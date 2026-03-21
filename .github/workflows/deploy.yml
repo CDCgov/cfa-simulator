@@ -29,12 +29,12 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - run: pnpm install
       - run: plz docs build
-      - run: plz examples build-python -- --base /python-example/
-      - run: plz examples build-rust-app -- --base /rust-example/
+      - run: plz examples build-python -- --base /cfa-simulator/python-example/
+      - run: plz examples build-rust-app -- --base /cfa-simulator/rust-example/
       - name: Assemble site
         run: |
           mkdir -p _site
-          cp -r docs/.vitepress/dist _site/docs
+          cp -r docs/.vitepress/dist/* _site/
           cp -r examples/python-example/dist _site/python-example
           cp -r examples/rust-example/dist _site/rust-example
       - uses: actions/upload-pages-artifact@v4

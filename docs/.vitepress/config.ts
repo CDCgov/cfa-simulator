@@ -2,7 +2,7 @@ import { defineConfig } from "vitepress";
 
 export default defineConfig({
   title: "CFA Simulator Docs",
-  base: "/docs/",
+  base: "/cfa-simulator/",
   themeConfig: {
     sidebar: [
       {
