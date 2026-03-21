@@ -16,9 +16,14 @@ defineProps<{
 
 <template>
   <TooltipProvider>
-    <TooltipRoot :delay-duration="0">
+    <TooltipRoot :delay-duration="0" disable-closing-trigger>
       <TooltipTrigger as-child>
-        <button type="button" class="HintTrigger" aria-label="More info">
+        <button
+          type="button"
+          class="HintTrigger"
+          aria-label="More info"
+          @pointerdown.prevent
+        >
           <Icon icon="help" :size="16" />
         </button>
       </TooltipTrigger>

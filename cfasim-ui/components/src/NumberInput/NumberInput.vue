@@ -332,9 +332,11 @@ input::placeholder {
   background-color: var(--color-primary-hover);
 }
 
+.slider-thumb:active,
 .slider-thumb:focus-visible {
   outline: none;
-  box-shadow: var(--shadow-focus);
+  box-shadow: 0 0 0 4px
+    color-mix(in srgb, var(--color-primary) 25%, transparent);
 }
 
 .slider-labels {
