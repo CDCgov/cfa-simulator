@@ -8,7 +8,7 @@ cfasim-ui uses CSS custom properties for all design tokens. Import `@cfasim-ui/t
 
 ## Custom themes
 
-To create a custom theme, add a CSS file that overrides variables under a `[data-theme="your-theme"]` selector. You only need to include the variables you want to change — everything else falls back to the defaults. Include a `prefers-color-scheme: dark` block for dark mode overrides.
+To create a custom theme, add a CSS file that overrides variables under a `[data-theme="your-theme"]` selector. You only need to include the variables you want to change — everything else falls back to the defaults. Use `light-dark()` for any values that should differ between light and dark mode.
 
 Here's the built-in `cdc` theme as an example:
 
