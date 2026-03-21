@@ -1,3 +1,4 @@
 *.whl
 *.ftl
 .gitignore
+pnpm-lock.yaml
