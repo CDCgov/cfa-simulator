@@ -3,11 +3,12 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@cfasim-ui/components": "workspace:*",
     "@cfasim-ui/charts": "workspace:*",
+    "@cfasim-ui/components": "workspace:*",
     "@cfasim-ui/theme": "workspace:*"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "vitepress": "^1.6.4"
   }
 }

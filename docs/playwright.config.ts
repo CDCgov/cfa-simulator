@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
-  testDir: "./cfasim-ui",
+  testDir: "../cfasim-ui",
   testMatch: "*.spec.ts",
   webServer: {
     command: "pnpm exec vitepress dev --port 6140 --host 127.0.0.1",

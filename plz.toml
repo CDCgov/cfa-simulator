@@ -1,10 +1,9 @@
 # Install all dependencies
-[tasks.install]
-run = "pnpm install"
+[tasks.setup]
+run = "pnpm install && pnpm exec playwright install chromium"
 
 # Run all tests
 [tasks.test]
-depends = "install"
 run = "pnpm exec vitest run"
 
 [taskgroup.docs.extends]
@@ -22,3 +21,7 @@ run = "pnpm exec vitepress dev"
 [taskgroup.docs.build]
 depends = "docs.generate"
 run = "pnpm exec vitepress build"
+
+[taskgroup.docs.test]
+depends = "docs.generate"
+run = "pnpm exec playwright test --config playwright.config.ts"
