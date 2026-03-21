@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, computed } from "vue";
 import { SidebarLayout, NumberInput } from "@cfasim-ui/components";
-import { LineChart } from "@cfasim-ui/charts";
+import { LineChart, DataTable } from "@cfasim-ui/charts";
 import type { Series } from "@cfasim-ui/charts";
 import { useModel } from "@cfasim-ui/wasm";
 
@@ -78,6 +78,16 @@ const chartSeries = computed<Series[]>(() => {
       :height="400"
       x-label="Generation"
       y-label="Cumulative infections"
+    />
+    <DataTable
+      v-if="outputs?.data"
+      :data="outputs.data"
+      :max-rows="20"
+      :column-config="{
+        generation: { label: 'Generation', width: 50 },
+        trajectory: { label: 'Trajectory' },
+        cumulative_infections: { label: 'Cumulative Infections' },
+      }"
     />
   </SidebarLayout>
 </template>

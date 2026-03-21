@@ -13,6 +13,11 @@ run = "pnpm exec prettier --check ."
 git_hook = "pre-commit"
 fail_hook = { suggest_command = "plz fix" }
 
+# Type-check
+[tasks.typecheck]
+run = "pnpm exec vue-tsc --noEmit -p cfasim-ui/charts/tsconfig.json"
+git_hook = "pre-commit"
+
 # Auto-fix formatting
 [tasks.fix]
 run = "pnpm exec prettier --write ."
