@@ -1,0 +1,11 @@
+{
+  "name": "@cfasim-ui/pyodide",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "pyodide": "^0.29.3"
+  }
+}

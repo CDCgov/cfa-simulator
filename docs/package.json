@@ -1,0 +1,13 @@
+{
+  "name": "@cfasim-ui/docs",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@cfasim-ui/components": "workspace:*",
+    "@cfasim-ui/charts": "workspace:*",
+    "@cfasim-ui/theme": "workspace:*"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  }
+}

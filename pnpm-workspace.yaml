@@ -1,0 +1,5 @@
+packages:
+  - "cfasim-ui/*"
+  - "docs"
+
+neverBuiltDependencies: []

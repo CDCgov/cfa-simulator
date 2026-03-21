@@ -1,0 +1,24 @@
+# Install all dependencies
+[tasks.install]
+run = "pnpm install"
+
+# Run all tests
+[tasks.test]
+depends = "install"
+run = "pnpm exec vitest run"
+
+[taskgroup.docs.extends]
+dir = "docs"
+
+# Generate cfasim-ui docs from source
+[taskgroup.docs.generate]
+dir = "."
+run = "node scripts/generate_docs.mjs"
+
+[taskgroup.docs.dev]
+depends = "docs.generate"
+run = "pnpm exec vitepress dev"
+
+[taskgroup.docs.build]
+depends = "docs.generate"
+run = "pnpm exec vitepress build"

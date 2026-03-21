@@ -1,0 +1,43 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.pytest_cache/
+
+# Virtual environments
+.venv
+
+# Node
+node_modules/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+
+# Build artifacts
+app/public/*.whl
+app/public/wheels.json
+app/public/wasm/
+app/src/pages/metapop/cached-run.json
+app/src/pages/metapop/cached-baseline.json
+
+# Rust
+target/
+
+test-results/
+coverage/
+
+.pnpm-store
+
+docs/.vitepress/cache
+docs/.vitepress/dist
+docs/cfasim-ui/components/
+docs/cfasim-ui/charts/
+
+CLAUDE.md
+.vscode/*
+.DS_Store

@@ -1,0 +1,176 @@
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  /* Root & Color Scheme */
+
+  :root {
+    color-scheme: light dark;
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+    /* Add this if you have scrollable content */
+    /* scrollbar-gutter: stable; */
+    --text-wrap-heading: balance;
+    --text-wrap-body: balance;
+  }
+
+  /* Accessibility */
+
+  :target {
+    scroll-margin-block: 5ex;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+
+  /* Typography */
+
+  body {
+    min-block-size: 100svb;
+    line-height: 1.5;
+    margin: 0;
+    hanging-punctuation: first allow-end last;
+    overflow-wrap: break-word;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    line-height: 1.1;
+  }
+
+  p,
+  li,
+  figcaption {
+    text-wrap: pretty;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  figcaption {
+    text-wrap: balance;
+  }
+
+  a:not([class]) {
+    color: currentColor;
+    text-decoration-skip-ink: auto;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.15em;
+    text-decoration-color: color-mix(in srgb, currentColor, transparent 67%);
+
+    &:hover {
+      text-decoration-color: currentColor;
+    }
+  }
+
+  pre,
+  code {
+    tab-size: 2;
+  }
+
+  /* Lists */
+
+  ul[role="list"],
+  ol[role="list"] {
+    list-style: none;
+  }
+
+  /* Forms */
+
+  input,
+  button,
+  textarea,
+  select {
+    font: inherit;
+    /* https://adactio.com/journal/21027 */
+    hanging-punctuation: none;
+  }
+
+  textarea:not([rows]) {
+    min-height: 10em;
+  }
+
+  /* Media */
+
+  img,
+  video,
+  picture,
+  canvas,
+  svg {
+    max-width: 100%;
+    display: block;
+    height: auto;
+  }
+}
+
+/* Base styles (applied after reset) */
+
+:root {
+  font-family: var(--font-family);
+  line-height: var(--line-height-normal);
+  color: var(--color-text);
+  background-color: var(--color-bg-0);
+}
+
+body {
+  font-size: var(--font-size-md);
+}
+
+:root,
+body {
+  overflow: hidden;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-family-heading);
+  font-weight: var(--font-weight-heading);
+  line-height: var(--line-height-tight);
+  margin-bottom: var(--space-3);
+}
+
+h1 {
+  font-size: var(--font-size-2xl);
+}
+
+h2 {
+  font-size: var(--font-size-xl);
+}
+
+p {
+  margin-bottom: var(--space-2);
+}
+
+section {
+  margin-bottom: var(--space-6);
+}
+
+code {
+  font-family: var(--font-family-mono);
+}
+
+a {
+  color: var(--color-link);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}

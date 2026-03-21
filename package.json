@@ -1,0 +1,14 @@
+{
+  "name": "cfa-simulator",
+  "private": true,
+  "packageManager": "pnpm@10.28.1",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
+  }
+}
