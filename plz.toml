@@ -85,11 +85,13 @@ run = "pnpm exec vite build"
 [taskgroup.examples.test-python]
 dir = "examples/python-example"
 run = "pnpm exec playwright test --config playwright.config.ts"
+git_hook = "pre-push"
 
 # E2E test for Rust example
 [taskgroup.examples.test-rust]
 dir = "examples/rust-example"
 run = "pnpm exec playwright test --config playwright.config.ts"
+git_hook = "pre-push"
 
 [taskgroup.docs.extends]
 dir = "docs"
