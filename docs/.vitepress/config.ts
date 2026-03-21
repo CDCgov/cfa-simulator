@@ -40,6 +40,14 @@ export default defineConfig({
               { text: "LineChart", link: "/cfasim-ui/charts/line-chart" },
             ],
           },
+          {
+            text: "Workers",
+            collapsed: false,
+            items: [
+              { text: "Pyodide", link: "/cfasim-ui/pyodide" },
+              { text: "WASM", link: "/cfasim-ui/wasm" },
+            ],
+          },
         ],
       },
     ],

@@ -17,6 +17,29 @@ fail_hook = { suggest_command = "plz fix" }
 [tasks.fix]
 run = "pnpm exec prettier --write ."
 
+# Create a new cfasim project
+[tasks.new]
+run = "cargo run -p cfasim -- new"
+
+[taskgroup.cli.extends]
+dir = "cfasim"
+
+# Format Rust code
+[taskgroup.cli.format]
+run = "cargo fmt --check"
+
+# Run Rust tests
+[taskgroup.cli.test]
+run = "cargo test"
+
+# Lint Rust code
+[taskgroup.cli.lint]
+run = "cargo clippy -- -D warnings"
+
+# Integration tests for the CLI (scaffolds projects + Playwright)
+[taskgroup.cli.e2e]
+run = "pnpm exec playwright test --config playwright.config.ts"
+
 [taskgroup.docs.extends]
 dir = "docs"
 

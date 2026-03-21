@@ -18,10 +18,27 @@ plz install
 
 `plz` is the project's task runner — see `plz.toml` for all available tasks.
 
+## Creating a new project
+
+Use the `cfasim` CLI to scaffold a new simulation project:
+
+```bash
+plz new
+```
+
+This will interactively prompt for a project name and model type (Python or Rust), then scaffold a Vite + Vue app with cfasim-ui and the appropriate worker setup.
+
+You can also run it non-interactively:
+
+```bash
+cargo run -p cfasim -- new --name my-sim --model python
+```
+
 ## Project structure
 
 | Directory    | What it is                                     |
 | ------------ | ---------------------------------------------- |
+| `cfasim/`    | CLI tool for scaffolding new projects (Rust)   |
 | `cfasim-ui/` | Shared components, charts, and theming library |
 | `docs/`      | This documentation site (VitePress)            |
 | `scripts/`   | Build and scaffolding scripts                  |

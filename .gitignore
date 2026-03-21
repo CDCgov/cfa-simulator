@@ -28,6 +28,10 @@ app/src/pages/metapop/cached-baseline.json
 # Rust
 target/
 
+# Scaffolded test projects
+test-project-python/
+test-project-rust/
+
 test-results/
 coverage/
 
