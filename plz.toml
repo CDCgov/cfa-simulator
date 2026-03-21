@@ -5,23 +5,38 @@ run = "pnpm install && pnpm exec playwright install chromium"
 # Run all tests
 [tasks.test]
 run = "pnpm exec vitest run"
+git_hook = "pre-commit"
+
+# Check formatting
+[tasks.format]
+run = "pnpm exec prettier --check ."
+git_hook = "pre-commit"
+fail_hook = { suggest_command = "plz fix" }
+
+# Auto-fix formatting
+[tasks.fix]
+run = "pnpm exec prettier --write ."
 
 [taskgroup.docs.extends]
 dir = "docs"
 
-# Generate cfasim-ui docs from source
+# Generate the component and API documentation for the docs site
 [taskgroup.docs.generate]
 dir = "."
 run = "node scripts/generate_docs.mjs"
 
+# Serve docs locally
 [taskgroup.docs.dev]
 depends = "docs.generate"
 run = "pnpm exec vitepress dev"
 
+# Build static files for docs
 [taskgroup.docs.build]
 depends = "docs.generate"
 run = "pnpm exec vitepress build"
 
+# Run tests for docs (Playwright tests for docs site)
 [taskgroup.docs.test]
 depends = "docs.generate"
 run = "pnpm exec playwright test --config playwright.config.ts"
+git_hook = "pre-commit"
