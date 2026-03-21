@@ -133,8 +133,15 @@ function cellValue(col: Column, row: number): string {
 
 .Table {
   border-collapse: collapse;
-  text-align: right;
   font-variant-numeric: tabular-nums;
+  border: 1px solid var(--color-border);
+}
+
+.Table tr,
+.Table th,
+.Table td {
+  background: transparent;
+  border: none;
 }
 
 .Table th,
@@ -144,26 +151,17 @@ function cellValue(col: Column, row: number): string {
 }
 
 .Table th {
-  text-align: right;
   font-weight: 600;
-  border-bottom: 1px solid var(--color-border-header, #c4c9ce);
+  border-bottom: 1px solid var(--color-border-header);
   position: sticky;
   top: 0;
-  background: var(--color-bg-0, #fff);
-}
-
-.Table th:first-child,
-.Table td:first-child {
-  text-align: left;
-  padding-left: 0;
-}
-
-.Table th:last-child,
-.Table td:last-child {
-  padding-right: 0;
 }
 
 .Table tbody td {
-  border-bottom: 1px solid var(--color-border, #dee2e6);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.Table tbody tr:last-child td {
+  border-bottom: none;
 }
 </style>

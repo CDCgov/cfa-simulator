@@ -14,7 +14,7 @@ import {
   TextInput,
   Toggle,
 } from "@cfasim-ui/components";
-import { LineChart } from "@cfasim-ui/charts";
+import { DataTable, LineChart } from "@cfasim-ui/charts";
 import ComponentDemo from "./ComponentDemo.vue";
 
 export default {
@@ -31,6 +31,7 @@ export default {
     app.component("Spinner", Spinner);
     app.component("TextInput", TextInput);
     app.component("Toggle", Toggle);
+    app.component("DataTable", DataTable);
     app.component("LineChart", LineChart);
     app.component("ComponentDemo", ComponentDemo);
   },

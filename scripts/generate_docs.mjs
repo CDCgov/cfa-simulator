@@ -86,6 +86,12 @@ const components = [
     "cfasim-ui/charts/src/LineChart/LineChart.vue",
     "cfasim-ui/charts/src/LineChart/LineChart.md",
   ],
+  [
+    "data-table",
+    "charts",
+    "cfasim-ui/charts/src/DataTable/DataTable.vue",
+    "cfasim-ui/charts/src/DataTable/DataTable.md",
+  ],
 ];
 
 // --- Prop extraction helpers ---

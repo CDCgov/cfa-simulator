@@ -14,20 +14,21 @@ cfasim-ui is the shared component and theming library you use to make simulators
 
 ## Components
 
-- [Box](./box) — colored container for callouts and alerts
-- [Button](./button) — primary and secondary actions
-- [Expander](./expander) — collapsible content section
-- [Hint](./hint) — inline tooltip for help text
-- [Icon](./icon) — Material Symbols icon
-- [NumberInput](./number-input) — number field with optional slider
-- [SelectBox](./select-box) — dropdown select
-- [Spinner](./spinner) — loading indicator
-- [TextInput](./text-input) — text field
-- [Toggle](./toggle) — boolean switch
+- [Box](./components/box) — colored container for callouts and alerts
+- [Button](./components/button) — primary and secondary actions
+- [Expander](./components/expander) — collapsible content section
+- [Hint](./components/hint) — inline tooltip for help text
+- [Icon](./components/icon) — Material Symbols icon
+- [NumberInput](./components/number-input) — number field with optional slider
+- [SelectBox](./components/select-box) — dropdown select
+- [Spinner](./components/spinner) — loading indicator
+- [TextInput](./components/text-input) — text field
+- [Toggle](./components/toggle) — boolean switch
 
 ## Charts
 
-- [LineChart](./line-chart) — responsive SVG line chart
+- [DataTable](./charts/data-table) — table for columnar data or ModelOutput
+- [LineChart](./charts/line-chart) — responsive SVG line chart
 
 ## Workers
 

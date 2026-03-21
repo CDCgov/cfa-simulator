@@ -37,6 +37,7 @@ export default defineConfig({
             text: "Charts",
             collapsed: false,
             items: [
+              { text: "DataTable", link: "/cfasim-ui/charts/data-table" },
               { text: "LineChart", link: "/cfasim-ui/charts/line-chart" },
             ],
           },
