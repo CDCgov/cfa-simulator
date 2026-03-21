@@ -25,7 +25,7 @@ describe("TextInput", () => {
       props: {
         modelValue: "initial",
         label: "Name",
-        "onUpdate:modelValue": (v: string) =>
+        "onUpdate:modelValue": (v: string | undefined) =>
           wrapper.setProps({ modelValue: v }),
       },
     });
@@ -43,7 +43,7 @@ describe("TextInput", () => {
       props: {
         modelValue: "initial",
         label: "Name",
-        "onUpdate:modelValue": (v: string) =>
+        "onUpdate:modelValue": (v: string | undefined) =>
           wrapper.setProps({ modelValue: v }),
       },
     });

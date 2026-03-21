@@ -56,7 +56,7 @@ describe("NumberInput", () => {
       props: {
         modelValue: 100,
         label: "Count",
-        "onUpdate:modelValue": (v: number) =>
+        "onUpdate:modelValue": (v: number | undefined) =>
           wrapper.setProps({ modelValue: v }),
       },
     });
@@ -75,7 +75,7 @@ describe("NumberInput", () => {
       props: {
         modelValue: 100,
         label: "Count",
-        "onUpdate:modelValue": (v: number) =>
+        "onUpdate:modelValue": (v: number | undefined) =>
           wrapper.setProps({ modelValue: v }),
       },
     });
@@ -103,7 +103,7 @@ describe("NumberInput", () => {
         modelValue: 0.5,
         label: "Rate",
         percent: true,
-        "onUpdate:modelValue": (v: number) =>
+        "onUpdate:modelValue": (v: number | undefined) =>
           wrapper.setProps({ modelValue: v }),
       },
     });
@@ -137,7 +137,7 @@ describe("NumberInput", () => {
         modelValue: 50,
         label: "Count",
         max: 100,
-        "onUpdate:modelValue": (v: number) =>
+        "onUpdate:modelValue": (v: number | undefined) =>
           wrapper.setProps({ modelValue: v }),
       },
     });
@@ -160,7 +160,7 @@ describe("NumberInput", () => {
         modelValue: 50,
         label: "Count",
         min: 10,
-        "onUpdate:modelValue": (v: number) =>
+        "onUpdate:modelValue": (v: number | undefined) =>
           wrapper.setProps({ modelValue: v }),
       },
     });
@@ -179,7 +179,7 @@ describe("NumberInput", () => {
         modelValue: 50,
         label: "Count",
         max: 100,
-        "onUpdate:modelValue": (v: number) =>
+        "onUpdate:modelValue": (v: number | undefined) =>
           wrapper.setProps({ modelValue: v }),
       },
     });
@@ -202,7 +202,7 @@ describe("NumberInput", () => {
         label: "Rate",
         percent: true,
         max: 0.99,
-        "onUpdate:modelValue": (v: number) =>
+        "onUpdate:modelValue": (v: number | undefined) =>
           wrapper.setProps({ modelValue: v }),
       },
     });
@@ -225,8 +225,8 @@ describe("NumberInput", () => {
         live: true,
         min: 0,
         max: 100,
-        "onUpdate:modelValue": (v: number) => {
-          updates.push(v);
+        "onUpdate:modelValue": (v: number | undefined) => {
+          if (v != null) updates.push(v);
           wrapper.setProps({ modelValue: v });
         },
       },
@@ -249,8 +249,8 @@ describe("NumberInput", () => {
         slider: true,
         min: 0,
         max: 100,
-        "onUpdate:modelValue": (v: number) => {
-          updates.push(v);
+        "onUpdate:modelValue": (v: number | undefined) => {
+          if (v != null) updates.push(v);
           wrapper.setProps({ modelValue: v });
         },
       },
@@ -267,7 +267,7 @@ describe("NumberInput", () => {
         modelValue: 100,
         label: "Count",
         live: true,
-        "onUpdate:modelValue": (v: number) =>
+        "onUpdate:modelValue": (v: number | undefined) =>
           wrapper.setProps({ modelValue: v }),
       },
     });
@@ -286,8 +286,8 @@ describe("NumberInput", () => {
         modelValue: 100,
         label: "Count",
         live: true,
-        "onUpdate:modelValue": (v: number) => {
-          updates.push(v);
+        "onUpdate:modelValue": (v: number | undefined) => {
+          if (v != null) updates.push(v);
           wrapper.setProps({ modelValue: v });
         },
       },

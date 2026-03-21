@@ -79,7 +79,8 @@ function commit() {
   sliderLocal.value = model.value;
 }
 
-function onSliderUpdate(v: number[]) {
+function onSliderUpdate(v: number[] | undefined) {
+  if (!v) return;
   sliderLocal.value = v[0];
   local.value = toDisplay(v[0]);
   if (props.live) {
@@ -87,7 +88,8 @@ function onSliderUpdate(v: number[]) {
   }
 }
 
-function onSliderCommit(v: number[]) {
+function onSliderCommit(v: number[] | undefined) {
+  if (!v) return;
   model.value = v[0];
 }
 

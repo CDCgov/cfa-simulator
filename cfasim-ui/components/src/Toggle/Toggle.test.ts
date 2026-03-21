@@ -15,7 +15,7 @@ describe("Toggle", () => {
       props: {
         label: "Enable",
         modelValue: false,
-        "onUpdate:modelValue": (e: boolean) =>
+        "onUpdate:modelValue": (e: boolean | undefined) =>
           wrapper.setProps({ modelValue: e }),
       },
     });
