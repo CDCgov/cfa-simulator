@@ -1,6 +1,6 @@
 # Install all dependencies
 [tasks.setup]
-run = "pnpm install && pnpm exec playwright install chromium"
+run = "pnpm install && pnpm exec playwright install chromium && cargo install wasm-pack && uv sync"
 
 # Run all tests
 [tasks.test]
