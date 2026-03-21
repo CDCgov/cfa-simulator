@@ -1,6 +1,5 @@
 {
   "name": "@cfasim-ui/theme",
-  "private": true,
   "type": "module",
   "exports": {
     ".": "./src/cfasim.css",

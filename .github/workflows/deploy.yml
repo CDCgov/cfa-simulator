@@ -29,8 +29,12 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - run: pnpm install
       - run: plz docs build
-      - run: plz examples build-python -- --base /cfa-simulator/python-example/
-      - run: plz examples build-rust-app -- --base /cfa-simulator/rust-example/
+      - run: plz examples build-python
+        env:
+          BASE_URL: /cfa-simulator/python-example/
+      - run: plz examples build-rust-app
+        env:
+          BASE_URL: /cfa-simulator/rust-example/
       - name: Assemble site
         run: |
           mkdir -p _site
