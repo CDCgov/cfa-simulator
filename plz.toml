@@ -39,4 +39,4 @@ run = "pnpm exec vitepress build"
 [taskgroup.docs.test]
 depends = "docs.generate"
 run = "pnpm exec playwright test --config playwright.config.ts"
-git_hook = "pre-commit"
+git_hook = "pre-push"
