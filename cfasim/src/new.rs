@@ -117,7 +117,11 @@ fn scaffold(name: &str, model_type: &ModelType) -> Result<(), Box<dyn std::error
         ModelType::Rust => inject_dependency(&pkg_json, "@cfasim-ui/wasm"),
     };
     write_file(&project_dir, "package.json", &pkg_json)?;
-    write_file(&project_dir, "vite.config.ts", &render(TMPL_VITE_CONFIG, name))?;
+    write_file(
+        &project_dir,
+        "vite.config.ts",
+        &render(TMPL_VITE_CONFIG, name),
+    )?;
     write_file(&project_dir, "tsconfig.json", &render(TMPL_TSCONFIG, name))?;
     write_file(&project_dir, "index.html", &render(TMPL_INDEX_HTML, name))?;
     write_file(&project_dir, "src/main.ts", &render(TMPL_MAIN_TS, name))?;
@@ -141,8 +145,16 @@ fn scaffold(name: &str, model_type: &ModelType) -> Result<(), Box<dyn std::error
         }
         ModelType::Rust => {
             write_file(&project_dir, "src/App.vue", &render(TMPL_RUST_APP, name))?;
-            write_file(&project_dir, "model/Cargo.toml", &render(TMPL_RUST_CARGO, name))?;
-            write_file(&project_dir, "model/src/lib.rs", &render(TMPL_RUST_LIB, name))?;
+            write_file(
+                &project_dir,
+                "model/Cargo.toml",
+                &render(TMPL_RUST_CARGO, name),
+            )?;
+            write_file(
+                &project_dir,
+                "model/src/lib.rs",
+                &render(TMPL_RUST_LIB, name),
+            )?;
         }
     }
 

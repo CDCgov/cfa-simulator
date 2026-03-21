@@ -32,6 +32,12 @@ dir = "cfasim"
 # Format Rust code
 [taskgroup.cli.format]
 run = "cargo fmt --check"
+git_hook = "pre-commit"
+fail_hook = { suggest_command = "plz cli fix" }
+
+# Auto-fix Rust formatting
+[taskgroup.cli.fix]
+run = "cargo fmt"
 
 # Run Rust tests
 [taskgroup.cli.test]
