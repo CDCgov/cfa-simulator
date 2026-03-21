@@ -1,0 +1,20 @@
+name: Setup plz
+description: Install plz build tool (cached)
+
+inputs:
+  version:
+    description: Version of plz to install
+    required: false
+    default: "0.0.14"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v5
+      id: plz-cache
+      with:
+        path: ~/.cargo/bin/plz
+        key: plz-${{ inputs.version }}-linux-x64
+    - if: steps.plz-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: curl --proto '=https' --tlsv1.2 -LsSf https://plzplz.org/install.sh | sh
