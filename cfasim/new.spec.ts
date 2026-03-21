@@ -98,11 +98,9 @@ test.describe("cfasim new", () => {
     test(`${p.model} project renders`, async ({ page }) => {
       await page.goto(`http://localhost:${p.port}`);
 
-      // The SidebarLayout sidebar should contain the project name
       await expect(page.locator("h2")).toContainText(p.name);
-
-      // The main content area should also have the project name
       await expect(page.locator("h1")).toContainText(p.name);
+      await expect(page.getByLabel("Base number")).toBeVisible();
     });
   }
 });

@@ -67,6 +67,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cfasim-model"
+version = "0.1.0"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

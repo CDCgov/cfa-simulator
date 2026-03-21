@@ -1,17 +1,30 @@
 <script setup lang="ts">
-import { SidebarLayout } from "@cfasim-ui/components";
+import { reactive } from "vue";
+import { SidebarLayout, NumberInput } from "@cfasim-ui/components";
 import { useModel } from "@cfasim-ui/wasm";
 
-const { result, loading } = useModel("%%project_name%%", "hello");
+const params = reactive({ steps: 10, rate: 2.5 });
+const { useOutputs } = useModel("%%project_name%%");
+const { outputs, loading } = useOutputs("simulate", params);
 </script>
 
 <template>
   <SidebarLayout>
     <template #sidebar>
       <h2>%%project_name%%</h2>
-      <p>Controls go here</p>
+      <NumberInput v-model="params.steps" label="Steps" />
+      <NumberInput v-model="params.rate" label="Rate" />
     </template>
     <h1>%%project_name%%</h1>
-    <p>{{ loading ? "Loading..." : result }}</p>
+    <p v-if="loading">Loading...</p>
+    <template v-else-if="outputs?.series">
+      <ul>
+        <li v-for="(_, i) in outputs.series.column('time')" :key="i">
+          t={{ outputs.series.column("time")[i] }}, v={{
+            outputs.series.column("values")[i]
+          }}
+        </li>
+      </ul>
+    </template>
   </SidebarLayout>
 </template>

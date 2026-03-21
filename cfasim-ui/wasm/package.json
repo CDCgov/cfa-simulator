@@ -5,6 +5,9 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "dependencies": {
+    "@cfasim-ui/shared": "workspace:*"
+  },
   "peerDependencies": {
     "vue": "^3.5.0"
   }

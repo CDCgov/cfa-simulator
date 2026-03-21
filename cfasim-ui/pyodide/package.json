@@ -6,6 +6,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@cfasim-ui/shared": "workspace:*",
     "pyodide": "^0.29.3"
   },
   "peerDependencies": {

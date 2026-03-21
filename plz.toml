@@ -40,6 +40,35 @@ run = "cargo clippy -- -D warnings"
 [taskgroup.cli.e2e]
 run = "pnpm exec playwright test --config playwright.config.ts"
 
+[taskgroup.examples.extends]
+dir = "examples"
+
+# Build the Rust example WASM module
+[taskgroup.examples.build-rust]
+dir = "examples/rust-example/model"
+run = "wasm-pack build --target web --out-dir ../public/wasm/rust_example"
+
+# Run the Rust example dev server
+[taskgroup.examples.dev-rust]
+dir = "examples/rust-example"
+depends = "examples.build-rust"
+run = "pnpm dev"
+
+# Run the Python example dev server
+[taskgroup.examples.dev-python]
+dir = "examples/python-example"
+run = "pnpm dev"
+
+# E2E test for Python example
+[taskgroup.examples.test-python]
+dir = "examples/python-example"
+run = "pnpm exec playwright test --config playwright.config.ts"
+
+# E2E test for Rust example
+[taskgroup.examples.test-rust]
+dir = "examples/rust-example"
+run = "pnpm exec playwright test --config playwright.config.ts"
+
 [taskgroup.docs.extends]
 dir = "docs"
 

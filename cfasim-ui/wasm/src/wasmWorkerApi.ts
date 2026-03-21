@@ -1,14 +1,11 @@
+import type { TransferableResponse } from "@cfasim-ui/shared";
+import { unwrapResponse } from "@cfasim-ui/shared";
+
 interface WorkerMessage {
   id: number;
   model: string;
   fn: string;
   args: string[];
-}
-
-interface WorkerResponse {
-  id: number;
-  result?: string;
-  error?: string;
 }
 
 let lastId = 0;
@@ -21,17 +18,17 @@ export function runWasm(
   model: string,
   fn: string,
   ...args: string[]
-): Promise<string> {
+): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const id = ++lastId;
 
-    function listener(event: MessageEvent<WorkerResponse>) {
+    function listener(event: MessageEvent<TransferableResponse>) {
       if (event.data?.id !== id) return;
       worker.removeEventListener("message", listener);
       if (event.data.error) {
         reject(new Error(event.data.error));
       } else {
-        resolve(event.data.result!);
+        resolve(unwrapResponse(event.data));
       }
     }
 

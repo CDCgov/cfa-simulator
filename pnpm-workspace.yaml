@@ -1,6 +1,6 @@
 packages:
   - "cfasim-ui/*"
   - "docs"
+  - "examples/*"
 
-  - "hello-py"
 neverBuiltDependencies: []

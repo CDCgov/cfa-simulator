@@ -1,3 +1,6 @@
+import type { TransferableResponse } from "@cfasim-ui/shared";
+import { unwrapResponse } from "@cfasim-ui/shared";
+
 interface PromiseResolver<T> {
   promise: Promise<T>;
   resolve: (value: T) => void;
@@ -24,27 +27,26 @@ interface WorkerMessage {
   context?: Record<string, unknown>;
 }
 
-interface WorkerResponse {
-  id: number;
-  result?: unknown;
-  error?: string;
-}
-
 function requestResponse(
   worker: Worker,
   msg: Omit<WorkerMessage, "id">,
-): Promise<Omit<WorkerResponse, "id">> {
-  const { promise, resolve } =
-    getPromiseAndResolve<Omit<WorkerResponse, "id">>();
+): Promise<{ result?: unknown; error?: string }> {
+  const { promise, resolve } = getPromiseAndResolve<{
+    result?: unknown;
+    error?: string;
+  }>();
   const idWorker = getId();
 
-  function listener(event: MessageEvent<WorkerResponse>) {
+  function listener(event: MessageEvent<TransferableResponse>) {
     if (event.data?.id !== idWorker) {
       return;
     }
     worker.removeEventListener("message", listener);
-    const { id, ...rest } = event.data;
-    resolve(rest);
+    if (event.data.error) {
+      resolve({ error: event.data.error });
+    } else {
+      resolve({ result: unwrapResponse(event.data) });
+    }
   }
 
   worker.addEventListener("message", listener);

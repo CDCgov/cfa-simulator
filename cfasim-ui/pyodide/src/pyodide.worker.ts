@@ -1,15 +1,16 @@
+import {
+  postWithTransfer,
+  postModelOutputsWithTransfer,
+  postErrorWithTransfer,
+} from "@cfasim-ui/shared";
+import type { ColumnDescriptor, ModelOutputsWire } from "@cfasim-ui/shared";
+
 interface WorkerMessage {
   id: number;
   type?: "run" | "loadModule";
   python?: string;
   module?: string;
   context?: Record<string, unknown>;
-}
-
-interface WorkerResponse {
-  id: number;
-  result?: unknown;
-  error?: string;
 }
 
 let wheelMap: Record<string, string> = {};
@@ -53,6 +54,74 @@ async function ensureModule(
   loadedModules.add(moduleName);
 }
 
+// Map Python struct format characters to TypedArray constructors
+const FORMAT_TO_TYPED_ARRAY: Record<
+  string,
+  new (buffer: ArrayBuffer) => ArrayBufferView
+> = {
+  b: Int8Array,
+  B: Uint8Array,
+  h: Int16Array,
+  H: Uint16Array,
+  i: Int32Array,
+  I: Uint32Array,
+  f: Float32Array,
+  d: Float64Array,
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractNumpyBuffer(proxy: any): ArrayBuffer {
+  const pyBuffer = proxy.getBuffer();
+  const Ctor = FORMAT_TO_TYPED_ARRAY[pyBuffer.format] ?? Float64Array;
+  const typed = new Ctor(
+    pyBuffer.data.buffer.slice(
+      pyBuffer.data.byteOffset,
+      pyBuffer.data.byteOffset + pyBuffer.data.byteLength,
+    ),
+  );
+  pyBuffer.release();
+  return typed.buffer as ArrayBuffer;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function convertModelOutputs(jsResult: any): ModelOutputsWire | null {
+  if (!jsResult || typeof jsResult !== "object" || !jsResult.__modelOutputs) {
+    return null;
+  }
+
+  const outputs: ModelOutputsWire["outputs"] = {};
+  for (const [key, outputProxy] of Object.entries(
+    jsResult.outputs as Record<string, Record<string, unknown>>,
+  )) {
+    const wire = outputProxy as {
+      length: number;
+      columns: { name: string; type: string; enumLabels?: string[] }[];
+      buffers: unknown[];
+    };
+
+    const buffers: ArrayBuffer[] = [];
+    for (const buf of wire.buffers) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (buf && typeof buf === "object" && (buf as any).getBuffer) {
+        buffers.push(extractNumpyBuffer(buf));
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((buf as any).destroy) (buf as any).destroy();
+      } else if (buf instanceof ArrayBuffer) {
+        buffers.push(buf);
+      }
+    }
+
+    outputs[key] = {
+      __modelOutput: true,
+      length: wire.length,
+      columns: wire.columns as ColumnDescriptor[],
+      buffers,
+    };
+  }
+
+  return { __modelOutputs: true, outputs };
+}
+
 self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
   const pyodide = await pyodideReadyPromise;
   const { id, type, python, module: moduleName, context } = event.data;
@@ -60,7 +129,7 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
   try {
     if (type === "loadModule" && moduleName) {
       await ensureModule(pyodide, moduleName);
-      self.postMessage({ result: true, id } as WorkerResponse);
+      postWithTransfer(self, id, true);
       return;
     }
 
@@ -83,9 +152,22 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
     // Destroy PyProxy if returned to prevent memory leaks
     let result = rawResult;
     if (rawResult && typeof rawResult === "object" && rawResult.destroy) {
-      result = rawResult.toJs
-        ? rawResult.toJs({ dict_converter: Object.fromEntries })
-        : rawResult.toString();
+      if (rawResult.toJs) {
+        result = rawResult.toJs({ dict_converter: Object.fromEntries });
+      } else if (rawResult.getBuffer) {
+        // Single numpy array: use getBuffer() for direct typed array access
+        const pyBuffer = rawResult.getBuffer();
+        const Ctor = FORMAT_TO_TYPED_ARRAY[pyBuffer.format] ?? Float64Array;
+        result = new Ctor(
+          pyBuffer.data.buffer.slice(
+            pyBuffer.data.byteOffset,
+            pyBuffer.data.byteOffset + pyBuffer.data.byteLength,
+          ),
+        );
+        pyBuffer.release();
+      } else {
+        result = rawResult.toString();
+      }
       rawResult.destroy();
     }
 
@@ -103,11 +185,14 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
       `[pyodide-worker] python=${bench.python_ms}ms convert=${bench.convert_ms}ms`,
     );
 
-    self.postMessage({ result, id } as WorkerResponse);
+    // Check for ModelOutputs wire format
+    const modelOutputs = convertModelOutputs(result);
+    if (modelOutputs) {
+      postModelOutputsWithTransfer(self, id, modelOutputs);
+    } else {
+      postWithTransfer(self, id, result);
+    }
   } catch (error) {
-    self.postMessage({
-      error: error instanceof Error ? error.message : String(error),
-      id,
-    } as WorkerResponse);
+    postErrorWithTransfer(self, id, error);
   }
 };

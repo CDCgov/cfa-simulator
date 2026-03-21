@@ -40,6 +40,7 @@ cargo run -p cfasim -- new --name my-sim --model python
 | ------------ | ---------------------------------------------- |
 | `cfasim/`    | CLI tool for scaffolding new projects (Rust)   |
 | `cfasim-ui/` | Shared components, charts, and theming library |
+| `examples/`  | Example projects (Python and Rust)             |
 | `docs/`      | This documentation site (VitePress)            |
 | `scripts/`   | Build and scaffolding scripts                  |
 
