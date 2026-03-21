@@ -27,10 +27,17 @@ jobs:
       - uses: ./.github/actions/setup-plz
       - run: plz setup
       - run: plz docs build
-      - run: cp -r docs/.vitepress/dist app/dist/docs
+      - run: plz examples build-python -- --base /python-example/
+      - run: plz examples build-rust-app -- --base /rust-example/
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp -r docs/.vitepress/dist _site/docs
+          cp -r examples/python-example/dist _site/python-example
+          cp -r examples/rust-example/dist _site/rust-example
       - uses: actions/upload-pages-artifact@v4
         with:
-          path: app/dist
+          path: _site
 
   deploy:
     needs: build

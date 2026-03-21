@@ -64,6 +64,17 @@ run = "pnpm dev"
 dir = "examples/python-example"
 run = "pnpm dev"
 
+# Build the Python example
+[taskgroup.examples.build-python]
+dir = "examples/python-example"
+run = "pnpm exec vite build"
+
+# Build the Rust example app
+[taskgroup.examples.build-rust-app]
+dir = "examples/rust-example"
+depends = "examples.build-rust"
+run = "pnpm exec vite build"
+
 # E2E test for Python example
 [taskgroup.examples.test-python]
 dir = "examples/python-example"
