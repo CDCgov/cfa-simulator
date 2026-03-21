@@ -157,4 +157,21 @@ describe("Table", () => {
     const th = wrapper.find("th");
     expect(th.attributes("style")).toBeUndefined();
   });
+
+  it("applies cellClass to td elements", () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        data: { day: [0, 1], value: [10, 20] },
+        columnConfig: {
+          day: { cellClass: "text-secondary" },
+        },
+      },
+    });
+    const rows = wrapper.findAll("tbody tr");
+    for (const row of rows) {
+      const cells = row.findAll("td");
+      expect(cells[0].classes()).toContain("text-secondary");
+      expect(cells[1].classes()).not.toContain("text-secondary");
+    }
+  });
 });

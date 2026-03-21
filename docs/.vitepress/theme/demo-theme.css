@@ -1,6 +1,6 @@
 /* Import the design tokens on :root so CSS vars are available globally */
 @import "@cfasim-ui/theme/theme.css";
-@import "@cfasim-ui/theme/spacing.css";
+@import "@cfasim-ui/theme/utilities.css";
 
 .demo-preview {
   font-size: 14px;

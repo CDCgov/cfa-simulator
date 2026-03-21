@@ -3,9 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    ".": "./src/cfasim.css",
     "./base.css": "./src/base.css",
     "./theme.css": "./src/theme.css",
-    "./spacing.css": "./src/spacing.css",
+    "./utilities.css": "./src/utilities.css",
     "./themes/cdc.css": "./src/themes/cdc.css"
   }
 }

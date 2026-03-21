@@ -84,7 +84,7 @@ const chartSeries = computed<Series[]>(() => {
       :data="outputs.data"
       :max-rows="20"
       :column-config="{
-        generation: { label: 'Generation', width: 50 },
+        generation: { label: '', width: 'small', cellClass: 'text-secondary' },
         trajectory: { label: 'Trajectory' },
         cumulative_infections: { label: 'Cumulative Infections' },
       }"

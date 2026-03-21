@@ -12,6 +12,7 @@ export interface ColumnConfig {
   label?: string;
   width?: ColumnWidth | number;
   align?: ColumnAlign;
+  cellClass?: string;
 }
 
 const COLUMN_WIDTHS: Record<ColumnWidth, string> = {
@@ -113,6 +114,7 @@ function cellValue(col: Column, row: number): string {
           <td
             v-for="col in columns"
             :key="col.name"
+            :class="columnConfig?.[col.name]?.cellClass"
             :style="columnAlignStyle(col.name)"
           >
             {{ cellValue(col, row - 1) }}
