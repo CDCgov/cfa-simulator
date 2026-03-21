@@ -1,6 +1,17 @@
 {
   "name": "@cfasim-ui/wasm",
+  "version": "0.1.0",
   "type": "module",
+  "description": "WebAssembly integration for cfasim-ui",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CDCgov/cfa-simulator.git",
+    "directory": "cfasim-ui/wasm"
+  },
+  "files": [
+    "src"
+  ],
   "exports": {
     ".": "./src/index.ts"
   },

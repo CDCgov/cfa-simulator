@@ -1,6 +1,17 @@
 {
   "name": "@cfasim-ui/shared",
+  "version": "0.1.0",
   "type": "module",
+  "description": "Shared utilities for cfasim-ui",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CDCgov/cfa-simulator.git",
+    "directory": "cfasim-ui/shared"
+  },
+  "files": [
+    "src"
+  ],
   "exports": {
     ".": "./src/index.ts"
   }

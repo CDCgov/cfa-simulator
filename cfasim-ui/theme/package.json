@@ -1,6 +1,17 @@
 {
   "name": "@cfasim-ui/theme",
+  "version": "0.1.0",
   "type": "module",
+  "description": "CSS theming system for cfasim-ui",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CDCgov/cfa-simulator.git",
+    "directory": "cfasim-ui/theme"
+  },
+  "files": [
+    "src"
+  ],
   "exports": {
     ".": "./src/cfasim.css",
     "./base.css": "./src/base.css",

@@ -1,12 +1,25 @@
 {
   "name": "@cfasim-ui/charts",
+  "version": "0.1.0",
   "type": "module",
+  "description": "Chart visualization components for cfasim-ui",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CDCgov/cfa-simulator.git",
+    "directory": "cfasim-ui/charts"
+  },
+  "files": [
+    "src"
+  ],
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@cfasim-ui/shared": "workspace:*",
-    "vue": "^3.5.30"
+    "@cfasim-ui/shared": "workspace:*"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.5",
