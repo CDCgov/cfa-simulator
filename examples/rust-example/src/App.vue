@@ -6,7 +6,7 @@ import type { Series } from "@cfasim-ui/charts";
 import { useModel } from "@cfasim-ui/wasm";
 
 const params = reactive({
-  population: 100,
+  population: 10_000,
   initial_infected: 3,
   p: 0.03,
   seed: 42,
@@ -29,19 +29,27 @@ const chartSeries = computed<Series[]>(() => {
   <SidebarLayout>
     <template #sidebar>
       <h2>Reed-Frost Epidemic</h2>
-      <NumberInput v-model="params.population" label="Population" />
-      <NumberInput v-model="params.initial_infected" label="Initial infected" />
+      <NumberInput v-model="params.population" label="Population" live />
+      <NumberInput
+        v-model="params.initial_infected"
+        label="Initial infected"
+        live
+      />
       <NumberInput
         v-model="params.p"
         label="Transmission prob (p)"
+        slider
+        live
+        percent
+        :min="0"
+        :max="1"
         :step="0.01"
       />
-      <NumberInput v-model="params.seed" label="Random seed" />
+      <NumberInput v-model="params.seed" label="Random seed" live />
     </template>
     <h1>Reed-Frost Epidemic</h1>
-    <p v-if="loading">Loading...</p>
-    <p v-else-if="error" style="color: red">{{ error }}</p>
-    <template v-else-if="outputs?.trajectory">
+    <p v-if="error" style="color: red">{{ error }}</p>
+    <template v-if="outputs?.trajectory">
       <LineChart
         :series="chartSeries"
         :height="300"

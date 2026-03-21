@@ -194,8 +194,8 @@ const xTicks = computed(() => {
       />
       <!-- y tick labels -->
       <text
-        v-for="tick in yTicks"
-        :key="'y' + tick.value"
+        v-for="(tick, i) in yTicks"
+        :key="'y' + i"
         :x="padding.left - 6"
         :y="tick.y"
         text-anchor="end"
@@ -220,8 +220,8 @@ const xTicks = computed(() => {
       </text>
       <!-- x tick labels -->
       <text
-        v-for="tick in xTicks"
-        :key="'x' + tick.value"
+        v-for="(tick, i) in xTicks"
+        :key="'x' + i"
         :x="tick.x"
         :y="padding.top + innerH + 16"
         text-anchor="middle"

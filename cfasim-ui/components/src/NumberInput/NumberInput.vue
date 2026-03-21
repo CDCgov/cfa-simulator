@@ -14,6 +14,7 @@ const props = defineProps<{
   hint?: string;
   percent?: boolean;
   slider?: boolean;
+  live?: boolean;
 }>();
 
 const sliderMin = computed(() => props.min ?? (props.percent ? 0 : 0));
@@ -44,6 +45,18 @@ watch(model, (v) => {
   sliderLocal.value = v;
 });
 
+let liveTimeout: ReturnType<typeof setTimeout> | null = null;
+function onInputEvent() {
+  if (!props.live || props.slider) return;
+  if (liveTimeout) clearTimeout(liveTimeout);
+  liveTimeout = setTimeout(commit, 300);
+}
+function onChangeEvent() {
+  if (!props.live || props.slider) return;
+  if (liveTimeout) clearTimeout(liveTimeout);
+  commit();
+}
+
 function validate(displayValue: number): string | undefined {
   if (inputMin.value != null && displayValue < inputMin.value) {
     return `Min ${inputMin.value}${props.percent ? "%" : ""}`;
@@ -69,6 +82,9 @@ function commit() {
 function onSliderUpdate(v: number[]) {
   sliderLocal.value = v[0];
   local.value = toDisplay(v[0]);
+  if (props.live) {
+    model.value = v[0];
+  }
 }
 
 function onSliderCommit(v: number[]) {
@@ -103,6 +119,8 @@ const inputMax = computed(() => {
         :aria-invalid="!!validationError"
         @blur="commit"
         @keydown.enter="commit"
+        @input="onInputEvent"
+        @change="onChangeEvent"
       />
       <span v-if="props.percent" class="input-suffix">%</span>
     </span>
@@ -146,6 +164,8 @@ const inputMax = computed(() => {
         :aria-invalid="!!validationError"
         @blur="commit"
         @keydown.enter="commit"
+        @input="onInputEvent"
+        @change="onChangeEvent"
       />
       <span v-if="props.percent" class="input-suffix">%</span>
     </span>

@@ -116,4 +116,54 @@ const days = ref(10);
   </template>
 </ComponentDemo>
 
+### Live slider
+
+With `live`, the model updates while dragging the slider thumb rather than only on release.
+
+<ComponentDemo>
+  <div style="width: 300px">
+    <NumberInput
+      v-model="coverage"
+      label="Vaccination coverage"
+      percent
+      slider
+      live
+      :max="1"
+    />
+  </div>
+
+<template #code>
+
+```vue
+<NumberInput
+  v-model="coverage"
+  label="Vaccination coverage"
+  percent
+  slider
+  live
+  :max="1"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Live input
+
+With `live` on a regular input, the model updates as you type (debounced 300ms). Arrow keys and spinner buttons commit immediately.
+
+<ComponentDemo>
+  <div style="width: 300px">
+    <NumberInput v-model="days" label="Days" live />
+  </div>
+
+<template #code>
+
+```vue
+<NumberInput v-model="days" label="Days" live />
+```
+
+  </template>
+</ComponentDemo>
+
 <!--@include: ./_api/number-input.md-->
