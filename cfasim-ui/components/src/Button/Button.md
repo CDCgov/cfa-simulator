@@ -12,7 +12,7 @@ Built on [reka-ui Primitive](https://reka-ui.com/docs/utilities/primitive), so i
   <Button>Primary</Button>
   <Button variant="secondary">Secondary</Button>
 
-  <template #code>
+<template #code>
 
 ```vue
 <Button>Primary</Button>
@@ -28,7 +28,7 @@ Built on [reka-ui Primitive](https://reka-ui.com/docs/utilities/primitive), so i
   <Button disabled>Disabled</Button>
   <Button variant="secondary" disabled>Disabled</Button>
 
-  <template #code>
+<template #code>
 
 ```vue
 <Button disabled>Disabled</Button>
@@ -43,7 +43,7 @@ Built on [reka-ui Primitive](https://reka-ui.com/docs/utilities/primitive), so i
 <ComponentDemo>
   <Button label="Click me" />
 
-  <template #code>
+<template #code>
 
 ```vue
 <Button label="Click me" />

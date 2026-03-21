@@ -9,8 +9,8 @@ It is still in the early stages of development so consider packages and APIs to 
 
 **General disclaimer** This repository was created for use by CDC programs to collaborate on public health related projects in support of the [CDC mission](https://www.cdc.gov/about/cdc/#cdc_about_cio_mission-our-mission). GitHub is not hosted by the CDC, but is a third party website used by CDC and its partners to share information and collaborate on software. CDC use of GitHub does not imply an endorsement of any one particular service, product, or enterprise.
 
-* [Disclaimer](DISCLAIMER.md)
-* [Contribution Notice](CONTRIBUTING.md)
+- [Disclaimer](DISCLAIMER.md)
+- [Contribution Notice](CONTRIBUTING.md)
 
 ## Public Domain Standard Notice
 

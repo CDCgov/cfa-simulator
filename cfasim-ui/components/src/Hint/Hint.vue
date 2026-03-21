@@ -7,7 +7,7 @@ import {
   TooltipRoot,
   TooltipTrigger,
 } from "reka-ui";
-import Icon from "./Icon.vue";
+import Icon from "../Icon/Icon.vue";
 
 defineProps<{
   text: string;

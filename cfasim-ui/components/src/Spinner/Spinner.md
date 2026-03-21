@@ -11,7 +11,7 @@ A loading indicator with accessible labeling.
   <Spinner size="md" label="Loading" />
   <Spinner size="lg" label="Loading" />
 
-  <template #code>
+<template #code>
 
 ```vue
 <Spinner size="sm" label="Loading" />
@@ -30,7 +30,7 @@ A loading indicator with accessible labeling.
     <span>Running model...</span>
   </div>
 
-  <template #code>
+<template #code>
 
 ```vue
 <div style="display: flex; align-items: center; gap: 8px;">

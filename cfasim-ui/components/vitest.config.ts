@@ -6,6 +6,6 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     // .spec is for e2e tests
-    exclude: ["src/*.spec.ts"],
+    exclude: ["src/**/*.spec.ts"],
   },
 });

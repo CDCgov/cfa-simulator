@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
-import Icon from "./Icon.vue";
+import Icon from "../Icon/Icon.vue";
 
 const mql = window.matchMedia("(max-width: 767px)");
 const isMobile = ref(mql.matches);

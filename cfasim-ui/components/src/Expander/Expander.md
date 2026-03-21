@@ -9,7 +9,7 @@ A collapsible section that toggles content visibility.
     <p style="margin: 0">Here is the hidden content.</p>
   </Expander>
 
-  <template #code>
+<template #code>
 
 ```vue
 <Expander label="Show advanced options">

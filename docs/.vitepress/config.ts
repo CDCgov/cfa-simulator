@@ -7,9 +7,7 @@ export default defineConfig({
     sidebar: [
       {
         text: "Guides",
-        items: [
-          { text: "Getting Started", link: "/getting-started" },
-        ],
+        items: [{ text: "Getting Started", link: "/getting-started" }],
       },
       {
         text: "cfasim-ui",
@@ -25,7 +23,10 @@ export default defineConfig({
               { text: "Expander", link: "/cfasim-ui/components/expander" },
               { text: "Hint", link: "/cfasim-ui/components/hint" },
               { text: "Icon", link: "/cfasim-ui/components/icon" },
-              { text: "NumberInput", link: "/cfasim-ui/components/number-input" },
+              {
+                text: "NumberInput",
+                link: "/cfasim-ui/components/number-input",
+              },
               { text: "SelectBox", link: "/cfasim-ui/components/select-box" },
               { text: "Spinner", link: "/cfasim-ui/components/spinner" },
               { text: "TextInput", link: "/cfasim-ui/components/text-input" },
@@ -35,7 +36,9 @@ export default defineConfig({
           {
             text: "Charts",
             collapsed: false,
-            items: [{ text: "LineChart", link: "/cfasim-ui/charts/line-chart" }],
+            items: [
+              { text: "LineChart", link: "/cfasim-ui/charts/line-chart" },
+            ],
           },
         ],
       },

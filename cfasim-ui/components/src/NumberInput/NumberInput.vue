@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from "vue";
 import { SliderRoot, SliderTrack, SliderRange, SliderThumb } from "reka-ui";
-import Hint from "./Hint.vue";
+import Hint from "../Hint/Hint.vue";
 
 const model = defineModel<number>();
 

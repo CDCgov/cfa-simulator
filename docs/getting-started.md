@@ -20,11 +20,11 @@ plz install
 
 ## Project structure
 
-| Directory | What it is |
-|---|---|
+| Directory    | What it is                                     |
+| ------------ | ---------------------------------------------- |
 | `cfasim-ui/` | Shared components, charts, and theming library |
-| `docs/` | This documentation site (VitePress) |
-| `scripts/` | Build and scaffolding scripts |
+| `docs/`      | This documentation site (VitePress)            |
+| `scripts/`   | Build and scaffolding scripts                  |
 
 ## Task running
 

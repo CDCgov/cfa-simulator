@@ -4,11 +4,11 @@ cfasim-ui is the shared component and theming library you use to make simulators
 
 ## Packages
 
-| Package | Description |
-|---|---|
+| Package                 | Description                                                      |
+| ----------------------- | ---------------------------------------------------------------- |
 | `@cfasim-ui/components` | Accessible UI components built on [reka-ui](https://reka-ui.com) |
-| `@cfasim-ui/charts` | SVG charting components |
-| `@cfasim-ui/theme` | Design tokens, reset, and utility classes |
+| `@cfasim-ui/charts`     | SVG charting components                                          |
+| `@cfasim-ui/theme`      | Design tokens, reset, and utility classes                        |
 
 ## Components
 

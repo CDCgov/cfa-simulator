@@ -9,7 +9,7 @@ An info icon that shows a tooltip on hover. Used alongside form labels to provid
     Population size <Hint text="The total number of individuals in the simulation." />
   </span>
 
-  <template #code>
+<template #code>
 
 ```vue
 <span style="display: flex; align-items: center; gap: 8px;">

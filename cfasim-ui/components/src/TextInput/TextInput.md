@@ -19,12 +19,12 @@ const name = ref('')
     />
   </div>
 
-  <template #code>
+<template #code>
 
 ```vue
 <script setup>
-import { ref } from 'vue'
-const name = ref('')
+import { ref } from "vue";
+const name = ref("");
 </script>
 
 <TextInput

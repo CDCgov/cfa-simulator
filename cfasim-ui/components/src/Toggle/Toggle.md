@@ -15,12 +15,12 @@ const disabled = ref(true)
 <ComponentDemo>
   <Toggle v-model="enabled" label="Enable vaccination" />
 
-  <template #code>
+<template #code>
 
 ```vue
 <script setup>
-import { ref } from 'vue'
-const enabled = ref(false)
+import { ref } from "vue";
+const enabled = ref(false);
 </script>
 
 <Toggle v-model="enabled" label="Enable vaccination" />
@@ -38,7 +38,7 @@ const enabled = ref(false)
     hint="Whether symptomatic individuals are isolated"
   />
 
-  <template #code>
+<template #code>
 
 ```vue
 <Toggle
@@ -56,7 +56,7 @@ const enabled = ref(false)
 <ComponentDemo>
   <Toggle v-model="disabled" label="Locked setting" :disabled="true" />
 
-  <template #code>
+<template #code>
 
 ```vue
 <Toggle v-model="value" label="Locked setting" :disabled="true" />

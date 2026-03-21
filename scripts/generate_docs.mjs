@@ -20,17 +20,72 @@ const DOCS_ROOT = resolve(ROOT, "docs/cfasim-ui");
 
 // [slug, output dir, vue source path, doc source path]
 const components = [
-  ["box", "components", "cfasim-ui/components/src/Box.vue", "cfasim-ui/components/src/Box.md"],
-  ["button", "components", "cfasim-ui/components/src/Button.vue", "cfasim-ui/components/src/Button.md"],
-  ["expander", "components", "cfasim-ui/components/src/Expander.vue", "cfasim-ui/components/src/Expander.md"],
-  ["hint", "components", "cfasim-ui/components/src/Hint.vue", "cfasim-ui/components/src/Hint.md"],
-  ["icon", "components", "cfasim-ui/components/src/Icon.vue", "cfasim-ui/components/src/Icon.md"],
-  ["number-input", "components", "cfasim-ui/components/src/NumberInput.vue", "cfasim-ui/components/src/NumberInput.md"],
-  ["select-box", "components", "cfasim-ui/components/src/SelectBox.vue", "cfasim-ui/components/src/SelectBox.md"],
-  ["spinner", "components", "cfasim-ui/components/src/Spinner.vue", "cfasim-ui/components/src/Spinner.md"],
-  ["text-input", "components", "cfasim-ui/components/src/TextInput.vue", "cfasim-ui/components/src/TextInput.md"],
-  ["toggle", "components", "cfasim-ui/components/src/Toggle.vue", "cfasim-ui/components/src/Toggle.md"],
-  ["line-chart", "charts", "cfasim-ui/charts/src/LineChart.vue", "cfasim-ui/charts/src/LineChart.md"],
+  [
+    "box",
+    "components",
+    "cfasim-ui/components/src/Box/Box.vue",
+    "cfasim-ui/components/src/Box/Box.md",
+  ],
+  [
+    "button",
+    "components",
+    "cfasim-ui/components/src/Button/Button.vue",
+    "cfasim-ui/components/src/Button/Button.md",
+  ],
+  [
+    "expander",
+    "components",
+    "cfasim-ui/components/src/Expander/Expander.vue",
+    "cfasim-ui/components/src/Expander/Expander.md",
+  ],
+  [
+    "hint",
+    "components",
+    "cfasim-ui/components/src/Hint/Hint.vue",
+    "cfasim-ui/components/src/Hint/Hint.md",
+  ],
+  [
+    "icon",
+    "components",
+    "cfasim-ui/components/src/Icon/Icon.vue",
+    "cfasim-ui/components/src/Icon/Icon.md",
+  ],
+  [
+    "number-input",
+    "components",
+    "cfasim-ui/components/src/NumberInput/NumberInput.vue",
+    "cfasim-ui/components/src/NumberInput/NumberInput.md",
+  ],
+  [
+    "select-box",
+    "components",
+    "cfasim-ui/components/src/SelectBox/SelectBox.vue",
+    "cfasim-ui/components/src/SelectBox/SelectBox.md",
+  ],
+  [
+    "spinner",
+    "components",
+    "cfasim-ui/components/src/Spinner/Spinner.vue",
+    "cfasim-ui/components/src/Spinner/Spinner.md",
+  ],
+  [
+    "text-input",
+    "components",
+    "cfasim-ui/components/src/TextInput/TextInput.vue",
+    "cfasim-ui/components/src/TextInput/TextInput.md",
+  ],
+  [
+    "toggle",
+    "components",
+    "cfasim-ui/components/src/Toggle/Toggle.vue",
+    "cfasim-ui/components/src/Toggle/Toggle.md",
+  ],
+  [
+    "line-chart",
+    "charts",
+    "cfasim-ui/charts/src/LineChart/LineChart.vue",
+    "cfasim-ui/charts/src/LineChart/LineChart.md",
+  ],
 ];
 
 // --- Prop extraction helpers ---
@@ -63,9 +118,7 @@ function parsePropsFromTypeBody(body) {
 }
 
 function resolveInterface(script, name) {
-  const re = new RegExp(
-    `interface\\s+${name}(?:\\s+extends\\s+\\w+)?\\s*\\{`,
-  );
+  const re = new RegExp(`interface\\s+${name}(?:\\s+extends\\s+\\w+)?\\s*\\{`);
   const match = re.exec(script);
   if (!match) return null;
   const braceStart = match.index + match[0].length - 1;
@@ -166,7 +219,8 @@ function generateMarkdown(meta) {
     sections.push("| Name | Type |");
     sections.push("|------|------|");
     for (const m of meta.models) {
-      const name = m.name === "modelValue" ? "`v-model`" : `\`v-model:${m.name}\``;
+      const name =
+        m.name === "modelValue" ? "`v-model`" : `\`v-model:${m.name}\``;
       sections.push(`| ${name} | \`${escapeType(m.type)}\` |`);
     }
     sections.push("");
@@ -178,7 +232,9 @@ function generateMarkdown(meta) {
     for (const p of meta.props) {
       const def = p.default ? `\`${p.default}\`` : "—";
       const req = p.required ? "Yes" : "No";
-      sections.push(`| \`${p.name}\` | \`${escapeType(p.type)}\` | ${req} | ${def} |`);
+      sections.push(
+        `| \`${p.name}\` | \`${escapeType(p.type)}\` | ${req} | ${def} |`,
+      );
     }
     sections.push("");
   }
@@ -213,4 +269,6 @@ for (const [slug, outDir, vuePath, docPath] of components) {
   );
 }
 
-console.log(`\nGenerated docs for ${components.length} components into docs/cfasim-ui/`);
+console.log(
+  `\nGenerated docs for ${components.length} components into docs/cfasim-ui/`,
+);

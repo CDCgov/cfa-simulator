@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { SwitchRoot, SwitchThumb, useId } from "reka-ui";
-import Hint from "./Hint.vue";
+import Hint from "../Hint/Hint.vue";
 
 const model = defineModel<boolean>();
 

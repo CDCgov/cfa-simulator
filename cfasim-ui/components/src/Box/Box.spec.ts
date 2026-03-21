@@ -7,11 +7,7 @@ test("Box page renders demos", async ({ page }) => {
   await expect(demos.first()).toBeVisible();
   await expect(demos.first().locator(".box")).toHaveCount(4);
   await expect(demos.first().getByText("This is an info box.")).toBeVisible();
-  await expect(
-    demos.first().getByText("This is a success box."),
-  ).toBeVisible();
-  await expect(
-    demos.first().getByText("This is a warning box."),
-  ).toBeVisible();
+  await expect(demos.first().getByText("This is a success box.")).toBeVisible();
+  await expect(demos.first().getByText("This is a warning box.")).toBeVisible();
   await expect(demos.first().getByText("This is an error box.")).toBeVisible();
 });

@@ -22,12 +22,12 @@ const interval = ref('weekly')
     />
   </div>
 
-  <template #code>
+<template #code>
 
 ```vue
 <script setup>
-import { ref } from 'vue'
-const interval = ref('weekly')
+import { ref } from "vue";
+const interval = ref("weekly");
 </script>
 
 <SelectBox

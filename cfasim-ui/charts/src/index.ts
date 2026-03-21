@@ -1,1 +1,1 @@
-export { default as LineChart, type Series } from "./LineChart.vue";
+export { default as LineChart, type Series } from "./LineChart/LineChart.vue";

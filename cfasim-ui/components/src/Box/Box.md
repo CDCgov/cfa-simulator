@@ -12,7 +12,7 @@ A colored container for callouts, alerts, and grouped content.
   <Box variant="warning">This is a warning box.</Box>
   <Box variant="error">This is an error box.</Box>
 
-  <template #code>
+<template #code>
 
 ```vue
 <Box variant="info">This is an info box.</Box>
@@ -29,7 +29,7 @@ A colored container for callouts, alerts, and grouped content.
 <ComponentDemo>
   <Box bg-color="#f0e6ff" text-color="#4a1d96">Custom purple box</Box>
 
-  <template #code>
+<template #code>
 
 ```vue
 <Box bg-color="#f0e6ff" text-color="#4a1d96">Custom purple box</Box>

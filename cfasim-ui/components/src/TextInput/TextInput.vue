@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import Hint from "./Hint.vue";
+import Hint from "../Hint/Hint.vue";
 
 const model = defineModel<string>();
 const local = ref(model.value);

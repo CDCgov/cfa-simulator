@@ -17,5 +17,5 @@ Here's the built-in `cdc` theme as an example:
 To activate a theme, set the `data-theme` attribute on the root element:
 
 ```html
-<html data-theme="your-theme">
+<html data-theme="your-theme"></html>
 ```

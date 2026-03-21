@@ -19,12 +19,12 @@ const r0 = ref(3.5)
     <NumberInput v-model="days" label="Days" placeholder="Number of days" />
   </div>
 
-  <template #code>
+<template #code>
 
 ```vue
 <script setup>
-import { ref } from 'vue'
-const days = ref(10)
+import { ref } from "vue";
+const days = ref(10);
 </script>
 
 <NumberInput v-model="days" label="Days" placeholder="Number of days" />
@@ -47,7 +47,7 @@ const days = ref(10)
     />
   </div>
 
-  <template #code>
+<template #code>
 
 ```vue
 <NumberInput
@@ -75,15 +75,10 @@ const days = ref(10)
     />
   </div>
 
-  <template #code>
+<template #code>
 
 ```vue
-<NumberInput
-  v-model="coverage"
-  label="Vaccination coverage"
-  percent
-  :max="1"
-/>
+<NumberInput v-model="coverage" label="Vaccination coverage" percent :max="1" />
 ```
 
   </template>
@@ -104,7 +99,7 @@ const days = ref(10)
     />
   </div>
 
-  <template #code>
+<template #code>
 
 ```vue
 <NumberInput
