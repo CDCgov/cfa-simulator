@@ -5,6 +5,7 @@ test("LineChart page renders demos", async ({ page }) => {
   await expect(page.locator("h1")).toBeVisible();
   const demos = page.locator(".demo-preview");
   await expect(demos.first()).toBeVisible();
-  await expect(demos.first().locator("svg")).toBeVisible();
-  await expect(demos.first().locator("svg path")).toBeAttached();
+  const chartSvg = demos.first().locator("svg").last();
+  await expect(chartSvg).toBeVisible();
+  await expect(chartSvg.locator("path")).toBeAttached();
 });
