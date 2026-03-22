@@ -8,7 +8,7 @@ import {
 const open = defineModel<boolean>("open", { default: false });
 
 defineProps<{
-  label: string;
+  label?: string;
 }>();
 </script>
 
@@ -16,7 +16,7 @@ defineProps<{
   <CollapsibleRoot v-model:open="open" class="expander">
     <CollapsibleTrigger class="expander-trigger">
       <span class="expander-caret" :class="{ open }" />
-      {{ label }}
+      <slot name="label">{{ label }}</slot>
     </CollapsibleTrigger>
     <CollapsibleContent class="expander-content">
       <slot />

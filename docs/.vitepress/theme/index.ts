@@ -7,6 +7,7 @@ import {
   Expander,
   Hint,
   Icon,
+  LightDarkToggle,
   NumberInput,
   SelectBox,
   SidebarLayout,
@@ -25,6 +26,7 @@ export default {
     app.component("Expander", Expander);
     app.component("Hint", Hint);
     app.component("Icon", Icon);
+    app.component("LightDarkToggle", LightDarkToggle);
     app.component("NumberInput", NumberInput);
     app.component("SelectBox", SelectBox);
     app.component("SidebarLayout", SidebarLayout);

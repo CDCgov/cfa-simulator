@@ -4,6 +4,9 @@ export default defineConfig({
   title: "CFA Simulator Docs",
   base: "/cfa-simulator/",
   themeConfig: {
+    search: {
+      provider: "local",
+    },
     sidebar: [
       {
         text: "Guides",

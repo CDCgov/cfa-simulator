@@ -4,6 +4,7 @@ export { default as Button } from "./Button/Button.vue";
 export { default as Expander } from "./Expander/Expander.vue";
 export { default as Hint } from "./Hint/Hint.vue";
 export { default as Icon } from "./Icon/Icon.vue";
+export { default as LightDarkToggle } from "./LightDarkToggle/LightDarkToggle.vue";
 export { default as NumberInput } from "./NumberInput/NumberInput.vue";
 export { default as SelectBox } from "./SelectBox/SelectBox.vue";
 export type { SelectOption } from "./SelectBox/SelectBox.vue";

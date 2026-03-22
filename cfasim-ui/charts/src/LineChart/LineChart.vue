@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from "vue";
+import ChartMenu from "../ChartMenu/ChartMenu.vue";
+import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
+import { saveSvg, savePng, downloadCsv } from "../ChartMenu/download.js";
 
 export interface Series {
   data: number[];
@@ -16,14 +19,17 @@ const props = withDefaults(
     width?: number;
     height?: number;
     lineOpacity?: number;
+    title?: string;
     xLabel?: string;
     yLabel?: string;
     debounce?: number;
+    menu?: boolean | string;
   }>(),
-  { lineOpacity: 1 },
+  { lineOpacity: 1, menu: true },
 );
 
 const containerRef = ref<HTMLElement | null>(null);
+const svgRef = ref<SVGSVGElement | null>(null);
 const measuredWidth = ref(0);
 let observer: ResizeObserver | null = null;
 let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -56,7 +62,7 @@ const width = computed(() => props.width ?? (measuredWidth.value || 400));
 const height = computed(() => props.height ?? 200);
 
 const padding = computed(() => ({
-  top: 10,
+  top: props.title ? 30 : 10,
   right: 10,
   bottom: props.xLabel ? 46 : 30,
   left: props.yLabel ? 66 : 50,
@@ -170,11 +176,72 @@ const xTicks = computed(() => {
   }
   return ticks;
 });
+
+function menuFilename() {
+  return typeof props.menu === "string" ? props.menu : "chart";
+}
+
+function getSvgEl(): SVGSVGElement | null {
+  return svgRef.value;
+}
+
+function toCsv(): string {
+  const series = allSeries.value;
+  if (series.length === 0) return "";
+  const len = maxLen.value;
+  const headers =
+    series.length === 1
+      ? ["index", "value"]
+      : ["index", ...series.map((_, i) => `series_${i}`)];
+  const rows = [headers.join(",")];
+  for (let r = 0; r < len; r++) {
+    const cells = [r.toString()];
+    for (const s of series) {
+      cells.push(r < s.data.length ? String(s.data[r]) : "");
+    }
+    rows.push(cells.join(","));
+  }
+  return rows.join("\n");
+}
+
+const menuItems = computed<ChartMenuItem[]>(() => {
+  const fname = menuFilename();
+  return [
+    {
+      label: "Save as SVG",
+      action: () => {
+        const el = getSvgEl();
+        if (el) saveSvg(el, fname);
+      },
+    },
+    {
+      label: "Save as PNG",
+      action: () => {
+        const el = getSvgEl();
+        if (el) savePng(el, fname);
+      },
+    },
+    { label: "Download CSV", action: () => downloadCsv(toCsv(), fname) },
+  ];
+});
 </script>
 
 <template>
-  <div ref="containerRef" style="width: 100%">
-    <svg :width="width" :height="height">
+  <div ref="containerRef" class="line-chart-wrapper">
+    <ChartMenu v-if="menu" :items="menuItems" />
+    <svg ref="svgRef" :width="width" :height="height">
+      <!-- title -->
+      <text
+        v-if="title"
+        :x="width / 2"
+        :y="18"
+        text-anchor="middle"
+        font-size="14"
+        font-weight="600"
+        fill="currentColor"
+      >
+        {{ title }}
+      </text>
       <!-- axes -->
       <line
         :x1="padding.left"
@@ -256,3 +323,14 @@ const xTicks = computed(() => {
     </svg>
   </div>
 </template>
+
+<style scoped>
+.line-chart-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.line-chart-wrapper:hover :deep(.chart-menu-button) {
+  opacity: 1;
+}
+</style>

@@ -16,7 +16,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@cfasim-ui/shared": "workspace:*"
+    "@cfasim-ui/shared": "workspace:*",
+    "reka-ui": "^2.9.2"
   },
   "peerDependencies": {
     "vue": "^3.5.0"

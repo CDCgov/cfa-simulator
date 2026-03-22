@@ -1,5 +1,16 @@
 :root {
   color-scheme: light dark;
+}
+
+:root.light {
+  color-scheme: light;
+}
+
+:root.dark {
+  color-scheme: dark;
+}
+
+:root {
   /* Primary */
   --color-primary: light-dark(#0066ff, #4d94ff);
   --color-primary-hover: light-dark(#0052cc, #66a3ff);

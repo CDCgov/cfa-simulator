@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 import Icon from "../Icon/Icon.vue";
+import LightDarkToggle from "../LightDarkToggle/LightDarkToggle.vue";
 
 const mql = window.matchMedia("(max-width: 767px)");
 const isMobile = ref(mql.matches);
@@ -65,6 +66,11 @@ function toggle() {
       </aside>
     </div>
     <main class="Main">
+      <div class="Topbar">
+        <slot name="topbar">
+          <LightDarkToggle />
+        </slot>
+      </div>
       <div class="MainScroll">
         <div class="MainContent">
           <slot />
@@ -187,6 +193,20 @@ function toggle() {
   font-size: var(--font-size-md);
 }
 
+.Topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: var(--space-2) var(--space-4);
+  flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+  .Topbar {
+    padding: var(--space-2) var(--space-4) var(--space-2) var(--space-20);
+  }
+}
+
 .MainScroll {
   flex: 1;
   min-height: 0;
@@ -212,7 +232,7 @@ function toggle() {
 
 @media (min-width: 768px) {
   .MainContent {
-    padding: 0 var(--space-20);
+    padding: 0 var(--space-4) 0 var(--space-20);
   }
 }
 

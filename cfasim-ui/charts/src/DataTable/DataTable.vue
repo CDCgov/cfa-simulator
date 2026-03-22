@@ -2,6 +2,9 @@
 import { computed } from "vue";
 import type { CSSProperties } from "vue";
 import type { ModelOutput } from "@cfasim-ui/shared";
+import ChartMenu from "../ChartMenu/ChartMenu.vue";
+import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
+import { downloadCsv } from "../ChartMenu/download.js";
 
 export type TableRecord = Record<string, ArrayLike<number | string | boolean>>;
 export type TableData = TableRecord | ModelOutput;
@@ -21,11 +24,15 @@ const COLUMN_WIDTHS: Record<ColumnWidth, string> = {
   large: "250px",
 };
 
-const props = defineProps<{
-  data: TableData;
-  maxRows?: number;
-  columnConfig?: Record<string, ColumnConfig>;
-}>();
+const props = withDefaults(
+  defineProps<{
+    data: TableData;
+    maxRows?: number;
+    columnConfig?: Record<string, ColumnConfig>;
+    menu?: boolean | string;
+  }>(),
+  { menu: true },
+);
 
 function columnLabel(name: string): string {
   return props.columnConfig?.[name]?.label ?? name;
@@ -86,46 +93,89 @@ function cellValue(col: Column, row: number): string {
   if (typeof v === "boolean") return v ? "true" : "false";
   return String(v);
 }
+
+function menuFilename() {
+  return typeof props.menu === "string" ? props.menu : "data";
+}
+
+function escapeCsvField(val: string): string {
+  if (val.includes(",") || val.includes('"') || val.includes("\n")) {
+    return `"${val.replace(/"/g, '""')}"`;
+  }
+  return val;
+}
+
+function toCsv(): string {
+  const cols = columns.value;
+  const rows = rowCount.value;
+  const headers = cols.map((c) => escapeCsvField(columnLabel(c.name)));
+  const lines = [headers.join(",")];
+  for (let r = 0; r < rows; r++) {
+    const cells = cols.map((c) => escapeCsvField(cellValue(c, r)));
+    lines.push(cells.join(","));
+  }
+  return lines.join("\n");
+}
+
+const menuItems = computed<ChartMenuItem[]>(() => [
+  { label: "Download CSV", action: () => downloadCsv(toCsv(), menuFilename()) },
+]);
 </script>
 
 <template>
-  <div class="TableWrapper">
-    <table class="Table">
-      <colgroup>
-        <col
-          v-for="col in columns"
-          :key="col.name"
-          :style="columnStyle(col.name)"
-        />
-      </colgroup>
-      <thead>
-        <tr>
-          <th
+  <div class="TableOuter" :class="{ 'has-menu': menu }">
+    <ChartMenu v-if="menu" :items="menuItems" />
+    <div class="TableWrapper">
+      <table class="Table">
+        <colgroup>
+          <col
             v-for="col in columns"
             :key="col.name"
-            :style="columnAlignStyle(col.name)"
-          >
-            {{ columnLabel(col.name) }}
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="row in rowCount" :key="row">
-          <td
-            v-for="col in columns"
-            :key="col.name"
-            :class="columnConfig?.[col.name]?.cellClass"
-            :style="columnAlignStyle(col.name)"
-          >
-            {{ cellValue(col, row - 1) }}
-          </td>
-        </tr>
-      </tbody>
-    </table>
+            :style="columnStyle(col.name)"
+          />
+        </colgroup>
+        <thead>
+          <tr>
+            <th
+              v-for="col in columns"
+              :key="col.name"
+              :style="columnAlignStyle(col.name)"
+            >
+              {{ columnLabel(col.name) }}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in rowCount" :key="row">
+            <td
+              v-for="col in columns"
+              :key="col.name"
+              :class="columnConfig?.[col.name]?.cellClass"
+              :style="columnAlignStyle(col.name)"
+            >
+              {{ cellValue(col, row - 1) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.TableOuter {
+  position: relative;
+  display: inline-block;
+}
+
+.TableOuter.has-menu {
+  padding-top: 32px;
+}
+
+.TableOuter:hover :deep(.chart-menu-button) {
+  opacity: 1;
+}
+
 .TableWrapper {
   overflow-x: auto;
   font-size: var(--font-size-sm);
