@@ -2,3 +2,4 @@
 *.ftl
 .gitignore
 pnpm-lock.yaml
+**/public/
