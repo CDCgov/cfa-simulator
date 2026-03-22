@@ -16,6 +16,8 @@ interface WorkerMessage {
 let wheelMap: Record<string, string> = {};
 const loadedModules = new Set<string>();
 
+const baseUrl = import.meta.env.BASE_URL ?? "/";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let micropip: any;
 
@@ -32,7 +34,7 @@ const pyodideReadyPromise = (async () => {
   micropip = pyodide.pyimport("micropip");
 
   // Build module→wheel lookup but don't install yet
-  const res = await fetch(`${self.location.origin}/wheels.json`);
+  const res = await fetch(`${self.location.origin}${baseUrl}wheels.json`);
   const wheelFiles: string[] = await res.json();
   for (const filename of wheelFiles) {
     const moduleName = filename.split("-")[0];
@@ -49,7 +51,7 @@ async function ensureModule(
   if (loadedModules.has(moduleName)) return;
   const filename = wheelMap[moduleName];
   if (!filename) throw new Error(`Unknown module: ${moduleName}`);
-  await micropip.install(`${self.location.origin}/${filename}`);
+  await micropip.install(`${self.location.origin}${baseUrl}${filename}`);
   pyodide.pyimport(moduleName);
   loadedModules.add(moduleName);
 }

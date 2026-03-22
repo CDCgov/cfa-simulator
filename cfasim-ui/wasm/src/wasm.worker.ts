@@ -14,12 +14,14 @@ interface WorkerMessage {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const loadedModules = new Map<string, Record<string, any>>();
 
+const baseUrl = import.meta.env.BASE_URL ?? "/";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function ensureModule(model: string): Promise<Record<string, any>> {
   const cached = loadedModules.get(model);
   if (cached) return cached;
 
-  const url = `${self.location.origin}/wasm/${model}/${model}.js`;
+  const url = `${self.location.origin}${baseUrl}wasm/${model}/${model}.js`;
   const mod = await import(/* @vite-ignore */ url);
   await mod.default();
   loadedModules.set(model, mod);
