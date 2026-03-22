@@ -26,6 +26,10 @@ run = "pnpm exec prettier --write ."
 [tasks.new]
 run = "cargo run -p cfasim -- new"
 
+# Bump all package versions (patch, minor, or major)
+[tasks.version]
+run = "node scripts/version.mjs ${1}"
+
 [taskgroup.cli.extends]
 dir = "cfasim"
 
