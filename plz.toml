@@ -30,6 +30,9 @@ run = "cargo run -p cfasim -- new"
 [tasks.version]
 run = "node scripts/version.mjs ${1}"
 
+[taskgroup.publish.pnpm]
+run = "pnpm -r publish --access public"
+
 [taskgroup.cli.extends]
 dir = "cfasim"
 
