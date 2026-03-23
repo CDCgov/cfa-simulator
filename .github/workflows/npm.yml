@@ -15,13 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-
+      - run: corepack enable
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
           cache: pnpm
-
       - run: npm install -g npm@latest
       - run: pnpm install
       - run: pnpm publish -r --access public --provenance --no-git-checks
