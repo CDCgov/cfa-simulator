@@ -1,8 +1,6 @@
 name: Publish Package
 
 on:
-  workflow_dispatch:
-
   push:
     tags:
       - "v*"
@@ -21,5 +19,8 @@ jobs:
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
+          cache: pnpm
 
-      - run: npm publish --workspaces --access public --provenance
+      - run: npm install -g npm@latest
+      - run: pnpm install
+      - run: pnpm publish -r --access public --provenance --no-git-checks
