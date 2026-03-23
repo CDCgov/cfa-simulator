@@ -6,6 +6,7 @@
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 
 const BUMP = process.argv[2];
 if (!["patch", "minor", "major"].includes(BUMP)) {
@@ -42,6 +43,7 @@ function bumpPackageJson(path) {
   content.version = bump(old, BUMP);
   writeFileSync(path, JSON.stringify(content, null, 2) + "\n");
   console.log(`${path}: ${old} → ${content.version}`);
+  return content.version;
 }
 
 function bumpCargoToml(path) {
@@ -61,7 +63,14 @@ function bumpCargoToml(path) {
   console.log(`${path}: ${old} → ${next}`);
 }
 
-for (const p of PACKAGE_JSONS) bumpPackageJson(p);
+let newVersion;
+for (const p of PACKAGE_JSONS) newVersion = bumpPackageJson(p);
 for (const p of CARGO_TOMLS) bumpCargoToml(p);
 
-console.log(`\nAll packages bumped (${BUMP}).`);
+const tag = `v${newVersion}`;
+const allFiles = [...PACKAGE_JSONS, ...CARGO_TOMLS].join(" ");
+execSync(`git add ${allFiles}`, { stdio: "inherit" });
+execSync(`git commit -m "release: ${tag}"`, { stdio: "inherit" });
+execSync(`git tag ${tag}`, { stdio: "inherit" });
+
+console.log(`\nAll packages bumped (${BUMP}). Created commit and tag ${tag}.`);

@@ -6,3 +6,6 @@ edition = "2021"
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 cliclack = "0.3"
+ureq = "3"
+flate2 = "1"
+tar = "0.4"

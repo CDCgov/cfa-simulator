@@ -1,0 +1,16 @@
+name: Update latest branch
+
+on:
+  push:
+    tags: ["*"]
+
+jobs:
+  update-latest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+      - run: git push origin HEAD:refs/heads/latest --force
