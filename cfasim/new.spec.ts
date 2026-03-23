@@ -1,41 +1,34 @@
 import { test, expect } from "@playwright/test";
 import { execSync, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { existsSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync, mkdtempSync } from "node:fs";
 import { resolve } from "node:path";
+import { tmpdir } from "node:os";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const CLI = resolve(ROOT, "target/debug/cfasim");
 
 type Model = "python" | "rust";
 
+const TMP_DIR = mkdtempSync(resolve(tmpdir(), "cfasim-test-"));
+
 function cleanProject(name: string) {
-  const dir = resolve(ROOT, name);
+  const dir = resolve(TMP_DIR, name);
   if (existsSync(dir)) {
     rmSync(dir, { recursive: true, force: true });
-  }
-  // Remove entry from pnpm-workspace.yaml
-  const wsFile = resolve(ROOT, "pnpm-workspace.yaml");
-  const content = readFileSync(wsFile, "utf-8");
-  const cleaned = content
-    .split("\n")
-    .filter((line) => !line.includes(`"${name}"`))
-    .join("\n");
-  if (cleaned !== content) {
-    writeFileSync(wsFile, cleaned);
   }
 }
 
 function scaffoldProject(name: string, model: Model) {
   cleanProject(name);
-  execSync(`${CLI} new --name ${name} --model ${model}`, { cwd: ROOT });
+  execSync(`${CLI} new --name ${name} --model ${model}`, { cwd: TMP_DIR });
 }
 
 function startVite(
   name: string,
   port: number,
 ): { proc: ChildProcess; url: string } {
-  const dir = resolve(ROOT, name);
+  const dir = resolve(TMP_DIR, name);
   const proc = spawn("pnpm", ["exec", "vite", "--port", String(port)], {
     cwd: dir,
     stdio: "pipe",
@@ -69,13 +62,11 @@ test.describe("cfasim new", () => {
     // Build CLI
     execSync("cargo build -p cfasim", { cwd: ROOT });
 
-    // Scaffold all projects
+    // Scaffold and install each project
     for (const p of projects) {
       scaffoldProject(p.name, p.model);
+      execSync("pnpm install", { cwd: resolve(TMP_DIR, p.name) });
     }
-
-    // Install dependencies
-    execSync("pnpm install", { cwd: ROOT });
 
     // Start vite dev servers
     for (const p of projects) {
@@ -89,9 +80,7 @@ test.describe("cfasim new", () => {
     for (const proc of procs) {
       proc.kill();
     }
-    for (const p of projects) {
-      cleanProject(p.name);
-    }
+    rmSync(TMP_DIR, { recursive: true, force: true });
   });
 
   for (const p of projects) {

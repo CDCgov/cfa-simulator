@@ -53,40 +53,10 @@ fn write_file(base: &Path, relative: &str, content: &str) -> std::io::Result<()>
     fs::write(path, content)
 }
 
-fn inject_dependency(package_json: &str, dep_name: &str) -> String {
-    let marker = "\"@cfasim-ui/theme\": \"workspace:*\"";
-    package_json.replace(
-        marker,
-        &format!("{marker},\n    \"{dep_name}\": \"workspace:*\""),
-    )
-}
-
-fn update_pnpm_workspace(project_dir: &Path, name: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let workspace_file = project_dir
-        .parent()
-        .ok_or("could not find parent directory")?
-        .join("pnpm-workspace.yaml");
-
-    if !workspace_file.exists() {
-        return Err("pnpm-workspace.yaml not found".into());
-    }
-
-    let content = fs::read_to_string(&workspace_file)?;
-
-    let new_entry = format!("  - \"{}\"", name);
-    if content.contains(&new_entry) {
-        return Ok(());
-    }
-
-    let updated = if let Some(pos) = content.find("\nneverBuiltDependencies:") {
-        let (before, after) = content.split_at(pos);
-        format!("{}\n{}{}", before, new_entry, after)
-    } else {
-        format!("{}{}\n", content.trim_end(), &format!("\n{new_entry}\n"))
-    };
-
-    fs::write(&workspace_file, updated)?;
-    Ok(())
+fn inject_dependency(package_json: &str, dep_name: &str, version: &str) -> String {
+    let marker = "\"@cfasim-ui/theme\"";
+    let injection = format!("\"{dep_name}\": \"{version}\",\n    {marker}");
+    package_json.replace(marker, &injection)
 }
 
 fn validate_name(name: &str) -> Result<(), String> {
@@ -113,8 +83,8 @@ fn scaffold(name: &str, model_type: &ModelType) -> Result<(), Box<dyn std::error
     // Write shared files
     let pkg_json = render(TMPL_PACKAGE_JSON, name);
     let pkg_json = match model_type {
-        ModelType::Python => inject_dependency(&pkg_json, "@cfasim-ui/pyodide"),
-        ModelType::Rust => inject_dependency(&pkg_json, "@cfasim-ui/wasm"),
+        ModelType::Python => inject_dependency(&pkg_json, "@cfasim-ui/pyodide", "^0.1.1"),
+        ModelType::Rust => inject_dependency(&pkg_json, "@cfasim-ui/wasm", "^0.1.1"),
     };
     write_file(&project_dir, "package.json", &pkg_json)?;
     write_file(
@@ -157,9 +127,6 @@ fn scaffold(name: &str, model_type: &ModelType) -> Result<(), Box<dyn std::error
             )?;
         }
     }
-
-    // Update pnpm workspace
-    update_pnpm_workspace(&project_dir, name)?;
 
     Ok(())
 }
