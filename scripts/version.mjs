@@ -67,8 +67,11 @@ let newVersion;
 for (const p of PACKAGE_JSONS) newVersion = bumpPackageJson(p);
 for (const p of CARGO_TOMLS) bumpCargoToml(p);
 
+// Update Cargo.lock to reflect the new versions
+execSync("cargo check --workspace", { stdio: "inherit" });
+
 const tag = `v${newVersion}`;
-const allFiles = [...PACKAGE_JSONS, ...CARGO_TOMLS].join(" ");
+const allFiles = [...PACKAGE_JSONS, ...CARGO_TOMLS, "Cargo.lock"].join(" ");
 execSync(`git add ${allFiles}`, { stdio: "inherit" });
 execSync(`git commit -m "release: ${tag}"`, { stdio: "inherit" });
 execSync(`git tag ${tag}`, { stdio: "inherit" });
