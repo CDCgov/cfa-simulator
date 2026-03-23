@@ -2,6 +2,11 @@
 name = "cfasim-model"
 version = "0.1.1"
 edition = "2021"
+description = "Model output types for cfasim WebAssembly simulations"
+license = "Apache-2.0"
+repository = "https://github.com/cdcgov/cfa-simulator"
+keywords = ["wasm", "simulation"]
+categories = ["wasm"]
 
 [dependencies]
 wasm-bindgen = "0.2"
