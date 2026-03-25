@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted, useId } from "vue";
+import { computed, ref, watch, onMounted, onUnmounted, useId } from "vue";
 import { geoPath, geoAlbersUsa } from "d3-geo";
+import { zoom as d3Zoom, zoomIdentity } from "d3-zoom";
+import { select } from "d3-selection";
 import { feature, mesh } from "topojson-client";
 import type { Topology, GeometryCollection } from "topojson-specification";
 import usStates from "us-atlas/states-10m.json";
@@ -56,6 +58,10 @@ const props = withDefaults(
     legend?: boolean;
     /** Title displayed next to the legend */
     legendTitle?: string;
+    /** Enable mouse-wheel zooming. Default: false */
+    zoom?: boolean;
+    /** Enable click-and-drag panning. Default: false */
+    pan?: boolean;
   }>(),
   {
     geoType: "states",
@@ -64,6 +70,8 @@ const props = withDefaults(
     strokeWidth: 0.5,
     menu: true,
     legend: true,
+    zoom: false,
+    pan: false,
   },
 );
 
@@ -82,9 +90,12 @@ const uid = useId();
 const gradientId = `choropleth-gradient-${uid}`;
 const containerRef = ref<HTMLElement | null>(null);
 const svgRef = ref<SVGSVGElement | null>(null);
+const mapGroupRef = ref<SVGGElement | null>(null);
 const measuredWidth = ref(0);
 let hoveredEl: SVGPathElement | null = null;
 let observer: ResizeObserver | null = null;
+let zoomBehavior: ReturnType<typeof d3Zoom<SVGSVGElement, unknown>> | null =
+  null;
 
 onMounted(() => {
   if (containerRef.value) {
@@ -95,11 +106,50 @@ onMounted(() => {
     });
     observer.observe(containerRef.value);
   }
+  setupZoom();
 });
 
 onUnmounted(() => {
   observer?.disconnect();
+  teardownZoom();
 });
+
+function setupZoom() {
+  if (!svgRef.value || !mapGroupRef.value) return;
+  if (!props.zoom && !props.pan) return;
+
+  const svg = select(svgRef.value);
+  zoomBehavior = d3Zoom<SVGSVGElement, unknown>()
+    .scaleExtent(props.zoom ? [1, 12] : [1, 1])
+    .on("zoom", (event) => {
+      if (mapGroupRef.value) {
+        mapGroupRef.value.setAttribute("transform", event.transform);
+      }
+    });
+
+  if (!props.pan) {
+    zoomBehavior.filter(
+      (event) => event.type === "wheel" || event.type === "dblclick",
+    );
+  }
+
+  svg.call(zoomBehavior);
+}
+
+function teardownZoom() {
+  if (svgRef.value && zoomBehavior) {
+    select(svgRef.value).on(".zoom", null);
+    zoomBehavior = null;
+  }
+}
+
+watch(
+  () => [props.zoom, props.pan],
+  () => {
+    teardownZoom();
+    setupZoom();
+  },
+);
 
 const width = computed(() => props.width ?? (measuredWidth.value || 600));
 const aspectRatio = computed(() => {
@@ -393,21 +443,10 @@ const menuItems = computed<ChartMenuItem[]>(() => {
 </script>
 
 <template>
-  <div ref="containerRef" class="choropleth-wrapper">
+  <div ref="containerRef" :class="['choropleth-wrapper', { pannable: pan }]">
     <ChartMenu v-if="menu" :items="menuItems" />
     <svg ref="svgRef" :width="width" :height="svgHeight">
-      <text
-        v-if="title"
-        :x="width / 2"
-        :y="18"
-        text-anchor="middle"
-        font-size="14"
-        font-weight="600"
-        fill="currentColor"
-      >
-        {{ title }}
-      </text>
-      <g>
+      <g ref="mapGroupRef">
         <path
           v-for="feat in featuresGeo.features"
           :key="String(feat.id)"
@@ -425,16 +464,16 @@ const menuItems = computed<ChartMenuItem[]>(() => {
             }}{{ stateValue(feat) != null ? `: ${stateValue(feat)}` : "" }}
           </title>
         </path>
+        <path
+          v-if="stateBordersPath"
+          :d="pathGenerator(stateBordersPath) ?? undefined"
+          fill="none"
+          :stroke="strokeColor"
+          :stroke-width="1"
+          stroke-linejoin="round"
+          pointer-events="none"
+        />
       </g>
-      <path
-        v-if="stateBordersPath"
-        :d="pathGenerator(stateBordersPath) ?? undefined"
-        fill="none"
-        :stroke="strokeColor"
-        :stroke-width="1"
-        stroke-linejoin="round"
-        pointer-events="none"
-      />
       <!-- Legend -->
       <g
         v-if="showLegend"
@@ -517,6 +556,17 @@ const menuItems = computed<ChartMenuItem[]>(() => {
           </text>
         </template>
       </g>
+      <text
+        v-if="title"
+        :x="width / 2"
+        :y="18"
+        text-anchor="middle"
+        font-size="14"
+        font-weight="600"
+        fill="currentColor"
+      >
+        {{ title }}
+      </text>
     </svg>
   </div>
 </template>
@@ -525,6 +575,14 @@ const menuItems = computed<ChartMenuItem[]>(() => {
 .choropleth-wrapper {
   position: relative;
   width: 100%;
+}
+
+.choropleth-wrapper.pannable svg {
+  cursor: grab;
+}
+
+.choropleth-wrapper.pannable svg:active {
+  cursor: grabbing;
 }
 
 .choropleth-wrapper:hover :deep(.chart-menu-button) {

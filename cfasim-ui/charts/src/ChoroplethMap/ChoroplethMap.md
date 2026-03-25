@@ -181,13 +181,15 @@ Use an array of `CategoricalStop` objects to map string values to colors. Each s
   </template>
 </ComponentDemo>
 
-### County-level map
+### County-level map with pan and zoom
 
-Set `geoType="counties"` to render county-level data using 5-digit FIPS codes. State borders are drawn on top for context.
+Set `geoType="counties"` to render county-level data using 5-digit FIPS codes. State borders are drawn on top for context. Use `pan` and `zoom` props to enable interactive navigation — useful for dense county data.
 
 <ComponentDemo>
   <ChoroplethMap
     geo-type="counties"
+    :pan="true"
+    :zoom="true"
     :data="[
       { id: '06037', value: 100 },
       { id: '06073', value: 80 },
@@ -210,6 +212,8 @@ Set `geoType="counties"` to render county-level data using 5-digit FIPS codes. S
 ```vue
 <ChoroplethMap
   geo-type="counties"
+  pan
+  zoom
   :data="[
     { id: '06037', value: 100 },
     { id: '36061', value: 90 },

@@ -18,6 +18,8 @@
   "dependencies": {
     "@cfasim-ui/shared": "workspace:*",
     "d3-geo": "^3.1.1",
+    "d3-selection": "^3.0.0",
+    "d3-zoom": "^3.0.0",
     "reka-ui": "^2.9.2",
     "topojson-client": "^3.1.0",
     "us-atlas": "^3.0.1"
@@ -27,6 +29,8 @@
   },
   "devDependencies": {
     "@types/d3-geo": "^3.1.0",
+    "@types/d3-selection": "^3.0.11",
+    "@types/d3-zoom": "^3.0.8",
     "@types/topojson-client": "^3.1.5",
     "@types/topojson-specification": "^1.0.5",
     "@vitejs/plugin-vue": "^6.0.5",
