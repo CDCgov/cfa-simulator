@@ -17,12 +17,18 @@
   },
   "dependencies": {
     "@cfasim-ui/shared": "workspace:*",
-    "reka-ui": "^2.9.2"
+    "d3-geo": "^3.1.1",
+    "reka-ui": "^2.9.2",
+    "topojson-client": "^3.1.0",
+    "us-atlas": "^3.0.1"
   },
   "peerDependencies": {
     "vue": "^3.5.0"
   },
   "devDependencies": {
+    "@types/d3-geo": "^3.1.0",
+    "@types/topojson-client": "^3.1.5",
+    "@types/topojson-specification": "^1.0.5",
     "@vitejs/plugin-vue": "^6.0.5",
     "@vue/test-utils": "^2.4.6",
     "happy-dom": "^20.8.4",

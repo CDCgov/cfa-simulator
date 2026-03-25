@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 const ROOT = resolve(import.meta.dirname, "..");
 const CLI = resolve(ROOT, "target/debug/cfasim");
 
-type Model = "python" | "rust";
+type Template = "python" | "rust";
 
 const TMP_DIR = mkdtempSync(resolve(tmpdir(), "cfasim-test-"));
 
@@ -19,9 +19,10 @@ function cleanProject(name: string) {
   }
 }
 
-function scaffoldProject(name: string, model: Model) {
+function scaffoldProject(name: string, template: Template) {
   cleanProject(name);
-  execSync(`${CLI} new --name ${name} --model ${model}`, { cwd: TMP_DIR });
+  const dir = resolve(TMP_DIR, name);
+  execSync(`${CLI} init --dir ${dir} --template ${template} --local`);
 }
 
 function startVite(
@@ -29,10 +30,14 @@ function startVite(
   port: number,
 ): { proc: ChildProcess; url: string } {
   const dir = resolve(TMP_DIR, name);
-  const proc = spawn("pnpm", ["exec", "vite", "--port", String(port)], {
-    cwd: dir,
-    stdio: "pipe",
-  });
+  const proc = spawn(
+    "pnpm",
+    ["exec", "vite", "--port", String(port), "--strictPort"],
+    {
+      cwd: dir,
+      stdio: "pipe",
+    },
+  );
   return { proc, url: `http://localhost:${port}` };
 }
 
@@ -50,10 +55,10 @@ async function waitForServer(url: string, timeoutMs = 30_000) {
   throw new Error(`Server at ${url} did not start within ${timeoutMs}ms`);
 }
 
-test.describe("cfasim new", () => {
-  const projects: { name: string; model: Model; port: number }[] = [
-    { name: "test-project-python", model: "python", port: 7201 },
-    { name: "test-project-rust", model: "rust", port: 7202 },
+test.describe("cfasim init", () => {
+  const projects: { name: string; template: Template; port: number }[] = [
+    { name: "test-project-python", template: "python", port: 7201 },
+    { name: "test-project-rust", template: "rust", port: 7202 },
   ];
 
   const procs: ChildProcess[] = [];
@@ -64,7 +69,7 @@ test.describe("cfasim new", () => {
 
     // Scaffold and install each project
     for (const p of projects) {
-      scaffoldProject(p.name, p.model);
+      scaffoldProject(p.name, p.template);
       execSync("pnpm install", { cwd: resolve(TMP_DIR, p.name) });
     }
 
@@ -76,20 +81,28 @@ test.describe("cfasim new", () => {
     }
   });
 
-  test.afterAll(() => {
+  test.afterAll(async () => {
     for (const proc of procs) {
       proc.kill();
     }
-    rmSync(TMP_DIR, { recursive: true, force: true });
+    // Wait for child processes to exit before removing temp dir
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      rmSync(TMP_DIR, { recursive: true, force: true });
+    } catch {
+      // Retry once after additional delay (macOS race condition)
+      await new Promise((r) => setTimeout(r, 1000));
+      rmSync(TMP_DIR, { recursive: true, force: true });
+    }
   });
 
   for (const p of projects) {
-    test(`${p.model} project renders`, async ({ page }) => {
+    test(`${p.template} project renders`, async ({ page }) => {
       await page.goto(`http://localhost:${p.port}`);
 
       await expect(page.locator("h2")).toContainText(p.name);
       await expect(page.locator("h1")).toContainText(p.name);
-      await expect(page.getByLabel("Base number")).toBeVisible();
+      await expect(page.getByLabel("Steps")).toBeVisible();
     });
   }
 });

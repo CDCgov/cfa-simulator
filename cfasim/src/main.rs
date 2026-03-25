@@ -1,4 +1,4 @@
-mod new;
+mod init;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
@@ -11,20 +11,24 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Create a new cfasim project
-    New {
-        /// Project name (skips interactive prompt)
-        #[arg(long)]
-        name: Option<String>,
+    /// Initialize a new cfasim project
+    Init {
+        /// Target directory (name is derived from directory name; defaults to current directory if provided without a value)
+        #[arg(long, default_missing_value = ".")]
+        dir: Option<String>,
 
-        /// Model type: python or rust (skips interactive prompt)
+        /// Template: python or rust (skips interactive prompt)
         #[arg(long)]
-        model: Option<ModelArg>,
+        template: Option<TemplateArg>,
+
+        /// Use local templates instead of downloading from GitHub
+        #[arg(long)]
+        local: bool,
     },
 }
 
 #[derive(Clone, ValueEnum)]
-enum ModelArg {
+enum TemplateArg {
     Python,
     Rust,
 }
@@ -32,12 +36,16 @@ enum ModelArg {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     match cli.command {
-        Commands::New { name, model } => {
-            let model_type = model.map(|m| match m {
-                ModelArg::Python => new::ModelType::Python,
-                ModelArg::Rust => new::ModelType::Rust,
+        Commands::Init {
+            dir,
+            template,
+            local,
+        } => {
+            let template = template.map(|t| match t {
+                TemplateArg::Python => init::Template::Python,
+                TemplateArg::Rust => init::Template::Rust,
             });
-            new::run(name, model_type)?;
+            init::run(dir, template, local)?;
         }
     }
     Ok(())

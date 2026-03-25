@@ -23,15 +23,15 @@ plz install
 Use the `cfasim` CLI to scaffold a new simulation project:
 
 ```bash
-plz new
+plz init
 ```
 
-This will interactively prompt for a project name and model type (Python or Rust), then scaffold a Vite + Vue app with cfasim-ui and the appropriate worker setup.
+This will interactively prompt for a template (Python or Rust), then scaffold a Vite + Vue app with cfasim-ui and the appropriate worker setup in the current directory (deriving the project name from the directory name).
 
 You can also run it non-interactively:
 
 ```bash
-cargo run -p cfasim -- new --name my-sim --model python
+cargo run -p cfasim -- init --dir my-sim --template python
 ```
 
 ## Project structure

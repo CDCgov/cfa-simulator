@@ -22,9 +22,9 @@ git_hook = "pre-commit"
 [tasks.fix]
 run = "pnpm exec prettier --write ."
 
-# Create a new cfasim project
-[tasks.new]
-run = "cargo run -p cfasim -- new"
+# Initialize a new cfasim project
+[tasks.init]
+run = "cargo run -p cfasim -- init"
 
 # Bump all package versions (patch, minor, or major)
 [tasks.version]
@@ -61,15 +61,9 @@ run = "pnpm exec playwright test --config playwright.config.ts"
 [taskgroup.examples.extends]
 dir = "examples"
 
-# Build the Rust example WASM module
-[taskgroup.examples.build-rust]
-dir = "examples/rust-example/model"
-run = "wasm-pack build --target web --out-dir ../public/wasm/rust_example"
-
 # Run the Rust example dev server
 [taskgroup.examples.dev-rust]
 dir = "examples/rust-example"
-depends = "examples.build-rust"
 run = "pnpm dev"
 
 # Run the Python example dev server
@@ -85,7 +79,6 @@ run = "pnpm exec vite build"
 # Build the Rust example app
 [taskgroup.examples.build-rust-app]
 dir = "examples/rust-example"
-depends = "examples.build-rust"
 run = "pnpm exec vite build"
 
 # E2E test for Python example

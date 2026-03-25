@@ -13,7 +13,8 @@
     "src"
   ],
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./vite": "./src/vitePlugin.ts"
   },
   "dependencies": {
     "@cfasim-ui/shared": "workspace:*",

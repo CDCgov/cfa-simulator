@@ -81,6 +81,12 @@ const components = [
     "cfasim-ui/components/src/Toggle/Toggle.md",
   ],
   [
+    "choropleth-map",
+    "charts",
+    "cfasim-ui/charts/src/ChoroplethMap/ChoroplethMap.vue",
+    "cfasim-ui/charts/src/ChoroplethMap/ChoroplethMap.md",
+  ],
+  [
     "line-chart",
     "charts",
     "cfasim-ui/charts/src/LineChart/LineChart.vue",
