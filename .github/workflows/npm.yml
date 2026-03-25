@@ -23,4 +23,6 @@ jobs:
           cache: pnpm
       - run: npm install -g npm@latest
       - run: pnpm install
-      - run: pnpm publish -r --access public --provenance --no-git-checks
+      - run: pnpm publish -r --access public --no-git-checks
+        env:
+          NPM_CONFIG_PROVENANCE: true
