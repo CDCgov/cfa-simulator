@@ -3,15 +3,16 @@ import { computed, ref, watch, onMounted, onUnmounted, useId } from "vue";
 import { geoPath, geoAlbersUsa } from "d3-geo";
 import { zoom as d3Zoom, zoomIdentity } from "d3-zoom";
 import { select } from "d3-selection";
-import { feature, mesh } from "topojson-client";
+import { feature, mesh, merge } from "topojson-client";
 import type { Topology, GeometryCollection } from "topojson-specification";
 import usStates from "us-atlas/states-10m.json";
 import usCounties from "us-atlas/counties-10m.json";
+import { fipsToHsa, hsaNames } from "./hsaMapping.js";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
 import { saveSvg, savePng } from "../ChartMenu/download.js";
 
-export type GeoType = "states" | "counties";
+export type GeoType = "states" | "counties" | "hsas";
 
 export interface StateData {
   /** FIPS code (e.g. "06" for California, "04015" for a county) or name */
@@ -44,7 +45,7 @@ export interface CategoricalStop {
 const props = withDefaults(
   defineProps<{
     data?: StateData[];
-    /** Geographic type: "states" (default) or "counties" */
+    /** Geographic type: "states" (default), "counties", or "hsas" (Health Service Areas) */
     geoType?: GeoType;
     width?: number;
     height?: number;
@@ -165,7 +166,33 @@ const countiesTopo = usCounties as unknown as Topology<{
   states: NamedGeometry;
 }>;
 
+const hsaFeaturesGeo = computed(() => {
+  const countyGeometries = countiesTopo.objects.counties.geometries;
+  const groups = new Map<string, typeof countyGeometries>();
+
+  for (const geom of countyGeometries) {
+    const fips = String(geom.id).padStart(5, "0");
+    const hsaCode = fipsToHsa[fips];
+    if (!hsaCode) continue;
+    if (!groups.has(hsaCode)) groups.set(hsaCode, []);
+    groups.get(hsaCode)!.push(geom);
+  }
+
+  const features: GeoJSON.Feature[] = [];
+  for (const [hsaCode, geoms] of groups) {
+    features.push({
+      type: "Feature",
+      id: hsaCode,
+      properties: { name: hsaNames[hsaCode] ?? hsaCode },
+      geometry: merge(countiesTopo as unknown as Topology, geoms as any),
+    });
+  }
+
+  return { type: "FeatureCollection" as const, features };
+});
+
 const featuresGeo = computed(() => {
+  if (props.geoType === "hsas") return hsaFeaturesGeo.value;
   if (props.geoType === "counties") {
     return feature(countiesTopo, countiesTopo.objects.counties);
   }
@@ -173,7 +200,7 @@ const featuresGeo = computed(() => {
 });
 
 const stateBordersPath = computed(() => {
-  if (props.geoType !== "counties") return null;
+  if (props.geoType !== "counties" && props.geoType !== "hsas") return null;
   return mesh(countiesTopo, countiesTopo.objects.states, (a, b) => a !== b);
 });
 
@@ -190,7 +217,9 @@ const projection = computed(() =>
 const pathGenerator = computed(() => geoPath(projection.value));
 
 const effectiveStrokeWidth = computed(() =>
-  props.geoType === "counties" ? props.strokeWidth * 0.5 : props.strokeWidth,
+  props.geoType === "counties" || props.geoType === "hsas"
+    ? props.strokeWidth * 0.5
+    : props.strokeWidth,
 );
 
 const dataMap = computed(() => {

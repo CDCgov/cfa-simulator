@@ -1,6 +1,6 @@
 # ChoroplethMap
 
-A US choropleth map using D3's Albers USA projection, which repositions Alaska and Hawaii to the bottom left. Supports state-level and county-level rendering via the `geoType` prop. Includes built-in GeoJSON for all US states, territories, and counties.
+A US choropleth map using D3's Albers USA projection, which repositions Alaska and Hawaii to the bottom left. Supports state-level, county-level, and HSA-level (Health Service Areas) rendering via the `geoType` prop. Includes built-in GeoJSON for all US states, territories, counties, and 949 HSAs.
 
 ## Examples
 
@@ -222,6 +222,55 @@ Set `geoType="counties"` to render county-level data using 5-digit FIPS codes. S
     { id: '04013', value: 60 },
   ]"
   title="Cases by County"
+  :legend-title="'Cases'"
+  :height="400"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### HSA-level map
+
+Set `geoType="hsas"` to render Health Service Area boundaries. HSAs are dissolved from county boundaries using a built-in FIPS-to-HSA mapping. Use 6-digit HSA codes as IDs. State borders are overlaid for context.
+
+<ComponentDemo>
+  <ChoroplethMap
+    geo-type="hsas"
+    :pan="true"
+    :zoom="true"
+    :data="[
+      { id: '010259', value: 100 },
+      { id: '060766', value: 90 },
+      { id: '120159', value: 85 },
+      { id: '090121', value: 70 },
+      { id: '110061', value: 60 },
+      { id: '040765', value: 55 },
+      { id: '080731', value: 50 },
+      { id: '050527', value: 45 },
+      { id: '100075', value: 40 },
+      { id: '020820', value: 35 },
+    ]"
+    title="Cases by HSA"
+    :legend-title="'Cases'"
+    :height="400"
+  />
+
+<template #code>
+
+```vue
+<ChoroplethMap
+  geo-type="hsas"
+  pan
+  zoom
+  :data="[
+    { id: '010259', value: 100 },
+    { id: '060766', value: 90 },
+    { id: '120159', value: 85 },
+    { id: '090121', value: 70 },
+    { id: '110061', value: 60 },
+  ]"
+  title="Cases by HSA"
   :legend-title="'Cases'"
   :height="400"
 />

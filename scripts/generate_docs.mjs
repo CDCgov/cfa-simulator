@@ -120,6 +120,8 @@ function findMatchingBrace(text, start) {
 }
 
 function parsePropsFromTypeBody(body) {
+  // Strip JSDoc comments so their colons don't confuse the prop regex
+  body = body.replace(/\/\*\*[\s\S]*?\*\//g, "");
   const props = [];
   const propRe = /(\w+)(\?)?:\s*([^;]+);/g;
   let m;

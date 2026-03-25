@@ -411,6 +411,48 @@ describe("ChoroplethMap", () => {
     expect(borderPath).toBeUndefined();
   });
 
+  it("renders HSA paths when geoType is hsas", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { width: 600, height: 400, geoType: "hsas" },
+    });
+    const paths = wrapper.findAll(".state-path");
+    // 949 unique HSAs
+    expect(paths.length).toBeGreaterThanOrEqual(900);
+    expect(paths.length).toBeLessThan(1000);
+  });
+
+  it("colors HSAs by HSA code", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        width: 600,
+        height: 400,
+        geoType: "hsas",
+        data: [
+          { id: "010259", value: 100 }, // Butler, AL
+          { id: "010177", value: 0 }, // Calhoun (Anniston), AL
+        ],
+      },
+    });
+    const butler = wrapper
+      .findAll(".state-path")
+      .find((p) => p.find("title").text().includes("Butler, AL"));
+    expect(butler).toBeDefined();
+    expect(butler!.attributes("fill")).not.toBe("#ddd");
+  });
+
+  it("renders state borders overlay in HSA mode", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { width: 600, height: 400, geoType: "hsas" },
+    });
+    const allPaths = wrapper.findAll("path");
+    const borderPath = allPaths.find(
+      (p) =>
+        p.attributes("fill") === "none" &&
+        p.attributes("pointer-events") === "none",
+    );
+    expect(borderPath).toBeDefined();
+  });
+
   it("emits stateHover on mouseenter/mouseleave", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: { width: 600, height: 400 },
