@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted, useId } from "vue";
 import { geoPath, geoAlbersUsa } from "d3-geo";
-import { feature } from "topojson-client";
+import { feature, mesh } from "topojson-client";
 import type { Topology, GeometryCollection } from "topojson-specification";
 import usStates from "us-atlas/states-10m.json";
+import usCounties from "us-atlas/counties-10m.json";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
 import { saveSvg, savePng } from "../ChartMenu/download.js";
 
+export type GeoType = "states" | "counties";
+
 export interface StateData {
-  /** FIPS code (e.g. "06" for California) or state name */
+  /** FIPS code (e.g. "06" for California, "04015" for a county) or name */
   id: string;
   value: number | string;
 }
@@ -39,6 +42,8 @@ export interface CategoricalStop {
 const props = withDefaults(
   defineProps<{
     data?: StateData[];
+    /** Geographic type: "states" (default) or "counties" */
+    geoType?: GeoType;
     width?: number;
     height?: number;
     colorScale?: ChoroplethColorScale | ThresholdStop[] | CategoricalStop[];
@@ -53,6 +58,7 @@ const props = withDefaults(
     legendTitle?: string;
   }>(),
   {
+    geoType: "states",
     noDataColor: "#ddd",
     strokeColor: "#fff",
     strokeWidth: 0.5,
@@ -77,7 +83,7 @@ const gradientId = `choropleth-gradient-${uid}`;
 const containerRef = ref<HTMLElement | null>(null);
 const svgRef = ref<SVGSVGElement | null>(null);
 const measuredWidth = ref(0);
-const hoveredStateId = ref<string | null>(null);
+let hoveredEl: SVGPathElement | null = null;
 let observer: ResizeObserver | null = null;
 
 onMounted(() => {
@@ -102,10 +108,24 @@ const aspectRatio = computed(() => {
 });
 const height = computed(() => width.value * aspectRatio.value);
 
-const topology = usStates as unknown as Topology<{
-  states: GeometryCollection<{ name: string }>;
+type NamedGeometry = GeometryCollection<{ name: string }>;
+const statesTopo = usStates as unknown as Topology<{ states: NamedGeometry }>;
+const countiesTopo = usCounties as unknown as Topology<{
+  counties: NamedGeometry;
+  states: NamedGeometry;
 }>;
-const statesGeo = computed(() => feature(topology, topology.objects.states));
+
+const featuresGeo = computed(() => {
+  if (props.geoType === "counties") {
+    return feature(countiesTopo, countiesTopo.objects.counties);
+  }
+  return feature(statesTopo, statesTopo.objects.states);
+});
+
+const stateBordersPath = computed(() => {
+  if (props.geoType !== "counties") return null;
+  return mesh(countiesTopo, countiesTopo.objects.states, (a, b) => a !== b);
+});
 
 const projection = computed(() =>
   geoAlbersUsa().fitExtent(
@@ -113,18 +133,22 @@ const projection = computed(() =>
       [0, topOffset.value],
       [width.value, height.value + topOffset.value],
     ],
-    statesGeo.value,
+    featuresGeo.value,
   ),
 );
 
 const pathGenerator = computed(() => geoPath(projection.value));
+
+const effectiveStrokeWidth = computed(() =>
+  props.geoType === "counties" ? props.strokeWidth * 0.5 : props.strokeWidth,
+);
 
 const dataMap = computed(() => {
   const map = new Map<string, number | string>();
   if (!props.data) return map;
   for (const d of props.data) {
     map.set(d.id, d.value);
-    const geo = statesGeo.value.features.find(
+    const geo = featuresGeo.value.features.find(
       (f) => f.properties?.name === d.id,
     );
     if (geo?.id != null) map.set(String(geo.id), d.value);
@@ -213,17 +237,17 @@ function stateColor(id: string | number): string {
   return interpolateColor(t);
 }
 
-function stateName(feat: (typeof statesGeo.value.features)[number]): string {
+function stateName(feat: (typeof featuresGeo.value.features)[number]): string {
   return feat.properties?.name ?? String(feat.id);
 }
 
 function stateValue(
-  feat: (typeof statesGeo.value.features)[number],
+  feat: (typeof featuresGeo.value.features)[number],
 ): number | string | undefined {
   return dataMap.value.get(String(feat.id));
 }
 
-function handleClick(feat: (typeof statesGeo.value.features)[number]) {
+function handleClick(feat: (typeof featuresGeo.value.features)[number]) {
   emit("stateClick", {
     id: String(feat.id),
     name: stateName(feat),
@@ -231,8 +255,13 @@ function handleClick(feat: (typeof statesGeo.value.features)[number]) {
   });
 }
 
-function handleMouseEnter(feat: (typeof statesGeo.value.features)[number]) {
-  hoveredStateId.value = String(feat.id);
+function handleMouseEnter(
+  feat: (typeof featuresGeo.value.features)[number],
+  event: MouseEvent,
+) {
+  const el = event.currentTarget as SVGPathElement;
+  hoveredEl = el;
+  el.setAttribute("stroke-width", String(effectiveStrokeWidth.value + 1));
   emit("stateHover", {
     id: String(feat.id),
     name: stateName(feat),
@@ -241,7 +270,10 @@ function handleMouseEnter(feat: (typeof statesGeo.value.features)[number]) {
 }
 
 function handleMouseLeave() {
-  hoveredStateId.value = null;
+  if (hoveredEl) {
+    hoveredEl.setAttribute("stroke-width", String(effectiveStrokeWidth.value));
+    hoveredEl = null;
+  }
   emit("stateHover", null);
 }
 
@@ -377,17 +409,15 @@ const menuItems = computed<ChartMenuItem[]>(() => {
       </text>
       <g>
         <path
-          v-for="feat in statesGeo.features"
+          v-for="feat in featuresGeo.features"
           :key="String(feat.id)"
           :d="pathGenerator(feat) ?? undefined"
           :fill="stateColor(feat.id!)"
           :stroke="strokeColor"
-          :stroke-width="
-            hoveredStateId === String(feat.id) ? strokeWidth + 1 : strokeWidth
-          "
+          :stroke-width="effectiveStrokeWidth"
           class="state-path"
           @click="handleClick(feat)"
-          @mouseenter="handleMouseEnter(feat)"
+          @mouseenter="handleMouseEnter(feat, $event)"
           @mouseleave="handleMouseLeave"
         >
           <title>
@@ -396,6 +426,15 @@ const menuItems = computed<ChartMenuItem[]>(() => {
           </title>
         </path>
       </g>
+      <path
+        v-if="stateBordersPath"
+        :d="pathGenerator(stateBordersPath) ?? undefined"
+        fill="none"
+        :stroke="strokeColor"
+        :stroke-width="1"
+        stroke-linejoin="round"
+        pointer-events="none"
+      />
       <!-- Legend -->
       <g
         v-if="showLegend"

@@ -356,6 +356,61 @@ describe("ChoroplethMap", () => {
     expect(wrapper.find(".choropleth-legend").exists()).toBe(false);
   });
 
+  it("renders county paths when geoType is counties", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { width: 600, height: 400, geoType: "counties" },
+    });
+    const paths = wrapper.findAll(".state-path");
+    // us-atlas counties-10m has 3231 county geometries
+    expect(paths.length).toBeGreaterThanOrEqual(3000);
+  });
+
+  it("colors counties by FIPS id", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        width: 600,
+        height: 400,
+        geoType: "counties",
+        data: [
+          { id: "04015", value: 100 }, // Mohave County, AZ
+          { id: "06037", value: 0 }, // Los Angeles County, CA
+        ],
+      },
+    });
+    const mohave = wrapper
+      .findAll(".state-path")
+      .find((p) => p.find("title").text().includes("Mohave"));
+    expect(mohave).toBeDefined();
+    expect(mohave!.attributes("fill")).not.toBe("#ddd");
+  });
+
+  it("renders state borders overlay in county mode", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { width: 600, height: 400, geoType: "counties" },
+    });
+    // State borders path rendered after the county paths group
+    const allPaths = wrapper.findAll("path");
+    const borderPath = allPaths.find(
+      (p) =>
+        p.attributes("fill") === "none" &&
+        p.attributes("pointer-events") === "none",
+    );
+    expect(borderPath).toBeDefined();
+  });
+
+  it("does not render state borders in states mode", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { width: 600, height: 400 },
+    });
+    const allPaths = wrapper.findAll("path");
+    const borderPath = allPaths.find(
+      (p) =>
+        p.attributes("fill") === "none" &&
+        p.attributes("pointer-events") === "none",
+    );
+    expect(borderPath).toBeUndefined();
+  });
+
   it("emits stateHover on mouseenter/mouseleave", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: { width: 600, height: 400 },

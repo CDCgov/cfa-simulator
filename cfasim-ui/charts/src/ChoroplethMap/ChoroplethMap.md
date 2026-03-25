@@ -1,6 +1,6 @@
 # ChoroplethMap
 
-A US state-level choropleth map using D3's Albers USA projection, which repositions Alaska and Hawaii to the bottom left. Includes built-in GeoJSON for all US states and territories.
+A US choropleth map using D3's Albers USA projection, which repositions Alaska and Hawaii to the bottom left. Supports state-level and county-level rendering via the `geoType` prop. Includes built-in GeoJSON for all US states, territories, and counties.
 
 ## Examples
 
@@ -181,13 +181,58 @@ Use an array of `CategoricalStop` objects to map string values to colors. Each s
   </template>
 </ComponentDemo>
 
+### County-level map
+
+Set `geoType="counties"` to render county-level data using 5-digit FIPS codes. State borders are drawn on top for context.
+
+<ComponentDemo>
+  <ChoroplethMap
+    geo-type="counties"
+    :data="[
+      { id: '06037', value: 100 },
+      { id: '06073', value: 80 },
+      { id: '06059', value: 70 },
+      { id: '36061', value: 90 },
+      { id: '36047', value: 75 },
+      { id: '17031', value: 85 },
+      { id: '48201', value: 65 },
+      { id: '04013', value: 60 },
+      { id: '12086', value: 55 },
+      { id: '53033', value: 50 },
+    ]"
+    title="Cases by County"
+    :legend-title="'Cases'"
+    :height="400"
+  />
+
+<template #code>
+
+```vue
+<ChoroplethMap
+  geo-type="counties"
+  :data="[
+    { id: '06037', value: 100 },
+    { id: '36061', value: 90 },
+    { id: '17031', value: 85 },
+    { id: '48201', value: 65 },
+    { id: '04013', value: 60 },
+  ]"
+  title="Cases by County"
+  :legend-title="'Cases'"
+  :height="400"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 <!--@include: ./_api/choropleth-map.md-->
 
 ### StateData
 
 ```ts
 interface StateData {
-  /** FIPS code (e.g. "06" for California) or state name */
+  /** FIPS code (e.g. "06" for California, "06037" for LA County) or name */
   id: string;
   value: number | string;
 }
