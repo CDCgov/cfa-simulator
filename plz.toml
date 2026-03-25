@@ -87,9 +87,25 @@ dir = "examples/python-example"
 run = "pnpm exec playwright test --config playwright.config.ts"
 git_hook = "pre-push"
 
+# Run the Fetch example dev server
+[taskgroup.examples.dev-fetch]
+dir = "examples/fetch-example"
+run = "pnpm dev"
+
+# Build the Fetch example
+[taskgroup.examples.build-fetch]
+dir = "examples/fetch-example"
+run = "pnpm exec vite build"
+
 # E2E test for Rust example
 [taskgroup.examples.test-rust]
 dir = "examples/rust-example"
+run = "pnpm exec playwright test --config playwright.config.ts"
+git_hook = "pre-push"
+
+# E2E test for Fetch example
+[taskgroup.examples.test-fetch]
+dir = "examples/fetch-example"
 run = "pnpm exec playwright test --config playwright.config.ts"
 git_hook = "pre-push"
 

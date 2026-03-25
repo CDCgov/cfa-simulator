@@ -12,16 +12,26 @@ export interface Series {
   opacity?: number;
 }
 
+export interface Area {
+  upper: number[];
+  lower: number[];
+  color?: string;
+  opacity?: number;
+}
+
 const props = withDefaults(
   defineProps<{
     data?: number[];
     series?: Series[];
+    areas?: Area[];
     width?: number;
     height?: number;
     lineOpacity?: number;
     title?: string;
     xLabel?: string;
     yLabel?: string;
+    yMin?: number;
+    xMin?: number;
     debounce?: number;
     menu?: boolean | string;
   }>(),
@@ -81,10 +91,16 @@ const allSeries = computed<Series[]>(() => {
   return [];
 });
 
+const allAreas = computed<Area[]>(() => props.areas ?? []);
+
 const maxLen = computed(() => {
   let m = 0;
   for (const s of allSeries.value) {
     if (s.data.length > m) m = s.data.length;
+  }
+  for (const a of allAreas.value) {
+    if (a.upper.length > m) m = a.upper.length;
+    if (a.lower.length > m) m = a.lower.length;
   }
   return m;
 });
@@ -98,7 +114,18 @@ const extent = computed(() => {
       if (v > max) max = v;
     }
   }
+  for (const a of allAreas.value) {
+    for (const v of a.upper) {
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    for (const v of a.lower) {
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+  }
   if (!isFinite(min)) return { min: 0, max: 0, range: 1 };
+  if (props.yMin != null && props.yMin < min) min = props.yMin;
   return { min, max, range: max - min || 1 };
 });
 
@@ -114,6 +141,22 @@ function toPath(data: number[]): string {
     d += `L${padding.value.left + i * xScale},${py - (data[i] - min) * yScale}`;
   }
   return d;
+}
+
+function toAreaPath(upper: number[], lower: number[]): string {
+  const len = Math.min(upper.length, lower.length);
+  if (len === 0) return "";
+  const { min, range } = extent.value;
+  const ml = maxLen.value;
+  const xScale = innerW.value / (ml - 1 || 1);
+  const yScale = innerH.value / range;
+  const py = padding.value.top + innerH.value;
+  const x = (i: number) => padding.value.left + i * xScale;
+  const y = (v: number) => py - (v - min) * yScale;
+  let d = `M${x(0)},${y(upper[0])}`;
+  for (let i = 1; i < len; i++) d += `L${x(i)},${y(upper[i])}`;
+  for (let i = len - 1; i >= 0; i--) d += `L${x(i)},${y(lower[i])}`;
+  return d + "Z";
 }
 
 function niceStep(range: number, targetTicks: number): number {
@@ -164,13 +207,14 @@ const yTicks = computed(() => {
 const xTicks = computed(() => {
   const len = maxLen.value;
   if (len <= 1) return [];
+  const offset = props.xMin ?? 0;
   const targetTicks = Math.max(3, Math.floor(innerW.value / 80));
   const step = niceStep(len - 1, targetTicks);
   const ticks: { value: string; x: number }[] = [];
   for (let i = 0; i <= len - 1; i += step) {
     const idx = Math.round(i);
     ticks.push({
-      value: idx.toString(),
+      value: formatTick(idx + offset),
       x: padding.value.left + (idx / (len - 1)) * innerW.value,
     });
   }
@@ -309,6 +353,15 @@ const menuItems = computed<ChartMenuItem[]>(() => {
       >
         {{ xLabel }}
       </text>
+      <!-- areas -->
+      <path
+        v-for="(a, i) in allAreas"
+        :key="'area' + i"
+        :d="toAreaPath(a.upper, a.lower)"
+        :fill="a.color ?? 'currentColor'"
+        :fill-opacity="a.opacity ?? 0.2"
+        stroke="none"
+      />
       <!-- data lines -->
       <path
         v-for="(s, i) in allSeries"

@@ -1,4 +1,8 @@
-export { default as LineChart, type Series } from "./LineChart/LineChart.vue";
+export {
+  default as LineChart,
+  type Series,
+  type Area,
+} from "./LineChart/LineChart.vue";
 export {
   default as ChoroplethMap,
   type GeoType,
