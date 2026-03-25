@@ -24,6 +24,30 @@ importers:
         specifier: ^3.2.6
         version: 3.2.6(typescript@5.9.3)
 
+  cfasim-ui/cfasim-ui:
+    dependencies:
+      '@cfasim-ui/charts':
+        specifier: workspace:*
+        version: link:../charts
+      '@cfasim-ui/components':
+        specifier: workspace:*
+        version: link:../components
+      '@cfasim-ui/pyodide':
+        specifier: workspace:*
+        version: link:../pyodide
+      '@cfasim-ui/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@cfasim-ui/theme':
+        specifier: workspace:*
+        version: link:../theme
+      '@cfasim-ui/wasm':
+        specifier: workspace:*
+        version: link:../wasm
+      vue:
+        specifier: ^3.5.0
+        version: 3.5.30(typescript@5.9.3)
+
   cfasim-ui/charts:
     dependencies:
       '@cfasim-ui/shared':

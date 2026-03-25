@@ -10,7 +10,11 @@ export default defineConfig({
     sidebar: [
       {
         text: "Guides",
-        items: [{ text: "Getting Started", link: "/getting-started" }],
+        items: [
+          { text: "Getting Started", link: "/getting-started" },
+          { text: "Python Projects", link: "/guide/python" },
+          { text: "Rust Projects", link: "/guide/rust" },
+        ],
       },
       {
         text: "cfasim-ui",

@@ -1,49 +1,22 @@
 # Getting Started
 
-## Prerequisites
+cfasim-ui is a Vue 3 component library for building interactive simulations. It runs your model — written in Python or Rust — directly in the browser using Web Workers.
 
-- [Node.js](https://nodejs.org/) v24+
-- [pnpm](https://pnpm.io/) v10+ (enabled via `corepack enable`)
-- [plz](https://plzplz.org) — the project's task runner
+## Packages
 
-## Setup
+| Package                 | Description                                                   |
+| ----------------------- | ------------------------------------------------------------- |
+| `@cfasim-ui/components` | Accessible UI components built on reka-ui                     |
+| `@cfasim-ui/charts`     | SVG charting components (LineChart, ChoroplethMap, DataTable) |
+| `@cfasim-ui/theme`      | Design tokens, reset, and utility classes                     |
+| `@cfasim-ui/pyodide`    | Run Python models in the browser via Pyodide                  |
+| `@cfasim-ui/wasm`       | Run Rust/WASM models in the browser                           |
 
-Clone the repo and install dependencies:
+## Choose your guide
 
-```bash
-git clone <repo-url>
-cd cfa-simulator
-plz install
-```
+Follow the guide for the language your model is written in:
 
-`plz` is the project's task runner — see `plz.toml` for all available tasks.
+- **[Python Projects](./guide/python)** — Vite + Vue + Pyodide. Write your model in Python, build it as a wheel, and run it in the browser.
+- **[Rust Projects](./guide/rust)** — Vite + Vue + WebAssembly. Write your model in Rust, compile to WASM, and run it in the browser.
 
-## Creating a new project
-
-Use the `cfasim` CLI to scaffold a new simulation project:
-
-```bash
-plz init
-```
-
-This will interactively prompt for a template (Python or Rust), then scaffold a Vite + Vue app with cfasim-ui and the appropriate worker setup in the current directory (deriving the project name from the directory name).
-
-You can also run it non-interactively:
-
-```bash
-cargo run -p cfasim -- init --dir my-sim --template python
-```
-
-## Project structure
-
-| Directory    | What it is                                     |
-| ------------ | ---------------------------------------------- |
-| `cfasim/`    | CLI tool for scaffolding new projects (Rust)   |
-| `cfasim-ui/` | Shared components, charts, and theming library |
-| `examples/`  | Example projects (Python and Rust)             |
-| `docs/`      | This documentation site (VitePress)            |
-| `scripts/`   | Build and scaffolding scripts                  |
-
-## Task running
-
-Run `plz` from the root of the repository to see all available tasks.
+Both guides walk through project setup, model creation, Vite configuration, and wiring up the UI from scratch.
