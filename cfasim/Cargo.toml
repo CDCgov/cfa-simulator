@@ -2,6 +2,8 @@
 name = "cfasim"
 version = "0.1.3"
 edition = "2021"
+description = "CLI for scaffolding interactive simulations using Python, Rust, and WebAssembly"
+license = "Apache-2.0"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
