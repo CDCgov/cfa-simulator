@@ -33,6 +33,9 @@ run = "node scripts/version.mjs ${1}"
 [taskgroup.publish.pnpm]
 run = "pnpm -r publish --access public"
 
+[taskgroup.publish.cargo]
+run = "cargo publish -p cfasim-model && cargo publish -p cfasim"
+
 [taskgroup.cli.extends]
 dir = "cfasim"
 
