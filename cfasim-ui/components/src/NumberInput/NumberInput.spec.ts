@@ -6,5 +6,5 @@ test("NumberInput page renders demos", async ({ page }) => {
   const demos = page.locator(".demo-preview");
   await expect(demos.first()).toBeVisible();
   await expect(demos.first().getByText("Days")).toBeVisible();
-  await expect(demos.first().locator('input[type="number"]')).toBeVisible();
+  await expect(demos.first().locator('input[type="text"]')).toBeVisible();
 });

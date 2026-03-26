@@ -113,15 +113,27 @@ describe("NumberInput", () => {
     expect(wrapper.props("modelValue")).toBeCloseTo(0.85);
   });
 
-  it("defaults step/min/max for percent mode", () => {
+  it("validates min/max for percent mode", async () => {
     const wrapper = mount(NumberInput, {
-      props: { modelValue: 0.5, label: "Rate", percent: true },
+      props: {
+        modelValue: 0.5,
+        label: "Rate",
+        percent: true,
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
     });
     const input = wrapper.find("input");
-    const el = input.element as HTMLInputElement;
-    expect(el.step).toBe("1");
-    expect(el.min).toBe("0");
-    expect(el.max).toBe("100");
+
+    await input.setValue(110);
+    await input.trigger("blur");
+    expect(wrapper.find(".input-error").text()).toBe("Max 100%");
+    expect(wrapper.props("modelValue")).toBe(0.5);
+
+    await input.setValue(-5);
+    await input.trigger("blur");
+    expect(wrapper.find(".input-error").text()).toBe("Min 0%");
+    expect(wrapper.props("modelValue")).toBe(0.5);
   });
 
   it("does not show suffix when percent is not set", () => {
@@ -311,6 +323,122 @@ describe("NumberInput", () => {
     vi.useRealTimers();
   });
 
+  it("increments value on ArrowUp", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 100,
+        label: "Count",
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+    const input = wrapper.find("input");
+    await input.trigger("keydown", { key: "ArrowUp" });
+    expect(wrapper.props("modelValue")).toBe(101);
+    expect((input.element as HTMLInputElement).value).toBe("101");
+  });
+
+  it("decrements value on ArrowDown", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 100,
+        label: "Count",
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+    const input = wrapper.find("input");
+    await input.trigger("keydown", { key: "ArrowDown" });
+    expect(wrapper.props("modelValue")).toBe(99);
+  });
+
+  it("steps by custom step prop", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 100,
+        label: "Count",
+        step: 5,
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+    const input = wrapper.find("input");
+    await input.trigger("keydown", { key: "ArrowUp" });
+    expect(wrapper.props("modelValue")).toBe(105);
+  });
+
+  it("steps by 10x with shift+arrow", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 100,
+        label: "Count",
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+    const input = wrapper.find("input");
+    await input.trigger("keydown", { key: "ArrowUp", shiftKey: true });
+    expect(wrapper.props("modelValue")).toBe(110);
+  });
+
+  it("clamps arrow step to min/max", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 99,
+        label: "Count",
+        max: 100,
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+    const input = wrapper.find("input");
+    await input.trigger("keydown", { key: "ArrowUp" });
+    expect(wrapper.props("modelValue")).toBe(100);
+    await input.trigger("keydown", { key: "ArrowUp" });
+    expect(wrapper.props("modelValue")).toBe(100);
+  });
+
+  it("displays numbers with comma separators", () => {
+    const wrapper = mount(NumberInput, {
+      props: { modelValue: 1000000, label: "Population" },
+    });
+    const input = wrapper.find("input");
+    expect((input.element as HTMLInputElement).value).toBe("1,000,000");
+  });
+
+  it("keeps commas during editing and commits on blur", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 1500,
+        label: "Count",
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+    const input = wrapper.find("input");
+    expect((input.element as HTMLInputElement).value).toBe("1,500");
+
+    await input.setValue("2500");
+    await input.trigger("blur");
+    expect((input.element as HTMLInputElement).value).toBe("2,500");
+    expect(wrapper.props("modelValue")).toBe(2500);
+  });
+
+  it("accepts comma-formatted input and parses correctly", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 100,
+        label: "Count",
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+    const input = wrapper.find("input");
+    await input.setValue("1,234,567");
+    await input.trigger("blur");
+    expect(wrapper.props("modelValue")).toBe(1234567);
+  });
+
   it("syncs local value when model changes externally", async () => {
     const wrapper = mount(NumberInput, {
       props: {
@@ -322,7 +450,7 @@ describe("NumberInput", () => {
     const input = wrapper.find("input");
     expect((input.element as HTMLInputElement).value).toBe("100");
 
-    await wrapper.setProps({ modelValue: 500 });
-    expect((input.element as HTMLInputElement).value).toBe("500");
+    await wrapper.setProps({ modelValue: 5000 });
+    expect((input.element as HTMLInputElement).value).toBe("5,000");
   });
 });

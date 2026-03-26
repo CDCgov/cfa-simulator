@@ -24,7 +24,7 @@ const sliderStep = computed(() => props.step ?? (props.percent ? 0.01 : 1));
 function formatSliderValue(v: number | undefined) {
   if (v == null) return "";
   if (props.percent) return (v * 100).toFixed(0) + "%";
-  return String(v);
+  return v.toLocaleString("en-US");
 }
 
 function toDisplay(v: number | undefined) {
@@ -36,14 +36,62 @@ function fromDisplay(v: number) {
   return props.percent ? v / 100 : v;
 }
 
-const local = ref(toDisplay(model.value));
+function formatWithCommas(v: number | undefined): string {
+  if (v == null) return "";
+  return v.toLocaleString("en-US");
+}
+
+function stripCommas(s: string): string {
+  return s.replace(/,/g, "");
+}
+
+const local = ref(formatWithCommas(toDisplay(model.value)));
 const sliderLocal = ref(model.value);
 const validationError = ref<string>();
 
 watch(model, (v) => {
-  local.value = toDisplay(v);
+  local.value = formatWithCommas(toDisplay(v));
   sliderLocal.value = v;
 });
+
+function reformatInput(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const raw = stripCommas(input.value);
+  if (raw === "" || raw === "-") return;
+  const parsed = Number(raw);
+  if (Number.isNaN(parsed)) return;
+
+  const formatted = formatWithCommas(parsed);
+  if (formatted === input.value) return;
+
+  const cursorPos = input.selectionStart ?? 0;
+  const commasBefore = (input.value.slice(0, cursorPos).match(/,/g) || [])
+    .length;
+  local.value = formatted;
+
+  requestAnimationFrame(() => {
+    const rawPos = cursorPos - commasBefore;
+    let newPos = 0;
+    let rawCount = 0;
+    for (let i = 0; i < formatted.length; i++) {
+      if (formatted[i] !== ",") rawCount++;
+      if (rawCount >= rawPos) {
+        newPos = i + 1;
+        break;
+      }
+    }
+    if (rawCount < rawPos) newPos = formatted.length;
+    input.setSelectionRange(newPos, newPos);
+  });
+}
+
+function onBlur() {
+  commit();
+  const parsed = Number(stripCommas(local.value));
+  if (!Number.isNaN(parsed)) {
+    local.value = formatWithCommas(parsed);
+  }
+}
 
 let liveTimeout: ReturnType<typeof setTimeout> | null = null;
 function onInputEvent() {
@@ -68,7 +116,7 @@ function validate(displayValue: number): string | undefined {
 }
 
 function commit() {
-  const parsed = Number(local.value);
+  const parsed = Number(stripCommas(local.value));
   if (Number.isNaN(parsed)) return;
 
   const error = validate(parsed);
@@ -82,7 +130,7 @@ function commit() {
 function onSliderUpdate(v: number[] | undefined) {
   if (!v) return;
   sliderLocal.value = v[0];
-  local.value = toDisplay(v[0]);
+  local.value = formatWithCommas(toDisplay(v[0]));
   if (props.live) {
     model.value = v[0];
   }
@@ -93,7 +141,22 @@ function onSliderCommit(v: number[] | undefined) {
   model.value = v[0];
 }
 
-const inputStep = computed(() => props.step ?? (props.percent ? 1 : undefined));
+const inputStep = computed(() => props.step ?? (props.percent ? 1 : 1));
+
+function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
+  event.preventDefault();
+  const parsed = Number(stripCommas(local.value));
+  const current = Number.isNaN(parsed) ? 0 : parsed;
+  const step = inputStep.value * (event.shiftKey ? 10 : 1);
+  let next = current + step * direction;
+  if (inputMin.value != null) next = Math.max(next, inputMin.value);
+  if (inputMax.value != null) next = Math.min(next, inputMax.value);
+  local.value = formatWithCommas(next);
+  validationError.value = undefined;
+  model.value = fromDisplay(next);
+  sliderLocal.value = model.value;
+}
+
 const inputMin = computed(() => {
   if (props.min != null) return props.percent ? props.min * 100 : props.min;
   return props.percent ? 0 : undefined;
@@ -112,16 +175,19 @@ const inputMax = computed(() => {
     </span>
     <span v-if="!props.slider" class="input-wrapper">
       <input
-        type="number"
-        v-model.number="local"
+        type="text"
+        inputmode="decimal"
+        v-model="local"
         :placeholder="props.placeholder"
-        :step="inputStep"
-        :min="inputMin"
-        :max="inputMax"
         :aria-invalid="!!validationError"
-        @blur="commit"
+        @blur="onBlur"
         @keydown.enter="commit"
-        @input="onInputEvent"
+        @keydown.up="onArrowStep($event, 1)"
+        @keydown.down="onArrowStep($event, -1)"
+        @input="
+          reformatInput($event);
+          onInputEvent();
+        "
         @change="onChangeEvent"
       />
       <span v-if="props.percent" class="input-suffix">%</span>
@@ -157,16 +223,19 @@ const inputMax = computed(() => {
   <div v-else>
     <span v-if="!props.slider" class="input-wrapper">
       <input
-        type="number"
-        v-model.number="local"
+        type="text"
+        inputmode="decimal"
+        v-model="local"
         :placeholder="props.placeholder"
-        :step="inputStep"
-        :min="inputMin"
-        :max="inputMax"
         :aria-invalid="!!validationError"
-        @blur="commit"
+        @blur="onBlur"
         @keydown.enter="commit"
-        @input="onInputEvent"
+        @keydown.up="onArrowStep($event, 1)"
+        @keydown.down="onArrowStep($event, -1)"
+        @input="
+          reformatInput($event);
+          onInputEvent();
+        "
         @change="onChangeEvent"
       />
       <span v-if="props.percent" class="input-suffix">%</span>
