@@ -6,6 +6,8 @@ import type { Plugin } from "vite";
 interface CfasimPyodideOptions {
   /** Path to the Python model directory (default: "model") */
   model?: string;
+  /** Additional local package directories to build as wheels */
+  deps?: string[];
 }
 
 /**
@@ -18,6 +20,12 @@ export function cfasimPyodide(options?: CfasimPyodideOptions): Plugin {
   function build(root: string) {
     const publicDir = resolve(root, "public");
     mkdirSync(publicDir, { recursive: true });
+    for (const dep of options?.deps ?? []) {
+      execSync(`uv build ${dep} --wheel --out-dir public`, {
+        cwd: root,
+        stdio: "pipe",
+      });
+    }
     execSync(`uv build ${modelDir} --wheel --out-dir public`, {
       cwd: root,
       stdio: "pipe",

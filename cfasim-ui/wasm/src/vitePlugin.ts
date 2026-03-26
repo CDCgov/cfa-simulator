@@ -17,7 +17,7 @@ export function cfasimWasm(options?: CfasimWasmOptions): Plugin {
   const modelDir = options?.model ?? "model";
 
   function build(root: string) {
-    const name = options?.name ?? basename(root);
+    const name = (options?.name ?? basename(root)).replace(/-/g, "_");
     const outDir = resolve(root, "public", "wasm", name);
     execSync(`wasm-pack build ${modelDir} --target web --out-dir ${outDir}`, {
       cwd: root,

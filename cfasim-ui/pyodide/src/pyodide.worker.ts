@@ -44,14 +44,26 @@ const pyodideReadyPromise = (async () => {
   return pyodide;
 })();
 
+let wheelsInstalled = false;
+
+async function installAllWheels() {
+  if (wheelsInstalled) return;
+  wheelsInstalled = true;
+  const urls = Object.values(wheelMap).map(
+    (f) => `${self.location.origin}${baseUrl}${f}`,
+  );
+  if (urls.length > 0) {
+    await micropip.install(urls, { deps: false });
+  }
+}
+
 async function ensureModule(
   pyodide: Awaited<typeof pyodideReadyPromise>,
   moduleName: string,
 ) {
   if (loadedModules.has(moduleName)) return;
-  const filename = wheelMap[moduleName];
-  if (!filename) throw new Error(`Unknown module: ${moduleName}`);
-  await micropip.install(`${self.location.origin}${baseUrl}${filename}`);
+  if (!wheelMap[moduleName]) throw new Error(`Unknown module: ${moduleName}`);
+  await installAllWheels();
   pyodide.pyimport(moduleName);
   loadedModules.add(moduleName);
 }
