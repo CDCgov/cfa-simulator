@@ -141,7 +141,10 @@ function onSliderCommit(v: number[] | undefined) {
   model.value = v[0];
 }
 
-const inputStep = computed(() => props.step ?? (props.percent ? 1 : 1));
+const inputStep = computed(() => {
+  if (props.step != null) return props.percent ? props.step * 100 : props.step;
+  return 1;
+});
 
 function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
   event.preventDefault();

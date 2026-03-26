@@ -381,6 +381,25 @@ describe("NumberInput", () => {
     expect(wrapper.props("modelValue")).toBe(110);
   });
 
+  it("converts step prop to display units in percent mode", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 0.5,
+        label: "Rate",
+        percent: true,
+        step: 0.01,
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+    const input = wrapper.find("input");
+    expect((input.element as HTMLInputElement).value).toBe("50");
+
+    await input.trigger("keydown", { key: "ArrowUp" });
+    expect(wrapper.props("modelValue")).toBeCloseTo(0.51);
+    expect((input.element as HTMLInputElement).value).toBe("51");
+  });
+
   it("clamps arrow step to min/max", async () => {
     const wrapper = mount(NumberInput, {
       props: {
