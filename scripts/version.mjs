@@ -26,6 +26,8 @@ const PACKAGE_JSONS = [
 
 const CARGO_TOMLS = ["cfasim/Cargo.toml", "cfasim-model/Cargo.toml"];
 
+const PYPROJECT_TOMLS = ["cfasim-model-py/pyproject.toml"];
+
 function bump(version, type) {
   const [major, minor, patch] = version.split(".").map(Number);
   switch (type) {
@@ -64,9 +66,27 @@ function bumpCargoToml(path) {
   console.log(`${path}: ${old} → ${next}`);
 }
 
+function bumpPyprojectToml(path) {
+  const content = readFileSync(path, "utf8");
+  const match = content.match(/^version\s*=\s*"(\d+\.\d+\.\d+)"/m);
+  if (!match) {
+    console.error(`Could not find version in ${path}`);
+    process.exit(1);
+  }
+  const old = match[1];
+  const next = bump(old, BUMP);
+  const updated = content.replace(
+    /^(version\s*=\s*")(\d+\.\d+\.\d+)(")/m,
+    `$1${next}$3`,
+  );
+  writeFileSync(path, updated);
+  console.log(`${path}: ${old} → ${next}`);
+}
+
 let newVersion;
 for (const p of PACKAGE_JSONS) newVersion = bumpPackageJson(p);
 for (const p of CARGO_TOMLS) bumpCargoToml(p);
+for (const p of PYPROJECT_TOMLS) bumpPyprojectToml(p);
 
 // Update Cargo.lock files to reflect the new versions
 execSync("cargo check --workspace", { stdio: "inherit" });
@@ -78,6 +98,7 @@ const tag = `v${newVersion}`;
 const allFiles = [
   ...PACKAGE_JSONS,
   ...CARGO_TOMLS,
+  ...PYPROJECT_TOMLS,
   "Cargo.lock",
   "examples/rust-example/model/Cargo.lock",
 ].join(" ");
