@@ -1,4 +1,7 @@
 import { defineConfig } from "@playwright/test";
+import vitepressConfig from "./.vitepress/config";
+
+const base = vitepressConfig.base ?? "/";
 
 export default defineConfig({
   testDir: "../cfasim-ui",
@@ -9,6 +12,6 @@ export default defineConfig({
     reuseExistingServer: false,
   },
   use: {
-    baseURL: "http://localhost:6140",
+    baseURL: `http://localhost:6140${base}`,
   },
 });
