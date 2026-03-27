@@ -27,3 +27,4 @@ jobs:
       - run: pnpm publish -r --access public --no-git-checks
         env:
           NPM_CONFIG_PROVENANCE: true
+          NODE_AUTH_TOKEN: ""

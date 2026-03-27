@@ -5,5 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cfasim-model"
 version = "0.1.0"
+description = "Base model class for CFA simulations"
 requires-python = ">=3.11"
+license = "Apache-2.0"
 dependencies = ["numpy"]
