@@ -1,6 +1,6 @@
 {
   "name": "@cfasim-ui/pyodide",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "type": "module",
   "description": "Pyodide (Python-in-browser) integration for cfasim-ui",
   "license": "Apache-2.0",
