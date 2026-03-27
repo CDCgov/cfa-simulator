@@ -25,7 +25,7 @@ export function cfasimPyodide(options?: CfasimPyodideOptions): Plugin {
     mkdirSync(publicDir, { recursive: true });
     for (const dep of options?.pypiDeps ?? []) {
       execSync(
-        `uv pip download ${dep} --dest public --no-deps --python-version 3.12 --platform any`,
+        `uv run pip download ${dep} --dest public --no-deps --python-version 3.12 --platform any`,
         { cwd: root, stdio: "pipe" },
       );
     }
