@@ -68,7 +68,7 @@ jobs:
       - run: pnpm exec playwright install --with-deps
       - run: plz docs test
 
-  test-examples:
+  test-models:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -86,5 +86,4 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
       - run: pnpm exec playwright install --with-deps
-      - run: plz examples test-python
-      - run: plz examples test-rust
+      - run: plz models test
