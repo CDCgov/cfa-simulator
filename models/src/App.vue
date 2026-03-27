@@ -50,7 +50,9 @@ function navigate(path: string) {
         </DropdownMenuContent>
       </DropdownMenuPortal>
     </DropdownMenuRoot>
-    <a href="https://cdcgov.github.io/cfa-simulator/" class="nav-link">Docs</a>
+    <a href="https://cdcgov.github.io/cfa-simulator/docs/" class="nav-link"
+      >Docs</a
+    >
     <div class="nav-spacer" />
     <LightDarkToggle />
     <a
