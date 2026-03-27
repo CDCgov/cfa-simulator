@@ -1,5 +1,5 @@
 {
-  "name": "rust-example",
+  "name": "@cfasim/models",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,10 +8,12 @@
   },
   "dependencies": {
     "vue": "^3.5.30",
+    "vue-router": "^4.5.1",
     "@cfasim-ui/components": "workspace:*",
     "@cfasim-ui/charts": "workspace:*",
     "@cfasim-ui/theme": "workspace:*",
-    "@cfasim-ui/wasm": "workspace:*"
+    "@cfasim-ui/wasm": "workspace:*",
+    "@cfasim-ui/pyodide": "workspace:*"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.5",

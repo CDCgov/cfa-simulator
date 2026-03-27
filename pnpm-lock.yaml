@@ -169,76 +169,29 @@ importers:
         specifier: ^1.6.4
         version: 1.6.4(@algolia/client-search@5.49.2)(@types/node@25.5.0)(lightningcss@1.32.0)(postcss@8.5.8)(search-insights@2.17.3)(typescript@5.9.3)
 
-  examples/fetch-example:
+  models:
     dependencies:
       '@cfasim-ui/charts':
         specifier: workspace:*
-        version: link:../../cfasim-ui/charts
+        version: link:../cfasim-ui/charts
       '@cfasim-ui/components':
         specifier: workspace:*
-        version: link:../../cfasim-ui/components
-      '@cfasim-ui/theme':
-        specifier: workspace:*
-        version: link:../../cfasim-ui/theme
-      vue:
-        specifier: ^3.5.30
-        version: 3.5.30(typescript@5.9.3)
-    devDependencies:
-      '@vitejs/plugin-vue':
-        specifier: ^6.0.5
-        version: 6.0.5(vite@8.0.1(@types/node@25.5.0)(esbuild@0.27.4))(vue@3.5.30(typescript@5.9.3))
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-      vite:
-        specifier: ^8.0.1
-        version: 8.0.1(@types/node@25.5.0)(esbuild@0.27.4)
-
-  examples/python-example:
-    dependencies:
-      '@cfasim-ui/charts':
-        specifier: workspace:*
-        version: link:../../cfasim-ui/charts
-      '@cfasim-ui/components':
-        specifier: workspace:*
-        version: link:../../cfasim-ui/components
+        version: link:../cfasim-ui/components
       '@cfasim-ui/pyodide':
         specifier: workspace:*
-        version: link:../../cfasim-ui/pyodide
+        version: link:../cfasim-ui/pyodide
       '@cfasim-ui/theme':
         specifier: workspace:*
-        version: link:../../cfasim-ui/theme
-      vue:
-        specifier: ^3.5.30
-        version: 3.5.30(typescript@5.9.3)
-    devDependencies:
-      '@vitejs/plugin-vue':
-        specifier: ^6.0.5
-        version: 6.0.5(vite@8.0.1(@types/node@25.5.0)(esbuild@0.27.4))(vue@3.5.30(typescript@5.9.3))
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-      vite:
-        specifier: ^8.0.1
-        version: 8.0.1(@types/node@25.5.0)(esbuild@0.27.4)
-
-  examples/rust-example:
-    dependencies:
-      '@cfasim-ui/charts':
-        specifier: workspace:*
-        version: link:../../cfasim-ui/charts
-      '@cfasim-ui/components':
-        specifier: workspace:*
-        version: link:../../cfasim-ui/components
-      '@cfasim-ui/theme':
-        specifier: workspace:*
-        version: link:../../cfasim-ui/theme
+        version: link:../cfasim-ui/theme
       '@cfasim-ui/wasm':
         specifier: workspace:*
-        version: link:../../cfasim-ui/wasm
+        version: link:../cfasim-ui/wasm
       vue:
         specifier: ^3.5.30
         version: 3.5.30(typescript@5.9.3)
+      vue-router:
+        specifier: ^4.5.1
+        version: 4.6.4(vue@3.5.30(typescript@5.9.3))
     devDependencies:
       '@vitejs/plugin-vue':
         specifier: ^6.0.5
@@ -1114,6 +1067,9 @@ packages:
   '@vue/compiler-ssr@3.5.30':
     resolution: {integrity: sha512-NsYK6OMTnx109PSL2IAyf62JP6EUdk4Dmj6AkWcJGBvN0dQoMYtVekAmdqgTtWQgEJo+Okstbf/1p7qZr5H+bA==}
 
+  '@vue/devtools-api@6.6.4':
+    resolution: {integrity: sha512-sGhTPMuXqZ1rVOk32RylztWkfXTRhuS7vgAKv0zjqk8gbsHkJ7xfFf+jbySxt7tWObEJwyKaHMikV/WGDiQm8g==}
+
   '@vue/devtools-api@7.7.9':
     resolution: {integrity: sha512-kIE8wvwlcZ6TJTbNeU2HQNtaxLx3a84aotTITUuL/4bzfPxzajGBOoqjMhwZJ8L9qFYDU/lAYMEEm11dnZOD6g==}
 
@@ -1964,6 +1920,11 @@ packages:
       '@vue/composition-api':
         optional: true
 
+  vue-router@4.6.4:
+    resolution: {integrity: sha512-Hz9q5sa33Yhduglwz6g9skT8OBPii+4bFn88w6J+J4MfEo4KRRpmiNG/hHHkdbRFlLBOqxN8y8gf2Fb0MTUgVg==}
+    peerDependencies:
+      vue: ^3.5.0
+
   vue-tsc@3.2.6:
     resolution: {integrity: sha512-gYW/kWI0XrwGzd0PKc7tVB/qpdeAkIZLNZb10/InizkQjHjnT8weZ/vBarZoj4kHKbUTZT/bAVgoOr8x4NsQ/Q==}
     hasBin: true
@@ -2753,6 +2714,8 @@ snapshots:
     dependencies:
       '@vue/compiler-dom': 3.5.30
       '@vue/shared': 3.5.30
+
+  '@vue/devtools-api@6.6.4': {}
 
   '@vue/devtools-api@7.7.9':
     dependencies:
@@ -3632,6 +3595,11 @@ snapshots:
 
   vue-demi@0.14.10(vue@3.5.30(typescript@5.9.3)):
     dependencies:
+      vue: 3.5.30(typescript@5.9.3)
+
+  vue-router@4.6.4(vue@3.5.30(typescript@5.9.3)):
+    dependencies:
+      '@vue/devtools-api': 6.6.4
       vue: 3.5.30(typescript@5.9.3)
 
   vue-tsc@3.2.6(typescript@5.9.3):

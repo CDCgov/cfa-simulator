@@ -5,7 +5,7 @@ import { useModel } from "@cfasim-ui/pyodide";
 
 const params = reactive({ steps: 10, rate: 2.5 });
 const { useOutputs } = useModel("python_example");
-const { outputs, loading } = useOutputs("simulate", params);
+const { outputs, loading, error } = useOutputs("simulate", params);
 </script>
 
 <template>
@@ -16,6 +16,7 @@ const { outputs, loading } = useOutputs("simulate", params);
       <NumberInput v-model="params.rate" label="Rate" />
     </template>
     <h1>python-example</h1>
+    <p v-if="error" style="color: red">{{ error }}</p>
     <p v-if="loading">Loading...</p>
     <template v-else-if="outputs?.series">
       <ul>

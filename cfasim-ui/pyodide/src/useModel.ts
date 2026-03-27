@@ -1,4 +1,4 @@
-import { ref, toValue, watch } from "vue";
+import { ref, toRaw, toValue, watch } from "vue";
 import type { MaybeRef } from "vue";
 import type { ModelOutput } from "@cfasim-ui/shared";
 import { asyncRunPython, loadModule } from "./pyodideWorkerApi.js";
@@ -20,9 +20,14 @@ export function useModel<T = unknown>(moduleName: string) {
       await loaded;
       const argNames = context ? Object.keys(context) : [];
       const callArgs = argNames.join(", ");
+      const plainContext = context
+        ? Object.fromEntries(
+            Object.entries(context).map(([k, v]) => [k, toRaw(v)]),
+          )
+        : undefined;
       const response = await asyncRunPython(
         `import ${moduleName}\n${moduleName}.${fn}(${callArgs})`,
-        context,
+        plainContext,
       );
       if (response.error) {
         error.value = response.error;
@@ -51,11 +56,14 @@ export function useModel<T = unknown>(moduleName: string) {
         outputsError.value = undefined;
         try {
           await loaded;
-          const argNames = Object.keys(p);
+          const plain = Object.fromEntries(
+            Object.entries(p).map(([k, v]) => [k, toRaw(v)]),
+          );
+          const argNames = Object.keys(plain);
           const callArgs = argNames.join(", ");
           const response = await asyncRunPython(
             `import ${moduleName}\n${moduleName}.${fn}(${callArgs})`,
-            p,
+            plain,
           );
           if (response.error) {
             outputsError.value = response.error;

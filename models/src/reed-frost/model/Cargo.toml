@@ -8,7 +8,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 wasm-bindgen = "0.2"
-cfasim-model = { path = "../../../cfasim-model" }
+cfasim-model = { path = "../../../../cfasim-model" }
 rand = { version = "0.9", default-features = false, features = ["small_rng"] }
 rand_distr = { version = "0.5", default-features = false }
 ordered-float = "5.1.0"

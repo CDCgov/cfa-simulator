@@ -29,18 +29,15 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - run: pnpm install
       - run: plz docs build
-      - run: plz examples build-python
+      - run: plz models build
         env:
-          BASE_URL: /cfa-simulator/python-example/
-      - run: plz examples build-rust-app
-        env:
-          BASE_URL: /cfa-simulator/rust-example/
+          BASE_URL: /cfa-simulator/models/
       - name: Assemble site
         run: |
           mkdir -p _site
           cp -r docs/.vitepress/dist/* _site/
-          cp -r examples/python-example/dist _site/python-example
-          cp -r examples/rust-example/dist _site/rust-example
+          cp -r models/dist _site/models
+          cp _site/models/index.html _site/models/404.html
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site

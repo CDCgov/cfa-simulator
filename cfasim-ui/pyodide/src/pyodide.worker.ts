@@ -122,6 +122,13 @@ function convertModelOutputs(jsResult: any): ModelOutputsWire | null {
         if ((buf as any).destroy) (buf as any).destroy();
       } else if (buf instanceof ArrayBuffer) {
         buffers.push(buf);
+      } else if (ArrayBuffer.isView(buf)) {
+        buffers.push(
+          buf.buffer.slice(
+            buf.byteOffset,
+            buf.byteOffset + buf.byteLength,
+          ) as ArrayBuffer,
+        );
       }
     }
 

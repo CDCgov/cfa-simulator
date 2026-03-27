@@ -32,6 +32,7 @@ const props = withDefaults(
     yLabel?: string;
     yMin?: number;
     xMin?: number;
+    xLabels?: string[];
     debounce?: number;
     menu?: boolean | string;
   }>(),
@@ -110,16 +111,19 @@ const extent = computed(() => {
   let max = -Infinity;
   for (const s of allSeries.value) {
     for (const v of s.data) {
+      if (!isFinite(v)) continue;
       if (v < min) min = v;
       if (v > max) max = v;
     }
   }
   for (const a of allAreas.value) {
     for (const v of a.upper) {
+      if (!isFinite(v)) continue;
       if (v < min) min = v;
       if (v > max) max = v;
     }
     for (const v of a.lower) {
+      if (!isFinite(v)) continue;
       if (v < min) min = v;
       if (v > max) max = v;
     }
@@ -136,9 +140,17 @@ function toPath(data: number[]): string {
   const xScale = innerW.value / (len - 1 || 1);
   const yScale = innerH.value / range;
   const py = padding.value.top + innerH.value;
-  let d = `M${padding.value.left},${py - (data[0] - min) * yScale}`;
-  for (let i = 1; i < data.length; i++) {
-    d += `L${padding.value.left + i * xScale},${py - (data[i] - min) * yScale}`;
+  let d = "";
+  let inSegment = false;
+  for (let i = 0; i < data.length; i++) {
+    if (!isFinite(data[i])) {
+      inSegment = false;
+      continue;
+    }
+    const x = padding.value.left + i * xScale;
+    const y = py - (data[i] - min) * yScale;
+    d += inSegment ? `L${x},${y}` : `M${x},${y}`;
+    inSegment = true;
   }
   return d;
 }
@@ -153,10 +165,27 @@ function toAreaPath(upper: number[], lower: number[]): string {
   const py = padding.value.top + innerH.value;
   const x = (i: number) => padding.value.left + i * xScale;
   const y = (v: number) => py - (v - min) * yScale;
-  let d = `M${x(0)},${y(upper[0])}`;
-  for (let i = 1; i < len; i++) d += `L${x(i)},${y(upper[i])}`;
-  for (let i = len - 1; i >= 0; i--) d += `L${x(i)},${y(lower[i])}`;
-  return d + "Z";
+  // Collect contiguous segments where both upper and lower are finite
+  const segments: number[][] = [];
+  let seg: number[] = [];
+  for (let i = 0; i < len; i++) {
+    if (isFinite(upper[i]) && isFinite(lower[i])) {
+      seg.push(i);
+    } else if (seg.length) {
+      segments.push(seg);
+      seg = [];
+    }
+  }
+  if (seg.length) segments.push(seg);
+  let d = "";
+  for (const s of segments) {
+    d += `M${x(s[0])},${y(upper[s[0]])}`;
+    for (let j = 1; j < s.length; j++) d += `L${x(s[j])},${y(upper[s[j]])}`;
+    for (let j = s.length - 1; j >= 0; j--)
+      d += `L${x(s[j])},${y(lower[s[j]])}`;
+    d += "Z";
+  }
+  return d;
 }
 
 function niceStep(range: number, targetTicks: number): number {
@@ -207,6 +236,19 @@ const yTicks = computed(() => {
 const xTicks = computed(() => {
   const len = maxLen.value;
   if (len <= 1) return [];
+  const labels = props.xLabels;
+  if (labels && labels.length === len) {
+    const targetTicks = Math.max(3, Math.floor(innerW.value / 80));
+    const step = Math.max(1, Math.round((len - 1) / targetTicks));
+    const ticks: { value: string; x: number }[] = [];
+    for (let i = 0; i < len; i += step) {
+      ticks.push({
+        value: labels[i],
+        x: padding.value.left + (i / (len - 1)) * innerW.value,
+      });
+    }
+    return ticks;
+  }
   const offset = props.xMin ?? 0;
   const targetTicks = Math.max(3, Math.floor(innerW.value / 80));
   const step = niceStep(len - 1, targetTicks);
