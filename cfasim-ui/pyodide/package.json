@@ -9,6 +9,9 @@
     "url": "https://github.com/CDCgov/cfa-simulator.git",
     "directory": "cfasim-ui/pyodide"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "src"
   ],
