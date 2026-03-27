@@ -53,7 +53,7 @@ async function installAllWheels() {
     (f) => `${self.location.origin}${baseUrl}${f}`,
   );
   if (urls.length > 0) {
-    await micropip.install(urls, { deps: false });
+    await micropip.install(urls);
   }
 }
 

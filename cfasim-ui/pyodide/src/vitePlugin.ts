@@ -6,13 +6,16 @@ import type { Plugin } from "vite";
 interface CfasimPyodideOptions {
   /** Path to the Python model directory (default: "model") */
   model?: string;
-  /** Additional local package directories to build as wheels */
-  deps?: string[];
+  /** PyPI packages to download at build time and serve locally */
+  pypiDeps?: string[];
 }
 
 /**
  * Vite plugin that builds a Python wheel from a local model directory
  * and generates wheels.json in the public directory.
+ *
+ * Use `pypiDeps` to prebuild PyPI packages (like cfasim-model) as local
+ * wheels for faster browser runtime — avoids PyPI round-trips on page load.
  */
 export function cfasimPyodide(options?: CfasimPyodideOptions): Plugin {
   const modelDir = options?.model ?? "model";
@@ -20,11 +23,11 @@ export function cfasimPyodide(options?: CfasimPyodideOptions): Plugin {
   function build(root: string) {
     const publicDir = resolve(root, "public");
     mkdirSync(publicDir, { recursive: true });
-    for (const dep of options?.deps ?? []) {
-      execSync(`uv build ${dep} --wheel --out-dir public`, {
-        cwd: root,
-        stdio: "pipe",
-      });
+    for (const dep of options?.pypiDeps ?? []) {
+      execSync(
+        `uv pip download ${dep} --dest public --no-deps --python-version 3.12 --platform any`,
+        { cwd: root, stdio: "pipe" },
+      );
     }
     execSync(`uv build ${modelDir} --wheel --out-dir public`, {
       cwd: root,
