@@ -40,7 +40,7 @@ const chartSeries = computed<Series[]>(() => {
 </script>
 
 <template>
-  <SidebarLayout>
+  <SidebarLayout hide-topbar>
     <template #sidebar>
       <h2>Reed-Frost Epidemic</h2>
       <NumberInput

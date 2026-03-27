@@ -362,7 +362,7 @@ const yLabel = computed(() =>
 </script>
 
 <template>
-  <SidebarLayout>
+  <SidebarLayout hide-topbar>
     <template #sidebar>
       <h2>Fetch Example</h2>
       <SelectBox

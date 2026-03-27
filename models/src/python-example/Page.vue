@@ -9,7 +9,7 @@ const { outputs, loading, error } = useOutputs("simulate", params);
 </script>
 
 <template>
-  <SidebarLayout>
+  <SidebarLayout hide-topbar>
     <template #sidebar>
       <h2>python-example</h2>
       <NumberInput v-model="params.steps" label="Steps" />

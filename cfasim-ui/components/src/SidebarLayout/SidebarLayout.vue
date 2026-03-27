@@ -3,6 +3,8 @@ import { ref, onMounted, onUnmounted } from "vue";
 import Icon from "../Icon/Icon.vue";
 import LightDarkToggle from "../LightDarkToggle/LightDarkToggle.vue";
 
+defineProps<{ hideTopbar?: boolean }>();
+
 const mql = window.matchMedia("(max-width: 767px)");
 const isMobile = ref(mql.matches);
 const collapsed = ref(mql.matches);
@@ -66,10 +68,8 @@ function toggle() {
       </aside>
     </div>
     <main class="Main">
-      <div class="Topbar">
-        <slot name="topbar">
-          <LightDarkToggle />
-        </slot>
+      <div v-if="!hideTopbar" class="Topbar">
+        <LightDarkToggle />
       </div>
       <div class="MainScroll">
         <div class="MainContent">
