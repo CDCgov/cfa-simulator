@@ -63,6 +63,12 @@ const components = [
     "cfasim-ui/components/src/SelectBox/SelectBox.md",
   ],
   [
+    "sidebar-layout",
+    "components",
+    "cfasim-ui/components/src/SidebarLayout/SidebarLayout.vue",
+    "cfasim-ui/components/src/SidebarLayout/SidebarLayout.md",
+  ],
+  [
     "spinner",
     "components",
     "cfasim-ui/components/src/Spinner/Spinner.vue",

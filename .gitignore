@@ -41,6 +41,7 @@ docs/.vitepress/cache
 docs/.vitepress/dist
 docs/cfasim-ui/components/
 docs/cfasim-ui/charts/
+docs/public/demos/
 
 CLAUDE.md
 .vscode/*

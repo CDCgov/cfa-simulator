@@ -35,6 +35,10 @@ export default defineConfig({
                 link: "/cfasim-ui/components/number-input",
               },
               { text: "SelectBox", link: "/cfasim-ui/components/select-box" },
+              {
+                text: "SidebarLayout",
+                link: "/cfasim-ui/components/sidebar-layout",
+              },
               { text: "Spinner", link: "/cfasim-ui/components/spinner" },
               { text: "TextInput", link: "/cfasim-ui/components/text-input" },
               { text: "Toggle", link: "/cfasim-ui/components/toggle" },

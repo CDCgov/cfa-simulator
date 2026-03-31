@@ -9,6 +9,7 @@ export { default as NumberInput } from "./NumberInput/NumberInput.vue";
 export { default as SelectBox } from "./SelectBox/SelectBox.vue";
 export type { SelectOption } from "./SelectBox/SelectBox.vue";
 export { default as SidebarLayout } from "./SidebarLayout/SidebarLayout.vue";
+export type { Tab } from "./SidebarLayout/SidebarLayout.vue";
 export { default as Spinner } from "./Spinner/Spinner.vue";
 export { default as TextInput } from "./TextInput/TextInput.vue";
 export { default as Toggle } from "./Toggle/Toggle.vue";
