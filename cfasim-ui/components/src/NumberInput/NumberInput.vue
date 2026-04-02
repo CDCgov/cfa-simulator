@@ -15,6 +15,7 @@ const props = defineProps<{
   percent?: boolean;
   slider?: boolean;
   live?: boolean;
+  numberType?: "integer" | "float";
 }>();
 
 const sliderMin = computed(() => props.min ?? (props.percent ? 0 : 0));
@@ -36,21 +37,37 @@ function fromDisplay(v: number) {
   return props.percent ? v / 100 : v;
 }
 
+function coerceInteger(v: number): number {
+  if (props.numberType !== "integer") return v;
+  // Truncate the display value to an integer, then convert back
+  const display = toDisplay(v);
+  if (display == null) return v;
+  return fromDisplay(Math.trunc(display));
+}
+
 function formatWithCommas(v: number | undefined): string {
   if (v == null) return "";
   return v.toLocaleString("en-US");
+}
+
+function formatForDisplay(v: number | undefined): string {
+  const s = formatWithCommas(v);
+  if (props.numberType === "float" && v != null && Number.isInteger(v)) {
+    return s + ".0";
+  }
+  return s;
 }
 
 function stripCommas(s: string): string {
   return s.replace(/,/g, "");
 }
 
-const local = ref(formatWithCommas(toDisplay(model.value)));
+const local = ref(formatForDisplay(toDisplay(model.value)));
 const sliderLocal = ref(model.value);
 const validationError = ref<string>();
 
 watch(model, (v) => {
-  local.value = formatWithCommas(toDisplay(v));
+  local.value = formatForDisplay(toDisplay(v));
   sliderLocal.value = v;
 });
 
@@ -58,6 +75,7 @@ function reformatInput(event: Event) {
   const input = event.target as HTMLInputElement;
   const raw = stripCommas(input.value);
   if (raw === "" || raw === "-") return;
+  if (raw.endsWith(".") || (raw.includes(".") && raw.endsWith("0"))) return;
   const parsed = Number(raw);
   if (Number.isNaN(parsed)) return;
 
@@ -89,7 +107,7 @@ function onBlur() {
   commit();
   const parsed = Number(stripCommas(local.value));
   if (!Number.isNaN(parsed)) {
-    local.value = formatWithCommas(parsed);
+    local.value = formatForDisplay(parsed);
   }
 }
 
@@ -116,8 +134,13 @@ function validate(displayValue: number): string | undefined {
 }
 
 function commit() {
-  const parsed = Number(stripCommas(local.value));
+  let parsed = Number(stripCommas(local.value));
   if (Number.isNaN(parsed)) return;
+
+  if (props.numberType === "integer") {
+    parsed = Math.trunc(parsed);
+    local.value = formatForDisplay(parsed);
+  }
 
   const error = validate(parsed);
   validationError.value = error;
@@ -129,16 +152,17 @@ function commit() {
 
 function onSliderUpdate(v: number[] | undefined) {
   if (!v) return;
-  sliderLocal.value = v[0];
-  local.value = formatWithCommas(toDisplay(v[0]));
+  const val = coerceInteger(v[0]);
+  sliderLocal.value = val;
+  local.value = formatForDisplay(toDisplay(val));
   if (props.live) {
-    model.value = v[0];
+    model.value = val;
   }
 }
 
 function onSliderCommit(v: number[] | undefined) {
   if (!v) return;
-  model.value = v[0];
+  model.value = coerceInteger(v[0]);
 }
 
 const inputStep = computed(() => {
@@ -152,9 +176,10 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
   const current = Number.isNaN(parsed) ? 0 : parsed;
   const step = inputStep.value * (event.shiftKey ? 10 : 1);
   let next = current + step * direction;
+  if (props.numberType === "integer") next = Math.trunc(next);
   if (inputMin.value != null) next = Math.max(next, inputMin.value);
   if (inputMax.value != null) next = Math.min(next, inputMax.value);
-  local.value = formatWithCommas(next);
+  local.value = formatForDisplay(next);
   validationError.value = undefined;
   model.value = fromDisplay(next);
   sliderLocal.value = model.value;
@@ -179,7 +204,7 @@ const inputMax = computed(() => {
     <span v-if="!props.slider" class="input-wrapper">
       <input
         type="text"
-        inputmode="decimal"
+        :inputmode="props.numberType === 'integer' ? 'numeric' : 'decimal'"
         v-model="local"
         :placeholder="props.placeholder"
         :aria-invalid="!!validationError"
@@ -227,7 +252,7 @@ const inputMax = computed(() => {
     <span v-if="!props.slider" class="input-wrapper">
       <input
         type="text"
-        inputmode="decimal"
+        :inputmode="props.numberType === 'integer' ? 'numeric' : 'decimal'"
         v-model="local"
         :placeholder="props.placeholder"
         :aria-invalid="!!validationError"

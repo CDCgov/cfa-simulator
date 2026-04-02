@@ -458,6 +458,111 @@ describe("NumberInput", () => {
     expect(wrapper.props("modelValue")).toBe(1234567);
   });
 
+  it("does not reformat while typing a decimal point", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 15,
+        label: "Count",
+      },
+    });
+    const input = wrapper.find("input");
+    // Simulate typing "15." — reformatInput should not strip the trailing dot
+    (input.element as HTMLInputElement).value = "15.";
+    await input.trigger("input");
+    expect((input.element as HTMLInputElement).value).toBe("15.");
+
+    // Typing "15.60" — trailing zero after decimal should also be preserved
+    (input.element as HTMLInputElement).value = "15.60";
+    await input.trigger("input");
+    expect((input.element as HTMLInputElement).value).toBe("15.60");
+  });
+
+  it("truncates decimal to integer when numberType is integer", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 15,
+        label: "Count",
+        numberType: "integer" as const,
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+    const input = wrapper.find("input");
+    await input.setValue("15.6");
+    await input.trigger("blur");
+    expect(wrapper.props("modelValue")).toBe(15);
+    expect((input.element as HTMLInputElement).value).toBe("15");
+  });
+
+  it("integer with percent allows whole percentages like 0.42", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 0.5,
+        label: "Rate",
+        percent: true,
+        numberType: "integer" as const,
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+    const input = wrapper.find("input");
+    // 42% → internal 0.42 (display value 42 is a whole number, so allowed)
+    await input.setValue("42");
+    await input.trigger("blur");
+    expect(wrapper.props("modelValue")).toBeCloseTo(0.42);
+  });
+
+  it("integer with percent truncates fractional percentages", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 0.5,
+        label: "Rate",
+        percent: true,
+        numberType: "integer" as const,
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+    const input = wrapper.find("input");
+    // 42.7% should truncate display to 42 → internal 0.42
+    await input.setValue("42.7");
+    await input.trigger("blur");
+    expect(wrapper.props("modelValue")).toBeCloseTo(0.42);
+    expect((input.element as HTMLInputElement).value).toBe("42");
+  });
+
+  it("displays .0 suffix for whole numbers when numberType is float", () => {
+    const wrapper = mount(NumberInput, {
+      props: { modelValue: 100, label: "Rate", numberType: "float" as const },
+    });
+    const input = wrapper.find("input");
+    expect((input.element as HTMLInputElement).value).toBe("100.0");
+  });
+
+  it("does not add .0 suffix for non-whole floats", () => {
+    const wrapper = mount(NumberInput, {
+      props: { modelValue: 2.5, label: "Rate", numberType: "float" as const },
+    });
+    const input = wrapper.find("input");
+    expect((input.element as HTMLInputElement).value).toBe("2.5");
+  });
+
+  it("adds .0 suffix after committing a whole number in float mode", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 2.5,
+        label: "Rate",
+        numberType: "float" as const,
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+    const input = wrapper.find("input");
+    await input.setValue("3");
+    await input.trigger("blur");
+    expect((input.element as HTMLInputElement).value).toBe("3.0");
+  });
+
   it("syncs local value when model changes externally", async () => {
     const wrapper = mount(NumberInput, {
       props: {
