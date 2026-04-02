@@ -35,6 +35,8 @@ const props = withDefaults(
     xLabels?: string[];
     debounce?: number;
     menu?: boolean | string;
+    xGrid?: boolean;
+    yGrid?: boolean;
   }>(),
   { lineOpacity: 1, menu: true },
 );
@@ -200,6 +202,11 @@ function niceStep(range: number, targetTicks: number): number {
   return step * mag;
 }
 
+/** Round to nearest half-pixel so 1px SVG strokes stay sharp. */
+function snap(v: number): number {
+  return Math.round(v) + 0.5;
+}
+
 const numFmt = new Intl.NumberFormat();
 function formatTick(v: number): string {
   if (Math.abs(v) >= 1000) return numFmt.format(v);
@@ -213,7 +220,7 @@ const yTicks = computed(() => {
     return [
       {
         value: formatTick(min),
-        y: padding.value.top + innerH.value / 2,
+        y: snap(padding.value.top + innerH.value / 2),
       },
     ];
   }
@@ -224,10 +231,11 @@ const yTicks = computed(() => {
   for (let v = start; v <= max; v += step) {
     ticks.push({
       value: formatTick(v),
-      y:
+      y: snap(
         padding.value.top +
-        innerH.value -
-        ((v - min) / extent.value.range) * innerH.value,
+          innerH.value -
+          ((v - min) / extent.value.range) * innerH.value,
+      ),
     });
   }
   return ticks;
@@ -244,7 +252,7 @@ const xTicks = computed(() => {
     for (let i = 0; i < len; i += step) {
       ticks.push({
         value: labels[i],
-        x: padding.value.left + (i / (len - 1)) * innerW.value,
+        x: snap(padding.value.left + (i / (len - 1)) * innerW.value),
       });
     }
     return ticks;
@@ -257,7 +265,7 @@ const xTicks = computed(() => {
     const idx = Math.round(i);
     ticks.push({
       value: formatTick(idx + offset),
-      x: padding.value.left + (idx / (len - 1)) * innerW.value,
+      x: snap(padding.value.left + (idx / (len - 1)) * innerW.value),
     });
   }
   return ticks;
@@ -330,21 +338,47 @@ const menuItems = computed<ChartMenuItem[]>(() => {
       </text>
       <!-- axes -->
       <line
-        :x1="padding.left"
-        :y1="padding.top"
-        :x2="padding.left"
-        :y2="padding.top + innerH"
+        :x1="snap(padding.left)"
+        :y1="snap(padding.top)"
+        :x2="snap(padding.left)"
+        :y2="snap(padding.top + innerH)"
         stroke="currentColor"
         stroke-opacity="0.3"
       />
       <line
-        :x1="padding.left"
-        :y1="padding.top + innerH"
-        :x2="padding.left + innerW"
-        :y2="padding.top + innerH"
+        :x1="snap(padding.left)"
+        :y1="snap(padding.top + innerH)"
+        :x2="snap(padding.left + innerW)"
+        :y2="snap(padding.top + innerH)"
         stroke="currentColor"
         stroke-opacity="0.3"
       />
+      <!-- y grid lines -->
+      <template v-if="yGrid">
+        <line
+          v-for="(tick, i) in yTicks"
+          :key="'yg' + i"
+          :x1="padding.left"
+          :y1="tick.y"
+          :x2="padding.left + innerW"
+          :y2="tick.y"
+          stroke="currentColor"
+          stroke-opacity="0.1"
+        />
+      </template>
+      <!-- x grid lines -->
+      <template v-if="xGrid">
+        <line
+          v-for="(tick, i) in xTicks"
+          :key="'xg' + i"
+          :x1="tick.x"
+          :y1="padding.top"
+          :x2="tick.x"
+          :y2="padding.top + innerH"
+          stroke="currentColor"
+          stroke-opacity="0.1"
+        />
+      </template>
       <!-- y tick labels -->
       <text
         v-for="(tick, i) in yTicks"
