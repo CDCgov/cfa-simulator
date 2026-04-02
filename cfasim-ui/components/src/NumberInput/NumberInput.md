@@ -166,4 +166,22 @@ With `live` on a regular input, the model updates as you type (debounced 300ms).
   </template>
 </ComponentDemo>
 
+### Integer type
+
+With `number-type="integer"`, decimal values are truncated to whole numbers on commit. When combined with `percent`, the display value (e.g. 42%) is treated as the integer — so internal values like 0.42 are valid.
+
+<ComponentDemo>
+  <div style="width: 300px">
+    <NumberInput v-model="days" label="Steps" number-type="integer" />
+  </div>
+
+<template #code>
+
+```vue
+<NumberInput v-model="days" label="Steps" number-type="integer" />
+```
+
+  </template>
+</ComponentDemo>
+
 <!--@include: ./_api/number-input.md-->

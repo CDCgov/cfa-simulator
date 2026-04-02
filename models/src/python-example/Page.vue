@@ -11,8 +11,8 @@ const { outputs, loading, error } = useOutputs("simulate", params);
 <template>
   <Teleport to="#model-sidebar">
     <h2>Parameters</h2>
-    <NumberInput v-model="params.steps" label="Steps" />
-    <NumberInput v-model="params.rate" label="Rate" />
+    <NumberInput v-model="params.steps" label="Steps" number-type="integer" />
+    <NumberInput v-model="params.rate" label="Rate" number-type="float" />
   </Teleport>
   <h1>Python Example</h1>
   <p v-if="error" style="color: red">{{ error }}</p>
