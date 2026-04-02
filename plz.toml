@@ -85,14 +85,21 @@ dir = "docs"
 dir = "."
 run = "node scripts/generate_docs.mjs"
 
+# Build the static demos embedded in docs
+[taskgroup.docs.demos]
+run = """
+pnpm exec vite build --config demos/sidebar-layout/vite.config.ts && \
+pnpm exec vite build --config demos/sidebar-tabs/vite.config.ts
+"""
+
 # Serve docs locally
 [taskgroup.docs.dev]
-depends = "docs.generate"
+depends = ["docs.generate", "docs.demos"]
 run = "pnpm exec vitepress dev"
 
 # Build static files for docs
 [taskgroup.docs.build]
-depends = "docs.generate"
+depends = ["docs.generate", "docs.demos"]
 run = "pnpm exec vitepress build"
 
 # Run tests for docs (Playwright tests for docs site)

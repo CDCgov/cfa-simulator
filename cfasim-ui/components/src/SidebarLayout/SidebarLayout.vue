@@ -1,9 +1,28 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import {
+  ref,
+  computed,
+  watch,
+  onMounted,
+  onUnmounted,
+  getCurrentInstance,
+} from "vue";
+import { TabsRoot, TabsList, TabsTrigger, TabsIndicator } from "reka-ui";
 import Icon from "../Icon/Icon.vue";
 import LightDarkToggle from "../LightDarkToggle/LightDarkToggle.vue";
 
-defineProps<{ hideTopbar?: boolean }>();
+export interface Tab {
+  value: string;
+  label: string;
+  to?: string;
+}
+
+const props = defineProps<{
+  hideTopbar?: boolean;
+  tabs?: Tab[];
+}>();
+
+const tab = defineModel<string>("tab");
 
 const mql = window.matchMedia("(max-width: 767px)");
 const isMobile = ref(mql.matches);
@@ -25,57 +44,139 @@ onUnmounted(() => {
 function toggle() {
   collapsed.value = !collapsed.value;
 }
+
+// Optional vue-router integration (no hard dependency)
+const instance = getCurrentInstance();
+const router = instance?.appContext.config.globalProperties.$router;
+const route = instance?.appContext.config.globalProperties.$route;
+
+const isRouterMode = computed(() => !!router && props.tabs?.some((t) => t.to));
+
+const activeTab = computed({
+  get() {
+    return tab.value ?? props.tabs?.[0]?.value;
+  },
+  set(value: string | undefined) {
+    if (!value) return;
+    tab.value = value;
+    if (isRouterMode.value && router) {
+      const target = props.tabs?.find((t) => t.value === value);
+      if (target?.to) router.push(target.to);
+    }
+  },
+});
+
+// Sync active tab from route changes in router mode
+if (route) {
+  watch(
+    () => route.path,
+    () => {
+      if (isRouterMode.value) {
+        const match = props.tabs?.find((t) => t.to === route.path);
+        if (match) tab.value = match.value;
+      }
+    },
+    { immediate: true },
+  );
+}
 </script>
 
 <template>
-  <div
-    class="SidebarLayout"
-    :data-collapsed="collapsed"
-    :data-mobile="isMobile"
-  >
-    <div v-if="isMobile && !collapsed" class="Overlay" @click="toggle" />
-    <button
-      v-if="isMobile"
-      type="button"
-      class="Toggle MobileToggle"
-      :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-      :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-      @click="toggle"
-    >
-      <Icon
-        :icon="collapsed ? 'left_panel_open' : 'left_panel_close'"
-        size="sm"
-      />
-    </button>
+  <div class="SidebarLayout" :data-collapsed="collapsed">
     <div class="SidebarRail">
       <aside class="Sidebar">
         <div class="SidebarScroll">
+          <div class="SidebarHeader">
+            <button
+              type="button"
+              class="Toggle"
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
+              @click="toggle"
+            >
+              <Icon icon="keyboard_double_arrow_left" size="sm" />
+            </button>
+          </div>
           <slot name="sidebar" />
         </div>
-        <button
-          v-if="!isMobile"
-          type="button"
-          class="Toggle"
-          :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-          :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-          @click="toggle"
-        >
-          <Icon
-            :icon="collapsed ? 'left_panel_open' : 'left_panel_close'"
-            size="sm"
-          />
-        </button>
       </aside>
+      <button
+        type="button"
+        class="Toggle Toggle--expand"
+        aria-label="Expand sidebar"
+        title="Expand sidebar"
+        @click="toggle"
+      >
+        <Icon icon="keyboard_double_arrow_right" size="sm" />
+      </button>
     </div>
     <main class="Main">
-      <div v-if="!hideTopbar" class="Topbar">
-        <LightDarkToggle />
-      </div>
-      <div class="MainScroll">
-        <div class="MainContent">
-          <slot />
+      <TabsRoot
+        v-if="tabs?.length"
+        :model-value="activeTab"
+        class="TabsLayout"
+        @update:model-value="activeTab = $event as string"
+      >
+        <div class="TabsBar">
+          <button
+            v-if="isMobile && collapsed"
+            type="button"
+            class="Toggle"
+            aria-label="Expand sidebar"
+            title="Expand sidebar"
+            @click="toggle"
+          >
+            <Icon icon="keyboard_double_arrow_right" size="sm" />
+          </button>
+          <TabsList class="TabsList" aria-label="Tabs">
+            <TabsTrigger
+              v-for="t in tabs"
+              :key="t.value"
+              :value="t.value"
+              class="TabsTrigger"
+            >
+              {{ t.label }}
+            </TabsTrigger>
+            <TabsIndicator
+              class="TabsIndicator"
+              :style="{
+                width: 'var(--reka-tabs-indicator-size)',
+                left: 'var(--reka-tabs-indicator-position)',
+              }"
+            />
+          </TabsList>
+          <div v-if="!hideTopbar" class="TabsBarEnd">
+            <LightDarkToggle />
+          </div>
         </div>
-      </div>
+        <div class="MainScroll">
+          <div class="MainContent">
+            <slot />
+          </div>
+        </div>
+      </TabsRoot>
+      <template v-else>
+        <div class="Topbar">
+          <button
+            v-if="isMobile && collapsed"
+            type="button"
+            class="Toggle"
+            aria-label="Expand sidebar"
+            title="Expand sidebar"
+            @click="toggle"
+          >
+            <Icon icon="keyboard_double_arrow_right" size="sm" />
+          </button>
+          <div class="TopbarEnd">
+            <LightDarkToggle v-if="!hideTopbar" />
+          </div>
+        </div>
+        <div class="MainScroll">
+          <div class="MainContent">
+            <slot />
+          </div>
+        </div>
+      </template>
     </main>
   </div>
 </template>
@@ -97,13 +198,16 @@ function toggle() {
   height: 100%;
   overflow: hidden;
   transition: width var(--transition-normal);
+  position: relative;
 }
 
-.SidebarLayout[data-collapsed="true"] .SidebarRail {
-  width: var(--toggle-size);
-  background-color: var(--color-bg-1);
-  border-right: 1px solid var(--color-border);
-  box-shadow: var(--shadow-sm);
+@media (min-width: 768px) {
+  .SidebarLayout[data-collapsed="true"] .SidebarRail {
+    width: var(--toggle-size);
+    background-color: var(--color-bg-1);
+    border-right: 1px solid var(--color-border);
+    box-shadow: var(--shadow-sm);
+  }
 }
 
 .Sidebar {
@@ -179,8 +283,26 @@ function toggle() {
   box-shadow: var(--shadow-focus);
 }
 
-.SidebarLayout[data-collapsed="true"] .Toggle:not(.MobileToggle) {
-  transform: translateX(100%);
+.SidebarHeader {
+  display: flex;
+  justify-content: flex-end;
+  margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4))
+    calc(-1 * var(--space-3));
+}
+
+.Toggle--expand {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+}
+
+.SidebarLayout[data-collapsed="true"] .Toggle--expand {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .Main {
@@ -196,14 +318,18 @@ function toggle() {
 .Topbar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  padding: var(--space-2) var(--space-4);
+  min-height: var(--toggle-size);
+  padding: 0 var(--space-4);
   flex-shrink: 0;
+}
+
+.TopbarEnd {
+  margin-left: auto;
 }
 
 @media (min-width: 768px) {
   .Topbar {
-    padding: var(--space-2) var(--space-4) var(--space-2) var(--space-20);
+    padding: 0 var(--space-4) 0 var(--space-20);
   }
 }
 
@@ -226,65 +352,104 @@ function toggle() {
   padding: 0 var(--space-4);
 }
 
-.SidebarLayout[data-mobile="true"] .MainScroll {
-  padding-top: calc(var(--toggle-size) + var(--space-2));
-}
-
 @media (min-width: 768px) {
   .MainContent {
     padding: 0 var(--space-4) 0 var(--space-20);
   }
 }
 
-/* Mobile: sidebar overlays content */
-.Overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  z-index: 10;
+/* Mobile: use transform instead of width resize */
+@media (max-width: 767px) {
+  .SidebarLayout {
+    transition: transform var(--transition-normal);
+  }
+
+  .SidebarLayout[data-collapsed="true"] {
+    transform: translateX(calc(-1 * var(--sidebar-width)));
+  }
+
+  .SidebarLayout[data-collapsed="true"] .Sidebar {
+    transform: translateX(0);
+  }
+
+  .SidebarRail {
+    min-width: var(--sidebar-width);
+  }
+
+  .Main {
+    min-width: 100vw;
+  }
+
+  .Toggle--expand {
+    display: none;
+  }
 }
 
-.SidebarLayout[data-mobile="true"] .SidebarRail {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 11;
-  width: var(--sidebar-width);
-  max-width: 85vw;
-  transition: transform var(--transition-normal);
-  transform: translateX(0);
+/* Tabs */
+.TabsLayout {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
-.SidebarLayout[data-mobile="true"][data-collapsed="true"] .SidebarRail {
-  transform: translateX(-100%);
-  width: var(--sidebar-width);
-  max-width: 85vw;
-  background-color: transparent;
-  border-right: none;
-  box-shadow: none;
+.TabsBar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  min-height: var(--toggle-size);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 var(--space-4);
 }
 
-.SidebarLayout[data-mobile="true"] .Sidebar {
-  width: 100%;
+.TabsBarEnd {
+  margin-left: auto;
 }
 
-.SidebarLayout[data-mobile="true"][data-collapsed="true"] .Sidebar {
-  transform: translateX(0);
+.TabsList {
+  display: flex;
+  gap: var(--space-1);
+  position: relative;
+  align-self: stretch;
 }
 
-.MobileToggle {
-  position: fixed;
-  top: var(--space-1);
-  left: calc(min(var(--sidebar-width), 85vw) + var(--space-1));
-  z-index: 12;
+.TabsTrigger {
+  position: relative;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--color-text-secondary);
   background: none;
   border: none;
-  box-shadow: none;
-  border-radius: var(--radius-md);
-  transition: left var(--transition-normal);
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
-.SidebarLayout[data-collapsed="true"] .MobileToggle {
-  left: var(--space-1);
+.TabsTrigger:hover {
+  color: var(--color-text);
+  background-color: var(--color-bg-1);
+}
+
+.TabsTrigger[data-state="active"] {
+  color: var(--color-text);
+}
+
+.TabsTrigger:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.TabsIndicator {
+  position: absolute;
+  bottom: 0;
+  height: 2px;
+  background-color: var(--color-text);
+  transition:
+    width var(--transition-fast),
+    left var(--transition-fast);
 }
 </style>
