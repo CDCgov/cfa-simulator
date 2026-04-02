@@ -12,17 +12,17 @@ test("home page lists all models", async ({ page }) => {
 
 test("reed-frost model renders", async ({ page }) => {
   await page.goto("/reed-frost");
-  await expect(page.locator("h2")).toContainText("Reed-Frost Epidemic");
+  await expect(page.locator("h1")).toContainText("Reed-Frost Epidemic");
   await expect(page.getByLabel("Population")).toBeVisible();
 });
 
 test("python example renders", async ({ page }) => {
   await page.goto("/python-example");
-  await expect(page.locator("h2")).toContainText("python-example");
+  await expect(page.locator("h1")).toContainText("Python Example");
   await expect(page.getByLabel("Steps")).toBeVisible();
 });
 
 test("fetch example renders", async ({ page }) => {
   await page.goto("/fetch-example");
-  await expect(page.locator("h2")).toContainText("Fetch Example");
+  await expect(page.locator("h1")).toContainText("COVID-19");
 });

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, watch, computed, onMounted } from "vue";
-import { SidebarLayout, SelectBox, Spinner } from "@cfasim-ui/components";
+import { SelectBox, Spinner } from "@cfasim-ui/components";
 import { LineChart, DataTable } from "@cfasim-ui/charts";
 import type { Series, Area } from "@cfasim-ui/charts";
 
@@ -362,56 +362,54 @@ const yLabel = computed(() =>
 </script>
 
 <template>
-  <SidebarLayout hide-topbar>
-    <template #sidebar>
-      <h2>Fetch Example</h2>
-      <SelectBox
-        v-model="params.date"
-        label="Reference date"
-        :options="dates.map((d) => ({ value: d, label: d }))"
-      />
-      <SelectBox v-model="params.target" label="Target" :options="TARGETS" />
-      <SelectBox
-        v-model="params.location"
-        label="Location"
-        :options="locations"
-      />
-    </template>
-    <h1>COVID-19 {{ targetLabel }} — {{ locationLabel }}</h1>
-    <p class="subtitle">CFA Pyrenew forecast for {{ params.date }}</p>
-    <Spinner v-if="loading || initialLoading" />
-    <p v-else-if="error" style="color: red">{{ error }}</p>
-    <template v-else>
-      <LineChart
-        v-if="medianSeries.length"
-        :series="medianSeries"
-        :areas="bandAreas"
-        :height="400"
-        :y-min="0"
-        :x-labels="xLabels"
-        x-label="Week ending"
-        :y-label="yLabel"
-      />
-      <p v-if="medianSeries.length" class="legend">
-        <span class="swatch" :style="{ background: ACCENT }" /> Forecast
-        <template v-if="params.target === 'wk inc covid hosp'">
-          <span class="swatch" :style="{ background: ACTUAL_COLOR }" />
-          Observed
-        </template>
-      </p>
-      <DataTable
-        v-if="tableData"
-        :data="tableData"
-        :column-config="{
-          target_end_date: { label: 'Week ending' },
-          forecast: { label: `Forecast ${yLabel} (95% CI)` },
-          ...(params.target === 'wk inc covid hosp'
-            ? { observed: { label: 'Observed', width: 'small' } }
-            : {}),
-        }"
-      />
-    </template>
-  </SidebarLayout>
+  <Teleport to="#model-sidebar">
+    <h2>Parameters</h2>
+    <SelectBox
+      v-model="params.date"
+      label="Reference date"
+      :options="dates.map((d) => ({ value: d, label: d }))"
+    />
+    <SelectBox v-model="params.target" label="Target" :options="TARGETS" />
+    <SelectBox
+      v-model="params.location"
+      label="Location"
+      :options="locations"
+    />
+  </Teleport>
+  <h1>COVID-19 {{ targetLabel }} — {{ locationLabel }}</h1>
+  <p class="subtitle">CFA Pyrenew forecast for {{ params.date }}</p>
+  <Spinner v-if="loading || initialLoading" />
+  <p v-else-if="error" style="color: red">{{ error }}</p>
+  <template v-else>
+    <LineChart
+      v-if="medianSeries.length"
+      :series="medianSeries"
+      :areas="bandAreas"
+      :height="400"
+      :y-min="0"
+      :x-labels="xLabels"
+      x-label="Week ending"
+      :y-label="yLabel"
+    />
+    <p v-if="medianSeries.length" class="legend">
+      <span class="swatch" :style="{ background: ACCENT }" /> Forecast
+      <template v-if="params.target === 'wk inc covid hosp'">
+        <span class="swatch" :style="{ background: ACTUAL_COLOR }" />
+        Observed
+      </template>
+    </p>
+    <DataTable
+      v-if="tableData"
+      :data="tableData"
+      :column-config="{
+        target_end_date: { label: 'Week ending' },
+        forecast: { label: `Forecast ${yLabel} (95% CI)` },
+        ...(params.target === 'wk inc covid hosp'
+          ? { observed: { label: 'Observed', width: 'small' } }
+          : {}),
+      }"
+    />
+  </template>
 </template>
 
 <style scoped>

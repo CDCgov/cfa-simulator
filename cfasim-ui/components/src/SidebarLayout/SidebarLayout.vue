@@ -146,8 +146,9 @@ if (route) {
               }"
             />
           </TabsList>
-          <div v-if="!hideTopbar" class="TabsBarEnd">
-            <LightDarkToggle />
+          <div class="TabsBarEnd">
+            <slot name="topbar" />
+            <LightDarkToggle v-if="!hideTopbar" />
           </div>
         </div>
         <div class="MainScroll">
@@ -169,6 +170,7 @@ if (route) {
             <Icon icon="keyboard_double_arrow_right" size="sm" />
           </button>
           <div class="TopbarEnd">
+            <slot name="topbar" />
             <LightDarkToggle v-if="!hideTopbar" />
           </div>
         </div>
@@ -184,6 +186,7 @@ if (route) {
 
 <style scoped>
 .SidebarLayout {
+  --bar-height: 3rem;
   display: flex;
   height: 100vh;
   height: 100dvh;
@@ -319,13 +322,16 @@ if (route) {
 .Topbar {
   display: flex;
   align-items: center;
-  min-height: var(--toggle-size);
+  min-height: var(--bar-height);
   padding: 0 var(--space-4);
   flex-shrink: 0;
 }
 
 .TopbarEnd {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
 }
 
 @media (min-width: 768px) {
@@ -398,13 +404,16 @@ if (route) {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  min-height: var(--toggle-size);
+  min-height: var(--bar-height);
   border-bottom: 1px solid var(--color-border);
   padding: 0 var(--space-4);
 }
 
 .TabsBarEnd {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
 }
 
 .TabsList {

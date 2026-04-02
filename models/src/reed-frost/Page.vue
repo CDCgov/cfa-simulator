@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, computed } from "vue";
-import { SidebarLayout, NumberInput } from "@cfasim-ui/components";
+import { NumberInput } from "@cfasim-ui/components";
 import { LineChart, DataTable } from "@cfasim-ui/charts";
 import type { Series } from "@cfasim-ui/charts";
 import { useModel } from "@cfasim-ui/wasm";
@@ -40,54 +40,52 @@ const chartSeries = computed<Series[]>(() => {
 </script>
 
 <template>
-  <SidebarLayout hide-topbar>
-    <template #sidebar>
-      <h2>Reed-Frost Epidemic</h2>
-      <NumberInput
-        v-model="params.population"
-        label="Population"
-        slider
-        live
-        :min="1"
-        :max="50"
-      />
-      <NumberInput
-        v-model="params.initial_infected"
-        label="Initial infected"
-        slider
-        live
-        :min="1"
-        :max="10"
-      />
-      <NumberInput
-        v-model="params.p"
-        label="Transmission prob (p)"
-        slider
-        live
-        percent
-        :min="0"
-        :max="1"
-        :step="0.01"
-      />
-    </template>
-    <h1>Reed-Frost Epidemic</h1>
-    <p v-if="error" style="color: red">{{ error }}</p>
-    <LineChart
-      v-if="chartSeries.length"
-      :series="chartSeries"
-      :height="400"
-      x-label="Generation"
-      y-label="Cumulative infections"
+  <Teleport to="#model-sidebar">
+    <h2>Parameters</h2>
+    <NumberInput
+      v-model="params.population"
+      label="Population"
+      slider
+      live
+      :min="1"
+      :max="50"
     />
-    <DataTable
-      v-if="outputs?.data"
-      :data="outputs.data"
-      :max-rows="20"
-      :column-config="{
-        generation: { label: '', width: 'small', cellClass: 'text-secondary' },
-        trajectory: { label: 'Trajectory' },
-        cumulative_infections: { label: 'Cumulative Infections' },
-      }"
+    <NumberInput
+      v-model="params.initial_infected"
+      label="Initial infected"
+      slider
+      live
+      :min="1"
+      :max="10"
     />
-  </SidebarLayout>
+    <NumberInput
+      v-model="params.p"
+      label="Transmission prob (p)"
+      slider
+      live
+      percent
+      :min="0"
+      :max="1"
+      :step="0.01"
+    />
+  </Teleport>
+  <h1>Reed-Frost Epidemic</h1>
+  <p v-if="error" style="color: red">{{ error }}</p>
+  <LineChart
+    v-if="chartSeries.length"
+    :series="chartSeries"
+    :height="400"
+    x-label="Generation"
+    y-label="Cumulative infections"
+  />
+  <DataTable
+    v-if="outputs?.data"
+    :data="outputs.data"
+    :max-rows="20"
+    :column-config="{
+      generation: { label: '', width: 'small', cellClass: 'text-secondary' },
+      trajectory: { label: 'Trajectory' },
+      cumulative_infections: { label: 'Cumulative Infections' },
+    }"
+  />
 </template>
