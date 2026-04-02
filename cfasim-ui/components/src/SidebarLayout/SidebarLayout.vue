@@ -11,6 +11,12 @@ import { TabsRoot, TabsList, TabsTrigger, TabsIndicator } from "reka-ui";
 import Icon from "../Icon/Icon.vue";
 import LightDarkToggle from "../LightDarkToggle/LightDarkToggle.vue";
 
+// Optional vue-router integration (no hard dependency).
+// $router/$route on globalProperties is vue-router's stable public API.
+const instance = getCurrentInstance();
+const router = instance?.appContext.config.globalProperties.$router;
+const route = instance?.appContext.config.globalProperties.$route;
+
 export interface Tab {
   value: string;
   label: string;
@@ -44,11 +50,6 @@ onUnmounted(() => {
 function toggle() {
   collapsed.value = !collapsed.value;
 }
-
-// Optional vue-router integration (no hard dependency)
-const instance = getCurrentInstance();
-const router = instance?.appContext.config.globalProperties.$router;
-const route = instance?.appContext.config.globalProperties.$route;
 
 const isRouterMode = computed(() => !!router && props.tabs?.some((t) => t.to));
 
