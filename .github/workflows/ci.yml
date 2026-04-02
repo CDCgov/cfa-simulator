@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-plz
+      - uses: k88hudson/setup-plz@v1
       - run: corepack enable
       - uses: actions/setup-node@v6
         with:
@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-plz
+      - uses: k88hudson/setup-plz@v1
       - uses: ./.github/actions/setup-rust
       - run: plz cli format
       - run: plz cli lint
@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-plz
+      - uses: k88hudson/setup-plz@v1
       - run: corepack enable
       - uses: actions/setup-node@v6
         with:
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-plz
+      - uses: k88hudson/setup-plz@v1
       - uses: ./.github/actions/setup-rust
       - run: plz cli test
 
@@ -54,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-plz
+      - uses: k88hudson/setup-plz@v1
       - run: corepack enable
       - uses: actions/setup-node@v6
         with:
@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-plz
+      - uses: k88hudson/setup-plz@v1
       - run: corepack enable
       - uses: actions/setup-node@v6
         with:
