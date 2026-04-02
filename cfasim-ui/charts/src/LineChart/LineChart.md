@@ -125,6 +125,48 @@ A responsive SVG line chart with support for multiple series, axis labels, and c
   </template>
 </ComponentDemo>
 
+### Grid lines
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      { data: [0, 10, 25, 45, 60, 55, 40, 20, 8], color: '#fb7e38', strokeWidth: 3 },
+      { data: [0, 5, 12, 20, 28, 25, 18, 10, 4], color: '#0057b7', strokeWidth: 3 },
+    ]"
+    :height="200"
+    x-label="Weeks"
+    y-label="Incidence"
+    x-grid
+    y-grid
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    {
+      data: [0, 10, 25, 45, 60, 55, 40, 20, 8],
+      color: '#fb7e38',
+      strokeWidth: 3,
+    },
+    {
+      data: [0, 5, 12, 20, 28, 25, 18, 10, 4],
+      color: '#0057b7',
+      strokeWidth: 3,
+    },
+  ]"
+  :height="200"
+  x-label="Weeks"
+  y-label="Incidence"
+  x-grid
+  y-grid
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 <!--@include: ./_api/line-chart.md-->
 
 ### Series
