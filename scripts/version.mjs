@@ -90,17 +90,12 @@ for (const p of PYPROJECT_TOMLS) bumpPyprojectToml(p);
 
 // Update Cargo.lock files to reflect the new versions
 execSync("cargo check --workspace", { stdio: "inherit" });
-execSync("cargo check --manifest-path examples/rust-example/model/Cargo.toml", {
-  stdio: "inherit",
-});
-
 const tag = `v${newVersion}`;
 const allFiles = [
   ...PACKAGE_JSONS,
   ...CARGO_TOMLS,
   ...PYPROJECT_TOMLS,
   "Cargo.lock",
-  "examples/rust-example/model/Cargo.lock",
 ].join(" ");
 execSync(`git add ${allFiles}`, { stdio: "inherit" });
 execSync(`git commit -m "release: ${tag}"`, { stdio: "inherit" });
