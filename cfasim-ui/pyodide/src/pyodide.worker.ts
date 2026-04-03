@@ -14,7 +14,6 @@ interface WorkerMessage {
 }
 
 let wheelMap: Record<string, string> = {};
-const loadedModules = new Set<string>();
 
 const baseUrl = import.meta.env.BASE_URL ?? "/";
 
@@ -44,28 +43,43 @@ const pyodideReadyPromise = (async () => {
   return pyodide;
 })();
 
-let wheelsInstalled = false;
+let installPromise: Promise<void> | null = null;
 
-async function installAllWheels() {
-  if (wheelsInstalled) return;
-  wheelsInstalled = true;
-  const urls = Object.values(wheelMap).map(
-    (f) => `${self.location.origin}${baseUrl}${f}`,
-  );
-  if (urls.length > 0) {
-    await micropip.install(urls);
+function installAllWheels(): Promise<void> {
+  if (!installPromise) {
+    installPromise = (async () => {
+      const urls = Object.values(wheelMap).map(
+        (f) => `${self.location.origin}${baseUrl}${f}`,
+      );
+      if (urls.length > 0) {
+        await micropip.install(urls);
+      }
+    })();
+    installPromise.catch(() => {
+      installPromise = null;
+    });
   }
+  return installPromise;
 }
 
-async function ensureModule(
+const modulePromises = new Map<string, Promise<void>>();
+
+function ensureModule(
   pyodide: Awaited<typeof pyodideReadyPromise>,
   moduleName: string,
-) {
-  if (loadedModules.has(moduleName)) return;
-  if (!wheelMap[moduleName]) throw new Error(`Unknown module: ${moduleName}`);
-  await installAllWheels();
-  pyodide.pyimport(moduleName);
-  loadedModules.add(moduleName);
+): Promise<void> {
+  if (!modulePromises.has(moduleName)) {
+    if (!wheelMap[moduleName]) throw new Error(`Unknown module: ${moduleName}`);
+    const promise = (async () => {
+      await installAllWheels();
+      pyodide.pyimport(moduleName);
+    })();
+    promise.catch(() => {
+      modulePromises.delete(moduleName);
+    });
+    modulePromises.set(moduleName, promise);
+  }
+  return modulePromises.get(moduleName)!;
 }
 
 // Map Python struct format characters to TypedArray constructors
