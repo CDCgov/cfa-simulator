@@ -24,5 +24,5 @@ test("python example renders", async ({ page }) => {
 
 test("fetch example renders", async ({ page }) => {
   await page.goto("/fetch-example");
-  await expect(page.locator("h1")).toContainText("COVID-19");
+  await expect(page.locator("h1")).toContainText("NSSP Emergency Department");
 });

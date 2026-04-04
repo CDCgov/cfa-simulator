@@ -28,6 +28,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - uses: ./.github/actions/setup-rust
       - run: pnpm install
+      - run: uv run scripts/fetch_nssp_ed.py
       - run: plz docs build
       - run: plz models build
         env:

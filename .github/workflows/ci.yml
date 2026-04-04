@@ -86,4 +86,5 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
       - run: pnpm exec playwright install --with-deps
+      - run: uv run scripts/fetch_nssp_ed.py
       - run: plz models test
