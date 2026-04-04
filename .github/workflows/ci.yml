@@ -86,5 +86,11 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
       - run: pnpm exec playwright install --with-deps
+      - run: echo "date=$(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+        id: date
+      - uses: actions/cache@v5
+        with:
+          path: .cache/nssp_ed_raw.csv
+          key: nssp-ed-data-${{ steps.date.outputs.date }}
       - run: uv run scripts/fetch_nssp_ed.py
       - run: plz models test
