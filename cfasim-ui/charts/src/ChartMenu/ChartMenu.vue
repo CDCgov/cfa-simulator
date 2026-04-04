@@ -41,7 +41,7 @@ defineProps<{
       </svg>
     </button>
     <!-- Multiple items: dropdown menu -->
-    <DropdownMenuRoot v-else>
+    <DropdownMenuRoot v-else :modal="false">
       <DropdownMenuTrigger class="chart-menu-button" aria-label="Chart options">
         <svg
           width="16"
