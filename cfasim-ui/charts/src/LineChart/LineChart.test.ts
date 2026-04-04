@@ -140,6 +140,54 @@ describe("LineChart", () => {
     expect(wrapper.findAll("circle").length).toBe(3);
   });
 
+  it("applies per-series lineOpacity to stroke-opacity", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        series: [{ data: [0, 10, 20], lineOpacity: 0.3 }],
+        height: 100,
+        menu: false,
+      },
+    });
+    const path = wrapper.find("path");
+    expect(path.attributes("stroke-opacity")).toBe("0.3");
+  });
+
+  it("applies per-series dotOpacity to fill-opacity", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        series: [{ data: [0, 10], dots: true, dotOpacity: 0.5 }],
+        height: 100,
+        menu: false,
+      },
+    });
+    const circle = wrapper.find("circle");
+    expect(circle.attributes("fill-opacity")).toBe("0.5");
+  });
+
+  it("lineOpacity overrides series opacity for lines", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        series: [{ data: [0, 10, 20], opacity: 0.8, lineOpacity: 0.2 }],
+        height: 100,
+        menu: false,
+      },
+    });
+    const path = wrapper.find("path");
+    expect(path.attributes("stroke-opacity")).toBe("0.2");
+  });
+
+  it("dotOpacity overrides series opacity for dots", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        series: [{ data: [0, 10], dots: true, opacity: 0.8, dotOpacity: 0.4 }],
+        height: 100,
+        menu: false,
+      },
+    });
+    const circle = wrapper.find("circle");
+    expect(circle.attributes("fill-opacity")).toBe("0.4");
+  });
+
   it("renders tooltip overlay when tooltipTrigger is set", () => {
     const wrapper = mount(LineChart, {
       props: {

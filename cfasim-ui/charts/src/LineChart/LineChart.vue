@@ -10,6 +10,8 @@ export interface Series {
   dashed?: boolean;
   strokeWidth?: number;
   opacity?: number;
+  lineOpacity?: number;
+  dotOpacity?: number;
   line?: boolean;
   dots?: boolean;
   dotRadius?: number;
@@ -613,7 +615,7 @@ const menuItems = computed<ChartMenuItem[]>(() => {
           fill="none"
           :stroke="s.color ?? 'currentColor'"
           :stroke-width="s.strokeWidth ?? 1.5"
-          :stroke-opacity="s.opacity ?? lineOpacity"
+          :stroke-opacity="s.lineOpacity ?? s.opacity ?? lineOpacity"
           :stroke-dasharray="s.dashed ? '6 3' : undefined"
         />
         <template v-if="s.dots">
@@ -624,7 +626,7 @@ const menuItems = computed<ChartMenuItem[]>(() => {
             :cy="pt.y"
             :r="s.dotRadius ?? (s.strokeWidth ?? 1.5) + 1"
             :fill="s.dotFill ?? s.color ?? 'currentColor'"
-            :fill-opacity="s.opacity ?? lineOpacity"
+            :fill-opacity="s.dotOpacity ?? s.opacity ?? lineOpacity"
             :stroke="s.dotStroke ?? 'none'"
           />
         </template>
