@@ -30,6 +30,12 @@ run = "cargo run -p cfasim -- init"
 [tasks.build]
 run = "pnpm --filter @cfasim-ui/components --filter @cfasim-ui/charts run build"
 
+# Check bundle sizes for built packages
+[tasks.bundle-size]
+depends = ["build"]
+run = "node scripts/check-bundle-size.mjs"
+git_hook = "pre-push"
+
 # Bump all package versions (patch, minor, or major)
 [tasks.version]
 run = "node scripts/version.mjs ${1}"
