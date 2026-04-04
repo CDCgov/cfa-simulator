@@ -1,6 +1,6 @@
 {
   "name": "@cfasim-ui/charts",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "description": "Chart visualization components for cfasim-ui",
   "license": "Apache-2.0",
