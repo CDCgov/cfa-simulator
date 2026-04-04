@@ -1,5 +1,7 @@
 import DefaultTheme from "vitepress/theme";
 import type { Theme } from "vitepress";
+import "@cfasim-ui/components/style.css";
+import "@cfasim-ui/charts/style.css";
 import "./demo-theme.css";
 import {
   Box,
