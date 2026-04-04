@@ -139,4 +139,68 @@ describe("LineChart", () => {
     expect(wrapper.findAll("path").length).toBe(0);
     expect(wrapper.findAll("circle").length).toBe(3);
   });
+
+  it("renders tooltip overlay when tooltipTrigger is set", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        data: [0, 10, 20],
+        height: 100,
+        menu: false,
+        tooltipTrigger: "hover" as const,
+      },
+    });
+    const rects = wrapper.findAll("rect");
+    const overlay = rects.find((r) => r.attributes("fill") === "transparent");
+    expect(overlay).toBeTruthy();
+  });
+
+  it("does not render tooltip overlay without tooltipTrigger", () => {
+    const wrapper = mount(LineChart, {
+      props: { data: [0, 10, 20], height: 100, menu: false },
+    });
+    const rects = wrapper.findAll("rect");
+    const overlay = rects.find((r) => r.attributes("fill") === "transparent");
+    expect(overlay).toBeUndefined();
+  });
+
+  it("emits hover event on mousemove over overlay", async () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        data: [0, 10, 20],
+        width: 400,
+        height: 100,
+        menu: false,
+        tooltipTrigger: "hover" as const,
+      },
+      attachTo: document.body,
+    });
+    const overlay = wrapper
+      .findAll("rect")
+      .find((r) => r.attributes("fill") === "transparent")!;
+    await overlay.trigger("mousemove", { clientX: 200, clientY: 50 });
+    expect(wrapper.emitted("hover")).toBeTruthy();
+    expect(wrapper.emitted("hover")![0][0]).toHaveProperty("index");
+    wrapper.unmount();
+  });
+
+  it("emits hover null on mouseleave", async () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        data: [0, 10, 20],
+        width: 400,
+        height: 100,
+        menu: false,
+        tooltipTrigger: "hover" as const,
+      },
+      attachTo: document.body,
+    });
+    const overlay = wrapper
+      .findAll("rect")
+      .find((r) => r.attributes("fill") === "transparent")!;
+    await overlay.trigger("mousemove", { clientX: 200, clientY: 50 });
+    await overlay.trigger("mouseleave");
+    const events = wrapper.emitted("hover")!;
+    expect(events[events.length - 1][0]).toBeNull();
+    wrapper.unmount();
+  });
 });

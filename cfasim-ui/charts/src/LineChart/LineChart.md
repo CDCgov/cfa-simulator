@@ -7,7 +7,7 @@ A responsive SVG line chart with support for multiple series, axis labels, and c
 ### Single series
 
 <ComponentDemo>
-  <LineChart :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]" :height="200" x-label="Days" y-label="Cases" />
+  <LineChart :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]" :height="200" x-label="Days" y-label="Cases" tooltip-trigger="hover" />
 
 <template #code>
 
@@ -17,6 +17,7 @@ A responsive SVG line chart with support for multiple series, axis labels, and c
   :height="200"
   x-label="Days"
   y-label="Cases"
+  tooltip-trigger="hover"
 />
 ```
 
@@ -55,6 +56,50 @@ A responsive SVG line chart with support for multiple series, axis labels, and c
   :height="200"
   x-label="Weeks"
   y-label="Incidence"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Tooltip
+
+Hover over the chart to see a tooltip with values at each data point. Set `tooltip-trigger="hover"` to enable the built-in tooltip with crosshair and highlight dots. Use the `#tooltip` slot for custom content.
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      { data: [0, 10, 25, 45, 60, 55, 40, 20, 8], color: '#fb7e38', strokeWidth: 3 },
+      { data: [0, 5, 12, 20, 28, 25, 18, 10, 4], color: '#0057b7', strokeWidth: 3 },
+    ]"
+    :x-labels="['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']"
+    :height="200"
+    x-label="Month"
+    y-label="Incidence"
+    tooltip-trigger="hover"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    {
+      data: [0, 10, 25, 45, 60, 55, 40, 20, 8],
+      color: '#fb7e38',
+      strokeWidth: 3,
+    },
+    {
+      data: [0, 5, 12, 20, 28, 25, 18, 10, 4],
+      color: '#0057b7',
+      strokeWidth: 3,
+    },
+  ]"
+  :x-labels="['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']"
+  :height="200"
+  x-label="Month"
+  y-label="Incidence"
+  tooltip-trigger="hover"
 />
 ```
 

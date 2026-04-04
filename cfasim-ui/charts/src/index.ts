@@ -11,6 +11,7 @@ export {
   type ThresholdStop,
   type CategoricalStop,
 } from "./ChoroplethMap/ChoroplethMap.vue";
+export { default as ChartTooltip } from "./ChartTooltip/ChartTooltip.vue";
 export {
   default as DataTable,
   type TableData,

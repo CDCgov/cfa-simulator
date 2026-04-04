@@ -2,6 +2,7 @@
 import { computed, ref, onMounted, onUnmounted } from "vue";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
+import ChartTooltip from "../ChartTooltip/ChartTooltip.vue";
 import { saveSvg, savePng, downloadCsv } from "../ChartMenu/download.js";
 
 export interface Series {
@@ -42,9 +43,26 @@ const props = withDefaults(
     menu?: boolean | string;
     xGrid?: boolean;
     yGrid?: boolean;
+    /** Custom per-index data passed to the tooltip slot */
+    tooltipData?: unknown[];
+    /** Tooltip activation mode. Default: 'hover' */
+    tooltipTrigger?: "hover" | "click";
   }>(),
   { lineOpacity: 1, menu: true },
 );
+
+const emit = defineEmits<{
+  (e: "hover", payload: { index: number } | null): void;
+}>();
+
+defineSlots<{
+  tooltip?(props: {
+    index: number;
+    xLabel?: string;
+    values: { value: number; color: string; seriesIndex: number }[];
+    data: unknown;
+  }): unknown;
+}>();
 
 const containerRef = ref<HTMLElement | null>(null);
 const svgRef = ref<SVGSVGElement | null>(null);
@@ -320,6 +338,125 @@ function toCsv(): string {
   return rows.join("\n");
 }
 
+// Tooltip hover state
+const TOUCH_Y_OFFSET = 50;
+const hoverIndex = ref<number | null>(null);
+const hoverMouseY = ref(0);
+const isTouching = ref(false);
+const hasTooltipSlot = computed(
+  () => !!props.tooltipData || !!props.tooltipTrigger,
+);
+
+const hoverX = computed(() => {
+  if (hoverIndex.value === null) return 0;
+  const len = maxLen.value;
+  const xScale = innerW.value / (len - 1 || 1);
+  return padding.value.left + hoverIndex.value * xScale;
+});
+
+const hoverDots = computed(() => {
+  const idx = hoverIndex.value;
+  if (idx === null) return [];
+  const { min, range } = extent.value;
+  const yScale = innerH.value / range;
+  const py = padding.value.top + innerH.value;
+  return allSeries.value
+    .filter((s) => idx < s.data.length && isFinite(s.data[idx]))
+    .map((s) => ({
+      x: hoverX.value,
+      y: py - (s.data[idx] - min) * yScale,
+      color: s.color ?? "currentColor",
+    }));
+});
+
+const hoverSlotProps = computed(() => {
+  const idx = hoverIndex.value;
+  if (idx === null) return null;
+  return {
+    index: idx,
+    xLabel: props.xLabels?.[idx],
+    values: allSeries.value.map((s, i) => ({
+      value: s.data[idx],
+      color: s.color ?? "currentColor",
+      seriesIndex: i,
+    })),
+    data: props.tooltipData?.[idx] ?? null,
+  };
+});
+
+function pointerFromEvent(
+  event: MouseEvent | TouchEvent,
+): { clientX: number; clientY: number } | null {
+  if ("touches" in event) {
+    return event.touches[0] ?? null;
+  }
+  return event;
+}
+
+function indexFromPointer(clientX: number): number | null {
+  const rect = containerRef.value?.getBoundingClientRect();
+  if (!rect) return null;
+  const len = maxLen.value;
+  if (len <= 1) return null;
+  const mouseX = clientX - rect.left;
+  const xScale = innerW.value / (len - 1 || 1);
+  const dataX = (mouseX - padding.value.left) / xScale;
+  return Math.round(Math.max(0, Math.min(len - 1, dataX)));
+}
+
+function updateHover(event: MouseEvent | TouchEvent) {
+  const pt = pointerFromEvent(event);
+  if (!pt) return;
+  const idx = indexFromPointer(pt.clientX);
+  if (idx === null) return;
+  const rect = containerRef.value!.getBoundingClientRect();
+  hoverIndex.value = idx;
+  const offset = isTouching.value ? TOUCH_Y_OFFSET : 0;
+  hoverMouseY.value = Math.max(0, pt.clientY - rect.top - offset);
+  emit("hover", { index: idx });
+}
+
+function onChartMouseMove(event: MouseEvent) {
+  updateHover(event);
+}
+
+function onChartMouseLeave() {
+  if (props.tooltipTrigger !== "click") {
+    hoverIndex.value = null;
+    emit("hover", null);
+  }
+}
+
+function onChartClick(event: MouseEvent) {
+  if (props.tooltipTrigger !== "click") return;
+  const pt = pointerFromEvent(event);
+  if (!pt) return;
+  const idx = indexFromPointer(pt.clientX);
+  if (idx === null) return;
+  hoverIndex.value = hoverIndex.value === idx ? null : idx;
+  emit("hover", hoverIndex.value !== null ? { index: idx } : null);
+}
+
+function onTouchStart(event: TouchEvent) {
+  isTouching.value = true;
+  updateHover(event);
+}
+
+function onTouchMove(event: TouchEvent) {
+  updateHover(event);
+}
+
+function onTouchEnd() {
+  isTouching.value = false;
+  hoverIndex.value = null;
+  emit("hover", null);
+}
+
+function onTooltipClose() {
+  hoverIndex.value = null;
+  emit("hover", null);
+}
+
 const menuItems = computed<ChartMenuItem[]>(() => {
   const fname = menuFilename();
   return [
@@ -484,7 +621,77 @@ const menuItems = computed<ChartMenuItem[]>(() => {
           />
         </template>
       </template>
+      <!-- Tooltip: crosshair line -->
+      <line
+        v-if="hasTooltipSlot && hoverIndex !== null"
+        :x1="snap(hoverX)"
+        :y1="padding.top"
+        :x2="snap(hoverX)"
+        :y2="padding.top + innerH"
+        stroke="currentColor"
+        stroke-opacity="0.3"
+        stroke-dasharray="4 2"
+        pointer-events="none"
+      />
+      <!-- Tooltip: hover dots -->
+      <circle
+        v-for="(dot, i) in hoverDots"
+        :key="'hd' + i"
+        :cx="dot.x"
+        :cy="dot.y"
+        r="4"
+        :fill="dot.color"
+        stroke="var(--color-bg-0, #fff)"
+        stroke-width="2"
+        pointer-events="none"
+      />
+      <!-- Tooltip: interaction overlay -->
+      <rect
+        v-if="hasTooltipSlot"
+        :x="padding.left"
+        :y="padding.top"
+        :width="innerW"
+        :height="innerH"
+        fill="transparent"
+        style="cursor: crosshair; touch-action: none"
+        @mousemove="onChartMouseMove"
+        @mouseleave="onChartMouseLeave"
+        @click="onChartClick"
+        @touchstart.prevent="onTouchStart"
+        @touchmove.prevent="onTouchMove"
+        @touchend="onTouchEnd"
+      />
     </svg>
+    <!-- Tooltip floating content -->
+    <ChartTooltip
+      v-if="hasTooltipSlot"
+      :x="hoverX"
+      :y="hoverMouseY"
+      :open="hoverIndex !== null"
+      :mode="tooltipTrigger ?? 'hover'"
+      side="right"
+      :side-offset="16"
+      @close="onTooltipClose"
+    >
+      <slot v-if="hoverSlotProps" name="tooltip" v-bind="hoverSlotProps">
+        <div class="line-chart-tooltip">
+          <div v-if="hoverSlotProps.xLabel" class="line-chart-tooltip-label">
+            {{ hoverSlotProps.xLabel }}
+          </div>
+          <div
+            v-for="v in hoverSlotProps.values"
+            :key="v.seriesIndex"
+            class="line-chart-tooltip-row"
+          >
+            <span
+              class="line-chart-tooltip-swatch"
+              :style="{ background: v.color }"
+            />
+            {{ isFinite(v.value) ? formatTick(v.value) : "—" }}
+          </div>
+        </div>
+      </slot>
+    </ChartTooltip>
   </div>
 </template>
 
@@ -496,5 +703,24 @@ const menuItems = computed<ChartMenuItem[]>(() => {
 
 .line-chart-wrapper:hover :deep(.chart-menu-button) {
   opacity: 1;
+}
+
+.line-chart-tooltip-label {
+  font-weight: 600;
+  margin-bottom: 0.25em;
+}
+
+.line-chart-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375em;
+}
+
+.line-chart-tooltip-swatch {
+  display: inline-block;
+  width: 0.625em;
+  height: 0.625em;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 </style>
