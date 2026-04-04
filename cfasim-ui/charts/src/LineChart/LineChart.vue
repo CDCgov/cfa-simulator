@@ -2,7 +2,6 @@
 import { computed, ref, onMounted, onUnmounted } from "vue";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
-import ChartTooltip from "../ChartTooltip/ChartTooltip.vue";
 import { saveSvg, savePng, downloadCsv } from "../ChartMenu/download.js";
 
 export interface Series {
@@ -341,8 +340,8 @@ function toCsv(): string {
 // Tooltip hover state
 const TOUCH_Y_OFFSET = 50;
 const hoverIndex = ref<number | null>(null);
-const hoverMouseY = ref(0);
 const isTouching = ref(false);
+const tooltipRef = ref<HTMLElement | null>(null);
 const hasTooltipSlot = computed(
   () => !!props.tooltipData || !!props.tooltipTrigger,
 );
@@ -404,15 +403,24 @@ function indexFromPointer(clientX: number): number | null {
   return Math.round(Math.max(0, Math.min(len - 1, dataX)));
 }
 
+function updateTooltipPos(clientX: number, clientY: number) {
+  const el = tooltipRef.value;
+  if (!el) return;
+  const rect = containerRef.value!.getBoundingClientRect();
+  const offset = isTouching.value ? TOUCH_Y_OFFSET : 0;
+  const x = clientX - rect.left;
+  const y = Math.max(0, clientY - rect.top - offset);
+  el.style.left = `${x + 16}px`;
+  el.style.top = `${y}px`;
+}
+
 function updateHover(event: MouseEvent | TouchEvent) {
   const pt = pointerFromEvent(event);
   if (!pt) return;
   const idx = indexFromPointer(pt.clientX);
   if (idx === null) return;
-  const rect = containerRef.value!.getBoundingClientRect();
   hoverIndex.value = idx;
-  const offset = isTouching.value ? TOUCH_Y_OFFSET : 0;
-  hoverMouseY.value = Math.max(0, pt.clientY - rect.top - offset);
+  updateTooltipPos(pt.clientX, pt.clientY);
   emit("hover", { index: idx });
 }
 
@@ -663,17 +671,13 @@ const menuItems = computed<ChartMenuItem[]>(() => {
       />
     </svg>
     <!-- Tooltip floating content -->
-    <ChartTooltip
-      v-if="hasTooltipSlot"
-      :x="hoverX"
-      :y="hoverMouseY"
-      :open="hoverIndex !== null"
-      :mode="tooltipTrigger ?? 'hover'"
-      side="right"
-      :side-offset="16"
-      @close="onTooltipClose"
+    <div
+      v-if="hasTooltipSlot && hoverIndex !== null && hoverSlotProps"
+      ref="tooltipRef"
+      class="chart-tooltip-content"
+      style="position: absolute; transform: translateY(-50%)"
     >
-      <slot v-if="hoverSlotProps" name="tooltip" v-bind="hoverSlotProps">
+      <slot name="tooltip" v-bind="hoverSlotProps">
         <div class="line-chart-tooltip">
           <div v-if="hoverSlotProps.xLabel" class="line-chart-tooltip-label">
             {{ hoverSlotProps.xLabel }}
@@ -691,7 +695,7 @@ const menuItems = computed<ChartMenuItem[]>(() => {
           </div>
         </div>
       </slot>
-    </ChartTooltip>
+    </div>
   </div>
 </template>
 

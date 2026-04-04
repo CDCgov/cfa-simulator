@@ -1,17 +1,12 @@
 <script setup lang="ts">
 import {
-  TooltipProvider,
-  TooltipRoot,
-  TooltipTrigger,
-  TooltipPortal,
-  TooltipContent,
   PopoverRoot,
   PopoverAnchor,
   PopoverPortal,
   PopoverContent,
 } from "reka-ui";
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     /** Pixel x-coordinate relative to the positioned parent container */
     x: number;
@@ -21,15 +16,12 @@ withDefaults(
     open: boolean;
     /** Interaction mode. Default: 'hover' */
     mode?: "hover" | "click";
-    /** Preferred side for placement. Default: 'top' */
-    side?: "top" | "right" | "bottom" | "left";
     /** Offset from anchor in pixels. Default: 8 */
     sideOffset?: number;
   }>(),
   {
     mode: "hover",
-    side: "top",
-    sideOffset: 8,
+    sideOffset: 16,
   },
 );
 
@@ -40,51 +32,44 @@ defineEmits<{
 </script>
 
 <template>
-  <!-- Hover mode: reka-ui Tooltip -->
-  <TooltipProvider v-if="mode === 'hover'" :delay-duration="0">
-    <TooltipRoot :open="open" :delay-duration="0" disable-closing-trigger>
-      <TooltipTrigger as-child>
+  <!-- Hover mode: lightweight CSS-positioned div -->
+  <div
+    v-if="mode === 'hover' && open"
+    class="chart-tooltip-content"
+    :style="{
+      position: 'absolute',
+      left: `${x + sideOffset}px`,
+      top: `${y}px`,
+      transform: 'translateY(-50%)',
+    }"
+  >
+    <slot />
+  </div>
+
+  <!-- Click mode: reka-ui Popover for dismiss-on-outside-click -->
+  <template v-else-if="mode === 'click'">
+    <PopoverRoot :open="open">
+      <PopoverAnchor as-child>
         <div
           class="chart-tooltip-anchor"
           :style="{ left: `${x}px`, top: `${y}px` }"
         />
-      </TooltipTrigger>
-      <TooltipPortal>
-        <TooltipContent
+      </PopoverAnchor>
+      <PopoverPortal>
+        <PopoverContent
           v-if="open"
           class="chart-tooltip-content"
-          :side="side"
+          side="right"
           :side-offset="sideOffset"
           update-position-strategy="always"
+          @pointer-down-outside="$emit('close')"
+          @escape-key-down="$emit('close')"
         >
           <slot />
-        </TooltipContent>
-      </TooltipPortal>
-    </TooltipRoot>
-  </TooltipProvider>
-
-  <!-- Click mode: reka-ui Popover -->
-  <PopoverRoot v-else :open="open">
-    <PopoverAnchor as-child>
-      <div
-        class="chart-tooltip-anchor"
-        :style="{ left: `${x}px`, top: `${y}px` }"
-      />
-    </PopoverAnchor>
-    <PopoverPortal>
-      <PopoverContent
-        v-if="open"
-        class="chart-tooltip-content"
-        :side="side"
-        :side-offset="sideOffset"
-        update-position-strategy="always"
-        @pointer-down-outside="$emit('close')"
-        @escape-key-down="$emit('close')"
-      >
-        <slot />
-      </PopoverContent>
-    </PopoverPortal>
-  </PopoverRoot>
+        </PopoverContent>
+      </PopoverPortal>
+    </PopoverRoot>
+  </template>
 </template>
 
 <style scoped>

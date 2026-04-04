@@ -88,6 +88,17 @@ const metricLabel = computed(() =>
 const title = computed(
   () => `% ED visits — ${metricLabel.value} — ${selectedWeek.value}`,
 );
+
+function formatTooltip(data: {
+  name: string;
+  value?: number | string;
+}): string {
+  const label = metric.value === "covid" ? "COVID" : "influenza";
+  if (data.value != null) {
+    return `<strong>${data.name}</strong><br>${data.value}% of ED visits were ${label}`;
+  }
+  return `<strong>${data.name}</strong><br>No data`;
+}
 </script>
 
 <template>
@@ -119,6 +130,8 @@ const title = computed(
     :zoom="countyLevel"
     :pan="countyLevel"
     legend-title="% visits"
+    tooltip-trigger="hover"
+    :tooltip-format="formatTooltip"
   />
 </template>
 

@@ -453,15 +453,15 @@ describe("ChoroplethMap", () => {
     expect(borderPath).toBeDefined();
   });
 
-  it("emits stateHover on mouseenter/mouseleave", async () => {
+  it("emits stateHover on mouseover/mouseout", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: { width: 600, height: 400 },
     });
     const firstPath = wrapper.find(".state-path");
-    await firstPath.trigger("mouseenter");
+    await firstPath.trigger("mouseover");
     expect(wrapper.emitted("stateHover")).toHaveLength(1);
     expect(wrapper.emitted("stateHover")![0][0]).not.toBeNull();
-    await firstPath.trigger("mouseleave");
+    await firstPath.trigger("mouseout");
     expect(wrapper.emitted("stateHover")).toHaveLength(2);
     expect(wrapper.emitted("stateHover")![1][0]).toBeNull();
   });

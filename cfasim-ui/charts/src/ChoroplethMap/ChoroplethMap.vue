@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onUnmounted, useId } from "vue";
 import { geoPath, geoAlbersUsa } from "d3-geo";
-import { zoom as d3Zoom, zoomIdentity } from "d3-zoom";
+import { zoom as d3Zoom } from "d3-zoom";
 import { select } from "d3-selection";
 import { feature, mesh, merge } from "topojson-client";
 import type { Topology, GeometryCollection } from "topojson-specification";
@@ -63,6 +63,14 @@ const props = withDefaults(
     zoom?: boolean;
     /** Enable click-and-drag panning. Default: false */
     pan?: boolean;
+    /** Tooltip activation mode */
+    tooltipTrigger?: "hover" | "click";
+    /** Custom tooltip formatter. Receives { id, name, value } and returns HTML string. */
+    tooltipFormat?: (data: {
+      id: string;
+      name: string;
+      value?: number | string;
+    }) => string;
   }>(),
   {
     geoType: "states",
@@ -94,9 +102,33 @@ const svgRef = ref<SVGSVGElement | null>(null);
 const mapGroupRef = ref<SVGGElement | null>(null);
 const measuredWidth = ref(0);
 let hoveredEl: SVGPathElement | null = null;
+let tooltipEl: HTMLDivElement | null = null;
+let isZooming = false;
+// TODO: map hover/tooltip causes performance issues on mobile (SVG stroke-width
+// changes + compositing layers degrade zoom/pan). Disabled on touch devices.
+const isTouchDevice = typeof window !== "undefined" && "ontouchstart" in window;
 let observer: ResizeObserver | null = null;
 let zoomBehavior: ReturnType<typeof d3Zoom<SVGSVGElement, unknown>> | null =
   null;
+
+function setupInteraction() {
+  if (isTouchDevice) return;
+  const g = mapGroupRef.value;
+  if (!g) return;
+  g.addEventListener("click", onDelegatedEvent);
+  g.addEventListener("mouseover", onDelegatedEvent);
+  g.addEventListener("mousemove", onDelegatedMouseMove);
+  g.addEventListener("mouseout", onDelegatedMouseOut);
+}
+
+function teardownInteraction() {
+  const g = mapGroupRef.value;
+  if (!g) return;
+  g.removeEventListener("click", onDelegatedEvent);
+  g.removeEventListener("mouseover", onDelegatedEvent);
+  g.removeEventListener("mousemove", onDelegatedMouseMove);
+  g.removeEventListener("mouseout", onDelegatedMouseOut);
+}
 
 onMounted(() => {
   if (containerRef.value) {
@@ -108,11 +140,14 @@ onMounted(() => {
     observer.observe(containerRef.value);
   }
   setupZoom();
+  setupInteraction();
 });
 
 onUnmounted(() => {
   observer?.disconnect();
   teardownZoom();
+  teardownInteraction();
+  hideTooltip();
 });
 
 function setupZoom() {
@@ -122,10 +157,17 @@ function setupZoom() {
   const svg = select(svgRef.value);
   zoomBehavior = d3Zoom<SVGSVGElement, unknown>()
     .scaleExtent(props.zoom ? [1, 12] : [1, 1])
+    .on("start", () => {
+      isZooming = true;
+      clearHover();
+    })
     .on("zoom", (event) => {
       if (mapGroupRef.value) {
         mapGroupRef.value.setAttribute("transform", event.transform);
       }
+    })
+    .on("end", () => {
+      isZooming = false;
     });
 
   if (!props.pan) {
@@ -148,7 +190,9 @@ watch(
   () => [props.zoom, props.pan],
   () => {
     teardownZoom();
+    teardownInteraction();
     setupZoom();
+    setupInteraction();
   },
 );
 
@@ -326,34 +370,114 @@ function stateValue(
   return dataMap.value.get(String(feat.id));
 }
 
-function handleClick(feat: (typeof featuresGeo.value.features)[number]) {
-  emit("stateClick", {
-    id: String(feat.id),
-    name: stateName(feat),
-    value: stateValue(feat),
-  });
+const featMap = computed(() => {
+  const m = new Map<string, (typeof featuresGeo.value.features)[number]>();
+  for (const f of featuresGeo.value.features) m.set(String(f.id), f);
+  return m;
+});
+
+function resolveTarget(el: Element | null): {
+  pathEl: SVGPathElement;
+  feat: (typeof featuresGeo.value.features)[number];
+} | null {
+  let target = el;
+  while (target && !(target as HTMLElement).dataset?.featId) {
+    target = target.parentElement;
+  }
+  if (!target) return null;
+  const feat = featMap.value.get((target as HTMLElement).dataset.featId!);
+  if (!feat) return null;
+  return { pathEl: target as SVGPathElement, feat };
 }
 
-function handleMouseEnter(
+function showTooltip(
   feat: (typeof featuresGeo.value.features)[number],
-  event: MouseEvent,
+  clientX: number,
+  clientY: number,
 ) {
-  const el = event.currentTarget as SVGPathElement;
-  hoveredEl = el;
-  el.setAttribute("stroke-width", String(effectiveStrokeWidth.value + 1));
-  emit("stateHover", {
-    id: String(feat.id),
-    name: stateName(feat),
-    value: stateValue(feat),
-  });
+  if (!tooltipEl) {
+    tooltipEl = document.createElement("div");
+    tooltipEl.className = "chart-tooltip-content";
+    tooltipEl.style.position = "fixed";
+    tooltipEl.style.transform = "translateY(-50%)";
+    document.body.appendChild(tooltipEl);
+  }
+  const name = stateName(feat);
+  const value = stateValue(feat);
+  const data = { id: String(feat.id), name, value };
+  if (props.tooltipFormat) {
+    tooltipEl.innerHTML = props.tooltipFormat(data);
+  } else {
+    tooltipEl.textContent = value != null ? `${name}: ${value}` : name;
+  }
+  tooltipEl.style.left = `${clientX + 16}px`;
+  tooltipEl.style.top = `${clientY}px`;
 }
 
-function handleMouseLeave() {
+function hideTooltip() {
+  if (tooltipEl) {
+    tooltipEl.remove();
+    tooltipEl = null;
+  }
+}
+
+function setHover(
+  pathEl: SVGPathElement,
+  feat: (typeof featuresGeo.value.features)[number],
+) {
+  if (hoveredEl && hoveredEl !== pathEl) {
+    hoveredEl.setAttribute("stroke-width", String(effectiveStrokeWidth.value));
+    hoveredEl.setAttribute("stroke", props.strokeColor);
+  }
+  hoveredEl = pathEl;
+  pathEl.parentNode?.appendChild(pathEl);
+  pathEl.setAttribute("stroke-width", String(effectiveStrokeWidth.value + 1));
+  pathEl.setAttribute("stroke", "#555");
+}
+
+function clearHover() {
   if (hoveredEl) {
     hoveredEl.setAttribute("stroke-width", String(effectiveStrokeWidth.value));
+    hoveredEl.setAttribute("stroke", props.strokeColor);
     hoveredEl = null;
+    emit("stateHover", null);
   }
-  emit("stateHover", null);
+  hideTooltip();
+}
+
+// Delegated event handlers (native DOM, attached to <g>)
+function onDelegatedEvent(event: Event) {
+  if (isZooming) return;
+  const me = event as MouseEvent;
+  const hit = resolveTarget(me.target as Element);
+  if (!hit) return;
+  if (event.type === "click") {
+    emit("stateClick", {
+      id: String(hit.feat.id),
+      name: stateName(hit.feat),
+      value: stateValue(hit.feat),
+    });
+  } else if (event.type === "mouseover") {
+    setHover(hit.pathEl, hit.feat);
+    if (props.tooltipTrigger) showTooltip(hit.feat, me.clientX, me.clientY);
+    emit("stateHover", {
+      id: String(hit.feat.id),
+      name: stateName(hit.feat),
+      value: stateValue(hit.feat),
+    });
+  }
+}
+
+function onDelegatedMouseMove(event: MouseEvent) {
+  if (isZooming || !tooltipEl) return;
+  tooltipEl.style.left = `${event.clientX + 16}px`;
+  tooltipEl.style.top = `${event.clientY}px`;
+}
+
+function onDelegatedMouseOut(event: MouseEvent) {
+  const related = event.relatedTarget as Element | null;
+  if (related && mapGroupRef.value?.contains(related)) return;
+  clearHover();
 }
 
 function menuFilename() {
@@ -479,16 +603,14 @@ const menuItems = computed<ChartMenuItem[]>(() => {
         <path
           v-for="feat in featuresGeo.features"
           :key="String(feat.id)"
+          :data-feat-id="String(feat.id)"
           :d="pathGenerator(feat) ?? undefined"
           :fill="stateColor(feat.id!)"
           :stroke="strokeColor"
           :stroke-width="effectiveStrokeWidth"
           class="state-path"
-          @click="handleClick(feat)"
-          @mouseenter="handleMouseEnter(feat, $event)"
-          @mouseleave="handleMouseLeave"
         >
-          <title>
+          <title v-if="!tooltipTrigger">
             {{ stateName(feat)
             }}{{ stateValue(feat) != null ? `: ${stateValue(feat)}` : "" }}
           </title>
@@ -620,10 +742,5 @@ const menuItems = computed<ChartMenuItem[]>(() => {
 
 .state-path {
   cursor: pointer;
-  transition: fill-opacity 0.15s;
-}
-
-.state-path:hover {
-  fill-opacity: 0.8;
 }
 </style>
