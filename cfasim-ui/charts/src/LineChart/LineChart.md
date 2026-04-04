@@ -167,6 +167,42 @@ A responsive SVG line chart with support for multiple series, axis labels, and c
   </template>
 </ComponentDemo>
 
+### Dots
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      { data: [0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2], color: '#0057b7', strokeWidth: 2, dots: true, dotRadius: 4, dotFill: '#fff', dotStroke: '#0057b7' },
+    ]"
+    :height="200"
+    x-label="Days"
+    y-label="Cases"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    {
+      data: [0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2],
+      color: '#0057b7',
+      strokeWidth: 2,
+      dots: true,
+      dotRadius: 4,
+      dotFill: '#fff',
+      dotStroke: '#0057b7',
+    },
+  ]"
+  :height="200"
+  x-label="Days"
+  y-label="Cases"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 <!--@include: ./_api/line-chart.md-->
 
 ### Series
@@ -178,5 +214,10 @@ interface Series {
   dashed?: boolean;
   strokeWidth?: number;
   opacity?: number;
+  line?: boolean;
+  dots?: boolean;
+  dotRadius?: number;
+  dotFill?: string;
+  dotStroke?: string;
 }
 ```

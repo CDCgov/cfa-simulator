@@ -10,6 +10,11 @@ export interface Series {
   dashed?: boolean;
   strokeWidth?: number;
   opacity?: number;
+  line?: boolean;
+  dots?: boolean;
+  dotRadius?: number;
+  dotFill?: string;
+  dotStroke?: string;
 }
 
 export interface Area {
@@ -155,6 +160,23 @@ function toPath(data: number[]): string {
     inSegment = true;
   }
   return d;
+}
+
+function toPoints(data: number[]): { x: number; y: number }[] {
+  const { min, range } = extent.value;
+  const len = maxLen.value;
+  const xScale = innerW.value / (len - 1 || 1);
+  const yScale = innerH.value / range;
+  const py = padding.value.top + innerH.value;
+  const pts: { x: number; y: number }[] = [];
+  for (let i = 0; i < data.length; i++) {
+    if (!isFinite(data[i])) continue;
+    pts.push({
+      x: padding.value.left + i * xScale,
+      y: py - (data[i] - min) * yScale,
+    });
+  }
+  return pts;
 }
 
 function toAreaPath(upper: number[], lower: number[]): string {
@@ -438,17 +460,30 @@ const menuItems = computed<ChartMenuItem[]>(() => {
         :fill-opacity="a.opacity ?? 0.2"
         stroke="none"
       />
-      <!-- data lines -->
-      <path
-        v-for="(s, i) in allSeries"
-        :key="i"
-        :d="toPath(s.data)"
-        fill="none"
-        :stroke="s.color ?? 'currentColor'"
-        :stroke-width="s.strokeWidth ?? 1.5"
-        :stroke-opacity="s.opacity ?? lineOpacity"
-        :stroke-dasharray="s.dashed ? '6 3' : undefined"
-      />
+      <!-- data lines and dots -->
+      <template v-for="(s, i) in allSeries" :key="i">
+        <path
+          v-if="s.line !== false"
+          :d="toPath(s.data)"
+          fill="none"
+          :stroke="s.color ?? 'currentColor'"
+          :stroke-width="s.strokeWidth ?? 1.5"
+          :stroke-opacity="s.opacity ?? lineOpacity"
+          :stroke-dasharray="s.dashed ? '6 3' : undefined"
+        />
+        <template v-if="s.dots">
+          <circle
+            v-for="(pt, j) in toPoints(s.data)"
+            :key="j"
+            :cx="pt.x"
+            :cy="pt.y"
+            :r="s.dotRadius ?? (s.strokeWidth ?? 1.5) + 1"
+            :fill="s.dotFill ?? s.color ?? 'currentColor'"
+            :fill-opacity="s.opacity ?? lineOpacity"
+            :stroke="s.dotStroke ?? 'none'"
+          />
+        </template>
+      </template>
     </svg>
   </div>
 </template>
