@@ -13,10 +13,23 @@
     "access": "public"
   },
   "files": [
-    "src"
+    "dist"
   ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "sideEffects": [
+    "*.css"
+  ],
+  "scripts": {
+    "build": "vite build"
   },
   "dependencies": {
     "reka-ui": "^2.9.2"
@@ -26,6 +39,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.5",
+    "vite-plugin-dts": "^4.5.4",
     "@vue/test-utils": "^2.4.6",
     "happy-dom": "^20.8.9",
     "vitest": "^4.1.0"

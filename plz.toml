@@ -26,11 +26,16 @@ run = "pnpm exec prettier --write ."
 [tasks.init]
 run = "cargo run -p cfasim -- init"
 
+# Build cfasim-ui libraries (components + charts)
+[tasks.build]
+run = "pnpm --filter @cfasim-ui/components --filter @cfasim-ui/charts run build"
+
 # Bump all package versions (patch, minor, or major)
 [tasks.version]
 run = "node scripts/version.mjs ${1}"
 
 [taskgroup.publish.pnpm]
+depends = ["build"]
 run = "pnpm -r publish --access public"
 
 [taskgroup.publish.cargo]
@@ -66,14 +71,17 @@ dir = "models"
 
 # Run the models dev server
 [taskgroup.models.dev]
+depends = ["build"]
 run = "pnpm dev"
 
 # Build the models app
 [taskgroup.models.build]
+depends = ["build"]
 run = "pnpm exec vite build"
 
 # E2E tests for models
 [taskgroup.models.test]
+depends = ["build"]
 run = "pnpm exec playwright test --config playwright.config.ts"
 git_hook = "pre-push"
 
@@ -94,16 +102,16 @@ pnpm exec vite build --config demos/sidebar-tabs/vite.config.ts
 
 # Serve docs locally
 [taskgroup.docs.dev]
-depends = ["docs.generate", "docs.demos"]
+depends = ["build", "docs.generate", "docs.demos"]
 run = "pnpm exec vitepress dev"
 
 # Build static files for docs
 [taskgroup.docs.build]
-depends = ["docs.generate", "docs.demos"]
+depends = ["build", "docs.generate", "docs.demos"]
 run = "pnpm exec vitepress build"
 
 # Run tests for docs (Playwright tests for docs site)
 [taskgroup.docs.test]
-depends = "docs.generate"
+depends = ["build", "docs.generate"]
 run = "pnpm exec playwright test --config playwright.config.ts"
 git_hook = "pre-push"
