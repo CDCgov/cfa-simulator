@@ -71,9 +71,6 @@ importers:
       topojson-client:
         specifier: ^3.1.0
         version: 3.1.0
-      us-atlas:
-        specifier: ^3.0.1
-        version: 3.0.1
       vue:
         specifier: ^3.5.0
         version: 3.5.30(typescript@5.9.3)
@@ -102,6 +99,9 @@ importers:
       happy-dom:
         specifier: ^20.8.9
         version: 20.8.9
+      us-atlas:
+        specifier: ^3.0.1
+        version: 3.0.1
       vite-plugin-dts:
         specifier: ^4.5.4
         version: 4.5.4(@types/node@25.5.0)(rollup@4.59.1)(typescript@5.9.3)(vite@8.0.1(@types/node@25.5.0)(esbuild@0.27.4))
@@ -170,6 +170,9 @@ importers:
       '@cfasim-ui/theme':
         specifier: workspace:*
         version: link:../cfasim-ui/theme
+      us-atlas:
+        specifier: ^3.0.1
+        version: 3.0.1
       vue:
         specifier: ^3.5.30
         version: 3.5.30(typescript@5.9.3)

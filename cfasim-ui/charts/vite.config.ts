@@ -25,7 +25,6 @@ export default defineConfig({
         "d3-selection",
         "d3-zoom",
         "topojson-client",
-        /^us-atlas\//,
       ],
     },
   },

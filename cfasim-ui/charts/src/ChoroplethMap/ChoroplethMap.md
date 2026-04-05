@@ -1,6 +1,33 @@
 # ChoroplethMap
 
-A US choropleth map using D3's Albers USA projection, which repositions Alaska and Hawaii to the bottom left. Supports state-level, county-level, and HSA-level (Health Service Areas) rendering via the `geoType` prop. Includes built-in GeoJSON for all US states, territories, counties, and 949 HSAs.
+A US choropleth map using D3's Albers USA projection, which repositions Alaska and Hawaii to the bottom left. Supports state-level, county-level, and HSA-level (Health Service Areas) rendering via the `geoType` prop.
+
+You must provide your own TopoJSON topology data via the `topology` prop. We recommend the [`us-atlas`](https://github.com/topojson/us-atlas) package:
+
+```sh
+npm install us-atlas
+```
+
+- **State-level maps**: use `us-atlas/states-10m.json`
+- **County or HSA maps**: use `us-atlas/counties-10m.json` (includes both county and state boundaries)
+
+```vue
+<script setup>
+import { ChoroplethMap } from "@cfasim-ui/charts";
+import statesTopo from "us-atlas/states-10m.json";
+import countiesTopo from "us-atlas/counties-10m.json";
+</script>
+
+<!-- State map -->
+<ChoroplethMap :topology="statesTopo" :data="stateData" />
+
+<!-- County map -->
+<ChoroplethMap
+  :topology="countiesTopo"
+  geo-type="counties"
+  :data="countyData"
+/>
+```
 
 ## Examples
 
@@ -8,6 +35,7 @@ A US choropleth map using D3's Albers USA projection, which repositions Alaska a
 
 <ComponentDemo>
   <ChoroplethMap
+    :topology="statesTopo"
     :data="[
       { id: '06', value: 100 },
       { id: '36', value: 80 },
@@ -28,7 +56,12 @@ A US choropleth map using D3's Albers USA projection, which repositions Alaska a
 <template #code>
 
 ```vue
+<script setup>
+import statesTopo from "us-atlas/states-10m.json";
+</script>
+
 <ChoroplethMap
+  :topology="statesTopo"
   :data="[
     { id: '06', value: 100 },
     { id: '36', value: 80 },
@@ -49,6 +82,7 @@ A US choropleth map using D3's Albers USA projection, which repositions Alaska a
 
 <ComponentDemo>
   <ChoroplethMap
+    :topology="statesTopo"
     :data="[
       { id: 'California', value: 100 },
       { id: 'Texas', value: 85 },
@@ -70,6 +104,7 @@ A US choropleth map using D3's Albers USA projection, which repositions Alaska a
 
 ```vue
 <ChoroplethMap
+  :topology="statesTopo"
   :data="[
     { id: 'California', value: 100 },
     { id: 'Texas', value: 85 },
@@ -91,6 +126,7 @@ Use an array of `ThresholdStop` objects instead of a linear scale. Each stop def
 
 <ComponentDemo>
   <ChoroplethMap
+    :topology="statesTopo"
     :data="[
       { id: 'California', value: 80 },
       { id: 'Texas', value: 45 },
@@ -118,6 +154,7 @@ Use an array of `ThresholdStop` objects instead of a linear scale. Each stop def
 
 ```vue
 <ChoroplethMap
+  :topology="statesTopo"
   :data="stateData"
   :color-scale="[
     { min: 0, color: '#fee5d9', label: 'Low' },
@@ -140,6 +177,7 @@ Use an array of `CategoricalStop` objects to map string values to colors. Each s
 
 <ComponentDemo>
   <ChoroplethMap
+    :topology="statesTopo"
     :data="[
       { id: 'California', value: 'high' },
       { id: 'Texas', value: 'medium' },
@@ -166,6 +204,7 @@ Use an array of `CategoricalStop` objects to map string values to colors. Each s
 
 ```vue
 <ChoroplethMap
+  :topology="statesTopo"
   :data="stateData"
   :color-scale="[
     { value: 'low', color: '#fee5d9' },
@@ -187,6 +226,7 @@ Set `geoType="counties"` to render county-level data using 5-digit FIPS codes. S
 
 <ComponentDemo>
   <ChoroplethMap
+    :topology="countiesTopo"
     geo-type="counties"
     :pan="true"
     :zoom="true"
@@ -211,6 +251,7 @@ Set `geoType="counties"` to render county-level data using 5-digit FIPS codes. S
 
 ```vue
 <ChoroplethMap
+  :topology="countiesTopo"
   geo-type="counties"
   pan
   zoom
@@ -236,6 +277,7 @@ Set `geoType="hsas"` to render Health Service Area boundaries. HSAs are dissolve
 
 <ComponentDemo>
   <ChoroplethMap
+    :topology="countiesTopo"
     geo-type="hsas"
     :pan="true"
     :zoom="true"
@@ -260,6 +302,7 @@ Set `geoType="hsas"` to render Health Service Area boundaries. HSAs are dissolve
 
 ```vue
 <ChoroplethMap
+  :topology="countiesTopo"
   geo-type="hsas"
   pan
   zoom

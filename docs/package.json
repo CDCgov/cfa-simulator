@@ -6,6 +6,7 @@
     "@cfasim-ui/charts": "workspace:*",
     "@cfasim-ui/components": "workspace:*",
     "@cfasim-ui/theme": "workspace:*",
+    "us-atlas": "^3.0.1",
     "vue": "^3.5.30",
     "vue-router": "^4.6.4"
   },

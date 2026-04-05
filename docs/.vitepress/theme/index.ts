@@ -18,6 +18,8 @@ import {
   Toggle,
 } from "@cfasim-ui/components";
 import { ChoroplethMap, DataTable, LineChart } from "@cfasim-ui/charts";
+import usStates from "us-atlas/states-10m.json";
+import usCounties from "us-atlas/counties-10m.json";
 import ComponentDemo from "./ComponentDemo.vue";
 
 export default {
@@ -39,5 +41,7 @@ export default {
     app.component("DataTable", DataTable);
     app.component("LineChart", LineChart);
     app.component("ComponentDemo", ComponentDemo);
+    app.config.globalProperties.statesTopo = usStates;
+    app.config.globalProperties.countiesTopo = usCounties;
   },
 } satisfies Theme;

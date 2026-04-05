@@ -3,6 +3,9 @@ import { ref, watch, computed, onMounted } from "vue";
 import { SelectBox, Toggle, Spinner } from "@cfasim-ui/components";
 import { ChoroplethMap } from "@cfasim-ui/charts";
 import type { StateData } from "@cfasim-ui/charts";
+import usStates from "us-atlas/states-10m.json";
+import usCounties from "us-atlas/counties-10m.json";
+import type { Topology } from "topojson-specification";
 
 type Metric = "covid" | "influenza";
 
@@ -80,6 +83,9 @@ const mapData = computed<StateData[]>(() => {
 });
 
 const geoType = computed(() => (countyLevel.value ? "counties" : "states"));
+const topology = computed<Topology>(
+  () => (countyLevel.value ? usCounties : usStates) as unknown as Topology,
+);
 
 const metricLabel = computed(() =>
   metric.value === "covid" ? "COVID" : "Influenza",
@@ -124,6 +130,7 @@ function formatTooltip(data: {
   <Spinner v-if="loading || weekLoading" />
   <ChoroplethMap
     v-else
+    :topology="topology"
     :data="mapData"
     :geo-type="geoType"
     :title="title"

@@ -1,11 +1,17 @@
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import ChoroplethMap from "./ChoroplethMap.vue";
+import usStates from "us-atlas/states-10m.json";
+import usCounties from "us-atlas/counties-10m.json";
+import type { Topology } from "topojson-specification";
+
+const statesTopo = usStates as unknown as Topology;
+const countiesTopo = usCounties as unknown as Topology;
 
 describe("ChoroplethMap", () => {
   it("renders SVG with state paths", () => {
     const wrapper = mount(ChoroplethMap, {
-      props: { width: 600, height: 400 },
+      props: { topology: statesTopo, width: 600, height: 400 },
     });
     const svg = wrapper.find("svg");
     expect(svg.exists()).toBe(true);
@@ -16,7 +22,7 @@ describe("ChoroplethMap", () => {
 
   it("renders without data (all states default gray)", () => {
     const wrapper = mount(ChoroplethMap, {
-      props: { width: 600, height: 400 },
+      props: { topology: statesTopo, width: 600, height: 400 },
     });
     const paths = wrapper.findAll(".state-path");
     for (const path of paths) {
@@ -27,6 +33,7 @@ describe("ChoroplethMap", () => {
   it("colors states based on data by FIPS id", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: statesTopo,
         width: 600,
         height: 400,
         data: [
@@ -46,6 +53,7 @@ describe("ChoroplethMap", () => {
   it("colors states based on data by name", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: statesTopo,
         width: 600,
         height: 400,
         data: [{ id: "California", value: 50 }],
@@ -60,7 +68,12 @@ describe("ChoroplethMap", () => {
 
   it("renders title when provided", () => {
     const wrapper = mount(ChoroplethMap, {
-      props: { width: 600, height: 400, title: "US Cases" },
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        title: "US Cases",
+      },
     });
     const title = wrapper.find("svg > text");
     expect(title.text()).toBe("US Cases");
@@ -69,6 +82,7 @@ describe("ChoroplethMap", () => {
   it("applies custom color scale", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: statesTopo,
         width: 600,
         height: 400,
         data: [
@@ -87,6 +101,7 @@ describe("ChoroplethMap", () => {
   it("shows state name and value in tooltip title", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: statesTopo,
         width: 600,
         height: 400,
         data: [{ id: "06", value: 42 }],
@@ -101,6 +116,7 @@ describe("ChoroplethMap", () => {
   it("applies threshold color scale", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: statesTopo,
         width: 600,
         height: 400,
         data: [
@@ -132,6 +148,7 @@ describe("ChoroplethMap", () => {
   it("threshold scale returns default gray when below all stops", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: statesTopo,
         width: 600,
         height: 400,
         data: [{ id: "06", value: 5 }],
@@ -147,6 +164,7 @@ describe("ChoroplethMap", () => {
   it("threshold stops can be provided in any order", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: statesTopo,
         width: 600,
         height: 400,
         data: [
@@ -172,6 +190,7 @@ describe("ChoroplethMap", () => {
   it("applies categorical color scale with string values", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: statesTopo,
         width: 600,
         height: 400,
         data: [
@@ -203,6 +222,7 @@ describe("ChoroplethMap", () => {
   it("categorical scale returns noDataColor for unmatched values", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: statesTopo,
         width: 600,
         height: 400,
         data: [{ id: "06", value: "unknown" }],
@@ -218,6 +238,7 @@ describe("ChoroplethMap", () => {
   it("categorical scale shows string value in tooltip", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: statesTopo,
         width: 600,
         height: 400,
         data: [{ id: "06", value: "high" }],
@@ -233,6 +254,7 @@ describe("ChoroplethMap", () => {
   it("uses noDataColor for states without data", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: statesTopo,
         width: 600,
         height: 400,
         data: [{ id: "06", value: 50 }],
@@ -247,7 +269,7 @@ describe("ChoroplethMap", () => {
 
   it("emits stateClick on path click", async () => {
     const wrapper = mount(ChoroplethMap, {
-      props: { width: 600, height: 400 },
+      props: { topology: statesTopo, width: 600, height: 400 },
     });
     const firstPath = wrapper.find(".state-path");
     await firstPath.trigger("click");
@@ -263,6 +285,7 @@ describe("ChoroplethMap", () => {
   it("renders categorical legend with circles and labels", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: statesTopo,
         width: 600,
         height: 400,
         data: [{ id: "06", value: "high" }],
@@ -286,6 +309,7 @@ describe("ChoroplethMap", () => {
   it("renders threshold legend with circles and labels", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: statesTopo,
         width: 600,
         height: 400,
         data: [{ id: "06", value: 50 }],
@@ -307,6 +331,7 @@ describe("ChoroplethMap", () => {
   it("renders threshold legend with min values when no label", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: statesTopo,
         width: 600,
         height: 400,
         data: [{ id: "06", value: 50 }],
@@ -325,6 +350,7 @@ describe("ChoroplethMap", () => {
   it("renders continuous legend with gradient rect and ticks", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: statesTopo,
         width: 600,
         height: 400,
         data: [
@@ -347,6 +373,7 @@ describe("ChoroplethMap", () => {
   it("hides legend when legend=false", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: statesTopo,
         width: 600,
         height: 400,
         data: [{ id: "06", value: 50 }],
@@ -358,7 +385,12 @@ describe("ChoroplethMap", () => {
 
   it("renders county paths when geoType is counties", () => {
     const wrapper = mount(ChoroplethMap, {
-      props: { width: 600, height: 400, geoType: "counties" },
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "counties",
+      },
     });
     const paths = wrapper.findAll(".state-path");
     // us-atlas counties-10m has 3231 county geometries
@@ -368,6 +400,7 @@ describe("ChoroplethMap", () => {
   it("colors counties by FIPS id", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: countiesTopo,
         width: 600,
         height: 400,
         geoType: "counties",
@@ -386,7 +419,12 @@ describe("ChoroplethMap", () => {
 
   it("renders state borders overlay in county mode", () => {
     const wrapper = mount(ChoroplethMap, {
-      props: { width: 600, height: 400, geoType: "counties" },
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "counties",
+      },
     });
     // State borders path rendered after the county paths group
     const allPaths = wrapper.findAll("path");
@@ -400,7 +438,7 @@ describe("ChoroplethMap", () => {
 
   it("does not render state borders in states mode", () => {
     const wrapper = mount(ChoroplethMap, {
-      props: { width: 600, height: 400 },
+      props: { topology: statesTopo, width: 600, height: 400 },
     });
     const allPaths = wrapper.findAll("path");
     const borderPath = allPaths.find(
@@ -413,7 +451,12 @@ describe("ChoroplethMap", () => {
 
   it("renders HSA paths when geoType is hsas", () => {
     const wrapper = mount(ChoroplethMap, {
-      props: { width: 600, height: 400, geoType: "hsas" },
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "hsas",
+      },
     });
     const paths = wrapper.findAll(".state-path");
     // 949 unique HSAs
@@ -424,6 +467,7 @@ describe("ChoroplethMap", () => {
   it("colors HSAs by HSA code", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        topology: countiesTopo,
         width: 600,
         height: 400,
         geoType: "hsas",
@@ -442,7 +486,12 @@ describe("ChoroplethMap", () => {
 
   it("renders state borders overlay in HSA mode", () => {
     const wrapper = mount(ChoroplethMap, {
-      props: { width: 600, height: 400, geoType: "hsas" },
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "hsas",
+      },
     });
     const allPaths = wrapper.findAll("path");
     const borderPath = allPaths.find(
@@ -455,7 +504,7 @@ describe("ChoroplethMap", () => {
 
   it("emits stateHover on mouseover/mouseout", async () => {
     const wrapper = mount(ChoroplethMap, {
-      props: { width: 600, height: 400 },
+      props: { topology: statesTopo, width: 600, height: 400 },
     });
     const firstPath = wrapper.find(".state-path");
     await firstPath.trigger("mouseover");

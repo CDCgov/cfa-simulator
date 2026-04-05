@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted, useId } from "vue";
+import {
+  computed,
+  ref,
+  watch,
+  onMounted,
+  onUnmounted,
+  useId,
+  toRaw,
+} from "vue";
 import { geoPath, geoAlbersUsa } from "d3-geo";
 import { zoom as d3Zoom } from "d3-zoom";
 import { select } from "d3-selection";
 import { feature, mesh, merge } from "topojson-client";
 import type { Topology, GeometryCollection } from "topojson-specification";
-import usStates from "us-atlas/states-10m.json" with { type: "json" };
-import usCounties from "us-atlas/counties-10m.json" with { type: "json" };
 import { fipsToHsa, hsaNames } from "./hsaMapping.js";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
@@ -44,6 +50,10 @@ export interface CategoricalStop {
 
 const props = withDefaults(
   defineProps<{
+    /** TopoJSON topology object (e.g. from us-atlas/states-10m.json or us-atlas/counties-10m.json).
+     * Must contain a "states" object for geoType="states", or both "states" and "counties" objects
+     * for geoType="counties" or geoType="hsas". */
+    topology: Topology;
     data?: StateData[];
     /** Geographic type: "states" (default), "counties", or "hsas" (Health Service Areas) */
     geoType?: GeoType;
@@ -204,14 +214,15 @@ const aspectRatio = computed(() => {
 const height = computed(() => width.value * aspectRatio.value);
 
 type NamedGeometry = GeometryCollection<{ name: string }>;
-const statesTopo = usStates as unknown as Topology<{ states: NamedGeometry }>;
-const countiesTopo = usCounties as unknown as Topology<{
+type StatesTopo = Topology<{ states: NamedGeometry }>;
+type CountiesTopo = Topology<{
   counties: NamedGeometry;
   states: NamedGeometry;
 }>;
 
 const hsaFeaturesGeo = computed(() => {
-  const countyGeometries = countiesTopo.objects.counties.geometries;
+  const topo = toRaw(props.topology) as unknown as CountiesTopo;
+  const countyGeometries = topo.objects.counties.geometries;
   const groups = new Map<string, typeof countyGeometries>();
 
   for (const geom of countyGeometries) {
@@ -228,7 +239,7 @@ const hsaFeaturesGeo = computed(() => {
       type: "Feature",
       id: hsaCode,
       properties: { name: hsaNames[hsaCode] ?? hsaCode },
-      geometry: merge(countiesTopo as unknown as Topology, geoms as any),
+      geometry: merge(topo as unknown as Topology, geoms as any),
     });
   }
 
@@ -238,14 +249,17 @@ const hsaFeaturesGeo = computed(() => {
 const featuresGeo = computed(() => {
   if (props.geoType === "hsas") return hsaFeaturesGeo.value;
   if (props.geoType === "counties") {
-    return feature(countiesTopo, countiesTopo.objects.counties);
+    const topo = toRaw(props.topology) as unknown as CountiesTopo;
+    return feature(topo, topo.objects.counties);
   }
-  return feature(statesTopo, statesTopo.objects.states);
+  const topo = toRaw(props.topology) as unknown as StatesTopo;
+  return feature(topo, topo.objects.states);
 });
 
 const stateBordersPath = computed(() => {
   if (props.geoType !== "counties" && props.geoType !== "hsas") return null;
-  return mesh(countiesTopo, countiesTopo.objects.states, (a, b) => a !== b);
+  const topo = toRaw(props.topology) as unknown as CountiesTopo;
+  return mesh(topo, topo.objects.states, (a, b) => a !== b);
 });
 
 const projection = computed(() =>
