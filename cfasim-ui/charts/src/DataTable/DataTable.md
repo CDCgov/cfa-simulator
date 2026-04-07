@@ -87,6 +87,37 @@ A table for displaying columnar data. Accepts a plain record of arrays or a `Mod
   </template>
 </ComponentDemo>
 
+### Download data link
+
+Pass `download-link` to render a plain text link below the table for
+downloading the CSV data. Set it to `true` for the default label or a
+string to customize it. When set, the Download CSV menu item is hidden.
+Use `filename` to control the downloaded filename, and `csv` to supply
+custom CSV content.
+
+<ComponentDemo>
+  <DataTable
+    :data="{ day: [0, 1, 2, 3, 4], cases: [1, 21, 56, 101, 141] }"
+    filename="sir-cases"
+    download-link="Download cases (CSV)"
+  />
+
+<template #code>
+
+```vue
+<DataTable
+  :data="{
+    day: [0, 1, 2, 3, 4],
+    cases: [1, 21, 56, 101, 141],
+  }"
+  filename="sir-cases"
+  download-link="Download cases (CSV)"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 <!--@include: ./_api/data-table.md-->
 
 ### ColumnConfig
