@@ -30,6 +30,21 @@ const props = withDefaults(
     maxRows?: number;
     columnConfig?: Record<string, ColumnConfig>;
     menu?: boolean | string;
+    /**
+     * Custom CSV content for the Download CSV menu item and download link.
+     * Can be a raw CSV string or a function returning one. When omitted, CSV
+     * is generated from the table data.
+     */
+    csv?: string | (() => string);
+    /** Filename (without extension) for downloaded CSV files. */
+    filename?: string;
+    /**
+     * Show a plain text link below the table to download the CSV data.
+     * Pass `true` for the default label ("Download data (CSV)") or a string
+     * to customize the link text. When set, the Download CSV menu item is
+     * hidden.
+     */
+    downloadLink?: boolean | string;
   }>(),
   { menu: true },
 );
@@ -95,6 +110,7 @@ function cellValue(col: Column, row: number): string {
 }
 
 function menuFilename() {
+  if (props.filename) return props.filename;
   return typeof props.menu === "string" ? props.menu : "data";
 }
 
@@ -106,6 +122,8 @@ function escapeCsvField(val: string): string {
 }
 
 function toCsv(): string {
+  if (typeof props.csv === "function") return props.csv();
+  if (typeof props.csv === "string") return props.csv;
   const cols = columns.value;
   const rows = rowCount.value;
   const headers = cols.map((c) => escapeCsvField(columnLabel(c.name)));
@@ -117,14 +135,34 @@ function toCsv(): string {
   return lines.join("\n");
 }
 
-const menuItems = computed<ChartMenuItem[]>(() => [
-  { label: "Download CSV", action: () => downloadCsv(toCsv(), menuFilename()) },
-]);
+const menuItems = computed<ChartMenuItem[]>(() => {
+  if (props.downloadLink) return [];
+  return [
+    {
+      label: "Download CSV",
+      action: () => downloadCsv(toCsv(), menuFilename()),
+    },
+  ];
+});
+
+const downloadLinkText = computed(() => {
+  if (!props.downloadLink) return null;
+  return typeof props.downloadLink === "string"
+    ? props.downloadLink
+    : "Download data (CSV)";
+});
+
+const csvHref = computed(() => {
+  if (!props.downloadLink) return null;
+  return `data:text/csv;charset=utf-8,${encodeURIComponent(toCsv())}`;
+});
+
+const showMenu = computed(() => props.menu && menuItems.value.length > 0);
 </script>
 
 <template>
-  <div class="TableOuter" :class="{ 'has-menu': menu }">
-    <ChartMenu v-if="menu" :items="menuItems" />
+  <div class="TableOuter" :class="{ 'has-menu': showMenu }">
+    <ChartMenu v-if="showMenu" :items="menuItems" />
     <div class="TableWrapper">
       <table class="Table">
         <colgroup>
@@ -159,6 +197,14 @@ const menuItems = computed<ChartMenuItem[]>(() => [
         </tbody>
       </table>
     </div>
+    <a
+      v-if="downloadLinkText"
+      class="data-table-download-link"
+      :href="csvHref!"
+      :download="`${menuFilename()}.csv`"
+    >
+      {{ downloadLinkText }}
+    </a>
   </div>
 </template>
 
@@ -169,7 +215,12 @@ const menuItems = computed<ChartMenuItem[]>(() => [
 }
 
 .TableOuter.has-menu {
-  padding-top: 32px;
+  margin-top: 32px;
+}
+
+.TableOuter :deep(.chart-menu-trigger-area) {
+  top: -32px;
+  right: 0;
 }
 
 .TableOuter:hover :deep(.chart-menu-button) {
@@ -182,6 +233,8 @@ const menuItems = computed<ChartMenuItem[]>(() => [
 }
 
 .Table {
+  display: table;
+  margin: 0;
   border-collapse: collapse;
   font-variant-numeric: tabular-nums;
   border: 1px solid var(--color-border);
@@ -213,5 +266,12 @@ const menuItems = computed<ChartMenuItem[]>(() => [
 
 .Table tbody tr:last-child td {
   border-bottom: none;
+}
+
+.data-table-download-link {
+  display: block;
+  text-align: right;
+  font-size: var(--font-size-sm);
+  margin-top: 0.25em;
 }
 </style>

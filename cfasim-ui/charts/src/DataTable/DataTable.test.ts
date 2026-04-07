@@ -158,6 +158,68 @@ describe("Table", () => {
     expect(th.attributes("style")).toBeUndefined();
   });
 
+  describe("download link", () => {
+    it("does not render a download link by default", () => {
+      const wrapper = mount(DataTable, {
+        props: { data: { day: [0, 1], value: [10, 20] } },
+      });
+      expect(wrapper.find("a.data-table-download-link").exists()).toBe(false);
+    });
+
+    it("renders a link with default text when downloadLink=true", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { day: [0, 1], value: [10, 20] },
+          downloadLink: true,
+        },
+      });
+      const link = wrapper.find("a.data-table-download-link");
+      expect(link.exists()).toBe(true);
+      expect(link.text()).toBe("Download data (CSV)");
+      expect(link.attributes("download")).toBe("data.csv");
+      expect(link.attributes("href")).toContain(
+        encodeURIComponent("day,value\n0,10\n1,20"),
+      );
+    });
+
+    it("renders a link with custom text and filename", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { day: [0], value: [10] },
+          downloadLink: "Get the data",
+          filename: "cases",
+        },
+      });
+      const link = wrapper.find("a.data-table-download-link");
+      expect(link.text()).toBe("Get the data");
+      expect(link.attributes("download")).toBe("cases.csv");
+    });
+
+    it("uses custom csv content in the link", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { day: [0], value: [10] },
+          downloadLink: true,
+          csv: "date,cases\n2024-01-01,10",
+        },
+      });
+      const link = wrapper.find("a.data-table-download-link");
+      expect(link.attributes("href")).toContain(
+        encodeURIComponent("date,cases\n2024-01-01,10"),
+      );
+    });
+
+    it("hides the menu when downloadLink is set and no other items remain", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { day: [0], value: [10] },
+          downloadLink: true,
+        },
+      });
+      expect(wrapper.findComponent({ name: "ChartMenu" }).exists()).toBe(false);
+    });
+  });
+
   it("applies cellClass to td elements", () => {
     const wrapper = mount(DataTable, {
       props: {

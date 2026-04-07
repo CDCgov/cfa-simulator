@@ -248,6 +248,55 @@ Hover over the chart to see a tooltip with values at each data point. Set `toolt
   </template>
 </ComponentDemo>
 
+### Custom CSV download
+
+By default, the Download CSV menu item exports the chart series as CSV. Use
+the `csv` prop to supply your own content (for example, to include original
+dates, categorical labels, or extra columns that aren't plotted). Use
+`filename` to control the download filename (shared by SVG, PNG and CSV).
+
+Pass `download-link` to also render a plain text link below the chart — set
+it to `true` for the default label, or pass a string to customize it.
+
+<ComponentDemo>
+  <LineChart
+    :data="[10, 22, 35, 48]"
+    :height="200"
+    filename="weekly-cases"
+    :csv="'week,cases\n2024-W01,10\n2024-W02,22\n2024-W03,35\n2024-W04,48'"
+    x-label="Week"
+    y-label="Cases"
+    download-link="Download weekly cases (CSV)"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :data="[10, 22, 35, 48]"
+  :height="200"
+  filename="weekly-cases"
+  :csv="`week,cases
+2024-W01,10
+2024-W02,22
+2024-W03,35
+2024-W04,48`"
+  x-label="Week"
+  y-label="Cases"
+  download-link="Download weekly cases (CSV)"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+`csv` also accepts a function, which is useful for deferring serialization
+until the user clicks Download:
+
+```vue
+<LineChart :data="cases" :csv="() => buildCsv(cases, dates)" />
+```
+
 <!--@include: ./_api/line-chart.md-->
 
 ### Series

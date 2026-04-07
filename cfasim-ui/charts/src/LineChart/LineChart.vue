@@ -48,6 +48,20 @@ const props = withDefaults(
     tooltipData?: unknown[];
     /** Tooltip activation mode. Default: 'hover' */
     tooltipTrigger?: "hover" | "click";
+    /**
+     * Custom CSV content for the Download CSV menu item. Can be a raw CSV
+     * string or a function returning one. When omitted, CSV is generated
+     * from the chart series.
+     */
+    csv?: string | (() => string);
+    /** Filename (without extension) for downloaded SVG, PNG and CSV files. */
+    filename?: string;
+    /**
+     * Show a plain text link below the chart to download the CSV data.
+     * Pass `true` for the default label ("Download data (CSV)") or a string
+     * to customize the link text.
+     */
+    downloadLink?: boolean | string;
   }>(),
   { lineOpacity: 1, menu: true },
 );
@@ -313,6 +327,7 @@ const xTicks = computed(() => {
 });
 
 function menuFilename() {
+  if (props.filename) return props.filename;
   return typeof props.menu === "string" ? props.menu : "chart";
 }
 
@@ -321,6 +336,8 @@ function getSvgEl(): SVGSVGElement | null {
 }
 
 function toCsv(): string {
+  if (typeof props.csv === "function") return props.csv();
+  if (typeof props.csv === "string") return props.csv;
   const series = allSeries.value;
   if (series.length === 0) return "";
   const len = maxLen.value;
@@ -467,9 +484,21 @@ function onTooltipClose() {
   emit("hover", null);
 }
 
+const downloadLinkText = computed(() => {
+  if (!props.downloadLink) return null;
+  return typeof props.downloadLink === "string"
+    ? props.downloadLink
+    : "Download data (CSV)";
+});
+
+const csvHref = computed(() => {
+  if (!props.downloadLink) return null;
+  return `data:text/csv;charset=utf-8,${encodeURIComponent(toCsv())}`;
+});
+
 const menuItems = computed<ChartMenuItem[]>(() => {
   const fname = menuFilename();
-  return [
+  const items: ChartMenuItem[] = [
     {
       label: "Save as SVG",
       action: () => {
@@ -484,8 +513,14 @@ const menuItems = computed<ChartMenuItem[]>(() => {
         if (el) savePng(el, fname);
       },
     },
-    { label: "Download CSV", action: () => downloadCsv(toCsv(), fname) },
   ];
+  if (!props.downloadLink) {
+    items.push({
+      label: "Download CSV",
+      action: () => downloadCsv(toCsv(), fname),
+    });
+  }
+  return items;
 });
 </script>
 
@@ -698,6 +733,14 @@ const menuItems = computed<ChartMenuItem[]>(() => {
         </div>
       </slot>
     </div>
+    <a
+      v-if="downloadLinkText"
+      class="line-chart-download-link"
+      :href="csvHref!"
+      :download="`${menuFilename()}.csv`"
+    >
+      {{ downloadLinkText }}
+    </a>
   </div>
 </template>
 
@@ -720,6 +763,13 @@ const menuItems = computed<ChartMenuItem[]>(() => {
   display: flex;
   align-items: center;
   gap: 0.375em;
+}
+
+.line-chart-download-link {
+  display: block;
+  text-align: right;
+  font-size: var(--font-size-sm);
+  margin-top: 0.25em;
 }
 
 .line-chart-tooltip-swatch {
