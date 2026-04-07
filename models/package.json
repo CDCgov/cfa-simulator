@@ -13,6 +13,7 @@
     "@cfasim-ui/theme": "workspace:*",
     "@cfasim-ui/wasm": "workspace:*",
     "reka-ui": "^2.9.2",
+    "us-atlas": "^3.0.1",
     "vue": "^3.5.30",
     "vue-router": "^4.5.1"
   },
