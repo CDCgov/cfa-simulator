@@ -22,6 +22,21 @@ describe("SelectBox", () => {
     expect(wrapper.find(".select-label").exists()).toBe(false);
   });
 
+  it("visually hides the label when hideLabel is set", () => {
+    const wrapper = mount(SelectBox, {
+      props: {
+        label: "Interval",
+        options,
+        modelValue: "daily",
+        hideLabel: true,
+      },
+    });
+    const label = wrapper.find(".select-label");
+    expect(label.exists()).toBe(true);
+    expect(label.text()).toContain("Interval");
+    expect(label.classes()).toContain("visually-hidden");
+  });
+
   it("renders trigger element", () => {
     const wrapper = mount(SelectBox, {
       props: { options, modelValue: "weekly" },

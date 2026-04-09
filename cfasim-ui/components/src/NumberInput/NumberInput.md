@@ -184,4 +184,24 @@ With `number-type="integer"`, decimal values are truncated to whole numbers on c
   </template>
 </ComponentDemo>
 
+### Hidden label
+
+Use `hide-label` to visually hide the label while keeping it available to
+screen readers. Useful when a heading or surrounding context already describes
+the input visually.
+
+<ComponentDemo>
+  <div style="width: 300px">
+    <NumberInput v-model="days" label="Days" hide-label />
+  </div>
+
+<template #code>
+
+```vue
+<NumberInput v-model="days" label="Days" hide-label />
+```
+
+  </template>
+</ComponentDemo>
+
 <!--@include: ./_api/number-input.md-->

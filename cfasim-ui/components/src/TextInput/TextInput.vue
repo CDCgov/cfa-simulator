@@ -15,6 +15,7 @@ function commit() {
 
 const props = defineProps<{
   label?: string;
+  hideLabel?: boolean;
   placeholder?: string;
   hint?: string;
 }>();
@@ -22,9 +23,12 @@ const props = defineProps<{
 
 <template>
   <label v-if="props.label" class="input-label">
-    <span class="input-label-row">
+    <span
+      class="input-label-row"
+      :class="{ 'visually-hidden': props.hideLabel }"
+    >
       {{ props.label }}
-      <Hint v-if="props.hint" :text="props.hint" />
+      <Hint v-if="props.hint && !props.hideLabel" :text="props.hint" />
     </span>
     <input
       type="text"

@@ -30,6 +30,22 @@ describe("NumberInput", () => {
     expect(label.find("input").exists()).toBe(true);
   });
 
+  it("visually hides the label when hideLabel is set", () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 42,
+        label: "Population",
+        hideLabel: true,
+      },
+    });
+    const label = wrapper.find("label.input-label");
+    expect(label.exists()).toBe(true);
+    expect(label.text()).toContain("Population");
+    expect(wrapper.find(".input-label-row").classes()).toContain(
+      "visually-hidden",
+    );
+  });
+
   it("does not render a label element when label is not provided", () => {
     const wrapper = mount(NumberInput, {
       props: {

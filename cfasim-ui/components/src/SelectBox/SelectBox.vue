@@ -21,6 +21,7 @@ const model = defineModel<string>();
 
 const props = defineProps<{
   label?: string;
+  hideLabel?: boolean;
   ariaLabel?: string;
   options: SelectOption[];
   placeholder?: string;
@@ -31,9 +32,13 @@ const id = useId();
 
 <template>
   <div class="select-box">
-    <label v-if="label" :id="`${id}-label`" class="select-label">{{
-      label
-    }}</label>
+    <label
+      v-if="label"
+      :id="`${id}-label`"
+      class="select-label"
+      :class="{ 'visually-hidden': hideLabel }"
+      >{{ label }}</label
+    >
     <SelectRoot v-model="model">
       <SelectTrigger
         class="select-trigger"

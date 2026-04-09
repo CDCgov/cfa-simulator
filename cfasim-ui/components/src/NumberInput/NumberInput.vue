@@ -7,6 +7,7 @@ const model = defineModel<number>();
 
 const props = defineProps<{
   label?: string;
+  hideLabel?: boolean;
   placeholder?: string;
   step?: number;
   min?: number;
@@ -197,9 +198,12 @@ const inputMax = computed(() => {
 
 <template>
   <label v-if="props.label" class="input-label">
-    <span class="input-label-row">
+    <span
+      class="input-label-row"
+      :class="{ 'visually-hidden': props.hideLabel }"
+    >
       {{ props.label }}
-      <Hint v-if="props.hint" :text="props.hint" />
+      <Hint v-if="props.hint && !props.hideLabel" :text="props.hint" />
     </span>
     <span v-if="!props.slider" class="input-wrapper">
       <input
