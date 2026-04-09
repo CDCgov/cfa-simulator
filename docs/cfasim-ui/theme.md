@@ -1,6 +1,33 @@
 # Theme
 
-cfasim-ui uses CSS custom properties for all design tokens. Import `@cfasim-ui/theme` in your app to get the default theme.
+cfasim-ui uses CSS custom properties for all design tokens.
+
+## Unified import (recommended)
+
+The simplest way to load all cfasim-ui styles — design tokens, reset, utilities, and the CSS for every `@cfasim-ui/components` and `@cfasim-ui/charts` component — is a single import in your app entry:
+
+```ts
+// src/main.ts
+import "@cfasim-ui/theme/all";
+```
+
+This pulls in `@cfasim-ui/theme`, `@cfasim-ui/components/style.css`, and `@cfasim-ui/charts/style.css` together. Use it whenever you're consuming the prebuilt packages from npm — without it, components and charts will render unstyled because their CSS is shipped as a separate file alongside their compiled JS.
+
+## Granular imports
+
+If you want only the design tokens and base styles (no component or chart CSS), import the theme entry directly:
+
+```ts
+import "@cfasim-ui/theme";
+```
+
+Or cherry-pick individual layers:
+
+```ts
+import "@cfasim-ui/theme/base.css";
+import "@cfasim-ui/theme/theme.css";
+import "@cfasim-ui/theme/utilities.css";
+```
 
 ## Variables
 

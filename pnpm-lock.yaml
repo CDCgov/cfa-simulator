@@ -148,7 +148,14 @@ importers:
 
   cfasim-ui/shared: {}
 
-  cfasim-ui/theme: {}
+  cfasim-ui/theme:
+    dependencies:
+      '@cfasim-ui/charts':
+        specifier: workspace:*
+        version: link:../charts
+      '@cfasim-ui/components':
+        specifier: workspace:*
+        version: link:../components
 
   cfasim-ui/wasm:
     dependencies:

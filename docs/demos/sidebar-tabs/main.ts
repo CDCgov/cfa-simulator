@@ -1,7 +1,6 @@
 import { createApp } from "vue";
 import { createRouter, createWebHashHistory } from "vue-router";
-import "@cfasim-ui/theme/theme.css";
-import "@cfasim-ui/theme/utilities.css";
+import "@cfasim-ui/theme/all";
 import App from "./App.vue";
 import ChartPage from "./pages/ChartPage.vue";
 import DataPage from "./pages/DataPage.vue";

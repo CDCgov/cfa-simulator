@@ -83,7 +83,7 @@ The plugin runs `uv build` on your `model/` directory and generates a `public/wh
 **`src/main.ts`**:
 
 ```ts
-import "@cfasim-ui/theme";
+import "@cfasim-ui/theme/all";
 import { createApp } from "vue";
 import App from "./App.vue";
 

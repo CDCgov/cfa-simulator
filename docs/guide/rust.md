@@ -92,7 +92,7 @@ The plugin compiles your `model/` crate and outputs to `public/wasm/{project-nam
 **`src/main.ts`**:
 
 ```ts
-import "@cfasim-ui/theme";
+import "@cfasim-ui/theme/all";
 import { createApp } from "vue";
 import App from "./App.vue";
 

@@ -15,11 +15,20 @@
   "files": [
     "src"
   ],
+  "sideEffects": [
+    "*.css",
+    "./src/all.js"
+  ],
   "exports": {
     ".": "./src/cfasim.css",
+    "./all": "./src/all.js",
     "./base.css": "./src/base.css",
     "./theme.css": "./src/theme.css",
     "./utilities.css": "./src/utilities.css",
     "./themes/cdc.css": "./src/themes/cdc.css"
+  },
+  "dependencies": {
+    "@cfasim-ui/charts": "workspace:*",
+    "@cfasim-ui/components": "workspace:*"
   }
 }
