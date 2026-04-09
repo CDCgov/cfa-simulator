@@ -94,7 +94,7 @@ dependencies = [
 
 [[package]]
 name = "cfasim"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "clap",
  "cliclack",
@@ -106,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "cfasim-model"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
