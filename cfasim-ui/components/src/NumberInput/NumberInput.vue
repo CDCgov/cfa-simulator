@@ -72,6 +72,11 @@ watch(model, (v) => {
   sliderLocal.value = v;
 });
 
+// Characters that can appear in a valid JS number literal: digits, thousands
+// separators (commas), decimal point, sign, and scientific-notation exponent.
+// Anything else is stripped when the value is committed.
+const INVALID_NUMBER_CHARS = /[^0-9,.\-+eE]/g;
+
 function reformatInput(event: Event) {
   const input = event.target as HTMLInputElement;
   const raw = stripCommas(input.value);
@@ -135,7 +140,16 @@ function validate(displayValue: number): string | undefined {
 }
 
 function commit() {
-  let parsed = Number(stripCommas(local.value));
+  // Strip any characters that can't be part of a valid number literal.
+  // People are free to type anything while editing; we clean it up on commit.
+  const cleaned = local.value.replace(INVALID_NUMBER_CHARS, "");
+  // Require at least one digit. Otherwise Number("") === 0 would silently
+  // turn pure garbage ("abc") into 0.
+  if (!/\d/.test(cleaned)) return;
+  if (cleaned !== local.value) {
+    local.value = cleaned;
+  }
+  let parsed = Number(stripCommas(cleaned));
   if (Number.isNaN(parsed)) return;
 
   if (props.numberType === "integer") {

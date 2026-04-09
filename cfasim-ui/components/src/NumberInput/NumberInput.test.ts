@@ -86,6 +86,43 @@ describe("NumberInput", () => {
     expect(wrapper.props("modelValue")).toBe(200);
   });
 
+  it("allows any characters while typing but strips invalid ones on commit", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 0,
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+
+    const input = wrapper.find("input");
+    const el = input.element as HTMLInputElement;
+
+    // While typing, junk characters remain in the field.
+    await input.setValue("abc12x3");
+    expect(el.value).toBe("abc12x3");
+
+    // Blur commits: invalid chars are stripped and the value is parsed.
+    await input.trigger("blur");
+    expect(wrapper.props("modelValue")).toBe(123);
+
+    // Scientific notation stays valid through commit.
+    await input.setValue("1e6");
+    await input.trigger("blur");
+    expect(wrapper.props("modelValue")).toBe(1_000_000);
+
+    // Negatives stay valid through commit.
+    await input.setValue("-10");
+    await input.trigger("blur");
+    expect(wrapper.props("modelValue")).toBe(-10);
+
+    // Pure garbage (no digits) must NOT silently collapse to 0.
+    await wrapper.setProps({ modelValue: 42 });
+    await input.setValue("abcxyz");
+    await input.trigger("blur");
+    expect(wrapper.props("modelValue")).toBe(42);
+  });
+
   it("emits update on Enter keydown", async () => {
     const wrapper = mount(NumberInput, {
       props: {
