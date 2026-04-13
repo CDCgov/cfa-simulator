@@ -2,6 +2,7 @@ export {
   default as LineChart,
   type Series,
   type Area,
+  type AreaSection,
 } from "./LineChart/LineChart.vue";
 export {
   default as ChoroplethMap,

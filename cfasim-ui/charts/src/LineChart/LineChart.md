@@ -248,6 +248,63 @@ Hover over the chart to see a tooltip with values at each data point. Set `toolt
   </template>
 </ComponentDemo>
 
+### Area sections
+
+Highlight a range of a series line by filling the area between the line and the x-axis. Labels are rendered below the chart and automatically stack when they overlap.
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      { data: [0, 2, 5, 12, 25, 45, 70, 100, 130, 155, 170], color: '#000', strokeWidth: 1 },
+    ]"
+    :area-sections="[
+      { startIndex: 2, endIndex: 7, color: '#6366f1', label: 'Day 2–7', description: 'Rapid growth phase' },
+      { startIndex: 5, endIndex: 9, color: '#f43f5e', label: 'Day 5–9', description: 'Mitigation period' },
+    ]"
+    :height="250"
+    x-label="Days"
+    y-label="Cumulative cases"
+    tooltip-trigger="hover"
+    :menu="false"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    {
+      data: [0, 2, 5, 12, 25, 45, 70, 100, 130, 155, 170],
+      color: '#000',
+      strokeWidth: 1,
+    },
+  ]"
+  :area-sections="[
+    {
+      startIndex: 2,
+      endIndex: 7,
+      color: '#6366f1',
+      label: 'Day 2–7',
+      description: 'Rapid growth phase',
+    },
+    {
+      startIndex: 5,
+      endIndex: 9,
+      color: '#f43f5e',
+      label: 'Day 5–9',
+      description: 'Mitigation period',
+    },
+  ]"
+  :height="250"
+  x-label="Days"
+  y-label="Cumulative cases"
+  tooltip-trigger="hover"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Custom CSV download
 
 By default, the Download CSV menu item exports the chart series as CSV. Use
@@ -313,5 +370,19 @@ interface Series {
   dotRadius?: number;
   dotFill?: string;
   dotStroke?: string;
+}
+```
+
+### AreaSection
+
+```ts
+interface AreaSection {
+  seriesIndex?: number; // default: 0
+  startIndex: number;
+  endIndex: number;
+  color?: string;
+  opacity?: number; // default: 0.15
+  label?: string;
+  description?: string;
 }
 ```

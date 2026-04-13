@@ -26,11 +26,31 @@ export interface Area {
   opacity?: number;
 }
 
+export interface AreaSection {
+  /** Index into the series array (default: 0) */
+  seriesIndex?: number;
+  /** Start x-index (inclusive) */
+  startIndex: number;
+  /** End x-index (inclusive) */
+  endIndex: number;
+  /** Fill color; defaults to referenced series color */
+  color?: string;
+  /** Fill opacity; defaults to 0.15 */
+  opacity?: number;
+  /** Primary label text (e.g. "Day 36–63") */
+  label?: string;
+  /** Secondary description text (e.g. "40.0M vaccines administered") */
+  description?: string;
+  /** Stroke width for the highlighted line segment (default: 2) */
+  strokeWidth?: number;
+}
+
 const props = withDefaults(
   defineProps<{
     data?: number[];
     series?: Series[];
     areas?: Area[];
+    areaSections?: AreaSection[];
     width?: number;
     height?: number;
     lineOpacity?: number;
@@ -244,6 +264,117 @@ function toAreaPath(upper: number[], lower: number[]): string {
   }
   return d;
 }
+
+function toSectionPath(section: AreaSection, closed = true): string {
+  const s = allSeries.value[section.seriesIndex ?? 0];
+  if (!s) return "";
+  const { min, range } = extent.value;
+  const len = maxLen.value;
+  const xScale = innerW.value / (len - 1 || 1);
+  const yScale = innerH.value / range;
+  const py = padding.value.top + innerH.value;
+  const x = (i: number) => padding.value.left + i * xScale;
+  const y = (v: number) => py - (v - min) * yScale;
+
+  const start = Math.max(0, section.startIndex);
+  const end = Math.min(s.data.length - 1, section.endIndex);
+  if (start > end) return "";
+
+  let d = `M${x(start)},${y(s.data[start])}`;
+  for (let i = start + 1; i <= end; i++) {
+    if (!isFinite(s.data[i])) continue;
+    d += `L${x(i)},${y(s.data[i])}`;
+  }
+  if (closed) {
+    d += `L${x(end)},${py}`;
+    d += `L${x(start)},${py}`;
+    d += "Z";
+  }
+  return d;
+}
+
+const SECTION_LABEL_ROW_HEIGHT = 36;
+const SECTION_LABEL_TOP_MARGIN = 12;
+const SECTION_LABEL_CHAR_WIDTH = 7;
+const SECTION_LABEL_H_GAP = 16;
+
+interface PositionedSectionLabel {
+  cx: number;
+  labelText: string;
+  descText: string;
+  textWidth: number;
+  row: number;
+  color: string;
+  fillOpacity: number;
+}
+
+const sectionLabels = computed<{
+  labels: PositionedSectionLabel[];
+  extraHeight: number;
+}>(() => {
+  const sections = props.areaSections;
+  if (!sections?.length) return { labels: [], extraHeight: 0 };
+
+  const len = maxLen.value;
+  const xScale = innerW.value / (len - 1 || 1);
+
+  const items: PositionedSectionLabel[] = [];
+  for (const sec of sections) {
+    if (!sec.label && !sec.description) continue;
+    const cx =
+      padding.value.left + ((sec.startIndex + sec.endIndex) / 2) * xScale;
+    const labelText = sec.label ?? "";
+    const descText = sec.description ?? "";
+    const maxChars = Math.max(labelText.length, descText.length);
+    const textWidth = maxChars * SECTION_LABEL_CHAR_WIDTH;
+    const seriesIdx = sec.seriesIndex ?? 0;
+    const color =
+      sec.color ?? allSeries.value[seriesIdx]?.color ?? "currentColor";
+    items.push({
+      cx,
+      labelText,
+      descText,
+      textWidth,
+      row: 0,
+      color,
+      fillOpacity: sec.opacity ?? 0.15,
+    });
+  }
+
+  items.sort((a, b) => a.cx - b.cx);
+
+  // Greedy collision detection
+  const rowRightEdges: number[] = [];
+  for (const item of items) {
+    const left = item.cx - item.textWidth / 2;
+    let row = 0;
+    while (row < rowRightEdges.length) {
+      if (left >= rowRightEdges[row] + SECTION_LABEL_H_GAP) break;
+      row++;
+    }
+    item.row = row;
+    const right = item.cx + item.textWidth / 2;
+    rowRightEdges[row] = Math.max(rowRightEdges[row] ?? -Infinity, right);
+  }
+
+  if (items.length === 0) return { labels: [], extraHeight: 0 };
+  const maxRow = Math.max(...items.map((it) => it.row));
+  const extraHeight =
+    (maxRow + 1) * SECTION_LABEL_ROW_HEIGHT + SECTION_LABEL_TOP_MARGIN;
+  return { labels: items, extraHeight };
+});
+
+const totalHeight = computed(
+  () => height.value + sectionLabels.value.extraHeight,
+);
+
+const sectionLabelBaseY = computed(
+  () =>
+    padding.value.top +
+    innerH.value +
+    padding.value.bottom +
+    SECTION_LABEL_TOP_MARGIN,
+);
 
 function niceStep(range: number, targetTicks: number): number {
   const rough = range / targetTicks;
@@ -527,7 +658,7 @@ const menuItems = computed<ChartMenuItem[]>(() => {
 <template>
   <div ref="containerRef" class="line-chart-wrapper">
     <ChartMenu v-if="menu" :items="menuItems" />
-    <svg ref="svgRef" :width="width" :height="height">
+    <svg ref="svgRef" :width="width" :height="totalHeight">
       <!-- title -->
       <text
         v-if="title"
@@ -666,6 +797,50 @@ const menuItems = computed<ChartMenuItem[]>(() => {
           />
         </template>
       </template>
+      <!-- area sections (rendered above series) -->
+      <template v-for="(sec, i) in areaSections ?? []" :key="'areasec' + i">
+        <path
+          :d="toSectionPath(sec)"
+          :fill="
+            sec.color ??
+            allSeries[sec.seriesIndex ?? 0]?.color ??
+            'currentColor'
+          "
+          :fill-opacity="sec.opacity ?? 0.15"
+          stroke="none"
+        />
+        <path
+          :d="toSectionPath(sec, false)"
+          fill="none"
+          :stroke="
+            sec.color ??
+            allSeries[sec.seriesIndex ?? 0]?.color ??
+            'currentColor'
+          "
+          :stroke-width="sec.strokeWidth ?? 2"
+        />
+        <!-- tick marks at section boundaries -->
+        <line
+          :x1="
+            snap(padding.left + sec.startIndex * (innerW / (maxLen - 1 || 1)))
+          "
+          :y1="padding.top + innerH - 4"
+          :x2="
+            snap(padding.left + sec.startIndex * (innerW / (maxLen - 1 || 1)))
+          "
+          :y2="padding.top + innerH + 4"
+          stroke="currentColor"
+          stroke-opacity="0.4"
+        />
+        <line
+          :x1="snap(padding.left + sec.endIndex * (innerW / (maxLen - 1 || 1)))"
+          :y1="padding.top + innerH - 4"
+          :x2="snap(padding.left + sec.endIndex * (innerW / (maxLen - 1 || 1)))"
+          :y2="padding.top + innerH + 4"
+          stroke="currentColor"
+          stroke-opacity="0.4"
+        />
+      </template>
       <!-- Tooltip: crosshair line -->
       <line
         v-if="hasTooltipSlot && hoverIndex !== null"
@@ -706,6 +881,38 @@ const menuItems = computed<ChartMenuItem[]>(() => {
         @touchmove.prevent="onTouchMove"
         @touchend="onTouchEnd"
       />
+      <!-- area section labels -->
+      <g v-for="(item, i) in sectionLabels.labels" :key="'seclab' + i">
+        <circle
+          :cx="item.cx - item.textWidth / 2 - 2"
+          :cy="sectionLabelBaseY + item.row * SECTION_LABEL_ROW_HEIGHT + 4"
+          r="4"
+          :fill="item.color"
+          :fill-opacity="item.fillOpacity"
+          :stroke="item.color"
+          stroke-width="1.5"
+        />
+        <text
+          v-if="item.labelText"
+          :x="item.cx - item.textWidth / 2 + 8"
+          :y="sectionLabelBaseY + item.row * SECTION_LABEL_ROW_HEIGHT + 8"
+          font-size="11"
+          font-weight="600"
+          :fill="item.color"
+        >
+          {{ item.labelText }}
+        </text>
+        <text
+          v-if="item.descText"
+          :x="item.cx - item.textWidth / 2 + 8"
+          :y="sectionLabelBaseY + item.row * SECTION_LABEL_ROW_HEIGHT + 22"
+          font-size="11"
+          fill="currentColor"
+          fill-opacity="0.6"
+        >
+          {{ item.descText }}
+        </text>
+      </g>
     </svg>
     <!-- Tooltip floating content -->
     <div
