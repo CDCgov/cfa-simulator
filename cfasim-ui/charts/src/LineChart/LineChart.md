@@ -258,8 +258,8 @@ Highlight a range of a series line by filling the area between the line and the 
       { data: [0, 2, 5, 12, 25, 45, 70, 100, 130, 155, 170], color: '#000', strokeWidth: 1 },
     ]"
     :area-sections="[
-      { startIndex: 2, endIndex: 7, color: '#6366f1', label: 'Day 2–7', description: 'Rapid growth phase' },
-      { startIndex: 5, endIndex: 9, color: '#f43f5e', label: 'Day 5–9', description: 'Mitigation period' },
+      { startIndex: 2, endIndex: 7, color: '#6366f1', strokeWidth: 1, dashed: true, label: 'Day 2–7', description: 'Rapid growth phase' },
+      { seriesIndex: 0, startIndex: 5, endIndex: 9, color: '#f43f5e', label: 'Day 5–9', description: 'Mitigation period' },
     ]"
     :height="250"
     x-label="Days"
@@ -284,10 +284,13 @@ Highlight a range of a series line by filling the area between the line and the 
       startIndex: 2,
       endIndex: 7,
       color: '#6366f1',
+      strokeWidth: 1,
+      dashed: true,
       label: 'Day 2–7',
       description: 'Rapid growth phase',
     },
     {
+      seriesIndex: 0,
       startIndex: 5,
       endIndex: 9,
       color: '#f43f5e',
@@ -377,12 +380,14 @@ interface Series {
 
 ```ts
 interface AreaSection {
-  seriesIndex?: number; // default: 0
+  seriesIndex?: number; // omit for full-height fill
   startIndex: number;
   endIndex: number;
   color?: string;
   opacity?: number; // default: 0.15
   label?: string;
   description?: string;
+  strokeWidth?: number; // default: 2
+  dashed?: boolean;
 }
 ```

@@ -27,7 +27,7 @@ export interface Area {
 }
 
 export interface AreaSection {
-  /** Index into the series array (default: 0) */
+  /** Index into the series array. When omitted, fills the full chart height with no line. */
   seriesIndex?: number;
   /** Start x-index (inclusive) */
   startIndex: number;
@@ -43,6 +43,8 @@ export interface AreaSection {
   description?: string;
   /** Stroke width for the highlighted line segment (default: 2) */
   strokeWidth?: number;
+  /** Dashed stroke pattern */
+  dashed?: boolean;
 }
 
 const props = withDefaults(
@@ -266,14 +268,23 @@ function toAreaPath(upper: number[], lower: number[]): string {
 }
 
 function toSectionPath(section: AreaSection, closed = true): string {
-  const s = allSeries.value[section.seriesIndex ?? 0];
-  if (!s) return "";
-  const { min, range } = extent.value;
   const len = maxLen.value;
   const xScale = innerW.value / (len - 1 || 1);
-  const yScale = innerH.value / range;
   const py = padding.value.top + innerH.value;
   const x = (i: number) => padding.value.left + i * xScale;
+
+  // No seriesIndex: full-height rectangle spanning the range
+  if (section.seriesIndex == null) {
+    const start = Math.max(0, section.startIndex);
+    const end = Math.min(len - 1, section.endIndex);
+    if (start > end) return "";
+    return `M${x(start)},${padding.value.top}L${x(end)},${padding.value.top}L${x(end)},${py}L${x(start)},${py}Z`;
+  }
+
+  const s = allSeries.value[section.seriesIndex];
+  if (!s) return "";
+  const { min, range } = extent.value;
+  const yScale = innerH.value / range;
   const y = (v: number) => py - (v - min) * yScale;
 
   const start = Math.max(0, section.startIndex);
@@ -327,9 +338,11 @@ const sectionLabels = computed<{
     const descText = sec.description ?? "";
     const maxChars = Math.max(labelText.length, descText.length);
     const textWidth = maxChars * SECTION_LABEL_CHAR_WIDTH;
-    const seriesIdx = sec.seriesIndex ?? 0;
     const color =
-      sec.color ?? allSeries.value[seriesIdx]?.color ?? "currentColor";
+      sec.color ??
+      (sec.seriesIndex != null
+        ? (allSeries.value[sec.seriesIndex]?.color ?? "currentColor")
+        : "#999");
     items.push({
       cx,
       labelText,
@@ -803,22 +816,52 @@ const menuItems = computed<ChartMenuItem[]>(() => {
           :d="toSectionPath(sec)"
           :fill="
             sec.color ??
-            allSeries[sec.seriesIndex ?? 0]?.color ??
-            'currentColor'
+            (sec.seriesIndex != null
+              ? (allSeries[sec.seriesIndex]?.color ?? 'currentColor')
+              : '#999')
           "
           :fill-opacity="sec.opacity ?? 0.15"
           stroke="none"
         />
         <path
+          v-if="sec.seriesIndex != null"
           :d="toSectionPath(sec, false)"
           fill="none"
           :stroke="
-            sec.color ??
-            allSeries[sec.seriesIndex ?? 0]?.color ??
-            'currentColor'
+            sec.color ?? allSeries[sec.seriesIndex]?.color ?? 'currentColor'
           "
           :stroke-width="sec.strokeWidth ?? 2"
+          :stroke-dasharray="sec.dashed ? '6 3' : undefined"
         />
+        <!-- vertical edge lines for full-height sections -->
+        <template v-if="sec.seriesIndex == null">
+          <line
+            :x1="
+              snap(padding.left + sec.startIndex * (innerW / (maxLen - 1 || 1)))
+            "
+            :y1="padding.top"
+            :x2="
+              snap(padding.left + sec.startIndex * (innerW / (maxLen - 1 || 1)))
+            "
+            :y2="padding.top + innerH"
+            :stroke="sec.color ?? '#999'"
+            :stroke-width="sec.strokeWidth ?? 2"
+            :stroke-dasharray="sec.dashed ? '6 3' : undefined"
+          />
+          <line
+            :x1="
+              snap(padding.left + sec.endIndex * (innerW / (maxLen - 1 || 1)))
+            "
+            :y1="padding.top"
+            :x2="
+              snap(padding.left + sec.endIndex * (innerW / (maxLen - 1 || 1)))
+            "
+            :y2="padding.top + innerH"
+            :stroke="sec.color ?? '#999'"
+            :stroke-width="sec.strokeWidth ?? 2"
+            :stroke-dasharray="sec.dashed ? '6 3' : undefined"
+          />
+        </template>
         <!-- tick marks at section boundaries -->
         <line
           :x1="
