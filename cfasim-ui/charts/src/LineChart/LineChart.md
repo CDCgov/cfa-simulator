@@ -255,15 +255,16 @@ Highlight a range of a series line by filling the area between the line and the 
 <ComponentDemo>
   <LineChart
     :series="[
-      { data: [0, 2, 5, 12, 25, 45, 70, 100, 130, 155, 170], color: '#000', strokeWidth: 1 },
+      { data: [0, 2, 5, 12, 25, 45, 70, 100, 130, 155, 170], color: '#000', strokeWidth: 1, legend: 'No interventions' },
+      { data: [0, 0, 0, 2, 8, 20, 40, 65, 90, 110, 120], color: '#999', strokeWidth: 1, dashed: true, legend: 'Interventions' },
     ]"
     :area-sections="[
-      { startIndex: 2, endIndex: 7, color: '#6366f1', strokeWidth: 1, dashed: true, label: 'Day 2–7', description: 'Rapid growth phase' },
+      { startIndex: 2, endIndex: 7, color: '#6366f1', strokeWidth: 0, legend: 'inline', label: 'Day 2–7', description: 'Rapid growth phase' },
       { seriesIndex: 0, startIndex: 5, endIndex: 9, color: '#f43f5e', label: 'Day 5–9', description: 'Mitigation period' },
     ]"
     :height="250"
     x-label="Days"
-    y-label="Cumulative cases"
+    y-label="Cumulative count"
     tooltip-trigger="hover"
     :menu="false"
   />
@@ -277,6 +278,14 @@ Highlight a range of a series line by filling the area between the line and the 
       data: [0, 2, 5, 12, 25, 45, 70, 100, 130, 155, 170],
       color: '#000',
       strokeWidth: 1,
+      legend: 'No interventions',
+    },
+    {
+      data: [0, 0, 0, 2, 8, 20, 40, 65, 90, 110, 120],
+      color: '#999',
+      strokeWidth: 1,
+      dashed: true,
+      legend: 'Interventions',
     },
   ]"
   :area-sections="[
@@ -284,8 +293,8 @@ Highlight a range of a series line by filling the area between the line and the 
       startIndex: 2,
       endIndex: 7,
       color: '#6366f1',
-      strokeWidth: 1,
-      dashed: true,
+      strokeWidth: 0,
+      legend: 'inline',
       label: 'Day 2–7',
       description: 'Rapid growth phase',
     },
@@ -300,7 +309,7 @@ Highlight a range of a series line by filling the area between the line and the 
   ]"
   :height="250"
   x-label="Days"
-  y-label="Cumulative cases"
+  y-label="Cumulative count"
   tooltip-trigger="hover"
 />
 ```
@@ -389,5 +398,6 @@ interface AreaSection {
   description?: string;
   strokeWidth?: number; // default: 2
   dashed?: boolean;
+  legend?: "inline" | "below" | false; // default: "below"
 }
 ```

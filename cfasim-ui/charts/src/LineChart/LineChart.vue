@@ -17,6 +17,8 @@ export interface Series {
   dotRadius?: number;
   dotFill?: string;
   dotStroke?: string;
+  /** Label shown in the inline legend */
+  legend?: string;
 }
 
 export interface Area {
@@ -45,6 +47,8 @@ export interface AreaSection {
   strokeWidth?: number;
   /** Dashed stroke pattern */
   dashed?: boolean;
+  /** Label placement: "below" (default) renders below chart, "inline" renders in legend row, false hides label */
+  legend?: "inline" | "below" | false;
 }
 
 const props = withDefaults(
@@ -134,8 +138,20 @@ onUnmounted(() => {
 const width = computed(() => props.width ?? (measuredWidth.value || 400));
 const height = computed(() => props.height ?? 200);
 
+const INLINE_LEGEND_HEIGHT = 20;
+
+const hasInlineLegend = computed(
+  () =>
+    allSeries.value.some((s) => s.legend) ||
+    props.areaSections?.some(
+      (s) => s.legend === "inline" && (s.label || s.description),
+    ),
+);
+
 const padding = computed(() => ({
-  top: props.title ? 30 : 10,
+  top:
+    (props.title ? 30 : 10) +
+    (hasInlineLegend.value ? INLINE_LEGEND_HEIGHT : 0),
   right: 10,
   bottom: props.xLabel ? 46 : 30,
   left: props.yLabel ? 66 : 50,
@@ -332,6 +348,7 @@ const sectionLabels = computed<{
   const items: PositionedSectionLabel[] = [];
   for (const sec of sections) {
     if (!sec.label && !sec.description) continue;
+    if (sec.legend === "inline" || sec.legend === false) continue;
     const cx =
       padding.value.left + ((sec.startIndex + sec.endIndex) / 2) * xScale;
     const labelText = sec.label ?? "";
@@ -375,6 +392,47 @@ const sectionLabels = computed<{
   const extraHeight =
     (maxRow + 1) * SECTION_LABEL_ROW_HEIGHT + SECTION_LABEL_TOP_MARGIN;
   return { labels: items, extraHeight };
+});
+
+interface InlineLegendItem {
+  label: string;
+  color: string;
+  type: "series" | "section";
+  dashed?: boolean;
+  fillOpacity?: number;
+}
+
+const inlineLegendItems = computed<InlineLegendItem[]>(() => {
+  const items: InlineLegendItem[] = [];
+  for (const s of allSeries.value) {
+    if (!s.legend) continue;
+    items.push({
+      label: s.legend,
+      color: s.color ?? "currentColor",
+      type: "series",
+      dashed: s.dashed,
+    });
+  }
+  const sections = props.areaSections;
+  if (sections) {
+    for (const sec of sections) {
+      if (sec.legend !== "inline") continue;
+      if (!sec.label && !sec.description) continue;
+      const label = [sec.label, sec.description].filter(Boolean).join(" ");
+      const color =
+        sec.color ??
+        (sec.seriesIndex != null
+          ? (allSeries.value[sec.seriesIndex]?.color ?? "currentColor")
+          : "#999");
+      items.push({
+        label,
+        color,
+        type: "section",
+        fillOpacity: sec.opacity ?? 0.15,
+      });
+    }
+  }
+  return items;
 });
 
 const totalHeight = computed(
@@ -684,6 +742,41 @@ const menuItems = computed<ChartMenuItem[]>(() => {
       >
         {{ title }}
       </text>
+      <!-- inline legend -->
+      <g v-if="inlineLegendItems.length > 0">
+        <template v-for="(item, i) in inlineLegendItems" :key="'ileg' + i">
+          <!-- series indicator: line -->
+          <line
+            v-if="item.type === 'series'"
+            :x1="padding.left + i * 120"
+            :y1="padding.top - INLINE_LEGEND_HEIGHT / 2"
+            :x2="padding.left + i * 120 + 12"
+            :y2="padding.top - INLINE_LEGEND_HEIGHT / 2"
+            :stroke="item.color"
+            stroke-width="2"
+            :stroke-dasharray="item.dashed ? '4 2' : undefined"
+          />
+          <!-- section indicator: filled circle -->
+          <circle
+            v-else
+            :cx="padding.left + i * 120 + 4"
+            :cy="padding.top - INLINE_LEGEND_HEIGHT / 2"
+            r="4"
+            :fill="item.color"
+            :fill-opacity="item.fillOpacity"
+            :stroke="item.color"
+            stroke-width="1.5"
+          />
+          <text
+            :x="padding.left + i * 120 + 18"
+            :y="padding.top - INLINE_LEGEND_HEIGHT / 2 + 4"
+            font-size="11"
+            fill="currentColor"
+          >
+            {{ item.label }}
+          </text>
+        </template>
+      </g>
       <!-- axes -->
       <line
         :x1="snap(padding.left)"
