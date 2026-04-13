@@ -400,4 +400,206 @@ describe("LineChart", () => {
     expect(events[events.length - 1][0]).toBeNull();
     wrapper.unmount();
   });
+
+  describe("areaSections", () => {
+    it("renders area section fill paths", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20, 30] }],
+          areaSections: [{ startIndex: 1, endIndex: 3 }],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const paths = wrapper.findAll("path");
+      // 1 series line + 1 area section fill + 1 area section line
+      expect(paths.length).toBe(3);
+      const fillPath = paths[1];
+      expect(fillPath.attributes("fill-opacity")).toBe("0.15");
+      expect(fillPath.attributes("stroke")).toBe("none");
+      const linePath = paths[2];
+      expect(linePath.attributes("fill")).toBe("none");
+      expect(linePath.attributes("stroke")).toBeTruthy();
+    });
+
+    it("uses explicit section color", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20] }],
+          areaSections: [{ startIndex: 0, endIndex: 2, color: "#ff0000" }],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const paths = wrapper.findAll("path");
+      const sectionPath = paths[1];
+      expect(sectionPath.attributes("fill")).toBe("#ff0000");
+    });
+
+    it("defaults section color to series color", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20], color: "#0057b7" }],
+          areaSections: [{ startIndex: 0, endIndex: 2 }],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const paths = wrapper.findAll("path");
+      const sectionPath = paths[1];
+      expect(sectionPath.attributes("fill")).toBe("#0057b7");
+    });
+
+    it("applies custom opacity", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20] }],
+          areaSections: [{ startIndex: 0, endIndex: 2, opacity: 0.5 }],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const paths = wrapper.findAll("path");
+      expect(paths[1].attributes("fill-opacity")).toBe("0.5");
+    });
+
+    it("renders tick marks at section boundaries", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20, 30] }],
+          areaSections: [{ startIndex: 1, endIndex: 3 }],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const lines = wrapper.findAll("line");
+      // 2 axis lines + 2 tick marks for section boundaries
+      const tickLines = lines.filter(
+        (l) => l.attributes("stroke-opacity") === "0.4",
+      );
+      expect(tickLines.length).toBe(2);
+    });
+
+    it("renders label text when label is provided", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20] }],
+          areaSections: [
+            {
+              startIndex: 0,
+              endIndex: 2,
+              label: "Day 1–3",
+              description: "Some info",
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const texts = wrapper.findAll("text");
+      const labelTexts = texts.map((t) => t.text());
+      expect(labelTexts).toContain("Day 1–3");
+      expect(labelTexts).toContain("Some info");
+    });
+
+    it("increases SVG height when labels are present", () => {
+      const withoutLabels = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20] }],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const withLabels = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20] }],
+          areaSections: [{ startIndex: 0, endIndex: 2, label: "Test" }],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const h1 = Number(withoutLabels.find("svg").attributes("height"));
+      const h2 = Number(withLabels.find("svg").attributes("height"));
+      expect(h2).toBeGreaterThan(h1);
+    });
+
+    it("does not increase SVG height without labels", () => {
+      const withoutSections = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20] }],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const withSectionsNoLabels = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20] }],
+          areaSections: [{ startIndex: 0, endIndex: 2 }],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const h1 = Number(withoutSections.find("svg").attributes("height"));
+      const h2 = Number(withSectionsNoLabels.find("svg").attributes("height"));
+      expect(h2).toBe(h1);
+    });
+
+    it("stacks overlapping labels into different rows", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20, 30, 40] }],
+          areaSections: [
+            {
+              startIndex: 0,
+              endIndex: 2,
+              label: "First section label",
+            },
+            {
+              startIndex: 1,
+              endIndex: 3,
+              label: "Second section label",
+            },
+          ],
+          height: 200,
+          width: 300,
+          menu: false,
+        },
+      });
+      // Two label groups means two circles (indicators)
+      const groups = wrapper.findAll("g");
+      const labelGroups = groups.filter((g) => {
+        const circle = g.find("circle");
+        return circle.exists() && circle.attributes("r") === "4";
+      });
+      expect(labelGroups.length).toBe(2);
+      // They should have different y positions for their text
+      const labelTexts = labelGroups.map(
+        (g) => g.find("text").attributes("y")!,
+      );
+      expect(labelTexts[0]).not.toBe(labelTexts[1]);
+    });
+
+    it("does not render extra elements without areaSections", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20] }],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const paths = wrapper.findAll("path");
+      expect(paths.length).toBe(1); // just the series line
+    });
+  });
 });
