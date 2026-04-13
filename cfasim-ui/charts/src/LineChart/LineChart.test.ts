@@ -406,7 +406,7 @@ describe("LineChart", () => {
       const wrapper = mount(LineChart, {
         props: {
           series: [{ data: [0, 10, 20, 30] }],
-          areaSections: [{ startIndex: 1, endIndex: 3 }],
+          areaSections: [{ seriesIndex: 0, startIndex: 1, endIndex: 3 }],
           height: 200,
           width: 400,
           menu: false,
@@ -442,7 +442,7 @@ describe("LineChart", () => {
       const wrapper = mount(LineChart, {
         props: {
           series: [{ data: [0, 10, 20], color: "#0057b7" }],
-          areaSections: [{ startIndex: 0, endIndex: 2 }],
+          areaSections: [{ seriesIndex: 0, startIndex: 0, endIndex: 2 }],
           height: 200,
           width: 400,
           menu: false,
