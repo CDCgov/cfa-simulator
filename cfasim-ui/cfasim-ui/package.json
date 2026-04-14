@@ -12,6 +12,10 @@
   "files": [
     "src"
   ],
+  "sideEffects": [
+    "*.css",
+    "./src/theme/index.js"
+  ],
   "exports": {
     "./components": "./src/components.ts",
     "./charts": "./src/charts.ts",
@@ -22,6 +26,9 @@
     "./shared": "./src/shared.ts",
     "./theme": {
       "default": "./src/theme/cfasim.css"
+    },
+    "./theme/all": {
+      "default": "./src/theme/index.js"
     },
     "./theme/base.css": {
       "default": "./src/theme/base.css"

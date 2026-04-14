@@ -12,7 +12,7 @@ function cfasimPyodide(modelDir = "model"): Plugin {
       mkdirSync(publicDir, { recursive: true });
       execSync(`uv build ${modelDir} --wheel --out-dir public`, {
         cwd: config.root,
-        stdio: "pipe",
+        stdio: "inherit",
       });
       const wheels = readdirSync(publicDir).filter((f) => f.endsWith(".whl"));
       writeFileSync(resolve(publicDir, "wheels.json"), JSON.stringify(wheels));

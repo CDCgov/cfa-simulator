@@ -11,7 +11,7 @@ function cfasimWasm(modelDir = "model"): Plugin {
       const outDir = resolve(config.root, "public", "wasm", name);
       execSync(`wasm-pack build ${modelDir} --target web --out-dir ${outDir}`, {
         cwd: config.root,
-        stdio: "pipe",
+        stdio: "inherit",
       });
     },
   };

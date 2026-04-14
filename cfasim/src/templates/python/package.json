@@ -8,10 +8,10 @@
   },
   "dependencies": {
     "vue": "^3.5.30",
-    "@cfasim-ui/components": "^0.1.1",
-    "@cfasim-ui/charts": "^0.1.1",
-    "@cfasim-ui/pyodide": "^0.1.1",
-    "@cfasim-ui/theme": "^0.1.1"
+    "@cfasim-ui/components": "^%%cfasim_version%%",
+    "@cfasim-ui/charts": "^%%cfasim_version%%",
+    "@cfasim-ui/pyodide": "^%%cfasim_version%%",
+    "@cfasim-ui/theme": "^%%cfasim_version%%"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.5",

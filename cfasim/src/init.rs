@@ -114,6 +114,7 @@ fn render(template: &str, name: &str) -> String {
     template
         .replace("%%project_name%%", name)
         .replace("%%module_name%%", &to_module_name(name))
+        .replace("%%cfasim_version%%", env!("CARGO_PKG_VERSION"))
 }
 
 fn render_path(path: &str, name: &str) -> String {
