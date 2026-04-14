@@ -17,6 +17,7 @@ import { fipsToHsa, hsaNames } from "./hsaMapping.js";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
 import { saveSvg, savePng } from "../ChartMenu/download.js";
+import { placeTooltip } from "../tooltip-position.js";
 
 export type GeoType = "states" | "counties" | "hsas";
 
@@ -81,6 +82,12 @@ const props = withDefaults(
       name: string;
       value?: number | string;
     }) => string;
+    /**
+     * Boundary for tooltip flip/clamp. `"none"` always places to the right of
+     * the pointer with no clamping. `"chart"` (default) uses the map
+     * container's bounding box. `"window"` uses the viewport.
+     */
+    tooltipClamp?: "none" | "chart" | "window";
   }>(),
   {
     geoType: "states",
@@ -91,6 +98,7 @@ const props = withDefaults(
     legend: true,
     zoom: false,
     pan: false,
+    tooltipClamp: "chart",
   },
 );
 
@@ -424,8 +432,17 @@ function showTooltip(
   } else {
     tooltipEl.textContent = value != null ? `${name}: ${value}` : name;
   }
-  tooltipEl.style.left = `${clientX + 16}px`;
-  tooltipEl.style.top = `${clientY}px`;
+  const chartRect = containerRef.value?.getBoundingClientRect();
+  const { left, top } = placeTooltip(
+    clientX,
+    clientY,
+    tooltipEl.offsetWidth,
+    tooltipEl.offsetHeight,
+    props.tooltipClamp,
+    chartRect,
+  );
+  tooltipEl.style.left = `${left}px`;
+  tooltipEl.style.top = `${top}px`;
 }
 
 function hideTooltip() {

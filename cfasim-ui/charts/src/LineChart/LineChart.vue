@@ -3,6 +3,7 @@ import { computed, ref, onMounted, onUnmounted } from "vue";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
 import { saveSvg, savePng, downloadCsv } from "../ChartMenu/download.js";
+import { placeTooltip } from "../tooltip-position.js";
 
 export interface Series {
   data: number[];
@@ -75,6 +76,12 @@ const props = withDefaults(
     /** Tooltip activation mode. Default: 'hover' */
     tooltipTrigger?: "hover" | "click";
     /**
+     * Boundary for tooltip flip/clamp. `"none"` always places to the right of
+     * the pointer with no clamping. `"chart"` (default) uses the chart
+     * container's bounding box. `"window"` uses the viewport.
+     */
+    tooltipClamp?: "none" | "chart" | "window";
+    /**
      * Custom CSV content for the Download CSV menu item. Can be a raw CSV
      * string or a function returning one. When omitted, CSV is generated
      * from the chart series.
@@ -89,7 +96,7 @@ const props = withDefaults(
      */
     downloadLink?: boolean | string;
   }>(),
-  { lineOpacity: 1, menu: true },
+  { lineOpacity: 1, menu: true, tooltipClamp: "chart" },
 );
 
 const emit = defineEmits<{
@@ -629,10 +636,16 @@ function updateTooltipPos(clientX: number, clientY: number) {
   if (!el) return;
   const rect = containerRef.value!.getBoundingClientRect();
   const offset = isTouching.value ? TOUCH_Y_OFFSET : 0;
-  const x = clientX - rect.left;
-  const y = Math.max(0, clientY - rect.top - offset);
-  el.style.left = `${x + 16}px`;
-  el.style.top = `${y}px`;
+  const { left, top } = placeTooltip(
+    clientX,
+    clientY - offset,
+    el.offsetWidth,
+    el.offsetHeight,
+    props.tooltipClamp,
+    rect,
+  );
+  el.style.left = `${left - rect.left}px`;
+  el.style.top = `${top - rect.top}px`;
 }
 
 function updateHover(event: MouseEvent | TouchEvent) {
