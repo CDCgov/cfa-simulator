@@ -1,18 +1,20 @@
 #!/usr/bin/env node
 
 /**
- * Bumps the version of all publishable packages (cfasim-ui/* and Cargo crates).
- * Usage: node scripts/version.mjs <patch|minor|major>
+ * Two-step release flow:
+ *   1. `node scripts/version.mjs <patch|minor|major>`
+ *        Bumps versions across npm/cargo/pypi packages, refreshes Cargo.lock,
+ *        and regenerates CHANGELOG.md. Leaves everything unstaged so you can
+ *        review and edit before committing.
+ *   2. `node scripts/version.mjs commit`
+ *        Stages the changed files, creates the `release: vX.Y.Z` commit,
+ *        and tags it.
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
 
-const BUMP = process.argv[2];
-if (!["patch", "minor", "major"].includes(BUMP)) {
-  console.error("Usage: node scripts/version.mjs <patch|minor|major>");
-  process.exit(1);
-}
+const VALID_BUMPS = ["patch", "minor", "major"];
 
 const PACKAGE_JSONS = [
   "cfasim-ui/components/package.json",
@@ -28,6 +30,15 @@ const CARGO_TOMLS = ["cfasim/Cargo.toml", "cfasim-model/Cargo.toml"];
 
 const PYPROJECT_TOMLS = ["cfasim-model-py/pyproject.toml"];
 
+const TRACKED_FILES = [
+  ...PACKAGE_JSONS,
+  ...CARGO_TOMLS,
+  ...PYPROJECT_TOMLS,
+  "Cargo.lock",
+  "models/src/reed-frost/model/Cargo.lock",
+  "CHANGELOG.md",
+];
+
 function bump(version, type) {
   const [major, minor, patch] = version.split(".").map(Number);
   switch (type) {
@@ -40,16 +51,16 @@ function bump(version, type) {
   }
 }
 
-function bumpPackageJson(path) {
+function bumpPackageJson(path, type) {
   const content = JSON.parse(readFileSync(path, "utf8"));
   const old = content.version;
-  content.version = bump(old, BUMP);
+  content.version = bump(old, type);
   writeFileSync(path, JSON.stringify(content, null, 2) + "\n");
   console.log(`${path}: ${old} → ${content.version}`);
   return content.version;
 }
 
-function bumpCargoToml(path) {
+function bumpTomlLike(path, type) {
   const content = readFileSync(path, "utf8");
   const match = content.match(/^version\s*=\s*"(\d+\.\d+\.\d+)"/m);
   if (!match) {
@@ -57,7 +68,7 @@ function bumpCargoToml(path) {
     process.exit(1);
   }
   const old = match[1];
-  const next = bump(old, BUMP);
+  const next = bump(old, type);
   const updated = content.replace(
     /^(version\s*=\s*")(\d+\.\d+\.\d+)(")/m,
     `$1${next}$3`,
@@ -66,43 +77,60 @@ function bumpCargoToml(path) {
   console.log(`${path}: ${old} → ${next}`);
 }
 
-function bumpPyprojectToml(path) {
-  const content = readFileSync(path, "utf8");
-  const match = content.match(/^version\s*=\s*"(\d+\.\d+\.\d+)"/m);
-  if (!match) {
-    console.error(`Could not find version in ${path}`);
-    process.exit(1);
-  }
-  const old = match[1];
-  const next = bump(old, BUMP);
-  const updated = content.replace(
-    /^(version\s*=\s*")(\d+\.\d+\.\d+)(")/m,
-    `$1${next}$3`,
-  );
-  writeFileSync(path, updated);
-  console.log(`${path}: ${old} → ${next}`);
+function readNpmVersion(path) {
+  return JSON.parse(readFileSync(path, "utf8")).version;
 }
 
-let newVersion;
-for (const p of PACKAGE_JSONS) newVersion = bumpPackageJson(p);
-for (const p of CARGO_TOMLS) bumpCargoToml(p);
-for (const p of PYPROJECT_TOMLS) bumpPyprojectToml(p);
+function bumpAll(type) {
+  let newVersion;
+  for (const p of PACKAGE_JSONS) newVersion = bumpPackageJson(p, type);
+  for (const p of CARGO_TOMLS) bumpTomlLike(p, type);
+  for (const p of PYPROJECT_TOMLS) bumpTomlLike(p, type);
 
-// Update Cargo.lock files to reflect the new versions
-execSync("cargo check --workspace", { stdio: "inherit" });
-execSync("cargo check --manifest-path models/src/reed-frost/model/Cargo.toml", {
-  stdio: "inherit",
-});
-const tag = `v${newVersion}`;
-const allFiles = [
-  ...PACKAGE_JSONS,
-  ...CARGO_TOMLS,
-  ...PYPROJECT_TOMLS,
-  "Cargo.lock",
-  "models/src/reed-frost/model/Cargo.lock",
-].join(" ");
-execSync(`git add ${allFiles}`, { stdio: "inherit" });
-execSync(`git commit -m "release: ${tag}"`, { stdio: "inherit" });
-execSync(`git tag ${tag}`, { stdio: "inherit" });
+  execSync("cargo check --workspace", { stdio: "inherit" });
+  execSync(
+    "cargo check --manifest-path models/src/reed-frost/model/Cargo.toml",
+    { stdio: "inherit" },
+  );
 
-console.log(`\nAll packages bumped (${BUMP}). Created commit and tag ${tag}.`);
+  const tag = `v${newVersion}`;
+  try {
+    execSync(`git cliff --tag ${tag} -o CHANGELOG.md`, { stdio: "inherit" });
+  } catch {
+    console.error(
+      "\nFailed to run git-cliff. Install it with `cargo install git-cliff` (or see `plz setup`).",
+    );
+    process.exit(1);
+  }
+
+  console.log(
+    `\nBumped to ${tag}. Review CHANGELOG.md (and any other files), then run:\n` +
+      `  plz commit`,
+  );
+}
+
+function commitAndTag() {
+  const version = readNpmVersion(PACKAGE_JSONS[0]);
+  const tag = `v${version}`;
+
+  const files = TRACKED_FILES.filter((f) => existsSync(f));
+  execSync(`git add ${files.join(" ")}`, { stdio: "inherit" });
+  execSync(`git commit -m "release: ${tag}"`, { stdio: "inherit" });
+  execSync(`git tag ${tag}`, { stdio: "inherit" });
+
+  console.log(`\nCreated commit and tag ${tag}.`);
+}
+
+const MODE = process.argv[2];
+if (MODE === "commit") {
+  commitAndTag();
+} else if (VALID_BUMPS.includes(MODE)) {
+  bumpAll(MODE);
+} else {
+  console.error(
+    "Usage:\n" +
+      "  node scripts/version.mjs <patch|minor|major>  # bump + changelog\n" +
+      "  node scripts/version.mjs commit               # commit + tag",
+  );
+  process.exit(1);
+}
