@@ -3,3 +3,4 @@
 .gitignore
 pnpm-lock.yaml
 **/public/
+CHANGELOG.md
