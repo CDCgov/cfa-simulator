@@ -17,7 +17,7 @@
   ],
   "exports": {
     ".": "./src/index.ts",
-    "./vite": "./src/vitePlugin.ts"
+    "./vite": "./src/vitePlugin.js"
   },
   "dependencies": {
     "@cfasim-ui/shared": "workspace:*",

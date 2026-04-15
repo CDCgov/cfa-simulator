@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive } from "vue";
-import { SidebarLayout, NumberInput } from "@cfasim-ui/components";
-import { useModel } from "@cfasim-ui/pyodide";
+import { SidebarLayout, NumberInput } from "cfasim-ui/components";
+import { useModel } from "cfasim-ui/pyodide";
 
 const params = reactive({ steps: 10, rate: 2.5 });
 const { useOutputs } = useModel("%%module_name%%");

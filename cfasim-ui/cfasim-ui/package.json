@@ -20,9 +20,9 @@
     "./components": "./src/components.ts",
     "./charts": "./src/charts.ts",
     "./wasm": "./src/wasm.ts",
-    "./wasm/vite": "./src/wasm-vite.ts",
+    "./wasm/vite": "./src/wasm-vite.js",
     "./pyodide": "./src/pyodide.ts",
-    "./pyodide/vite": "./src/pyodide-vite.ts",
+    "./pyodide/vite": "./src/pyodide-vite.js",
     "./shared": "./src/shared.ts",
     "./theme": {
       "default": "./src/theme/cfasim.css"
