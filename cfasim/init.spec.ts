@@ -35,7 +35,7 @@ function startVite(
     ["exec", "vite", "--port", String(port), "--strictPort"],
     {
       cwd: dir,
-      stdio: "pipe",
+      stdio: ["ignore", "inherit", "inherit"],
     },
   );
   return { proc, url: `http://localhost:${port}` };
