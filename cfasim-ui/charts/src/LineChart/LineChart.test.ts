@@ -233,6 +233,36 @@ describe("LineChart", () => {
     wrapper.unmount();
   });
 
+  it("positions tooltip on the first mousemove that opens it", async () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        data: [0, 10, 20],
+        width: 400,
+        height: 100,
+        menu: false,
+        tooltipTrigger: "hover" as const,
+      },
+      attachTo: document.body,
+    });
+    const overlay = wrapper
+      .findAll("rect")
+      .find((r) => r.attributes("fill") === "transparent")!;
+    await overlay.trigger("mousemove", { clientX: 200, clientY: 50 });
+    // Give the async updateTooltipPos a tick to complete after DOM flush.
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    const tooltip = wrapper.element.querySelector(
+      ".chart-tooltip-content",
+    ) as HTMLElement;
+    expect(tooltip).toBeTruthy();
+    // Before the fix, updateTooltipPos ran before the tooltip was mounted
+    // and returned early, so no transform was applied — the element
+    // rendered at the wrapper's (0, 0) corner.
+    expect(tooltip.style.transform).toContain("translate3d");
+    expect(tooltip.style.visibility).toBe("visible");
+    wrapper.unmount();
+  });
+
   describe("menu downloads", () => {
     beforeEach(() => {
       vi.restoreAllMocks();

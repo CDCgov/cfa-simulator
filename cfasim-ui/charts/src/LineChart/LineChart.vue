@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from "vue";
+import { computed, ref, watch, onMounted, onUnmounted } from "vue";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
 import { saveSvg, savePng, downloadCsv } from "../ChartMenu/download.js";
@@ -570,6 +570,8 @@ const TOUCH_Y_OFFSET = 50;
 const hoverIndex = ref<number | null>(null);
 const isTouching = ref(false);
 const tooltipRef = ref<HTMLElement | null>(null);
+const pointer = ref<{ clientX: number; clientY: number } | null>(null);
+const tooltipPos = ref<{ left: number; top: number } | null>(null);
 const hasTooltipSlot = computed(
   () => !!props.tooltipData || !!props.tooltipTrigger,
 );
@@ -631,32 +633,40 @@ function indexFromPointer(clientX: number): number | null {
   return Math.round(Math.max(0, Math.min(len - 1, dataX)));
 }
 
-function updateTooltipPos(clientX: number, clientY: number) {
-  const el = tooltipRef.value;
-  if (!el) return;
-  const rect = containerRef.value!.getBoundingClientRect();
-  const offset = isTouching.value ? TOUCH_Y_OFFSET : 0;
-  const { left, top } = placeTooltip(
-    clientX,
-    clientY - offset,
-    el.offsetWidth,
-    el.offsetHeight,
-    props.tooltipClamp,
-    rect,
-  );
-  el.style.left = `${left - rect.left}px`;
-  el.style.top = `${top - rect.top}px`;
-}
-
 function updateHover(event: MouseEvent | TouchEvent) {
   const pt = pointerFromEvent(event);
   if (!pt) return;
   const idx = indexFromPointer(pt.clientX);
   if (idx === null) return;
   hoverIndex.value = idx;
-  updateTooltipPos(pt.clientX, pt.clientY);
+  pointer.value = { clientX: pt.clientX, clientY: pt.clientY };
   emit("hover", { index: idx });
 }
+
+watch(
+  [pointer, hoverIndex],
+  () => {
+    if (hoverIndex.value === null || !pointer.value) {
+      tooltipPos.value = null;
+      return;
+    }
+    const el = tooltipRef.value;
+    const container = containerRef.value;
+    if (!el || !container) return;
+    const rect = container.getBoundingClientRect();
+    const offset = isTouching.value ? TOUCH_Y_OFFSET : 0;
+    const { left, top } = placeTooltip(
+      pointer.value.clientX,
+      pointer.value.clientY - offset,
+      el.offsetWidth,
+      el.offsetHeight,
+      props.tooltipClamp,
+      rect,
+    );
+    tooltipPos.value = { left: left - rect.left, top: top - rect.top };
+  },
+  { flush: "post" },
+);
 
 function onChartMouseMove(event: MouseEvent) {
   updateHover(event);
@@ -690,11 +700,6 @@ function onTouchMove(event: TouchEvent) {
 
 function onTouchEnd() {
   isTouching.value = false;
-  hoverIndex.value = null;
-  emit("hover", null);
-}
-
-function onTooltipClose() {
   hoverIndex.value = null;
   emit("hover", null);
 }
@@ -1068,7 +1073,16 @@ const menuItems = computed<ChartMenuItem[]>(() => {
       v-if="hasTooltipSlot && hoverIndex !== null && hoverSlotProps"
       ref="tooltipRef"
       class="chart-tooltip-content"
-      style="position: absolute; transform: translateY(-50%)"
+      :style="{
+        position: 'absolute',
+        top: '0',
+        left: '0',
+        willChange: 'transform',
+        transform: tooltipPos
+          ? `translate3d(${tooltipPos.left}px, ${tooltipPos.top}px, 0) translateY(-50%)`
+          : 'translateY(-50%)',
+        visibility: tooltipPos ? 'visible' : 'hidden',
+      }"
     >
       <slot name="tooltip" v-bind="hoverSlotProps">
         <div class="line-chart-tooltip">
