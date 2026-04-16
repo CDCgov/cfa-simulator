@@ -68,6 +68,26 @@ jobs:
       - run: pnpm exec playwright install --with-deps
       - run: plz docs test
 
+  test-cli-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: k88hudson/setup-plz@v1
+      - run: corepack enable
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: ./.github/actions/setup-rust
+      - run: pnpm install
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: cargo build -p cfasim
+      - run: plz cli e2e
+
   test-models:
     runs-on: ubuntu-latest
     steps:
