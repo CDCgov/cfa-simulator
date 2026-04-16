@@ -76,6 +76,7 @@ run = "cargo clippy -- -D warnings"
 # Integration tests for the CLI (scaffolds projects + Playwright)
 [taskgroup.cli.e2e]
 run = "pnpm exec playwright test --config playwright.config.ts"
+git_hook = "pre-push"
 
 [taskgroup.models.extends]
 dir = "models"
