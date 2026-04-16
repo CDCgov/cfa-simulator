@@ -184,6 +184,45 @@ With `number-type="integer"`, decimal values are truncated to whole numbers on c
   </template>
 </ComponentDemo>
 
+### Decimal places
+
+Display precision is inferred from `step` (e.g. `step="0.001"` in percent mode
+shows tenths of a percent). Set `decimals` explicitly to override.
+
+<ComponentDemo>
+  <div style="width: 300px; display: flex; flex-direction: column; gap: 0.75em">
+    <NumberInput
+      v-model="coverage"
+      label="Coverage (inferred from step)"
+      percent
+      :step="0.001"
+      :max="1"
+    />
+    <NumberInput
+      v-model="r0"
+      label="R0 (explicit decimals)"
+      :decimals="3"
+      :min="0"
+      :max="18"
+    />
+  </div>
+
+<template #code>
+
+```vue
+<NumberInput
+  v-model="coverage"
+  label="Coverage"
+  percent
+  :step="0.001"
+  :max="1"
+/>
+<NumberInput v-model="r0" label="R0" :decimals="3" :min="0" :max="18" />
+```
+
+  </template>
+</ComponentDemo>
+
 ### Required
 
 With `required`, clearing the field shows a validation error on commit.

@@ -18,21 +18,70 @@ const props = defineProps<{
   live?: boolean;
   numberType?: "integer" | "float";
   required?: boolean;
+  decimals?: number;
 }>();
 
 const sliderMin = computed(() => props.min ?? (props.percent ? 0 : 0));
 const sliderMax = computed(() => props.max ?? (props.percent ? 1 : 100));
 const sliderStep = computed(() => props.step ?? (props.percent ? 0.01 : 1));
 
+// Count fractional digits in a finite number's decimal representation.
+// Uses toPrecision + parseFloat to mask float-multiplication artifacts
+// (e.g. 0.007 * 100 === 0.7000000000000001 would otherwise return 16).
+function countDecimals(n: number): number {
+  if (!Number.isFinite(n) || Number.isInteger(n)) return 0;
+  const s = parseFloat(Math.abs(n).toPrecision(12)).toString();
+  const dot = s.indexOf(".");
+  if (dot !== -1) return s.length - dot - 1;
+  const eNeg = s.indexOf("e-");
+  if (eNeg !== -1) return Number(s.slice(eNeg + 2));
+  return 0;
+}
+
+const inputStep = computed(() => {
+  if (props.step != null) return props.percent ? props.step * 100 : props.step;
+  return 1;
+});
+
+const inputMin = computed(() => {
+  if (props.min != null) return props.percent ? props.min * 100 : props.min;
+  return props.percent ? 0 : undefined;
+});
+const inputMax = computed(() => {
+  if (props.max != null) return props.percent ? props.max * 100 : props.max;
+  return props.percent ? 100 : undefined;
+});
+
+// Display precision: explicit `decimals` wins; otherwise inferred from the
+// input step (which is already in display units — see `inputStep`). Integer
+// mode always collapses to 0.
+const displayDecimals = computed(() => {
+  if (props.numberType === "integer") return 0;
+  if (props.decimals != null) return Math.max(0, props.decimals);
+  return countDecimals(inputStep.value);
+});
+
+function roundToDecimals(v: number, d: number): number {
+  const factor = Math.pow(10, d);
+  return Math.round(v * factor) / factor;
+}
+
 function formatSliderValue(v: number | undefined) {
   if (v == null) return "";
-  if (props.percent) return (v * 100).toFixed(0) + "%";
-  return v.toLocaleString("en-US");
+  const d = displayDecimals.value;
+  if (props.percent) return (v * 100).toFixed(d) + "%";
+  return v.toLocaleString("en-US", {
+    minimumFractionDigits: d,
+    maximumFractionDigits: d,
+  });
 }
 
 function toDisplay(v: number | undefined) {
   if (v == null) return v;
-  return props.percent ? Math.round(v * 10000) / 100 : v;
+  if (!props.percent) return v;
+  // Round in display units to hide float-multiplication artifacts like
+  // 0.1 * 100 === 10.000000000000002. Precision follows displayDecimals.
+  return roundToDecimals(v * 100, displayDecimals.value);
 }
 
 function fromDisplay(v: number) {
@@ -53,8 +102,16 @@ function formatWithCommas(v: number | undefined): string {
 }
 
 function formatForDisplay(v: number | undefined): string {
+  if (v == null) return "";
+  const d = displayDecimals.value;
+  if (d > 0) {
+    return v.toLocaleString("en-US", {
+      minimumFractionDigits: d,
+      maximumFractionDigits: d,
+    });
+  }
   const s = formatWithCommas(v);
-  if (props.numberType === "float" && v != null && Number.isInteger(v)) {
+  if (props.numberType === "float" && Number.isInteger(v)) {
     return s + ".0";
   }
   return s;
@@ -201,11 +258,6 @@ function onSliderCommit(v: number[] | undefined) {
   model.value = coerceInteger(v[0]);
 }
 
-const inputStep = computed(() => {
-  if (props.step != null) return props.percent ? props.step * 100 : props.step;
-  return 1;
-});
-
 function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
   event.preventDefault();
   const parsed = Number(stripCommas(local.value));
@@ -219,15 +271,6 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
   model.value = fromDisplay(next);
   sliderLocal.value = model.value;
 }
-
-const inputMin = computed(() => {
-  if (props.min != null) return props.percent ? props.min * 100 : props.min;
-  return props.percent ? 0 : undefined;
-});
-const inputMax = computed(() => {
-  if (props.max != null) return props.percent ? props.max * 100 : props.max;
-  return props.percent ? 100 : undefined;
-});
 </script>
 
 <template>

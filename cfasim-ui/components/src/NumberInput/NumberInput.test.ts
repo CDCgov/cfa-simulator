@@ -728,6 +728,79 @@ describe("NumberInput", () => {
     expect((input.element as HTMLInputElement).value).toBe("3.0");
   });
 
+  it("preserves decimal places on percent input inferred from step", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 0.5,
+        label: "Rate",
+        percent: true,
+        step: 0.001,
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+    const input = wrapper.find("input");
+    // step 0.001 in fraction units → 0.1% in display units → 1 decimal
+    expect((input.element as HTMLInputElement).value).toBe("50.0");
+
+    await input.setValue("12.3");
+    await input.trigger("blur");
+    expect(wrapper.props("modelValue")).toBeCloseTo(0.123);
+    expect((input.element as HTMLInputElement).value).toBe("12.3");
+  });
+
+  it("respects explicit decimals prop for percent", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 0.12345,
+        label: "Rate",
+        percent: true,
+        decimals: 3,
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+    const input = wrapper.find("input");
+    expect((input.element as HTMLInputElement).value).toBe("12.345");
+
+    await input.setValue("7.891");
+    await input.trigger("blur");
+    expect(wrapper.props("modelValue")).toBeCloseTo(0.07891, 5);
+    expect((input.element as HTMLInputElement).value).toBe("7.891");
+  });
+
+  it("respects explicit decimals prop for non-percent", async () => {
+    const wrapper = mount(NumberInput, {
+      props: { modelValue: 3.14159, label: "Value", decimals: 2 },
+    });
+    const input = wrapper.find("input");
+    expect((input.element as HTMLInputElement).value).toBe("3.14");
+  });
+
+  it("infers decimals cleanly from steps with float artifacts", () => {
+    // step 0.007 in fraction units → 0.7% in display units, but
+    // 0.007 * 100 === 0.7000000000000001 in JS floats. The inferred
+    // precision must not over-pad to 16 decimals.
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 0.5,
+        label: "Rate",
+        percent: true,
+        step: 0.007,
+      },
+    });
+    const input = wrapper.find("input");
+    expect((input.element as HTMLInputElement).value).toBe("50.0");
+  });
+
+  it("pads trailing zeros to match decimals", () => {
+    const wrapper = mount(NumberInput, {
+      props: { modelValue: 2.5, label: "Value", decimals: 3 },
+    });
+    const input = wrapper.find("input");
+    expect((input.element as HTMLInputElement).value).toBe("2.500");
+  });
+
   it("syncs local value when model changes externally", async () => {
     const wrapper = mount(NumberInput, {
       props: {
