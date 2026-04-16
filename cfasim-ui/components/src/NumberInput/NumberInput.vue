@@ -140,12 +140,24 @@ function validate(displayValue: number): string | undefined {
 }
 
 function commit() {
+  // An empty field clears the model — distinct from garbage input.
+  if (local.value.trim() === "") {
+    model.value = undefined;
+    sliderLocal.value = undefined;
+    validationError.value = undefined;
+    return;
+  }
   // Strip any characters that can't be part of a valid number literal.
   // People are free to type anything while editing; we clean it up on commit.
   const cleaned = local.value.replace(INVALID_NUMBER_CHARS, "");
   // Require at least one digit. Otherwise Number("") === 0 would silently
-  // turn pure garbage ("abc") into 0.
-  if (!/\d/.test(cleaned)) return;
+  // turn pure garbage ("abc") into 0. Reset to the current model value so
+  // invalid input doesn't linger in the field.
+  if (!/\d/.test(cleaned)) {
+    local.value = formatForDisplay(toDisplay(model.value));
+    validationError.value = undefined;
+    return;
+  }
   if (cleaned !== local.value) {
     local.value = cleaned;
   }

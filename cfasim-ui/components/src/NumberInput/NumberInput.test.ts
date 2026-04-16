@@ -123,6 +123,50 @@ describe("NumberInput", () => {
     expect(wrapper.props("modelValue")).toBe(42);
   });
 
+  it("resets the displayed value when input is all invalid on commit", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 42,
+        label: "Count",
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+
+    const input = wrapper.find("input");
+    const el = input.element as HTMLInputElement;
+
+    // Blur: garbage text should be replaced with the formatted model value.
+    await input.setValue("abcxyz");
+    expect(el.value).toBe("abcxyz");
+    await input.trigger("blur");
+    expect(el.value).toBe("42");
+    expect(wrapper.props("modelValue")).toBe(42);
+
+    // Enter: same behavior via the Enter keydown path.
+    await input.setValue("???");
+    await input.trigger("keydown.enter");
+    expect(el.value).toBe("42");
+    expect(wrapper.props("modelValue")).toBe(42);
+  });
+
+  it("clears the model when the input is emptied", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 42,
+        label: "Count",
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+
+    const input = wrapper.find("input");
+    await input.setValue("");
+    await input.trigger("blur");
+    expect(wrapper.props("modelValue")).toBeUndefined();
+    expect((input.element as HTMLInputElement).value).toBe("");
+  });
+
   it("emits update on Enter keydown", async () => {
     const wrapper = mount(NumberInput, {
       props: {
