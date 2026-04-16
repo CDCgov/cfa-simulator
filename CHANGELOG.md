@@ -1,6 +1,17 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.3.5] - 2026-04-16
+
+### Bug Fixes
+
+- **charts:** Position LineChart tooltip reactively via transform
+- **cfasim:** Use module_name in rust template App.vue
+
+### Chores
+
+- Omit CHANGELOG.md from prettier
+- Run cli e2e in pre-push hook
 
 ## [0.3.4] - 2026-04-15
 
@@ -168,7 +179,33 @@ All notable changes to this project are documented here. Generated from conventi
 
 - Use pypiDeps to prebuild dependencies
 
+## [0.1.5] - 2026-03-27
+
+### Bug Fixes
+
+- Wasm and python paths
+
+### Chores
+
+- Add publish tasks for cargo
+- Add python publishing
+- Skip existing packages for pypi
+- Add publish config to package.json
+- Add crates trusted publishing
+- **deps-dev:** Bump happy-dom from 20.8.4 to 20.8.8 (#1)
+
 ## [0.1.4] - 2026-03-26
+
+### Bug Fixes
+
+- Step should be in original units for percent
+
+### Chores
+
+- Update cargo lock on version script
+- Add environment to github workflow
+- Disable publish on tags
+- Add metadata to cfasim package
 
 ### Features
 
@@ -176,6 +213,20 @@ All notable changes to this project are documented here. Generated from conventi
 - Add commas to number input
 
 ## [0.1.3] - 2026-03-25
+
+### Chores
+
+- Update Cargo lock
+- Update version bumping to include Cargo.lock
+- Add npm release action
+- Add npm environment to the npm task
+- Add corepack to npm publish
+- Try npm for trusted publishing
+- Remove pnpm from publish
+- Try upgrading npm for pnpm publishing
+- Enable workflow dispatch
+- Corepack enable
+- Set provenance globally
 
 ### Features
 
@@ -185,6 +236,36 @@ All notable changes to this project are documented here. Generated from conventi
 - Add hsa to choroplethmap
 
 ## [0.1.2] - 2026-03-23
+
+### Bug Fixes
+
+- LineChart should prefix x and y ids
+- Type errors
+- **examples:** Fix python e2e test label and add example tests to pre-push
+- **ci:** Base paths needed for wasm and pyodide assets
+- Add icon font
+- Cfasim should create an independent project
+
+### Chores
+
+- Add pre-commit hooks and formatting tasks to plz.toml
+- Move plz docs test to prepush
+- Add playwright as a dependency
+- Deploy examples as well
+- Added setup rust and more deploy iteration
+- Update package.json for publishing
+- Update the lockfile
+- Add version script
+- Version v0.1.0
+- Pnpm publish task
+- Fix e2e tests
+- Ignore public/ dirs from prettier
+- Add metadata to cfasim-model
+- Update latest branch
+
+### Documentation
+
+- Added a deploy action for docs
 
 ### Features
 
@@ -201,3 +282,5 @@ All notable changes to this project are documented here. Generated from conventi
 ### Tests
 
 - Added playwright e2e tests for components
+
+
