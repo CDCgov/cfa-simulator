@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { execSync, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { existsSync, rmSync, mkdtempSync } from "node:fs";
+import { existsSync, rmSync, mkdtempSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -63,7 +63,29 @@ test.describe("cfasim init", () => {
 
   const procs: ChildProcess[] = [];
 
+  // During release prep the workspace version has been bumped but not yet
+  // published to npm. Scaffolded projects would fail `pnpm install` in that
+  // window — skip the suite until the bump lands on the registry.
+  const uiVersion = JSON.parse(
+    readFileSync(resolve(ROOT, "cfasim-ui/cfasim-ui/package.json"), "utf8"),
+  ).version;
+  let published = false;
+  try {
+    const out = execSync(`npm view cfasim-ui@${uiVersion} version`, {
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+    published = out.length > 0;
+  } catch {
+    published = false;
+  }
+
   test.beforeAll(async () => {
+    test.skip(
+      !published,
+      `cfasim-ui@${uiVersion} is not published to npm yet. Skipping until release lands`,
+    );
     // Build CLI
     execSync("cargo build -p cfasim", { cwd: ROOT });
 
