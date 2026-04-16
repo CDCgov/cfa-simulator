@@ -103,6 +103,11 @@ test.describe("cfasim init", () => {
       await expect(page.locator("h2")).toContainText(p.name);
       await expect(page.locator("h1")).toContainText(p.name);
       await expect(page.getByLabel("Steps")).toBeVisible();
+
+      // Verify the model actually loaded and produced output.
+      await expect(page.locator("ul li").first()).toContainText("t=", {
+        timeout: 20_000,
+      });
     });
   }
 });

@@ -4,7 +4,7 @@ import { SidebarLayout, NumberInput } from "cfasim-ui/components";
 import { useModel } from "cfasim-ui/wasm";
 
 const params = reactive({ steps: 10, rate: 2.5 });
-const { useOutputs } = useModel("%%project_name%%");
+const { useOutputs } = useModel("%%module_name%%");
 const { outputs, loading } = useOutputs("simulate", params);
 </script>
 
