@@ -17,6 +17,7 @@ const props = defineProps<{
   slider?: boolean;
   live?: boolean;
   numberType?: "integer" | "float";
+  required?: boolean;
 }>();
 
 const sliderMin = computed(() => props.min ?? (props.percent ? 0 : 0));
@@ -70,6 +71,7 @@ const validationError = ref<string>();
 watch(model, (v) => {
   local.value = formatForDisplay(toDisplay(v));
   sliderLocal.value = v;
+  validationError.value = validate(v);
 });
 
 // Characters that can appear in a valid JS number literal: digits, thousands
@@ -111,6 +113,7 @@ function reformatInput(event: Event) {
 
 function onBlur() {
   commit();
+  if (local.value.trim() === "") return;
   const parsed = Number(stripCommas(local.value));
   if (!Number.isNaN(parsed)) {
     local.value = formatForDisplay(parsed);
@@ -129,11 +132,16 @@ function onChangeEvent() {
   commit();
 }
 
-function validate(displayValue: number): string | undefined {
-  if (inputMin.value != null && displayValue < inputMin.value) {
+// Validates a model value (or undefined for empty). Single source of truth
+// for required / min / max errors — used on commit, programmatic updates,
+// and arrow-key stepping.
+function validate(v: number | undefined): string | undefined {
+  if (v == null) return props.required ? "Required" : undefined;
+  const display = toDisplay(v) as number;
+  if (inputMin.value != null && display < inputMin.value) {
     return `Min ${inputMin.value}${props.percent ? "%" : ""}`;
   }
-  if (inputMax.value != null && displayValue > inputMax.value) {
+  if (inputMax.value != null && display > inputMax.value) {
     return `Max ${inputMax.value}${props.percent ? "%" : ""}`;
   }
   return undefined;
@@ -144,7 +152,7 @@ function commit() {
   if (local.value.trim() === "") {
     model.value = undefined;
     sliderLocal.value = undefined;
-    validationError.value = undefined;
+    validationError.value = validate(undefined);
     return;
   }
   // Strip any characters that can't be part of a valid number literal.
@@ -155,7 +163,7 @@ function commit() {
   // invalid input doesn't linger in the field.
   if (!/\d/.test(cleaned)) {
     local.value = formatForDisplay(toDisplay(model.value));
-    validationError.value = undefined;
+    validationError.value = validate(model.value);
     return;
   }
   if (cleaned !== local.value) {
@@ -169,11 +177,12 @@ function commit() {
     local.value = formatForDisplay(parsed);
   }
 
-  const error = validate(parsed);
+  const next = fromDisplay(parsed);
+  const error = validate(next);
   validationError.value = error;
   if (error) return;
 
-  model.value = fromDisplay(parsed);
+  model.value = next;
   sliderLocal.value = model.value;
 }
 
@@ -207,7 +216,6 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
   if (inputMin.value != null) next = Math.max(next, inputMin.value);
   if (inputMax.value != null) next = Math.min(next, inputMax.value);
   local.value = formatForDisplay(next);
-  validationError.value = undefined;
   model.value = fromDisplay(next);
   sliderLocal.value = model.value;
 }
@@ -238,6 +246,8 @@ const inputMax = computed(() => {
         v-model="local"
         :placeholder="props.placeholder"
         :aria-invalid="!!validationError"
+        :aria-required="props.required || undefined"
+        :required="props.required"
         @blur="onBlur"
         @keydown.enter="commit"
         @keydown.up="onArrowStep($event, 1)"
@@ -286,6 +296,8 @@ const inputMax = computed(() => {
         v-model="local"
         :placeholder="props.placeholder"
         :aria-invalid="!!validationError"
+        :aria-required="props.required || undefined"
+        :required="props.required"
         @blur="onBlur"
         @keydown.enter="commit"
         @keydown.up="onArrowStep($event, 1)"

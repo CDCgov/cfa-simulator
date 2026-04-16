@@ -150,6 +150,74 @@ describe("NumberInput", () => {
     expect(wrapper.props("modelValue")).toBe(42);
   });
 
+  it("shows a validation error when required and emptied", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 42,
+        label: "Count",
+        required: true,
+        "onUpdate:modelValue": (v: number | undefined) =>
+          wrapper.setProps({ modelValue: v }),
+      },
+    });
+
+    const input = wrapper.find("input");
+    await input.setValue("");
+    await input.trigger("blur");
+    expect(wrapper.props("modelValue")).toBeUndefined();
+    expect(wrapper.find(".input-error").text()).toBe("Required");
+    expect(input.attributes("aria-invalid")).toBe("true");
+    expect(input.attributes("aria-required")).toBe("true");
+    expect(input.attributes("required")).toBeDefined();
+
+    // Refocusing and blurring without typing must not collapse to 0.
+    await input.trigger("focus");
+    await input.trigger("blur");
+    expect((input.element as HTMLInputElement).value).toBe("");
+    expect(wrapper.props("modelValue")).toBeUndefined();
+    expect(wrapper.find(".input-error").text()).toBe("Required");
+
+    // Entering a valid number clears the error.
+    await input.setValue("7");
+    await input.trigger("blur");
+    expect(wrapper.props("modelValue")).toBe(7);
+    expect(wrapper.find(".input-error").exists()).toBe(false);
+  });
+
+  it("shows the required error when modelValue is programmatically cleared", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 42,
+        label: "Count",
+        required: true,
+      },
+    });
+
+    expect(wrapper.find(".input-error").exists()).toBe(false);
+    await wrapper.setProps({ modelValue: undefined });
+    expect(wrapper.find(".input-error").text()).toBe("Required");
+
+    await wrapper.setProps({ modelValue: 5 });
+    expect(wrapper.find(".input-error").exists()).toBe(false);
+  });
+
+  it("shows a min/max error when modelValue is programmatically set out of range", async () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 10,
+        label: "Count",
+        min: 1,
+        max: 100,
+      },
+    });
+
+    await wrapper.setProps({ modelValue: 500 });
+    expect(wrapper.find(".input-error").text()).toBe("Max 100");
+
+    await wrapper.setProps({ modelValue: 50 });
+    expect(wrapper.find(".input-error").exists()).toBe(false);
+  });
+
   it("clears the model when the input is emptied", async () => {
     const wrapper = mount(NumberInput, {
       props: {

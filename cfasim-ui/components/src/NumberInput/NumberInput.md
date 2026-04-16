@@ -184,6 +184,42 @@ With `number-type="integer"`, decimal values are truncated to whole numbers on c
   </template>
 </ComponentDemo>
 
+### Required
+
+With `required`, clearing the field shows a validation error on commit.
+
+<ComponentDemo>
+  <div style="width: 300px">
+    <NumberInput v-model="days" label="Days" required />
+  </div>
+
+<template #code>
+
+```vue
+<NumberInput v-model="days" label="Days" required />
+```
+
+  </template>
+</ComponentDemo>
+
+Combine `required` with `live` to validate as the user types (debounced).
+
+<ComponentDemo>
+  <div style="width: 300px; display: flex; flex-direction: column; gap: 0.75em">
+    <NumberInput v-model="days" label="Days (on blur)" required />
+    <NumberInput v-model="days" label="Days (live)" required live />
+  </div>
+
+<template #code>
+
+```vue
+<NumberInput v-model="days" label="Days (on blur)" required />
+<NumberInput v-model="days" label="Days (live)" required live />
+```
+
+  </template>
+</ComponentDemo>
+
 ### Hidden label
 
 Use `hide-label` to visually hide the label while keeping it available to
