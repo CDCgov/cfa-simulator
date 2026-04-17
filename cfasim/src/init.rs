@@ -4,6 +4,7 @@ use std::fmt;
 use std::fs;
 use std::io::Read as IoRead;
 use std::path::Path;
+use std::process::Command;
 
 const TEMPLATE_URL: &str =
     "https://github.com/cdcgov/cfa-simulator/archive/refs/heads/latest.tar.gz";
@@ -171,6 +172,18 @@ fn scaffold(
     Ok(())
 }
 
+fn init_git_repo(project_dir: &Path) -> bool {
+    if project_dir.join(".git").exists() {
+        return false;
+    }
+    let status = Command::new("git")
+        .arg("init")
+        .arg("--quiet")
+        .current_dir(project_dir)
+        .status();
+    matches!(status, Ok(s) if s.success())
+}
+
 fn resolve_directory(
     directory: &str,
 ) -> Result<(std::path::PathBuf, String), Box<dyn std::error::Error>> {
@@ -247,14 +260,26 @@ pub fn run(
         "Downloading templates and scaffolding project..."
     };
 
-    if interactive {
-        let spinner = cliclack::spinner();
-        spinner.start(spinner_msg);
-        scaffold(&project_dir, &name, &template, local)?;
-        spinner.stop("Project created");
+    let spinner = interactive.then(|| {
+        let s = cliclack::spinner();
+        s.start(spinner_msg);
+        s
+    });
+
+    scaffold(&project_dir, &name, &template, local)?;
+    let git_initialized = init_git_repo(&project_dir);
+
+    if let Some(spinner) = spinner {
+        spinner.stop(if git_initialized {
+            "Project created (git repo initialized)"
+        } else {
+            "Project created"
+        });
     } else {
-        scaffold(&project_dir, &name, &template, local)?;
         println!("Created project: {}", name);
+        if git_initialized {
+            println!("Initialized git repository");
+        }
     }
 
     let next_steps = format!(
