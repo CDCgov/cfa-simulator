@@ -1,6 +1,22 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.3.6] - 2026-04-17
+
+### Bug Fixes
+
+- **cfasim-ui:** Handle invalid and empty NumberInput values on commit
+- **cfasim-ui:** Use container queries for SidebarLayout main padding
+
+### Features
+
+- **cfasim-ui:** Add required prop to NumberInput
+- **cfasim-ui:** Support decimal places in NumberInput
+
+### Tests
+
+- **cfasim:** Skip cli e2e when workspace version is unpublished
+
 ## [0.3.5] - 2026-04-16
 
 ### Bug Fixes
