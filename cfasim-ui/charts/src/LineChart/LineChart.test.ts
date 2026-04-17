@@ -431,6 +431,193 @@ describe("LineChart", () => {
     wrapper.unmount();
   });
 
+  describe("tick customization", () => {
+    function xTickLabels(wrapper: ReturnType<typeof mount>) {
+      return wrapper.findAll('[data-testid="x-tick"]').map((t) => t.text());
+    }
+    function yTickLabels(wrapper: ReturnType<typeof mount>) {
+      return wrapper.findAll('[data-testid="y-tick"]').map((t) => t.text());
+    }
+
+    it("places x-axis ticks at a numeric interval respecting xMin", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: Array.from({ length: 15 }, (_, i) => i),
+          xMin: 0,
+          xTicks: 5,
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const labels = xTickLabels(wrapper);
+      expect(labels).toEqual(expect.arrayContaining(["0", "5", "10"]));
+      expect(labels).not.toContain("3");
+    });
+
+    it("places x-axis ticks at explicit values", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: Array.from({ length: 10 }, (_, i) => i),
+          xTicks: [0, 3, 7],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const labels = xTickLabels(wrapper);
+      expect(labels).toEqual(expect.arrayContaining(["0", "3", "7"]));
+    });
+
+    it("drops explicit x-tick values outside data range", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 1, 2, 3, 4],
+          xTicks: [-1, 2, 99],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const labels = xTickLabels(wrapper);
+      expect(labels).toContain("2");
+      expect(labels).not.toContain("-1");
+      expect(labels).not.toContain("99");
+    });
+
+    it("formats x-axis ticks with xTickFormat", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 1, 2, 3, 4],
+          xTicks: [0, 2, 4],
+          xTickFormat: (v: number) => `day-${v}`,
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const labels = xTickLabels(wrapper);
+      expect(labels).toEqual(
+        expect.arrayContaining(["day-0", "day-2", "day-4"]),
+      );
+    });
+
+    it("places y-axis ticks at a numeric interval", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 25, 50, 75, 100],
+          yTicks: 25,
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      expect(yTickLabels(wrapper)).toEqual(
+        expect.arrayContaining(["0", "25", "50", "75", "100"]),
+      );
+    });
+
+    it("places y-axis ticks at explicit values", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 50, 100],
+          yTicks: [10, 90],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      expect(yTickLabels(wrapper)).toEqual(
+        expect.arrayContaining(["10", "90"]),
+      );
+    });
+
+    it("formats y-axis ticks with yTickFormat", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 0.5, 1],
+          yTicks: [0, 0.5, 1],
+          yTickFormat: (v: number) => `${(v * 100).toFixed(0)}%`,
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      expect(yTickLabels(wrapper)).toEqual(
+        expect.arrayContaining(["0%", "50%", "100%"]),
+      );
+    });
+
+    it("falls back to xLabels when xTickFormat is not provided", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 1, 2, 3],
+          xLabels: ["Jan", "Feb", "Mar", "Apr"],
+          xTicks: [0, 2],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const labels = xTickLabels(wrapper);
+      expect(labels).toEqual(expect.arrayContaining(["Jan", "Mar"]));
+    });
+
+    it("uses xTickFormat for the tooltip x-label", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [10, 20, 30, 40, 50],
+          xMin: 0,
+          xTickFormat: (v: number) => `day-${v}`,
+          width: 400,
+          height: 200,
+          menu: false,
+          tooltipTrigger: "hover" as const,
+        },
+        attachTo: document.body,
+      });
+      const overlay = wrapper
+        .findAll("rect")
+        .find((r) => r.attributes("fill") === "transparent")!;
+      await overlay.trigger("mousemove", { clientX: 200, clientY: 50 });
+      const label = wrapper.find(".line-chart-tooltip-label");
+      expect(label.exists()).toBe(true);
+      expect(label.text()).toMatch(/^day-\d+$/);
+      wrapper.unmount();
+    });
+
+    it("anchors edge x-ticks to start/end to prevent clipping", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: Array.from({ length: 11 }, (_, i) => i),
+          xTicks: [0, 5, 10],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const ticks = wrapper.findAll('[data-testid="x-tick"]');
+      const anchors = ticks.map((t) => t.attributes("text-anchor"));
+      expect(anchors[0]).toBe("start");
+      expect(anchors[anchors.length - 1]).toBe("end");
+      // interior tick stays centered
+      expect(anchors.slice(1, -1).every((a) => a === "middle")).toBe(true);
+    });
+
+    it("ignores zero or negative intervals", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 1, 2, 3, 4],
+          xTicks: 0,
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      expect(xTickLabels(wrapper)).toEqual([]);
+    });
+  });
+
   describe("areaSections", () => {
     it("renders area section fill paths", () => {
       const wrapper = mount(LineChart, {

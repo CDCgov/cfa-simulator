@@ -72,7 +72,7 @@ Hover over the chart to see a tooltip with values at each data point. Set `toolt
       { data: [0, 10, 25, 45, 60, 55, 40, 20, 8], color: '#fb7e38', strokeWidth: 3 },
       { data: [0, 5, 12, 20, 28, 25, 18, 10, 4], color: '#0057b7', strokeWidth: 3 },
     ]"
-    :x-labels="['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']"
+    :x-tick-format="(_, i) => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'][i]"
     :height="200"
     x-label="Month"
     y-label="Incidence"
@@ -95,11 +95,49 @@ Hover over the chart to see a tooltip with values at each data point. Set `toolt
       strokeWidth: 3,
     },
   ]"
-  :x-labels="['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']"
+  :x-tick-format="(_, i) => months[i]"
   :height="200"
   x-label="Month"
   y-label="Incidence"
   tooltip-trigger="hover"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Custom axis ticks
+
+Control tick placement with `x-ticks` and `y-ticks`. Pass a **number** for a fixed interval (in data units, respecting `xMin`) or an **array** of explicit values. Use `x-tick-format` / `y-tick-format` to customize labels.
+
+<ComponentDemo>
+  <LineChart
+    :data="[0, 0.12, 0.28, 0.45, 0.61, 0.74, 0.83, 0.89, 0.93, 0.96, 0.97, 0.98, 0.99, 0.99, 1.0]"
+    :x-ticks="7"
+    :y-ticks="[0, 0.5, 1]"
+    :y-tick-format="(v) => `${(v * 100).toFixed(0)}%`"
+    :x-tick-format="(v) => `day ${v}`"
+    :height="220"
+    x-label="Time"
+    y-label="Coverage"
+    x-grid
+    y-grid
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :data="coverage"
+  :x-ticks="7"
+  :y-ticks="[0, 0.5, 1]"
+  :y-tick-format="(v) => `${(v * 100).toFixed(0)}%`"
+  :x-tick-format="(v) => `day ${v}`"
+  :height="220"
+  x-label="Time"
+  y-label="Coverage"
+  x-grid
+  y-grid
 />
 ```
 

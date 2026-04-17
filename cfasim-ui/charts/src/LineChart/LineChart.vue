@@ -66,6 +66,28 @@ const props = withDefaults(
     yLabel?: string;
     yMin?: number;
     xMin?: number;
+    /**
+     * Tick placement on the x-axis. Number = interval in data units
+     * (respecting `xMin`, e.g. `7` ticks every 7 days). Array = explicit tick
+     * values in data space; values outside the data range are dropped.
+     * When omitted, ticks are chosen automatically.
+     */
+    xTicks?: number | number[];
+    /**
+     * Tick placement on the y-axis. Number = interval in data units. Array =
+     * explicit tick values; values outside the data range are dropped. When
+     * omitted, ticks are chosen automatically.
+     */
+    yTicks?: number | number[];
+    /** Formatter for x-axis tick labels. Receives the raw numeric value. */
+    xTickFormat?: (value: number, index: number) => string;
+    /** Formatter for y-axis tick labels. Receives the raw numeric value. */
+    yTickFormat?: (value: number) => string;
+    /**
+     * @deprecated Use `xTickFormat` (e.g. `(_, i) => labels[i]`) together
+     * with `xTicks` for explicit control. Still honored for tooltip x-labels
+     * and as a default x-tick formatter when `xTickFormat` is not provided.
+     */
     xLabels?: string[];
     debounce?: number;
     menu?: boolean | string;
@@ -478,61 +500,97 @@ function formatTick(v: number): string {
   return v.toFixed(1);
 }
 
-const yTicks = computed(() => {
-  const { min, max } = extent.value;
-  if (min === max) {
-    return [
-      {
-        value: formatTick(min),
-        y: snap(padding.value.top + innerH.value / 2),
-      },
-    ];
-  }
-  const targetTicks = Math.max(3, Math.floor(innerH.value / 50));
-  const step = niceStep(max - min, targetTicks);
+/** Generate interval-spaced values in [min, max], inclusive. */
+function intervalValues(min: number, max: number, step: number): number[] {
+  if (!(step > 0) || !isFinite(step)) return [];
+  const out: number[] = [];
   const start = Math.ceil(min / step) * step;
-  const ticks: { value: string; y: number }[] = [];
-  for (let v = start; v <= max; v += step) {
-    ticks.push({
-      value: formatTick(v),
-      y: snap(
-        padding.value.top +
-          innerH.value -
-          ((v - min) / extent.value.range) * innerH.value,
-      ),
-    });
+  // Cap iteration to avoid runaway loops from pathological inputs.
+  const maxIterations = 1000;
+  for (
+    let i = 0, v = start;
+    v <= max + 1e-9 && i < maxIterations;
+    i++, v = start + i * step
+  ) {
+    out.push(v);
   }
-  return ticks;
+  return out;
+}
+
+const yTickItems = computed(() => {
+  const { min, max } = extent.value;
+  const toY = (v: number) =>
+    snap(
+      padding.value.top +
+        innerH.value -
+        ((v - min) / extent.value.range) * innerH.value,
+    );
+  const fmt = (v: number) =>
+    props.yTickFormat ? props.yTickFormat(v) : formatTick(v);
+
+  if (min === max) {
+    return [{ value: fmt(min), y: snap(padding.value.top + innerH.value / 2) }];
+  }
+
+  let values: number[];
+  if (Array.isArray(props.yTicks)) {
+    values = props.yTicks.filter((v) => v >= min && v <= max);
+  } else if (typeof props.yTicks === "number") {
+    values = intervalValues(min, max, props.yTicks);
+  } else {
+    const targetTicks = Math.max(3, Math.floor(innerH.value / 50));
+    values = intervalValues(min, max, niceStep(max - min, targetTicks));
+  }
+  return values.map((v) => ({ value: fmt(v), y: toY(v) }));
 });
 
-const xTicks = computed(() => {
+const xTickItems = computed(() => {
   const len = maxLen.value;
   if (len <= 1) return [];
-  const labels = props.xLabels;
-  if (labels && labels.length === len) {
+  const offset = props.xMin ?? 0;
+  const xMin = offset;
+  const xMax = offset + (len - 1);
+
+  const toX = (v: number) =>
+    snap(padding.value.left + ((v - offset) / (len - 1)) * innerW.value);
+  const fmt = (v: number, i: number) => {
+    if (props.xTickFormat) return props.xTickFormat(v, i);
+    const labels = props.xLabels;
+    const idx = v - offset;
+    if (labels && Number.isInteger(idx) && idx >= 0 && idx < labels.length) {
+      return labels[idx];
+    }
+    return formatTick(v);
+  };
+
+  let values: number[];
+  if (Array.isArray(props.xTicks)) {
+    values = props.xTicks.filter((v) => v >= xMin && v <= xMax);
+  } else if (typeof props.xTicks === "number") {
+    values = intervalValues(xMin, xMax, props.xTicks);
+  } else if (props.xLabels && props.xLabels.length === len) {
     const targetTicks = Math.max(3, Math.floor(innerW.value / 80));
     const step = Math.max(1, Math.round((len - 1) / targetTicks));
-    const ticks: { value: string; x: number }[] = [];
-    for (let i = 0; i < len; i += step) {
-      ticks.push({
-        value: labels[i],
-        x: snap(padding.value.left + (i / (len - 1)) * innerW.value),
-      });
+    values = [];
+    for (let i = 0; i < len; i += step) values.push(offset + i);
+  } else {
+    const targetTicks = Math.max(3, Math.floor(innerW.value / 80));
+    const step = niceStep(len - 1, targetTicks);
+    values = [];
+    for (let i = 0; i <= len - 1; i += step) {
+      values.push(Math.round(i) + offset);
     }
-    return ticks;
   }
-  const offset = props.xMin ?? 0;
-  const targetTicks = Math.max(3, Math.floor(innerW.value / 80));
-  const step = niceStep(len - 1, targetTicks);
-  const ticks: { value: string; x: number }[] = [];
-  for (let i = 0; i <= len - 1; i += step) {
-    const idx = Math.round(i);
-    ticks.push({
-      value: formatTick(idx + offset),
-      x: snap(padding.value.left + (idx / (len - 1)) * innerW.value),
-    });
-  }
-  return ticks;
+  const leftEdge = padding.value.left;
+  const rightEdge = padding.value.left + innerW.value;
+  const edgeSnapPx = 1;
+  return values.map((v, i) => {
+    const x = toX(v);
+    let anchor: "start" | "middle" | "end" = "middle";
+    if (x - leftEdge <= edgeSnapPx) anchor = "start";
+    else if (rightEdge - x <= edgeSnapPx) anchor = "end";
+    return { value: fmt(v, i), x, anchor };
+  });
 });
 
 function menuFilename() {
@@ -601,9 +659,13 @@ const hoverDots = computed(() => {
 const hoverSlotProps = computed(() => {
   const idx = hoverIndex.value;
   if (idx === null) return null;
+  const offset = props.xMin ?? 0;
+  const xLabel = props.xTickFormat
+    ? props.xTickFormat(idx + offset, idx)
+    : props.xLabels?.[idx];
   return {
     index: idx,
-    xLabel: props.xLabels?.[idx],
+    xLabel,
     values: allSeries.value.map((s, i) => ({
       value: s.data[idx],
       color: s.color ?? "currentColor",
@@ -815,7 +877,7 @@ const menuItems = computed<ChartMenuItem[]>(() => {
       <!-- y grid lines -->
       <template v-if="yGrid">
         <line
-          v-for="(tick, i) in yTicks"
+          v-for="(tick, i) in yTickItems"
           :key="'yg' + i"
           :x1="padding.left"
           :y1="tick.y"
@@ -828,7 +890,7 @@ const menuItems = computed<ChartMenuItem[]>(() => {
       <!-- x grid lines -->
       <template v-if="xGrid">
         <line
-          v-for="(tick, i) in xTicks"
+          v-for="(tick, i) in xTickItems"
           :key="'xg' + i"
           :x1="tick.x"
           :y1="padding.top"
@@ -840,8 +902,9 @@ const menuItems = computed<ChartMenuItem[]>(() => {
       </template>
       <!-- y tick labels -->
       <text
-        v-for="(tick, i) in yTicks"
+        v-for="(tick, i) in yTickItems"
         :key="'y' + i"
+        data-testid="y-tick"
         :x="padding.left - 6"
         :y="tick.y"
         text-anchor="end"
@@ -866,11 +929,12 @@ const menuItems = computed<ChartMenuItem[]>(() => {
       </text>
       <!-- x tick labels -->
       <text
-        v-for="(tick, i) in xTicks"
+        v-for="(tick, i) in xTickItems"
         :key="'x' + i"
+        data-testid="x-tick"
         :x="tick.x"
         :y="padding.top + innerH + 16"
-        text-anchor="middle"
+        :text-anchor="tick.anchor"
         font-size="10"
         fill="currentColor"
         fill-opacity="0.6"
