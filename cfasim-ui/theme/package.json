@@ -1,6 +1,6 @@
 {
   "name": "@cfasim-ui/theme",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "type": "module",
   "description": "CSS theming system for cfasim-ui",
   "license": "Apache-2.0",

@@ -1,6 +1,19 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.3.7] - 2026-04-17
+
+### Chores
+
+- Prepend to CHANGELOG.md instead of regenerating
+
+### Features
+
+- **cfasim-ui:** Add useUrlParams composable for URL query sync
+- **cfasim:** Init git repo after scaffolding
+- **charts:** Add xTicks/yTicks and tick formatters to LineChart
+- **shared:** Add include/ignore, async defaults, and reset options to useUrlParams
+
 ## [0.3.6] - 2026-04-17
 
 ### Bug Fixes
