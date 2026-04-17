@@ -1,4 +1,4 @@
-import { watch, onMounted, onUnmounted, isRef, type Ref } from "vue";
+import { isRef, onMounted, onUnmounted, toRaw, watch, type Ref } from "vue";
 
 /**
  * Minimal shape of vue-router's `Router` that `useUrlParams` needs.
@@ -10,13 +10,25 @@ export interface UrlParamsRouter {
 
 /**
  * Minimal shape of vue-router's `RouteLocationNormalized` that
- * `useUrlParams` reads to hydrate initial state.
+ * `useUrlParams` reads to hydrate initial state. `query` is typed as
+ * `Record<string, unknown>` because vue-router yields `string | string[] |
+ * null`; `deserialize` silently ignores non-string entries.
  */
 export interface UrlParamsRoute {
   query: Record<string, unknown>;
 }
 
-export type UrlParamsOptions = {
+/**
+ * Defaults can be:
+ *  - a plain object (sync, always available),
+ *  - a Ref<T> (reactive; useful when defaults are computed),
+ *  - a getter `() => T | undefined` (useful for async loads; return
+ *    `undefined` until defaults are ready, then call `hydrate()` from
+ *    the consumer).
+ */
+export type DefaultsInput<T> = T | Ref<T> | (() => T | undefined);
+
+export type UrlParamsOptions<T> = {
   debounceMs?: number;
   /**
    * Optional vue-router integration. Pass `useRouter()` and `useRoute()` from
@@ -26,6 +38,20 @@ export type UrlParamsOptions = {
    */
   router?: UrlParamsRouter;
   route?: UrlParamsRoute;
+  /**
+   * Only sync these keys. Useful when `defaults` contains labels, flags, or
+   * other fields the user never edits.
+   */
+  include?: (keyof T)[];
+  /**
+   * Sync all keys except these. Ignored if `include` is provided.
+   */
+  ignore?: (keyof T)[];
+};
+
+export type ResetOptions = {
+  /** Whether to clear the URL query in addition to resetting params. Default: true. */
+  clearUrl?: boolean;
 };
 
 export function serialize(value: unknown): string {
@@ -95,11 +121,45 @@ function writeLocationQuery(query: Record<string, string>) {
   window.history.replaceState(window.history.state, "", url);
 }
 
+function toGetter<T>(input: DefaultsInput<T>): () => T | undefined {
+  if (typeof input === "function") return input as () => T | undefined;
+  if (isRef(input)) return () => (input as Ref<T>).value;
+  return () => input as T;
+}
+
+function filterKeys<T extends object>(
+  obj: T,
+  include?: (keyof T)[],
+  ignore?: (keyof T)[],
+): T {
+  if (!include && !ignore) return obj;
+  const src = obj as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(src)) {
+    const key = k as keyof T;
+    if (include) {
+      if (include.includes(key)) out[k] = src[k];
+    } else if (ignore) {
+      if (!ignore.includes(key)) out[k] = src[k];
+    } else {
+      out[k] = src[k];
+    }
+  }
+  return out as T;
+}
+
 /**
- * Syncs a reactive params object with the URL query string.
- * Only values that differ from defaults appear in the URL.
- * On mount, applies any overrides from the current query string.
- * Accepts either a `ref()` or a `reactive()` object.
+ * Syncs a reactive params object with the URL query string. Only values
+ * that differ from defaults appear in the URL. Accepts either a `ref()`
+ * or a `reactive()` object.
+ *
+ * For async defaults (e.g. loaded from WASM/network), pass a getter or ref
+ * that returns `undefined` until ready, and call `hydrate()` once defaults
+ * are available. The composable also attempts hydration on mount; the
+ * first successful attempt "locks in" writes going forward.
+ *
+ * Browser back/forward and external `route.query` changes are picked up
+ * automatically (via `popstate` or a route watcher).
  *
  * By default, uses the browser History API directly. Consumers using
  * vue-router can pass `{ router: useRouter(), route: useRoute() }` so that
@@ -107,11 +167,16 @@ function writeLocationQuery(query: Record<string, string>) {
  */
 export function useUrlParams<T extends object>(
   params: T | Ref<T>,
-  defaults: T,
-  options: UrlParamsOptions = {},
+  defaults: DefaultsInput<T>,
+  options: UrlParamsOptions<T> = {},
 ) {
   const debounceMs = options.debounceMs ?? 300;
-  const { router, route } = options;
+  const { router, route, include, ignore } = options;
+  const getDefaults = toGetter<T>(defaults);
+  const scopedDefaults = (): T | undefined => {
+    const d = getDefaults();
+    return d === undefined ? undefined : filterKeys(d, include, ignore);
+  };
 
   function readQuery(): Record<string, unknown> {
     if (route) return route.query;
@@ -130,8 +195,18 @@ export function useUrlParams<T extends object>(
     return isRef(params) ? params.value : params;
   }
 
-  function apply(overrides: Partial<T>) {
-    const merged = { ...structuredClone(defaults), ...overrides } as T;
+  function apply(overrides: Partial<T>, d: T) {
+    // Layer order (later wins): current params -> defaults -> URL overrides.
+    // Starting from current preserves keys outside the sync scope (i.e.
+    // those filtered out by `include`/`ignore`), which matters when `params`
+    // is a ref and the whole object gets replaced below. `toRaw` unwraps
+    // reactive proxies so `structuredClone` doesn't choke.
+    const current = toRaw(read());
+    const merged = {
+      ...structuredClone(current),
+      ...structuredClone(toRaw(d)),
+      ...overrides,
+    } as T;
     if (isRef(params)) {
       params.value = merged;
     } else {
@@ -141,12 +216,28 @@ export function useUrlParams<T extends object>(
 
   let hydrated = false;
 
-  onMounted(() => {
-    const overrides = queryToParams(readQuery(), defaults);
-    if (Object.keys(overrides).length > 0) {
-      apply(overrides);
-    }
+  function hydrate(): boolean {
+    const d = scopedDefaults();
+    if (d === undefined) return false;
+    const overrides = queryToParams(readQuery(), d);
+    if (Object.keys(overrides).length > 0) apply(overrides, d);
     hydrated = true;
+    return true;
+  }
+
+  function syncFromUrl() {
+    if (!hydrated) {
+      hydrate();
+      return;
+    }
+    const d = scopedDefaults();
+    if (d === undefined) return;
+    const overrides = queryToParams(readQuery(), d);
+    apply(overrides, d);
+  }
+
+  onMounted(() => {
+    hydrate();
   });
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -157,21 +248,49 @@ export function useUrlParams<T extends object>(
       if (!hydrated) return;
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
-        writeQuery(paramsToQuery(read(), defaults));
+        const d = scopedDefaults();
+        if (d === undefined) return;
+        writeQuery(paramsToQuery(read(), d));
       }, debounceMs);
     },
     { deep: true },
   );
 
-  function reset() {
-    apply({});
-    if (debounceTimer) clearTimeout(debounceTimer);
-    writeQuery({});
+  // React to external query changes (back/forward, programmatic nav).
+  let stopRouteWatch: (() => void) | null = null;
+  function onPopState() {
+    syncFromUrl();
+  }
+  onMounted(() => {
+    if (route) {
+      stopRouteWatch = watch(
+        () => route.query,
+        () => syncFromUrl(),
+        { deep: true },
+      );
+    } else {
+      window.addEventListener("popstate", onPopState);
+    }
+  });
+  onUnmounted(() => {
+    if (stopRouteWatch) stopRouteWatch();
+    else window.removeEventListener("popstate", onPopState);
+  });
+
+  function reset(opts: ResetOptions = {}) {
+    const { clearUrl = true } = opts;
+    const d = scopedDefaults();
+    if (d === undefined) return;
+    apply({}, d);
+    if (clearUrl) {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      writeQuery({});
+    }
   }
 
   onUnmounted(() => {
     if (debounceTimer) clearTimeout(debounceTimer);
   });
 
-  return { reset };
+  return { reset, hydrate };
 }

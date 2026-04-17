@@ -8,7 +8,10 @@ Syncs a reactive params object with the URL query string.
 
 - On mount: reads `route.query` and overrides any matching defaults.
 - On change: debounces for 300ms, then calls `router.replace({ query })` with only the values that differ from defaults. Default values are omitted to keep URLs short.
-- Returns `{ reset }` — resets params to defaults and clears the query string.
+- Reacts to browser back/forward and external `route.query` changes (via `popstate` or a route watcher).
+- Returns `{ reset, hydrate }`:
+  - `reset(opts?)` — resets synced params to defaults. Clears the URL query by default; pass `{ clearUrl: false }` to leave the URL alone.
+  - `hydrate()` — manually re-applies the current query onto params. Returns `true` once defaults are available, `false` while still waiting (see [Async defaults](#async-defaults)).
 
 ### Usage
 
@@ -61,19 +64,55 @@ Query strings are always strings, so deserialization is driven by the type of ea
 
 ### Options
 
-| Option       | Type     | Default | Purpose                                                   |
-| ------------ | -------- | ------- | --------------------------------------------------------- |
-| `debounceMs` | `number` | `300`   | How long to wait after a param change before writing URL. |
-| `router`     | `Router` | —       | Optional vue-router `useRouter()` instance.               |
-| `route`      | `Route`  | —       | Optional vue-router `useRoute()` instance.                |
+| Option       | Type          | Default | Purpose                                                                |
+| ------------ | ------------- | ------- | ---------------------------------------------------------------------- |
+| `debounceMs` | `number`      | `300`   | How long to wait after a param change before writing URL.              |
+| `router`     | `Router`      | —       | Optional vue-router `useRouter()` instance.                            |
+| `route`      | `Route`       | —       | Optional vue-router `useRoute()` instance.                             |
+| `include`    | `(keyof T)[]` | —       | Only sync these keys. Other keys are left entirely out of the URL.     |
+| `ignore`     | `(keyof T)[]` | —       | Sync everything except these keys. Ignored when `include` is provided. |
+
+Use `include`/`ignore` when `defaults` contains fields the user never edits (labels, UI flags) or ephemeral state you want to keep out of the URL. Keys filtered out are also preserved across `hydrate()` and `reset()`, even when `params` is a `ref()` (whose whole object gets replaced on write).
+
+### Restricting which keys sync
+
+```vue
+<script setup lang="ts">
+const defaults = { population: 20, p: 0.1, label: "Run 1", debug: false };
+const params = reactive({ ...defaults });
+useUrlParams(params, defaults, { ignore: ["label", "debug"] });
+</script>
+```
+
+### Async defaults
+
+If the initial defaults come from an async source (WASM, network), pass a getter that returns `undefined` until ready, and call `hydrate()` when they arrive:
+
+```vue
+<script setup lang="ts">
+const params = reactive<Params>({} as Params);
+let defaults: Params | undefined;
+const { hydrate } = useUrlParams(params, () => defaults);
+
+onMounted(async () => {
+  defaults = await loadDefaults();
+  Object.assign(params, defaults);
+  hydrate(); // re-apply any URL overrides now that defaults exist
+});
+</script>
+```
+
+You can also pass a `Ref<T>` as defaults if they are reactive.
 
 ### Reset button
 
 Pair the returned `reset` with a Button to restore defaults:
 
 ```vue
-<Button variant="secondary" @click="reset">Reset</Button>
+<Button variant="secondary" @click="() => reset()">Reset</Button>
 ```
+
+Pass `{ clearUrl: false }` to reset params in place without touching the URL (e.g. when another part of the app is about to navigate).
 
 ### Caveats
 
