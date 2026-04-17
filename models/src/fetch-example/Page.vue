@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, watch, computed, onMounted } from "vue";
-import { SelectBox, Toggle, Spinner } from "@cfasim-ui/components";
+import { ref, reactive, watch, computed, onMounted } from "vue";
+import { useRouter, useRoute } from "vue-router";
+import { SelectBox, Toggle, Spinner, Button } from "@cfasim-ui/components";
 import { ChoroplethMap } from "@cfasim-ui/charts";
 import type { StateData } from "@cfasim-ui/charts";
+import { useUrlParams } from "@cfasim-ui/shared";
 import usStates from "us-atlas/states-10m.json";
 import usCounties from "us-atlas/counties-10m.json";
 import type { Topology } from "topojson-specification";
@@ -16,11 +18,19 @@ interface WeekData {
 
 const BASE = import.meta.env.BASE_URL;
 
+const defaults = {
+  metric: "covid" as Metric,
+  countyLevel: true,
+  selectedWeek: "",
+};
+const params = reactive({ ...defaults });
+const { reset } = useUrlParams(params, defaults, {
+  router: useRouter(),
+  route: useRoute(),
+});
+
 const loading = ref(true);
 const weeks = ref<string[]>([]);
-const selectedWeek = ref("");
-const metric = ref<Metric>("covid");
-const countyLevel = ref(true);
 const fipsToHsaNci = ref<Record<string, string>>({});
 const weekData = ref<WeekData | null>(null);
 const weekLoading = ref(false);
@@ -43,18 +53,23 @@ onMounted(async () => {
   ]);
   weeks.value = manifest.weeks;
   fipsToHsaNci.value = fipsMap;
-  selectedWeek.value = weeks.value[weeks.value.length - 1];
+  if (!params.selectedWeek || !weeks.value.includes(params.selectedWeek)) {
+    params.selectedWeek = weeks.value[weeks.value.length - 1];
+  }
 
-  weekData.value = await loadWeek(selectedWeek.value);
+  weekData.value = await loadWeek(params.selectedWeek);
   loading.value = false;
 });
 
-watch(selectedWeek, async (week) => {
-  if (!week || loading.value) return;
-  weekLoading.value = true;
-  weekData.value = await loadWeek(week);
-  weekLoading.value = false;
-});
+watch(
+  () => params.selectedWeek,
+  async (week) => {
+    if (!week || loading.value) return;
+    weekLoading.value = true;
+    weekData.value = await loadWeek(week);
+    weekLoading.value = false;
+  },
+);
 
 const weekOptions = computed(() =>
   weeks.value.map((w) => ({ value: w, label: w })),
@@ -63,10 +78,10 @@ const weekOptions = computed(() =>
 const mapData = computed<StateData[]>(() => {
   if (!weekData.value) return [];
 
-  if (!countyLevel.value) {
+  if (!params.countyLevel) {
     const data: StateData[] = [];
     for (const [name, entry] of Object.entries(weekData.value.state)) {
-      const v = entry[metric.value];
+      const v = entry[params.metric];
       if (v != null) data.push({ id: name, value: v });
     }
     return data;
@@ -76,30 +91,30 @@ const mapData = computed<StateData[]>(() => {
   const hsaData = weekData.value.hsa;
   const data: StateData[] = [];
   for (const [fips, nciId] of Object.entries(fipsToHsaNci.value)) {
-    const v = hsaData[nciId]?.[metric.value];
+    const v = hsaData[nciId]?.[params.metric];
     if (v != null) data.push({ id: fips, value: v });
   }
   return data;
 });
 
-const geoType = computed(() => (countyLevel.value ? "counties" : "states"));
+const geoType = computed(() => (params.countyLevel ? "counties" : "states"));
 const topology = computed<Topology>(
-  () => (countyLevel.value ? usCounties : usStates) as unknown as Topology,
+  () => (params.countyLevel ? usCounties : usStates) as unknown as Topology,
 );
 
 const metricLabel = computed(() =>
-  metric.value === "covid" ? "COVID" : "Influenza",
+  params.metric === "covid" ? "COVID" : "Influenza",
 );
 
 const title = computed(
-  () => `% ED visits — ${metricLabel.value} — ${selectedWeek.value}`,
+  () => `% ED visits — ${metricLabel.value} — ${params.selectedWeek}`,
 );
 
 function formatTooltip(data: {
   name: string;
   value?: number | string;
 }): string {
-  const label = metric.value === "covid" ? "COVID" : "influenza";
+  const label = params.metric === "covid" ? "COVID" : "influenza";
   if (data.value != null) {
     return `<strong>${data.name}</strong><br>${data.value}% of ED visits were ${label}`;
   }
@@ -109,18 +124,19 @@ function formatTooltip(data: {
 
 <template>
   <Teleport to="#model-sidebar">
+    <Button variant="secondary" @click="reset">Reset</Button>
     <h2>Parameters</h2>
     <SelectBox
-      v-model="metric"
+      v-model="params.metric"
       label="Metric"
       :options="[
         { value: 'covid', label: 'COVID' },
         { value: 'influenza', label: 'Influenza' },
       ]"
     />
-    <Toggle v-model="countyLevel" label="County-level (HSA)" />
+    <Toggle v-model="params.countyLevel" label="County-level (HSA)" />
     <SelectBox
-      v-model="selectedWeek"
+      v-model="params.selectedWeek"
       label="Week ending"
       :options="weekOptions"
     />
@@ -134,8 +150,8 @@ function formatTooltip(data: {
     :data="mapData"
     :geo-type="geoType"
     :title="title"
-    :zoom="countyLevel"
-    :pan="countyLevel"
+    :zoom="params.countyLevel"
+    :pan="params.countyLevel"
     legend-title="% visits"
     tooltip-trigger="hover"
     :tooltip-format="formatTooltip"

@@ -17,5 +17,8 @@
   ],
   "exports": {
     ".": "./src/index.ts"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
   }
 }

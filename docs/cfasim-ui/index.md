@@ -11,6 +11,7 @@ cfasim-ui is the shared component and theming library you use to make simulators
 | `@cfasim-ui/theme`      | Design tokens, reset, and utility classes                                       |
 | `@cfasim-ui/pyodide`    | Run Python models in the browser via [Pyodide](https://pyodide.org) Web Workers |
 | `@cfasim-ui/wasm`       | Run Rust/WASM models in the browser via a Web Worker                            |
+| `@cfasim-ui/shared`     | Shared utilities, including the [`useUrlParams`](./shared) composable           |
 
 ## Components
 

@@ -22,6 +22,7 @@ export default defineConfig({
         items: [
           { text: "Overview", link: "/cfasim-ui/" },
           { text: "Theme", link: "/cfasim-ui/theme" },
+          { text: "Shared", link: "/cfasim-ui/shared" },
           {
             text: "Components",
             collapsed: false,

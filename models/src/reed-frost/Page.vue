@@ -1,16 +1,23 @@
 <script setup lang="ts">
 import { reactive, computed } from "vue";
-import { NumberInput } from "@cfasim-ui/components";
+import { useRouter, useRoute } from "vue-router";
+import { NumberInput, Button } from "@cfasim-ui/components";
 import { LineChart, DataTable } from "@cfasim-ui/charts";
 import type { Series } from "@cfasim-ui/charts";
 import { useModel } from "@cfasim-ui/wasm";
+import { useUrlParams } from "@cfasim-ui/shared";
 
-const params = reactive({
+const defaults = {
   population: 20,
   initial_infected: 1,
   p: 0.1,
   generations: 20,
   n_trajectories: 100,
+};
+const params = reactive({ ...defaults });
+const { reset } = useUrlParams(params, defaults, {
+  router: useRouter(),
+  route: useRoute(),
 });
 const { useOutputs } = useModel("rust_example");
 const { outputs, error } = useOutputs("simulate", params);
@@ -19,8 +26,6 @@ const chartSeries = computed<Series[]>(() => {
   const d = outputs.value?.data;
   if (!d) return [];
 
-  const gen = d.column("generation");
-  const traj = d.column("trajectory");
   const cum = d.column("cumulative_infections");
 
   const nGen = params.generations + 1;
@@ -41,6 +46,7 @@ const chartSeries = computed<Series[]>(() => {
 
 <template>
   <Teleport to="#model-sidebar">
+    <Button variant="secondary" @click="reset">Reset</Button>
     <h2>Parameters</h2>
     <NumberInput
       v-model="params.population"
