@@ -36,8 +36,10 @@ depends = ["build"]
 run = "node scripts/check-bundle-size.mjs"
 git_hook = "pre-push"
 
-# Bump all package versions + regenerate CHANGELOG.md (patch, minor, or major).
-# Leaves changes unstaged so you can review/edit before committing.
+# Bump all package versions + prepend a new CHANGELOG.md section for the
+# unreleased commits (patch, minor, or major). Past changelog sections are
+# left untouched. Leaves changes unstaged so you can review/edit before
+# committing.
 [tasks.version]
 run = "node scripts/version.mjs ${1}"
 

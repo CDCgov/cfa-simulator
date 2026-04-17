@@ -4,8 +4,10 @@
  * Two-step release flow:
  *   1. `node scripts/version.mjs <patch|minor|major>`
  *        Bumps versions across npm/cargo/pypi packages, refreshes Cargo.lock,
- *        and regenerates CHANGELOG.md. Leaves everything unstaged so you can
- *        review and edit before committing.
+ *        and prepends a new section to CHANGELOG.md for the unreleased
+ *        commits since the latest tag. Past sections are left untouched so
+ *        manual edits survive. Leaves everything unstaged so you can review
+ *        and edit before committing.
  *   2. `node scripts/version.mjs commit`
  *        Stages the changed files, creates the `release: vX.Y.Z` commit,
  *        and tags it.
@@ -94,8 +96,19 @@ function bumpAll(type) {
   );
 
   const tag = `v${newVersion}`;
+  if (
+    existsSync("CHANGELOG.md") &&
+    readFileSync("CHANGELOG.md", "utf8").includes(`## [${newVersion}]`)
+  ) {
+    console.error(
+      `\nCHANGELOG.md already has a [${newVersion}] section. Revert it before re-running this script.`,
+    );
+    process.exit(1);
+  }
   try {
-    execSync(`git cliff --tag ${tag} -o CHANGELOG.md`, { stdio: "inherit" });
+    execSync(`git cliff --unreleased --tag ${tag} --prepend CHANGELOG.md`, {
+      stdio: "inherit",
+    });
   } catch {
     console.error(
       "\nFailed to run git-cliff. Install it with `cargo install git-cliff` (or see `plz setup`).",
