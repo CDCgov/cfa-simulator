@@ -317,6 +317,7 @@ if (route) {
   overflow: hidden;
   background-color: var(--color-bg-0);
   font-size: var(--font-size-md);
+  container-type: inline-size;
 }
 
 .Topbar {
@@ -334,7 +335,7 @@ if (route) {
   gap: var(--space-1);
 }
 
-@media (min-width: 768px) {
+@container (min-width: 768px) {
   .Topbar {
     padding: 0 var(--space-4) 0 var(--space-20);
   }
@@ -359,7 +360,7 @@ if (route) {
   padding: 0 var(--space-4);
 }
 
-@media (min-width: 768px) {
+@container (min-width: 768px) {
   .MainContent {
     padding: 0 var(--space-4) 0 var(--space-20);
   }
