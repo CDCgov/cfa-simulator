@@ -9,33 +9,35 @@ This guide walks through setting up a cfasim-ui project that runs a Rust model c
 - [Rust](https://www.rust-lang.org/tools/install) toolchain
 - [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/) — for compiling Rust to WASM
 
-## Create the project
+You can check these with `uvx cfasim tools` (or `cfasim tools` if you've installed the CLI).
 
-Scaffold a Vite + Vue app and install cfasim-ui packages:
+## Recommended: scaffold with `cfasim init`
+
+The fastest way to start is with `uvx`, which runs `cfasim` ephemerally without installing it:
 
 ```bash
-pnpm create vite my-sim --template vue-ts
-cd my-sim
-pnpm add vue @cfasim-ui/components @cfasim-ui/charts @cfasim-ui/wasm @cfasim-ui/theme
-pnpm add -D @vitejs/plugin-vue vite typescript
+uvx cfasim init
 ```
 
-## Set up the Rust model
+Follow the prompts to pick a project name and choose the **Rust** template. `cfasim init` generates a Vite + Vue app with a working WASM model already wired up, ready to `pnpm dev`.
 
-Create a Rust library in a `model/` directory:
+See [Getting Started](../getting-started) for other ways to install `cfasim`.
 
-```
-model/
-├── Cargo.toml
-└── src/
-    └── lib.rs
-```
+## Adding cfasim-ui to an existing Rust project
 
-**`model/Cargo.toml`**:
+This section assumes you already have a Rust crate with a simulation function — for example, `my_sim/` with a `Cargo.toml` and a `lib.rs` exporting a `simulate(...)` function. What you don't have yet is a frontend.
+
+The steps below walk through adding a new `ui/` directory next to your crate, wiring it up with pnpm, Vite, Vue, and cfasim-ui, and pointing the WASM plugin at your existing crate.
+
+### Prepare your Rust crate
+
+Make sure your crate builds as a `cdylib` and depends on `wasm-bindgen` and `cfasim-model`. The `cfasim-model` crate provides the `ModelOutput` and `model_outputs` helpers that the UI uses to read your simulation results.
+
+**`my_sim/Cargo.toml`** (minimum required):
 
 ```toml
 [package]
-name = "my-sim"
+name = "my_sim"
 version = "0.1.0"
 edition = "2021"
 
@@ -47,7 +49,7 @@ wasm-bindgen = "0.2"
 cfasim-model = "0.1"
 ```
 
-**`model/src/lib.rs`**:
+**`my_sim/src/lib.rs`**:
 
 ```rust
 use cfasim_model::{model_outputs, ModelOutput};
@@ -56,81 +58,163 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 pub fn simulate(steps: u32, rate: f64) -> JsValue {
     let time: Vec<f64> = (0..steps).map(|i| i as f64).collect();
-    let values: Vec<f64> = time
-        .iter()
-        .map(|t| (rate * t / steps as f64).exp())
-        .collect();
+    let values: Vec<f64> = (0..steps).map(|i| rate * i as f64).collect();
 
-    let series = ModelOutput::new()
-        .with_f64("time", time)
-        .with_f64("values", values);
+    let series = ModelOutput::new(steps as usize)
+        .add_f64("time", time)
+        .add_f64("values", values);
 
     model_outputs([("series", series)])
 }
 ```
 
-## Configure Vite
+Each `#[wasm_bindgen]`-exported function becomes a callable entry point from the UI side.
 
-The `@cfasim-ui/wasm` package provides a Vite plugin that runs `wasm-pack build` and serves the output.
+### Create a frontend directory
 
-**`vite.config.ts`**:
+Next to your Rust crate, create a new directory for the frontend and initialize it with pnpm:
+
+```bash
+mkdir ui
+cd ui
+pnpm init
+```
+
+Install runtime and dev dependencies:
+
+```bash
+pnpm add vue cfasim-ui
+pnpm add -D @vitejs/plugin-vue vite typescript
+```
+
+`cfasim-ui` is a single package that re-exports subpath entries for each area (`cfasim-ui/components`, `cfasim-ui/charts`, `cfasim-ui/wasm`, `cfasim-ui/shared`, `cfasim-ui/theme`).
+
+Add `"type": "module"` and dev scripts to the generated `package.json`:
+
+```json
+{
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  }
+}
+```
+
+### Configure Vite
+
+`cfasim-ui/wasm/vite` provides a Vite plugin that runs `wasm-pack build` and serves the output. Point the `model` option at your existing crate (relative to the `ui/` directory). Since the frontend directory name (`ui`) doesn't match your crate name, also pass `name` so the output lands at `public/wasm/my_sim/`:
+
+**`ui/vite.config.ts`**:
 
 ```ts
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
-import { cfasimWasm } from "@cfasim-ui/wasm/vite";
+import { cfasimWasm } from "cfasim-ui/wasm/vite";
 
 export default defineConfig({
-  plugins: [vue(), cfasimWasm()],
+  plugins: [vue(), cfasimWasm({ model: "../my_sim", name: "my_sim" })],
 });
 ```
 
-The plugin compiles your `model/` crate and outputs to `public/wasm/{project-name}/`.
+The plugin runs `wasm-pack build ../my_sim --target web --out-dir public/wasm/my_sim`. The worker loads `/wasm/{name}/{name}.js` at runtime, so `name` must match the crate name (with hyphens converted to underscores).
 
-## Wire up the app
+Options:
 
-**`src/main.ts`**:
+- `model` — path to your Rust crate directory (default: `"model"`)
+- `name` — output directory name and module name the worker loads (default: the Vite project directory's basename, hyphens converted to underscores)
+
+Add a minimal `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}
+```
+
+### Wire up the app
+
+**`ui/index.html`**:
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Sim</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
+    />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+```
+
+**`ui/src/main.ts`**:
 
 ```ts
-import "@cfasim-ui/theme/all";
 import { createApp } from "vue";
+import "cfasim-ui/theme/all";
 import App from "./App.vue";
 
 createApp(App).mount("#app");
 ```
 
-**`src/App.vue`**:
+**`ui/src/App.vue`**:
 
 ```vue
 <script setup lang="ts">
 import { reactive } from "vue";
-import { SidebarLayout, NumberInput } from "@cfasim-ui/components";
-import { LineChart } from "@cfasim-ui/charts";
-import { useModel } from "@cfasim-ui/wasm";
+import { SidebarLayout, NumberInput, Button } from "cfasim-ui/components";
+import { useModel } from "cfasim-ui/wasm";
+import { useUrlParams } from "cfasim-ui/shared";
 
-const params = reactive({ steps: 100, rate: 0.5 });
-const { useOutputs } = useModel("my-sim");
+const defaults = { steps: 10, rate: 2.5 };
+const params = reactive({ ...defaults });
+const { reset } = useUrlParams(params, defaults);
+const { useOutputs } = useModel("my_sim");
 const { outputs, loading } = useOutputs("simulate", params);
 </script>
 
 <template>
   <SidebarLayout>
     <template #sidebar>
-      <NumberInput v-model="params.steps" label="Steps" :min="1" :max="500" />
-      <NumberInput
-        v-model="params.rate"
-        label="Rate"
-        :min="0"
-        :max="2"
-        :step="0.1"
-      />
+      <Button variant="secondary" @click="reset">Reset</Button>
+      <NumberInput v-model="params.steps" label="Steps" />
+      <NumberInput v-model="params.rate" label="Rate" />
     </template>
-    <LineChart v-if="outputs?.series" :model-output="outputs.series" />
+    <p v-if="loading">Loading...</p>
+    <template v-else-if="outputs?.series">
+      <ul>
+        <li v-for="(_, i) in outputs.series.column('time')" :key="i">
+          t={{ outputs.series.column("time")[i] }}, v={{
+            outputs.series.column("values")[i]
+          }}
+        </li>
+      </ul>
+    </template>
   </SidebarLayout>
 </template>
 ```
 
-## Run it
+`useModel("my_sim")` must match the `name` you passed to `cfasimWasm`, which in turn must match your crate name (with hyphens converted to underscores). `useUrlParams` syncs your reactive params to the URL query string so reloads and shares preserve state.
+
+### Run it
 
 ```bash
 pnpm dev
