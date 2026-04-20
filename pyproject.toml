@@ -5,7 +5,9 @@ build-backend = "maturin"
 [project]
 name = "cfasim"
 description = "CLI for scaffolding interactive simulations using Python, Rust, and WebAssembly"
+readme = "README.md"
 license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.8"
 dynamic = ["version"]
 
@@ -16,3 +18,7 @@ Repository = "https://github.com/CDCgov/cfa-simulator"
 bindings = "bin"
 manifest-path = "cfasim/Cargo.toml"
 strip = true
+include = [
+  { path = "LICENSE", format = "sdist" },
+  { path = "README.md", format = "sdist" },
+]
