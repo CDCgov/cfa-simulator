@@ -45,6 +45,10 @@ jobs:
           cp -r models/dist/* _site/
           cp -r docs/.vitepress/dist _site/docs
           cp _site/index.html _site/404.html
+      - name: Copy installer scripts
+        run: |
+          curl -fsSL https://github.com/${{ github.repository }}/releases/latest/download/cfasim-installer.sh -o _site/install.sh
+          curl -fsSL https://github.com/${{ github.repository }}/releases/latest/download/cfasim-installer.ps1 -o _site/install.ps1
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site
