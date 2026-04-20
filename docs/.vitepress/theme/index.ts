@@ -1,3 +1,4 @@
+import { h } from "vue";
 import DefaultTheme from "vitepress/theme";
 import type { Theme } from "vitepress";
 import "@cfasim-ui/components/style.css";
@@ -21,9 +22,15 @@ import { ChoroplethMap, DataTable, LineChart } from "@cfasim-ui/charts";
 import usStates from "us-atlas/states-10m.json";
 import usCounties from "us-atlas/counties-10m.json";
 import ComponentDemo from "./ComponentDemo.vue";
+import InstallBox from "./InstallBox.vue";
 
 export default {
   extends: DefaultTheme,
+  Layout() {
+    return h(DefaultTheme.Layout, null, {
+      "home-features-after": () => h(InstallBox),
+    });
+  },
   enhanceApp({ app }) {
     app.component("Box", Box);
     app.component("Button", Button);

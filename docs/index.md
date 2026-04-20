@@ -1,8 +1,8 @@
 ---
 layout: home
 hero:
-  name: CFA Simulator Docs
-  tagline: Guides and reference for contributors
+  name: cfasim
+  tagline: Interactive modeling in Python and Rust
 features:
   - title: Getting Started
     details: Set up your local development environment and learn the basics
