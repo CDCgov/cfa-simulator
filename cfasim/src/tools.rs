@@ -17,8 +17,8 @@ struct MinVersion {
 // Sourced from the repo at build time so minimums stay in sync with:
 //   .node-version  → node
 //   package.json   → pnpm (via packageManager field)
-//   Cargo.toml     → cargo (via [workspace.package].rust-version)
-// wasm-pack has no in-repo source of truth, so it stays hardcoded.
+//   Cargo.toml     → cargo     (via [workspace.package].rust-version)
+//                    wasm-pack (via [workspace.metadata.cfasim].wasm-pack-min)
 // uv uses `uv self update --dry-run` instead of a pinned minimum.
 const NODE_VERSION_FILE: &str = include_str!("../../.node-version");
 const PACKAGE_JSON: &str = include_str!("../../package.json");
@@ -37,10 +37,10 @@ fn parse_pnpm_min(package_json: &str) -> Option<Version> {
     parse_first_semver(&package_json[idx + 5..])
 }
 
-fn parse_rust_min(cargo_toml: &str) -> Option<Version> {
-    let key = "rust-version = \"";
-    let idx = cargo_toml.find(key)?;
-    let after = &cargo_toml[idx + key.len()..];
+fn parse_toml_version_field(source: &str, key: &str) -> Option<Version> {
+    let needle = format!("{key} = \"");
+    let idx = source.find(&needle)?;
+    let after = &source[idx + needle.len()..];
     let end = after.find('"')?;
     let value = &after[..end];
     let parts: Vec<&str> = value.split('.').collect();
@@ -57,9 +57,10 @@ fn min_versions() -> MinVersion {
             .expect("failed to parse .node-version at build time"),
         pnpm: parse_pnpm_min(PACKAGE_JSON)
             .expect("failed to parse packageManager from package.json"),
-        cargo: parse_rust_min(WORKSPACE_CARGO_TOML)
+        cargo: parse_toml_version_field(WORKSPACE_CARGO_TOML, "rust-version")
             .expect("failed to parse rust-version from workspace Cargo.toml"),
-        wasm_pack: Version::new(0, 13, 0),
+        wasm_pack: parse_toml_version_field(WORKSPACE_CARGO_TOML, "wasm-pack-min")
+            .expect("failed to parse wasm-pack-min from workspace Cargo.toml"),
     }
 }
 
@@ -421,22 +422,38 @@ mod tests {
     }
 
     #[test]
-    fn parses_rust_version_two_parts() {
+    fn parses_toml_version_field_two_parts() {
         let toml = "[workspace.package]\nrust-version = \"1.80\"\n";
-        assert_eq!(parse_rust_min(toml), Some(Version::new(1, 80, 0)));
+        assert_eq!(
+            parse_toml_version_field(toml, "rust-version"),
+            Some(Version::new(1, 80, 0))
+        );
     }
 
     #[test]
-    fn parses_rust_version_three_parts() {
+    fn parses_toml_version_field_three_parts() {
         let toml = "rust-version = \"1.82.1\"\n";
-        assert_eq!(parse_rust_min(toml), Some(Version::new(1, 82, 1)));
+        assert_eq!(
+            parse_toml_version_field(toml, "rust-version"),
+            Some(Version::new(1, 82, 1))
+        );
+    }
+
+    #[test]
+    fn parses_toml_custom_field() {
+        let toml = "[workspace.metadata.cfasim]\nwasm-pack-min = \"0.13\"\n";
+        assert_eq!(
+            parse_toml_version_field(toml, "wasm-pack-min"),
+            Some(Version::new(0, 13, 0))
+        );
     }
 
     #[test]
     fn embedded_files_parse_at_runtime() {
         assert!(parse_node_min(NODE_VERSION_FILE).is_some());
         assert!(parse_pnpm_min(PACKAGE_JSON).is_some());
-        assert!(parse_rust_min(WORKSPACE_CARGO_TOML).is_some());
+        assert!(parse_toml_version_field(WORKSPACE_CARGO_TOML, "rust-version").is_some());
+        assert!(parse_toml_version_field(WORKSPACE_CARGO_TOML, "wasm-pack-min").is_some());
     }
 
     #[test]
