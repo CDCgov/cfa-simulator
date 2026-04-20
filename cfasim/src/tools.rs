@@ -1,6 +1,11 @@
 use anyhow::Result;
 use semver::Version;
 use std::process::Command;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
+
+const UV_UPDATE_CHECK_TIMEOUT: Duration = Duration::from_secs(5);
 
 struct MinVersion {
     node: Version,
@@ -178,10 +183,16 @@ fn check_uv() -> Status {
     let Some(current) = run_version("uv", "--version") else {
         return Status::Missing;
     };
-    let Ok(output) = Command::new("uv")
-        .args(["self", "update", "--dry-run"])
-        .output()
-    else {
+    // uv self update --dry-run hits the network. Run it in a thread with a
+    // short timeout so a slow or offline network doesn't stall the diagnostic.
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let result = Command::new("uv")
+            .args(["self", "update", "--dry-run"])
+            .output();
+        let _ = tx.send(result);
+    });
+    let Ok(Ok(output)) = rx.recv_timeout(UV_UPDATE_CHECK_TIMEOUT) else {
         return Status::Ok(current);
     };
     if !output.status.success() {
