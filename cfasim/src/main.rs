@@ -45,6 +45,7 @@ enum TemplateArg {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let is_update = matches!(cli.command, Commands::Update);
+    let is_tools = matches!(cli.command, Commands::Tools);
     if !is_update {
         settings::prompt_for_updates_if_first_run();
     }
@@ -64,7 +65,7 @@ fn main() -> Result<()> {
         Commands::Tools => tools::run(),
     };
 
-    if !is_update {
+    if !is_update && !is_tools {
         update_check::maybe_print_update_hint();
     }
     result

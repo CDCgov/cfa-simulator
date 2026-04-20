@@ -59,7 +59,7 @@ fn write_cache(path: &std::path::Path, latest_version: &str) {
     let _ = std::fs::write(path, content);
 }
 
-fn fetch_latest_version() -> Option<String> {
+pub(crate) fn fetch_latest_version() -> Option<String> {
     let mut updater = crate::update::configured_updater();
     let current = env!("CARGO_PKG_VERSION");
     updater.set_current_version(current.parse().ok()?).ok()?;

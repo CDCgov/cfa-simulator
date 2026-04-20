@@ -5,7 +5,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-const UV_UPDATE_CHECK_TIMEOUT: Duration = Duration::from_secs(5);
+const UPDATE_CHECK_TIMEOUT: Duration = Duration::from_secs(5);
 
 struct MinVersion {
     node: Version,
@@ -179,6 +179,31 @@ fn report(name: &str, status: &Status, hint: Option<&str>) {
     }
 }
 
+fn check_cfasim() -> Status {
+    let current = match Version::parse(env!("CARGO_PKG_VERSION")) {
+        Ok(v) => v,
+        Err(_) => return Status::Ok(Version::new(0, 0, 0)),
+    };
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let _ = tx.send(crate::update_check::fetch_latest_version());
+    });
+    let Ok(Some(latest_str)) = rx.recv_timeout(UPDATE_CHECK_TIMEOUT) else {
+        return Status::Ok(current);
+    };
+    let Ok(latest) = Version::parse(&latest_str) else {
+        return Status::Ok(current);
+    };
+    if latest > current {
+        Status::UpdateAvailable {
+            found: current,
+            latest,
+        }
+    } else {
+        Status::Ok(current)
+    }
+}
+
 fn check_uv() -> Status {
     let Some(current) = run_version("uv", "--version") else {
         return Status::Missing;
@@ -192,7 +217,7 @@ fn check_uv() -> Status {
             .output();
         let _ = tx.send(result);
     });
-    let Ok(Ok(output)) = rx.recv_timeout(UV_UPDATE_CHECK_TIMEOUT) else {
+    let Ok(Ok(output)) = rx.recv_timeout(UPDATE_CHECK_TIMEOUT) else {
         return Status::Ok(current);
     };
     if !output.status.success() {
@@ -233,6 +258,13 @@ pub fn run() -> Result<()> {
 
     let min = min_versions();
     let mut results: Vec<(String, Status, Option<String>)> = Vec::new();
+
+    let cfasim = check_cfasim();
+    let cfasim_hint = match &cfasim {
+        Status::UpdateAvailable { .. } => Some("Upgrade cfasim: cfasim update".into()),
+        _ => None,
+    };
+    results.push(("cfasim".into(), cfasim, cfasim_hint));
 
     let node = check("node", "--version", &min.node);
     let node_hint = match &node {
