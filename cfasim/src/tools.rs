@@ -10,10 +10,31 @@ struct MinVersion {
     wasm_pack: Version,
 }
 
+// Sourced from the repo at build time so minimums stay in sync with .node-version
+// and package.json's packageManager field. uv/cargo/wasm-pack have no in-repo
+// source of truth, so they remain hardcoded.
+const NODE_VERSION_FILE: &str = include_str!("../../.node-version");
+const PACKAGE_JSON: &str = include_str!("../../package.json");
+
+fn parse_node_min(raw: &str) -> Option<Version> {
+    let trimmed = raw.trim().trim_start_matches('v');
+    if let Some(v) = parse_first_semver(trimmed) {
+        return Some(v);
+    }
+    trimmed.parse::<u64>().ok().map(|m| Version::new(m, 0, 0))
+}
+
+fn parse_pnpm_min(package_json: &str) -> Option<Version> {
+    let idx = package_json.find("pnpm@")?;
+    parse_first_semver(&package_json[idx + 5..])
+}
+
 fn min_versions() -> MinVersion {
     MinVersion {
-        node: Version::new(24, 0, 0),
-        pnpm: Version::new(10, 0, 0),
+        node: parse_node_min(NODE_VERSION_FILE)
+            .expect("failed to parse .node-version at build time"),
+        pnpm: parse_pnpm_min(PACKAGE_JSON)
+            .expect("failed to parse packageManager from package.json"),
         uv: Version::new(0, 5, 0),
         cargo: Version::new(1, 80, 0),
         wasm_pack: Version::new(0, 13, 0),
@@ -261,6 +282,28 @@ mod tests {
         assert!(Version::new(25, 0, 0) >= min);
         assert!(Version::new(20, 10, 0) < min);
         assert!(Version::new(18, 0, 0) < min);
+    }
+
+    #[test]
+    fn parses_node_version_bare_major() {
+        assert_eq!(parse_node_min("24\n"), Some(Version::new(24, 0, 0)));
+    }
+
+    #[test]
+    fn parses_node_version_with_v_prefix() {
+        assert_eq!(parse_node_min("v24.11.0\n"), Some(Version::new(24, 11, 0)));
+    }
+
+    #[test]
+    fn parses_pnpm_from_package_json() {
+        let pj = r#"{"packageManager": "pnpm@10.28.1", "other": "x"}"#;
+        assert_eq!(parse_pnpm_min(pj), Some(Version::new(10, 28, 1)));
+    }
+
+    #[test]
+    fn embedded_files_parse_at_runtime() {
+        assert!(parse_node_min(NODE_VERSION_FILE).is_some());
+        assert!(parse_pnpm_min(PACKAGE_JSON).is_some());
     }
 
     #[test]
