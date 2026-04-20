@@ -23,23 +23,29 @@ to check your environment.
 
 If you plan on working with projects often, you can install the `cfasim` CLI:
 
+### Shell (macOS / Linux)
+
 ```sh
-# Shell (macOS / Linux)
 curl --proto '=https' --tlsv1.2 -LsSf https://cdcgov.github.io/cfa-simulator/install.sh | sh
 ```
 
+### PowerShell (Windows)
+
 ```powershell
-# PowerShell (Windows)
 powershell -ExecutionPolicy Bypass -c "irm https://cdcgov.github.io/cfa-simulator/install.ps1 | iex"
 ```
 
 You can also use a package manager of your choice:
 
-```sh
-# cargo
-cargo install cfasim
+### cargo
 
-# uv
+```sh
+cargo install cfasim
+```
+
+### uv
+
+```sh
 uv tool install cfasim
 ```
 
