@@ -1,6 +1,6 @@
 # Install all dependencies
 [tasks.setup]
-run = "pnpm install && pnpm exec playwright install chromium && cargo install wasm-pack && cargo install git-cliff --locked && uv sync"
+run = "pnpm install && pnpm exec playwright install chromium && cargo install wasm-pack && cargo install git-cliff --locked && uv sync --no-install-project"
 
 # Run all tests
 [tasks.test]
@@ -25,6 +25,10 @@ run = "pnpm exec prettier --write ."
 # Initialize a new cfasim project
 [tasks.init]
 run = "cargo run -p cfasim -- init"
+
+# Show what cargo-dist would build/release
+[tasks.dist-plan]
+run = "dist plan"
 
 # Build cfasim-ui libraries (components + charts)
 [tasks.build]

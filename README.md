@@ -5,6 +5,26 @@
 This repository contains utilities for deploying interactive simulations using Python, Rust, and WebAssembly.
 It is still in the early stages of development so consider packages and APIs to be unstable.
 
+## Installing the `cfasim` CLI
+
+```sh
+# Shell (macOS / Linux)
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/CDCgov/cfa-simulator/releases/latest/download/cfasim-installer.sh | sh
+
+# PowerShell (Windows)
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/CDCgov/cfa-simulator/releases/latest/download/cfasim-installer.ps1 | iex"
+
+# uvx (ephemeral — no install)
+uvx cfasim init
+
+# cargo
+cargo install cfasim
+```
+
+Binaries installed via the shell/PowerShell installer can self-update with `cfasim update`. Copies installed via `cargo` or `uvx` are managed by those tools — update them with `cargo install cfasim --force` or `uv tool upgrade cfasim` instead.
+
+To opt into a once-per-week "new version available" hint, create `~/.cfasim/settings.toml` with `check_for_updates = true`.
+
 ## Related documents
 
 **General disclaimer** This repository was created for use by CDC programs to collaborate on public health related projects in support of the [CDC mission](https://www.cdc.gov/about/cdc/#cdc_about_cio_mission-our-mission). GitHub is not hosted by the CDC, but is a third party website used by CDC and its partners to share information and collaborate on software. CDC use of GitHub does not imply an endorsement of any one particular service, product, or enterprise.

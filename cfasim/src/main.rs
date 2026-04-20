@@ -1,5 +1,9 @@
 mod init;
+mod settings;
+mod update;
+mod update_check;
 
+use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
@@ -25,6 +29,8 @@ enum Commands {
         #[arg(long)]
         local: bool,
     },
+    /// Update cfasim to the latest release
+    Update,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -33,9 +39,10 @@ enum TemplateArg {
     Rust,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<()> {
     let cli = Cli::parse();
-    match cli.command {
+    let is_update = matches!(cli.command, Commands::Update);
+    let result = match cli.command {
         Commands::Init {
             dir,
             template,
@@ -45,8 +52,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 TemplateArg::Python => init::Template::Python,
                 TemplateArg::Rust => init::Template::Rust,
             });
-            init::run(dir, template, local)?;
+            init::run(dir, template, local).map_err(|e| anyhow::anyhow!("{e}"))
         }
+        Commands::Update => update::run(),
+    };
+
+    if !is_update {
+        update_check::maybe_print_update_hint();
     }
-    Ok(())
+    result
 }
