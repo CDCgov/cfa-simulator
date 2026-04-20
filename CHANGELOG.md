@@ -1,6 +1,29 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.3.8] - 2026-04-20
+
+### Bug Fixes
+
+- **shared:** Declare @vue/test-utils and happy-dom as devDependencies
+- **pyodide:** Use uvx pip download instead of uv run pip
+- Update the install message to be more generic
+
+### Chores
+
+- **deps:** Bump rustls-webpki from 0.103.10 to 0.103.12
+
+### Features
+
+- **pyodide:** Make pip command configurable via pipCommand option
+- **pyodide:** Make pythonVersion configurable in vitePlugin
+- **cfasim:** Add cargo-dist, PyPI wheels, and self-update
+- **cfasim:** Prompt for auto-update opt-in on first permanent-install run
+
+### Tests
+
+- **cfasim:** Serialize settings env-var tests to prevent parallel races
+
 ## [0.3.7] - 2026-04-17
 
 ### Chores
