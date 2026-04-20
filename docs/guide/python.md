@@ -83,6 +83,7 @@ Options:
 - `model` — path to your Python model directory (default: `"model"`)
 - `pypiDeps` — list of PyPI packages to prebuild as local wheels, avoiding PyPI round-trips on page load
 - `pipCommand` — command used to invoke pip when downloading `pypiDeps` (default: `"uvx pip"`). Set to `"pip"` or `"uv run pip"` if you'd rather use a pip that's already on your PATH or in your project's venv.
+- `pythonVersion` — Python version passed to pip's `--python-version` flag when downloading `pypiDeps` (default: `"3.12"`). Should match the Python shipped by your Pyodide runtime.
 
 ## Wire up the app
 
