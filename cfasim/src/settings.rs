@@ -83,26 +83,33 @@ pub fn prompt_for_updates_if_first_run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // Serializes tests that mutate the CFASIM_CONFIG_DIR env var; cargo test
+    // runs tests in parallel by default and process env is shared state.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn load_missing_returns_default() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::TempDir::new().unwrap();
         std::env::set_var("CFASIM_CONFIG_DIR", dir.path());
         let s = load();
-        assert!(!s.check_for_updates);
         std::env::remove_var("CFASIM_CONFIG_DIR");
+        assert!(!s.check_for_updates);
     }
 
     #[test]
     fn save_and_load_roundtrip() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::TempDir::new().unwrap();
         std::env::set_var("CFASIM_CONFIG_DIR", dir.path());
-        save(&Settings {
+        let save_result = save(&Settings {
             check_for_updates: true,
-        })
-        .unwrap();
+        });
         let s = load();
-        assert!(s.check_for_updates);
         std::env::remove_var("CFASIM_CONFIG_DIR");
+        save_result.unwrap();
+        assert!(s.check_for_updates);
     }
 }
