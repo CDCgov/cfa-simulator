@@ -10,11 +10,14 @@ struct MinVersion {
     wasm_pack: Version,
 }
 
-// Sourced from the repo at build time so minimums stay in sync with .node-version
-// and package.json's packageManager field. uv/cargo/wasm-pack have no in-repo
-// source of truth, so they remain hardcoded.
+// Sourced from the repo at build time so minimums stay in sync with:
+//   .node-version  → node
+//   package.json   → pnpm (via packageManager field)
+//   Cargo.toml     → cargo (via [workspace.package].rust-version)
+// uv and wasm-pack have no in-repo source of truth, so they stay hardcoded.
 const NODE_VERSION_FILE: &str = include_str!("../../.node-version");
 const PACKAGE_JSON: &str = include_str!("../../package.json");
+const WORKSPACE_CARGO_TOML: &str = include_str!("../../Cargo.toml");
 
 fn parse_node_min(raw: &str) -> Option<Version> {
     let trimmed = raw.trim().trim_start_matches('v');
@@ -29,6 +32,20 @@ fn parse_pnpm_min(package_json: &str) -> Option<Version> {
     parse_first_semver(&package_json[idx + 5..])
 }
 
+fn parse_rust_min(cargo_toml: &str) -> Option<Version> {
+    let key = "rust-version = \"";
+    let idx = cargo_toml.find(key)?;
+    let after = &cargo_toml[idx + key.len()..];
+    let end = after.find('"')?;
+    let value = &after[..end];
+    let parts: Vec<&str> = value.split('.').collect();
+    match parts.len() {
+        2 => Version::parse(&format!("{}.{}.0", parts[0], parts[1])).ok(),
+        3 => Version::parse(value).ok(),
+        _ => None,
+    }
+}
+
 fn min_versions() -> MinVersion {
     MinVersion {
         node: parse_node_min(NODE_VERSION_FILE)
@@ -36,7 +53,8 @@ fn min_versions() -> MinVersion {
         pnpm: parse_pnpm_min(PACKAGE_JSON)
             .expect("failed to parse packageManager from package.json"),
         uv: Version::new(0, 5, 0),
-        cargo: Version::new(1, 80, 0),
+        cargo: parse_rust_min(WORKSPACE_CARGO_TOML)
+            .expect("failed to parse rust-version from workspace Cargo.toml"),
         wasm_pack: Version::new(0, 13, 0),
     }
 }
@@ -152,12 +170,14 @@ pub fn run() -> Result<()> {
 
     let node = check("node", "--version", &min.node);
     let node_hint = match &node {
-        Status::Missing => {
-            Some("Install Node.js 24 LTS: https://nodejs.org/en/download".to_string())
-        }
-        Status::Outdated { .. } => {
-            Some("Upgrade to Node.js 24 LTS or newer: https://nodejs.org/en/download".to_string())
-        }
+        Status::Missing => Some(format!(
+            "Install Node.js {}+: https://nodejs.org/en/download",
+            min.node.major
+        )),
+        Status::Outdated { .. } => Some(format!(
+            "Upgrade Node.js to {}+: https://nodejs.org/en/download",
+            min.node.major
+        )),
         _ => None,
     };
     results.push(("Node.js".into(), node, node_hint));
@@ -200,9 +220,11 @@ pub fn run() -> Result<()> {
         } else {
             "Install wasm-pack: https://wasm-bindgen.github.io/wasm-pack/installer/".into()
         }),
-        Status::Outdated { .. } => {
-            Some("Upgrade wasm-pack: cargo install wasm-pack --force".into())
-        }
+        Status::Outdated { .. } => Some(if cargo_available {
+            "Upgrade wasm-pack: cargo install wasm-pack --force".into()
+        } else {
+            "Upgrade wasm-pack: https://wasm-bindgen.github.io/wasm-pack/installer/".into()
+        }),
         _ => None,
     };
     results.push(("wasm-pack".into(), wp, wp_hint));
@@ -301,9 +323,22 @@ mod tests {
     }
 
     #[test]
+    fn parses_rust_version_two_parts() {
+        let toml = "[workspace.package]\nrust-version = \"1.80\"\n";
+        assert_eq!(parse_rust_min(toml), Some(Version::new(1, 80, 0)));
+    }
+
+    #[test]
+    fn parses_rust_version_three_parts() {
+        let toml = "rust-version = \"1.82.1\"\n";
+        assert_eq!(parse_rust_min(toml), Some(Version::new(1, 82, 1)));
+    }
+
+    #[test]
     fn embedded_files_parse_at_runtime() {
         assert!(parse_node_min(NODE_VERSION_FILE).is_some());
         assert!(parse_pnpm_min(PACKAGE_JSON).is_some());
+        assert!(parse_rust_min(WORKSPACE_CARGO_TOML).is_some());
     }
 
     #[test]

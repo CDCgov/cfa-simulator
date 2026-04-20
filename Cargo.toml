@@ -3,6 +3,9 @@ members = ["cfasim", "cfasim-model"]
 exclude = ["models/src/reed-frost/model"]
 resolver = "2"
 
+[workspace.package]
+rust-version = "1.80"
+
 # The profile that 'dist' will build with
 [profile.dist]
 inherits = "release"
