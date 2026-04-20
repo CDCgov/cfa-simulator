@@ -42,6 +42,9 @@ enum TemplateArg {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let is_update = matches!(cli.command, Commands::Update);
+    if !is_update {
+        settings::prompt_for_updates_if_first_run();
+    }
     let result = match cli.command {
         Commands::Init {
             dir,
