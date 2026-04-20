@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.3.9] - 2026-04-20
+
+### Bug Fixes
+
+- Include LICENSE and README in sdist for PyPI publish
+
 ## [0.3.8] - 2026-04-20
 
 ### Bug Fixes
