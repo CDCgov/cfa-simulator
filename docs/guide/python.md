@@ -78,6 +78,12 @@ export default defineConfig({
 
 The plugin runs `uv build` on your `model/` directory and generates a `public/wheels.json` file so the Pyodide worker can find your wheel.
 
+Options:
+
+- `model` — path to your Python model directory (default: `"model"`)
+- `pypiDeps` — list of PyPI packages to prebuild as local wheels, avoiding PyPI round-trips on page load
+- `pipCommand` — command used to invoke pip when downloading `pypiDeps` (default: `"uvx pip"`). Set to `"pip"` or `"uv run pip"` if you'd rather use a pip that's already on your PATH or in your project's venv.
+
 ## Wire up the app
 
 **`src/main.ts`**:

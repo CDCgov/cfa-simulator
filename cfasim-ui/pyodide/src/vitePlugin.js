@@ -6,6 +6,7 @@ import { resolve } from "node:path";
  * @typedef {object} CfasimPyodideOptions
  * @property {string} [model] Path to the Python model directory (default: "model")
  * @property {string[]} [pypiDeps] PyPI packages to download at build time and serve locally
+ * @property {string} [pipCommand] Command used to invoke pip for downloading `pypiDeps` (default: "uvx pip"). Override with e.g. "pip" or "uv run pip".
  */
 
 /**
@@ -20,13 +21,14 @@ import { resolve } from "node:path";
  */
 export function cfasimPyodide(options) {
   const modelDir = options?.model ?? "model";
+  const pipCommand = options?.pipCommand ?? "uvx pip";
 
   function build(root) {
     const publicDir = resolve(root, "public");
     mkdirSync(publicDir, { recursive: true });
     for (const dep of options?.pypiDeps ?? []) {
       execSync(
-        `uvx pip download ${dep} --dest public --no-deps --python-version 3.12 --platform any`,
+        `${pipCommand} download ${dep} --dest public --no-deps --python-version 3.12 --platform any`,
         { cwd: root, stdio: "pipe" },
       );
     }
