@@ -1,6 +1,22 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.3.10] - 2026-04-20
+
+### Bug Fixes
+
+- **cfasim:** Use tokio runtime for background update check
+
+### Documentation
+
+- Rewrite python guide around uvx cfasim init
+- Rewrite rust guide around uvx cfasim init
+
+### Features
+
+- Add cfasim tools command to check system dependencies (#24)
+- Host cfasim installer scripts on Pages and document in getting-started
+
 ## [0.3.9] - 2026-04-20
 
 ### Bug Fixes
