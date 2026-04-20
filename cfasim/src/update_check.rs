@@ -64,7 +64,11 @@ fn fetch_latest_version() -> Option<String> {
     let current = env!("CARGO_PKG_VERSION");
     updater.set_current_version(current.parse().ok()?).ok()?;
 
-    let version = pollster::block_on(updater.query_new_version()).ok()??;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .ok()?;
+    let version = runtime.block_on(updater.query_new_version()).ok()??;
     Some(version.to_string())
 }
 
