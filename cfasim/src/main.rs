@@ -1,5 +1,6 @@
 mod init;
 mod settings;
+mod tools;
 mod update;
 mod update_check;
 
@@ -31,6 +32,8 @@ enum Commands {
     },
     /// Update cfasim to the latest release
     Update,
+    /// Check your system for the tools needed to develop cfasim projects
+    Tools,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -42,6 +45,7 @@ enum TemplateArg {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let is_update = matches!(cli.command, Commands::Update);
+    let is_tools = matches!(cli.command, Commands::Tools);
     if !is_update {
         settings::prompt_for_updates_if_first_run();
     }
@@ -58,9 +62,10 @@ fn main() -> Result<()> {
             init::run(dir, template, local).map_err(|e| anyhow::anyhow!("{e}"))
         }
         Commands::Update => update::run(),
+        Commands::Tools => tools::run(),
     };
 
-    if !is_update {
+    if !is_update && !is_tools {
         update_check::maybe_print_update_hint();
     }
     result
