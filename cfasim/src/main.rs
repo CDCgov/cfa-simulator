@@ -1,5 +1,6 @@
 mod init;
 mod settings;
+mod tools;
 mod update;
 mod update_check;
 
@@ -31,6 +32,8 @@ enum Commands {
     },
     /// Update cfasim to the latest release
     Update,
+    /// Check your system for the tools needed to develop cfasim projects
+    Tools,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -58,6 +61,7 @@ fn main() -> Result<()> {
             init::run(dir, template, local).map_err(|e| anyhow::anyhow!("{e}"))
         }
         Commands::Update => update::run(),
+        Commands::Tools => tools::run(),
     };
 
     if !is_update {
