@@ -1,0 +1,18 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "cfasim"
+description = "CLI for scaffolding interactive simulations using Python, Rust, and WebAssembly"
+license = "Apache-2.0"
+requires-python = ">=3.8"
+dynamic = ["version"]
+
+[project.urls]
+Repository = "https://github.com/CDCgov/cfa-simulator"
+
+[tool.maturin]
+bindings = "bin"
+manifest-path = "cfasim/Cargo.toml"
+strip = true

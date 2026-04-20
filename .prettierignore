@@ -4,3 +4,4 @@
 pnpm-lock.yaml
 **/public/
 CHANGELOG.md
+.github/workflows/release.yml
