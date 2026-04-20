@@ -5,7 +5,6 @@ use std::process::Command;
 struct MinVersion {
     node: Version,
     pnpm: Version,
-    uv: Version,
     cargo: Version,
     wasm_pack: Version,
 }
@@ -14,7 +13,8 @@ struct MinVersion {
 //   .node-version  → node
 //   package.json   → pnpm (via packageManager field)
 //   Cargo.toml     → cargo (via [workspace.package].rust-version)
-// uv and wasm-pack have no in-repo source of truth, so they stay hardcoded.
+// wasm-pack has no in-repo source of truth, so it stays hardcoded.
+// uv uses `uv self update --dry-run` instead of a pinned minimum.
 const NODE_VERSION_FILE: &str = include_str!("../../.node-version");
 const PACKAGE_JSON: &str = include_str!("../../package.json");
 const WORKSPACE_CARGO_TOML: &str = include_str!("../../Cargo.toml");
@@ -52,7 +52,6 @@ fn min_versions() -> MinVersion {
             .expect("failed to parse .node-version at build time"),
         pnpm: parse_pnpm_min(PACKAGE_JSON)
             .expect("failed to parse packageManager from package.json"),
-        uv: Version::new(0, 5, 0),
         cargo: parse_rust_min(WORKSPACE_CARGO_TOML)
             .expect("failed to parse rust-version from workspace Cargo.toml"),
         wasm_pack: Version::new(0, 13, 0),
@@ -63,6 +62,7 @@ fn min_versions() -> MinVersion {
 enum Status {
     Ok(Version),
     Outdated { found: Version, min: Version },
+    UpdateAvailable { found: Version, latest: Version },
     Missing,
 }
 
@@ -133,7 +133,7 @@ fn tool_exists(cmd: &str) -> bool {
 fn symbol(status: &Status) -> &'static str {
     match status {
         Status::Ok(_) => "\x1b[32m✓\x1b[0m",
-        Status::Outdated { .. } => "\x1b[33m⚠\x1b[0m",
+        Status::Outdated { .. } | Status::UpdateAvailable { .. } => "\x1b[33m⚠\x1b[0m",
         Status::Missing => "\x1b[31m✗\x1b[0m",
     }
 }
@@ -153,12 +153,67 @@ fn report(name: &str, status: &Status, hint: Option<&str>) {
                 println!("    \x1b[2m{}\x1b[0m", h);
             }
         }
+        Status::UpdateAvailable { found, latest } => {
+            println!(
+                "  {} {} v{} \x1b[2m(update available: v{})\x1b[0m",
+                symbol(status),
+                name,
+                found,
+                latest
+            );
+            if let Some(h) = hint {
+                println!("    \x1b[2m{}\x1b[0m", h);
+            }
+        }
         Status::Missing => {
             println!("  {} {} not found", symbol(status), name);
             if let Some(h) = hint {
                 println!("    \x1b[2m{}\x1b[0m", h);
             }
         }
+    }
+}
+
+fn check_uv() -> Status {
+    let Some(current) = run_version("uv", "--version") else {
+        return Status::Missing;
+    };
+    let Ok(output) = Command::new("uv")
+        .args(["self", "update", "--dry-run"])
+        .output()
+    else {
+        return Status::Ok(current);
+    };
+    if !output.status.success() {
+        return Status::Ok(current);
+    }
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    // "Would update uv from vX to vY" indicates an update is available.
+    // "already on ... latest version" means up to date.
+    if let Some(idx) = text.find("Would update") {
+        if let Some(latest) = parse_uv_target_version(&text[idx..], &current) {
+            return Status::UpdateAvailable {
+                found: current,
+                latest,
+            };
+        }
+    }
+    Status::Ok(current)
+}
+
+fn parse_uv_target_version(line: &str, current: &Version) -> Option<Version> {
+    // "Would update uv from v0.11.7 to v0.12.0" — take the second semver.
+    let idx = line.find(" to ")?;
+    let after = &line[idx + 4..];
+    let v = parse_first_semver(after)?;
+    if v != *current {
+        Some(v)
+    } else {
+        None
     }
 }
 
@@ -194,12 +249,12 @@ pub fn run() -> Result<()> {
     };
     results.push(("pnpm".into(), pnpm, pnpm_hint));
 
-    let uv = check("uv", "--version", &min.uv);
+    let uv = check_uv();
     let uv_hint = match &uv {
         Status::Missing => {
             Some("Install uv: https://docs.astral.sh/uv/getting-started/installation/".into())
         }
-        Status::Outdated { .. } => Some("Upgrade uv: uv self update".into()),
+        Status::UpdateAvailable { .. } => Some("Upgrade uv: uv self update".into()),
         _ => None,
     };
     results.push(("uv".into(), uv, uv_hint));
@@ -350,5 +405,27 @@ mod tests {
             min: Version::new(2, 0, 0),
         }
         .is_ok());
+        assert!(!Status::UpdateAvailable {
+            found: Version::new(1, 0, 0),
+            latest: Version::new(2, 0, 0),
+        }
+        .is_ok());
+    }
+
+    #[test]
+    fn parses_uv_target_from_dry_run() {
+        let text = "Would update uv from v0.11.7 to v0.12.0\n";
+        let current = Version::new(0, 11, 7);
+        assert_eq!(
+            parse_uv_target_version(text, &current),
+            Some(Version::new(0, 12, 0))
+        );
+    }
+
+    #[test]
+    fn ignores_same_version_dry_run() {
+        let text = "Would update uv from v0.11.7 to v0.11.7\n";
+        let current = Version::new(0, 11, 7);
+        assert_eq!(parse_uv_target_version(text, &current), None);
     }
 }
