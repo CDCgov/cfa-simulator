@@ -26,7 +26,7 @@ export function cfasimPyodide(options) {
     mkdirSync(publicDir, { recursive: true });
     for (const dep of options?.pypiDeps ?? []) {
       execSync(
-        `uv run pip download ${dep} --dest public --no-deps --python-version 3.12 --platform any`,
+        `uvx pip download ${dep} --dest public --no-deps --python-version 3.12 --platform any`,
         { cwd: root, stdio: "pipe" },
       );
     }
