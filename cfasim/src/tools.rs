@@ -33,8 +33,11 @@ fn parse_node_min(raw: &str) -> Option<Version> {
 }
 
 fn parse_pnpm_min(package_json: &str) -> Option<Version> {
+    // packageManager pins the exact corepack-managed version. We only use
+    // its major as the floor — users with any compatible 10.x should pass.
     let idx = package_json.find("pnpm@")?;
-    parse_first_semver(&package_json[idx + 5..])
+    let v = parse_first_semver(&package_json[idx + 5..])?;
+    Some(Version::new(v.major, 0, 0))
 }
 
 fn parse_toml_version_field(source: &str, key: &str) -> Option<Version> {
@@ -181,10 +184,8 @@ fn report(name: &str, status: &Status, hint: Option<&str>) {
 }
 
 fn check_cfasim() -> Status {
-    let current = match Version::parse(env!("CARGO_PKG_VERSION")) {
-        Ok(v) => v,
-        Err(_) => return Status::Ok(Version::new(0, 0, 0)),
-    };
+    let current = Version::parse(env!("CARGO_PKG_VERSION"))
+        .expect("CARGO_PKG_VERSION is always a valid semver");
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
         let _ = tx.send(crate::update_check::fetch_latest_version());
@@ -416,9 +417,9 @@ mod tests {
     }
 
     #[test]
-    fn parses_pnpm_from_package_json() {
+    fn parses_pnpm_floor_to_major() {
         let pj = r#"{"packageManager": "pnpm@10.28.1", "other": "x"}"#;
-        assert_eq!(parse_pnpm_min(pj), Some(Version::new(10, 28, 1)));
+        assert_eq!(parse_pnpm_min(pj), Some(Version::new(10, 0, 0)));
     }
 
     #[test]
