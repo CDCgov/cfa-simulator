@@ -1,0 +1,26 @@
+{
+  "name": "@cfasim-ui/docs",
+  "version": "0.3.11",
+  "description": "LLM-friendly component and chart documentation for cfasim-ui",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CDCgov/cfa-simulator.git",
+    "directory": "cfasim-ui/docs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "prepack": "node ../../scripts/generate_docs.mjs"
+  },
+  "files": [
+    "index.json",
+    "components",
+    "charts",
+    "shared",
+    "pyodide",
+    "wasm",
+    "theme"
+  ]
+}

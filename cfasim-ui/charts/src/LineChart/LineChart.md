@@ -1,3 +1,7 @@
+---
+keywords: [line, chart, time-series, series, axis, svg]
+---
+
 # LineChart
 
 A responsive SVG line chart with support for multiple series, axis labels, and custom styling.

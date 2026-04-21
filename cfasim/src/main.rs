@@ -1,3 +1,4 @@
+mod docs;
 mod init;
 mod settings;
 mod tools;
@@ -34,6 +35,12 @@ enum Commands {
     Update,
     /// Check your system for the tools needed to develop cfasim projects
     Tools,
+    /// List cfasim-ui components and charts (LLM-friendly with --json)
+    Docs {
+        /// Emit the raw JSON directory instead of the human-readable listing
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Clone, ValueEnum)]
@@ -46,6 +53,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     let is_update = matches!(cli.command, Commands::Update);
     let is_tools = matches!(cli.command, Commands::Tools);
+    let is_docs = matches!(cli.command, Commands::Docs { .. });
     if !is_update {
         settings::prompt_for_updates_if_first_run();
     }
@@ -63,9 +71,10 @@ fn main() -> Result<()> {
         }
         Commands::Update => update::run(),
         Commands::Tools => tools::run(),
+        Commands::Docs { json } => docs::run(json),
     };
 
-    if !is_update && !is_tools {
+    if !is_update && !is_tools && !is_docs {
         update_check::maybe_print_update_hint();
     }
     result

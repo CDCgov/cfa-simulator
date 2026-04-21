@@ -46,6 +46,7 @@
   "dependencies": {
     "@cfasim-ui/components": "workspace:*",
     "@cfasim-ui/charts": "workspace:*",
+    "@cfasim-ui/docs": "workspace:*",
     "@cfasim-ui/wasm": "workspace:*",
     "@cfasim-ui/pyodide": "workspace:*",
     "@cfasim-ui/shared": "workspace:*",
