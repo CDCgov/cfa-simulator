@@ -14,15 +14,17 @@ struct MinVersion {
     wasm_pack: Version,
 }
 
-// Sourced from the repo at build time so minimums stay in sync with:
+// Committed copies of workspace-root files so minimums stay in sync with:
 //   .node-version  → node
 //   package.json   → pnpm (via packageManager field)
 //   Cargo.toml     → cargo     (via [workspace.package].rust-version)
 //                    wasm-pack (via [workspace.metadata.cfasim].wasm-pack-min)
+// Kept inside the crate so `cargo publish` tarballs are self-contained.
+// A drift-check test below asserts these stay byte-identical to the originals.
 // uv uses `uv self update --dry-run` instead of a pinned minimum.
-const NODE_VERSION_FILE: &str = include_str!("../../.node-version");
-const PACKAGE_JSON: &str = include_str!("../../package.json");
-const WORKSPACE_CARGO_TOML: &str = include_str!("../../Cargo.toml");
+const NODE_VERSION_FILE: &str = include_str!("../embedded/node-version");
+const PACKAGE_JSON: &str = include_str!("../embedded/package.json");
+const WORKSPACE_CARGO_TOML: &str = include_str!("../embedded/workspace-Cargo.toml");
 
 fn parse_node_min(raw: &str) -> Option<Version> {
     let trimmed = raw.trim().trim_start_matches('v');
@@ -455,6 +457,31 @@ mod tests {
         assert!(parse_pnpm_min(PACKAGE_JSON).is_some());
         assert!(parse_toml_version_field(WORKSPACE_CARGO_TOML, "rust-version").is_some());
         assert!(parse_toml_version_field(WORKSPACE_CARGO_TOML, "wasm-pack-min").is_some());
+    }
+
+    // Published tarballs don't contain the workspace originals, so the check
+    // only runs when invoked from a workspace checkout. Inside the workspace
+    // (including CI), drift fails the build.
+    #[test]
+    fn embedded_files_match_workspace_sources() {
+        let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let workspace = manifest.parent().expect("cfasim has a parent dir");
+        for (source_name, embedded_name, embedded) in [
+            (".node-version", "node-version", NODE_VERSION_FILE),
+            ("package.json", "package.json", PACKAGE_JSON),
+            ("Cargo.toml", "workspace-Cargo.toml", WORKSPACE_CARGO_TOML),
+        ] {
+            let source_path = workspace.join(source_name);
+            let Ok(source) = std::fs::read_to_string(&source_path) else {
+                continue;
+            };
+            assert_eq!(
+                source, embedded,
+                "cfasim/embedded/{embedded_name} drifted from workspace {source_name} — \
+                 refresh the copies in cfasim/embedded/ (also done automatically by \
+                 scripts/version.mjs on `plz version`)"
+            );
+        }
     }
 
     #[test]

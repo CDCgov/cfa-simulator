@@ -13,7 +13,7 @@
  *        and tags it.
  */
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, copyFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 
 const VALID_BUMPS = ["patch", "minor", "major"];
@@ -32,14 +32,29 @@ const CARGO_TOMLS = ["cfasim/Cargo.toml", "cfasim-model/Cargo.toml"];
 
 const PYPROJECT_TOMLS = ["cfasim-model-py/pyproject.toml"];
 
+// Committed copies inside cfasim/ so `cargo publish` tarballs are self-contained.
+// Kept in sync with the workspace originals; a drift test in cfasim fails CI otherwise.
+const EMBEDDED_COPIES = [
+  [".node-version", "cfasim/embedded/node-version"],
+  ["package.json", "cfasim/embedded/package.json"],
+  ["Cargo.toml", "cfasim/embedded/workspace-Cargo.toml"],
+];
+
 const TRACKED_FILES = [
   ...PACKAGE_JSONS,
   ...CARGO_TOMLS,
   ...PYPROJECT_TOMLS,
+  ...EMBEDDED_COPIES.map(([, dst]) => dst),
   "Cargo.lock",
   "models/src/reed-frost/model/Cargo.lock",
   "CHANGELOG.md",
 ];
+
+function syncEmbeddedCopies() {
+  for (const [src, dst] of EMBEDDED_COPIES) {
+    copyFileSync(src, dst);
+  }
+}
 
 function bump(version, type) {
   const [major, minor, patch] = version.split(".").map(Number);
@@ -88,6 +103,8 @@ function bumpAll(type) {
   for (const p of PACKAGE_JSONS) newVersion = bumpPackageJson(p, type);
   for (const p of CARGO_TOMLS) bumpTomlLike(p, type);
   for (const p of PYPROJECT_TOMLS) bumpTomlLike(p, type);
+
+  syncEmbeddedCopies();
 
   execSync("cargo check --workspace", { stdio: "inherit" });
   execSync(
