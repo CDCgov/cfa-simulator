@@ -1041,6 +1041,54 @@ describe("LineChart", () => {
       expect(labelTexts[0]).not.toBe(labelTexts[1]);
     });
 
+    it("anchors label indicator circle to the section start", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20] }],
+          areaSections: [{ startIndex: 1, endIndex: 2, label: "Day 2" }],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      // padding.left = 50 (no yLabel), innerW = 400 - 50 - 10 = 340
+      // xPixel(1) with range 0..2 = 50 + 0.5 * 340 = 220
+      const expectedStart = 220;
+      const labelCircles = wrapper
+        .findAll("circle")
+        .filter((c) => c.attributes("r") === "4");
+      expect(labelCircles.length).toBe(1);
+      const cx = Number(labelCircles[0].attributes("cx"));
+      expect(cx).toBeCloseTo(expectedStart, 0);
+    });
+
+    it("clamps label so right edge stays within the chart", () => {
+      const longLabel = "x".repeat(40);
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20] }],
+          areaSections: [{ startIndex: 2, endIndex: 2, label: longLabel }],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      // padding.left = 50, innerW = 340, so chart right edge = 390.
+      // textWidth = 40 * 7 = 280; preferred cx = 390 + 140 + 2 = 532 → overflow.
+      // Clamped: cx = 390 - 140 - 8 = 242. Label text right edge = cx + 140 + 8 = 390.
+      const labelGroups = wrapper.findAll("g").filter((g) => {
+        const c = g.find("circle");
+        return c.exists() && c.attributes("r") === "4";
+      });
+      expect(labelGroups.length).toBe(1);
+      const textEl = labelGroups[0].findAll("text")[0];
+      const textX = Number(textEl.attributes("x"));
+      const textWidth = longLabel.length * 7;
+      const textRight = textX + textWidth;
+      expect(textRight).toBeLessThanOrEqual(390);
+      expect(textRight).toBeCloseTo(390, 0);
+    });
+
     it("does not render extra elements without areaSections", () => {
       const wrapper = mount(LineChart, {
         props: {
