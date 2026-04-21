@@ -18,21 +18,46 @@ The fastest way to start is with `uvx`, which runs `cfasim` ephemerally without 
 uvx cfasim init
 ```
 
-Follow the prompts to pick a project name and choose the **Python** template. `cfasim init` generates a Vite + Vue app with a working Pyodide model already wired up, ready to `pnpm dev`.
+Follow the prompts to pick a project name and choose the **Python** template. The generated project is a Python package at the root, with the interactive UI source in an `interactive/` subfolder. All tasks run from the project root:
+
+```
+my-project/
+├── pyproject.toml
+├── src/
+│   └── my_project/
+│       └── __init__.py
+├── package.json
+├── vite.config.ts
+├── tsconfig.json
+└── interactive/
+    ├── index.html
+    └── src/
+        ├── App.vue
+        ├── env.d.ts
+        └── main.ts
+```
+
+After scaffolding:
+
+```bash
+cd my-project
+pnpm install
+pnpm run dev
+```
 
 See [Getting Started](../getting-started) for other ways to install `cfasim`.
 
 ## Adding cfasim-ui to an existing Python project
 
-This section assumes you already have a Python package with a simulation function — for example, `my_model/` with a `pyproject.toml` and an `__init__.py` exporting a `simulate(...)` function. What you don't have yet is a frontend.
+This section assumes you already have a Python package with a simulation function — for example, a project with `pyproject.toml` at the root and `src/my_model/__init__.py` exporting a `simulate(...)` function. What you don't have yet is a frontend.
 
-The steps below walk through adding a new `ui/` directory next to your model, wiring it up with pnpm, Vite, Vue, and cfasim-ui, and pointing the Pyodide plugin at your existing Python package.
+The steps below walk through adding a new `interactive/` directory inside your project, wiring it up with pnpm, Vite, Vue, and cfasim-ui, and pointing the Pyodide plugin at the Python package at the project root.
 
 ### Prepare your Python model
 
 Make sure your model's `pyproject.toml` has `cfasim-model` listed as a dependency, and that your `simulate` function returns a `model_outputs(...)` result. The `cfasim-model` package provides the `ModelOutput` and `model_outputs` helpers that the UI uses to read your simulation results.
 
-**`my_model/pyproject.toml`** (minimum required):
+**`pyproject.toml`** (minimum required):
 
 ```toml
 [build-system]
@@ -46,7 +71,7 @@ requires-python = ">=3.11"
 dependencies = ["cfasim-model"]
 ```
 
-**`my_model/src/my_model/__init__.py`**:
+**`src/my_model/__init__.py`**:
 
 ```python
 import numpy as np
@@ -62,14 +87,13 @@ def simulate(steps, rate):
 
 Each top-level function becomes a callable entry point from the UI side.
 
-### Create a frontend directory
+### Set up the frontend
 
-Next to your Python package, create a new directory for the frontend and initialize it with pnpm:
+At your project root, initialize a `package.json` and create an `interactive/` subfolder for the Vue source:
 
 ```bash
-mkdir ui
-cd ui
 pnpm init
+mkdir -p interactive/src
 ```
 
 Install runtime and dev dependencies:
@@ -95,9 +119,9 @@ Add scripts to the generated `package.json`:
 
 ### Configure Vite
 
-`cfasim-ui/pyodide/vite` provides a Vite plugin that builds your Python model into a wheel and serves it to Pyodide at dev time. Point the `model` option at your existing Python package (relative to the `ui/` directory):
+`cfasim-ui/pyodide/vite` provides a Vite plugin that builds your Python model into a wheel and serves it to Pyodide at dev time. Put `vite.config.ts` at the project root and set Vite's `root` to `interactive/` so the Vue source is served from there; redirect the build output to a top-level `dist/`:
 
-**`ui/vite.config.ts`**:
+**`vite.config.ts`**:
 
 ```ts
 import { defineConfig } from "vite";
@@ -105,11 +129,13 @@ import vue from "@vitejs/plugin-vue";
 import { cfasimPyodide } from "cfasim-ui/pyodide/vite";
 
 export default defineConfig({
-  plugins: [vue(), cfasimPyodide({ model: "../my_model" })],
+  root: "interactive",
+  build: { outDir: "../dist", emptyOutDir: true },
+  plugins: [vue(), cfasimPyodide({ model: ".." })],
 });
 ```
 
-The plugin runs `uv build` on that directory and generates a `public/wheels.json` file so the Pyodide worker can find your wheel.
+`model: ".."` resolves from the Vite root (`interactive/`) back to the project root where `pyproject.toml` lives. The plugin runs `uv build` on that directory and generates an `interactive/public/wheels.json` file so the Pyodide worker can find your wheel.
 
 Other options:
 
@@ -117,7 +143,7 @@ Other options:
 - `pipCommand` — command used to invoke pip when downloading `pypiDeps` (default: `"uvx pip"`). Set to `"pip"` or `"uv run pip"` if you'd rather use a pip that's already on your PATH or in your project's venv.
 - `pythonVersion` — Python version passed to pip's `--python-version` flag when downloading `pypiDeps` (default: `"3.12"`). Should match the Python shipped by your Pyodide runtime.
 
-Add a minimal `tsconfig.json`:
+Add a minimal `tsconfig.json` at the project root:
 
 ```json
 {
@@ -131,13 +157,13 @@ Add a minimal `tsconfig.json`:
     "isolatedModules": true,
     "skipLibCheck": true
   },
-  "include": ["src"]
+  "include": ["interactive/src"]
 }
 ```
 
 ### Wire up the app
 
-**`ui/index.html`**:
+**`interactive/index.html`**:
 
 ```html
 <!doctype html>
@@ -158,7 +184,7 @@ Add a minimal `tsconfig.json`:
 </html>
 ```
 
-**`ui/src/main.ts`**:
+**`interactive/src/main.ts`**:
 
 ```ts
 import { createApp } from "vue";
@@ -168,7 +194,7 @@ import App from "./App.vue";
 createApp(App).mount("#app");
 ```
 
-**`ui/src/App.vue`**:
+**`interactive/src/App.vue`**:
 
 ```vue
 <script setup lang="ts">
@@ -187,7 +213,7 @@ const { outputs, loading } = useOutputs("simulate", params);
 <template>
   <SidebarLayout>
     <template #sidebar>
-      <Button variant="secondary" @click="reset">Reset</Button>
+      <Button variant="secondary" @click="() => reset()">Reset</Button>
       <NumberInput v-model="params.steps" label="Steps" />
       <NumberInput v-model="params.rate" label="Rate" />
     </template>
@@ -209,11 +235,13 @@ const { outputs, loading } = useOutputs("simulate", params);
 
 ### Run it
 
+From the project root:
+
 ```bash
 pnpm dev
 ```
 
-The Vite plugin will build your Python wheel on startup. Changes to your Python code will trigger a rebuild when you refresh.
+The Vite plugin will build your Python wheel on startup. Changes to your Python code will trigger a rebuild when you refresh. `pnpm build` produces a static site in `dist/` at the project root.
 
 ## Next steps
 

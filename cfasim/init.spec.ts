@@ -29,12 +29,11 @@ function startVite(
   name: string,
   port: number,
 ): { proc: ChildProcess; url: string } {
-  const dir = resolve(TMP_DIR, name);
   const proc = spawn(
     "pnpm",
     ["exec", "vite", "--port", String(port), "--strictPort"],
     {
-      cwd: dir,
+      cwd: resolve(TMP_DIR, name),
       stdio: ["ignore", "inherit", "inherit"],
     },
   );
@@ -119,6 +118,13 @@ test.describe("cfasim init", () => {
   });
 
   for (const p of projects) {
+    test(`${p.template} project typechecks`, () => {
+      execSync("pnpm run typecheck", {
+        cwd: resolve(TMP_DIR, p.name),
+        stdio: "pipe",
+      });
+    });
+
     test(`${p.template} project renders`, async ({ page }) => {
       await page.goto(`http://localhost:${p.port}`);
 

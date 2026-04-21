@@ -19,21 +19,45 @@ The fastest way to start is with `uvx`, which runs `cfasim` ephemerally without 
 uvx cfasim init
 ```
 
-Follow the prompts to pick a project name and choose the **Rust** template. `cfasim init` generates a Vite + Vue app with a working WASM model already wired up, ready to `pnpm dev`.
+Follow the prompts to pick a project name and choose the **Rust** template. The generated project is a Rust crate at the root, with the interactive UI source in an `interactive/` subfolder. All tasks run from the project root:
+
+```
+my-project/
+├── Cargo.toml
+├── src/
+│   └── lib.rs
+├── package.json
+├── vite.config.ts
+├── tsconfig.json
+└── interactive/
+    ├── index.html
+    └── src/
+        ├── App.vue
+        ├── env.d.ts
+        └── main.ts
+```
+
+After scaffolding:
+
+```bash
+cd my-project
+pnpm install
+pnpm run dev
+```
 
 See [Getting Started](../getting-started) for other ways to install `cfasim`.
 
 ## Adding cfasim-ui to an existing Rust project
 
-This section assumes you already have a Rust crate with a simulation function — for example, `my_sim/` with a `Cargo.toml` and a `lib.rs` exporting a `simulate(...)` function. What you don't have yet is a frontend.
+This section assumes you already have a Rust crate with a simulation function — for example, a project with `Cargo.toml` at the root and `src/lib.rs` exporting a `simulate(...)` function. What you don't have yet is a frontend.
 
-The steps below walk through adding a new `ui/` directory next to your crate, wiring it up with pnpm, Vite, Vue, and cfasim-ui, and pointing the WASM plugin at your existing crate.
+The steps below walk through adding a new `interactive/` directory inside your project, wiring it up with pnpm, Vite, Vue, and cfasim-ui, and pointing the WASM plugin at the crate at the project root.
 
 ### Prepare your Rust crate
 
 Make sure your crate builds as a `cdylib` and depends on `wasm-bindgen` and `cfasim-model`. The `cfasim-model` crate provides the `ModelOutput` and `model_outputs` helpers that the UI uses to read your simulation results.
 
-**`my_sim/Cargo.toml`** (minimum required):
+**`Cargo.toml`** (minimum required):
 
 ```toml
 [package]
@@ -49,7 +73,7 @@ wasm-bindgen = "0.2"
 cfasim-model = "0.1"
 ```
 
-**`my_sim/src/lib.rs`**:
+**`src/lib.rs`**:
 
 ```rust
 use cfasim_model::{model_outputs, ModelOutput};
@@ -70,14 +94,13 @@ pub fn simulate(steps: u32, rate: f64) -> JsValue {
 
 Each `#[wasm_bindgen]`-exported function becomes a callable entry point from the UI side.
 
-### Create a frontend directory
+### Set up the frontend
 
-Next to your Rust crate, create a new directory for the frontend and initialize it with pnpm:
+At your project root, initialize a `package.json` and create an `interactive/` subfolder for the Vue source:
 
 ```bash
-mkdir ui
-cd ui
 pnpm init
+mkdir -p interactive/src
 ```
 
 Install runtime and dev dependencies:
@@ -103,9 +126,9 @@ Add `"type": "module"` and dev scripts to the generated `package.json`:
 
 ### Configure Vite
 
-`cfasim-ui/wasm/vite` provides a Vite plugin that runs `wasm-pack build` and serves the output. Point the `model` option at your existing crate (relative to the `ui/` directory). Since the frontend directory name (`ui`) doesn't match your crate name, also pass `name` so the output lands at `public/wasm/my_sim/`:
+`cfasim-ui/wasm/vite` provides a Vite plugin that runs `wasm-pack build` and serves the output. Put `vite.config.ts` at the project root and set Vite's `root` to `interactive/` so the Vue source is served from there; redirect the build output to a top-level `dist/`. Since the Vite root (`interactive`) doesn't match your crate name, also pass `name` so the output lands at `interactive/public/wasm/my_sim/`:
 
-**`ui/vite.config.ts`**:
+**`vite.config.ts`**:
 
 ```ts
 import { defineConfig } from "vite";
@@ -113,18 +136,20 @@ import vue from "@vitejs/plugin-vue";
 import { cfasimWasm } from "cfasim-ui/wasm/vite";
 
 export default defineConfig({
-  plugins: [vue(), cfasimWasm({ model: "../my_sim", name: "my_sim" })],
+  root: "interactive",
+  build: { outDir: "../dist", emptyOutDir: true },
+  plugins: [vue(), cfasimWasm({ model: "..", name: "my_sim" })],
 });
 ```
 
-The plugin runs `wasm-pack build ../my_sim --target web --out-dir public/wasm/my_sim`. The worker loads `/wasm/{name}/{name}.js` at runtime, so `name` must match the crate name (with hyphens converted to underscores).
+`model: ".."` resolves from the Vite root (`interactive/`) back to the project root where `Cargo.toml` lives. The plugin runs `wasm-pack build .. --target web --out-dir interactive/public/wasm/my_sim`. The worker loads `/wasm/{name}/{name}.js` at runtime, so `name` must match the crate name (with hyphens converted to underscores).
 
 Options:
 
 - `model` — path to your Rust crate directory (default: `"model"`)
 - `name` — output directory name and module name the worker loads (default: the Vite project directory's basename, hyphens converted to underscores)
 
-Add a minimal `tsconfig.json`:
+Add a minimal `tsconfig.json` at the project root:
 
 ```json
 {
@@ -138,13 +163,13 @@ Add a minimal `tsconfig.json`:
     "isolatedModules": true,
     "skipLibCheck": true
   },
-  "include": ["src"]
+  "include": ["interactive/src"]
 }
 ```
 
 ### Wire up the app
 
-**`ui/index.html`**:
+**`interactive/index.html`**:
 
 ```html
 <!doctype html>
@@ -165,7 +190,7 @@ Add a minimal `tsconfig.json`:
 </html>
 ```
 
-**`ui/src/main.ts`**:
+**`interactive/src/main.ts`**:
 
 ```ts
 import { createApp } from "vue";
@@ -175,7 +200,7 @@ import App from "./App.vue";
 createApp(App).mount("#app");
 ```
 
-**`ui/src/App.vue`**:
+**`interactive/src/App.vue`**:
 
 ```vue
 <script setup lang="ts">
@@ -194,7 +219,7 @@ const { outputs, loading } = useOutputs("simulate", params);
 <template>
   <SidebarLayout>
     <template #sidebar>
-      <Button variant="secondary" @click="reset">Reset</Button>
+      <Button variant="secondary" @click="() => reset()">Reset</Button>
       <NumberInput v-model="params.steps" label="Steps" />
       <NumberInput v-model="params.rate" label="Rate" />
     </template>
@@ -216,11 +241,13 @@ const { outputs, loading } = useOutputs("simulate", params);
 
 ### Run it
 
+From the project root:
+
 ```bash
 pnpm dev
 ```
 
-The Vite plugin will compile your Rust model to WASM on startup. Changes to your Rust code will trigger a rebuild when you refresh.
+The Vite plugin will compile your Rust model to WASM on startup. Changes to your Rust code will trigger a rebuild when you refresh. `pnpm build` produces a static site in `dist/` at the project root.
 
 ## Next steps
 

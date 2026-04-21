@@ -1,6 +1,10 @@
-node_modules/
-dist/
-public/*.whl
-public/wheels.json
+# Python
 __pycache__/
 *.egg-info/
+/build/
+
+# UI
+node_modules/
+/dist/
+interactive/public/*.whl
+interactive/public/wheels.json

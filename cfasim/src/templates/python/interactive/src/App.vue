@@ -15,7 +15,7 @@ const { outputs, loading } = useOutputs("simulate", params);
   <SidebarLayout>
     <template #sidebar>
       <h2>%%project_name%%</h2>
-      <Button variant="secondary" @click="reset">Reset</Button>
+      <Button variant="secondary" @click="() => reset()">Reset</Button>
       <NumberInput v-model="params.steps" label="Steps" />
       <NumberInput v-model="params.rate" label="Rate" />
     </template>
