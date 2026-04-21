@@ -16,4 +16,4 @@ runs:
         key: rust-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
         restore-keys: rust-${{ runner.os }}-
     - shell: bash
-      run: command -v wasm-pack || cargo install wasm-pack
+      run: command -v wasm-pack || cargo install wasm-pack --locked

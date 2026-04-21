@@ -185,9 +185,12 @@ fn report(name: &str, status: &Status, hint: Option<&str>) {
     }
 }
 
+fn current_cfasim_version() -> Version {
+    Version::parse(env!("CARGO_PKG_VERSION")).expect("CARGO_PKG_VERSION is always a valid semver")
+}
+
 fn check_cfasim() -> Status {
-    let current = Version::parse(env!("CARGO_PKG_VERSION"))
-        .expect("CARGO_PKG_VERSION is always a valid semver");
+    let current = current_cfasim_version();
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
         let _ = tx.send(crate::update_check::fetch_latest_version());
@@ -205,6 +208,13 @@ fn check_cfasim() -> Status {
         }
     } else {
         Status::Ok(current)
+    }
+}
+
+fn check_uv_offline() -> Status {
+    match run_version("uv", "--version") {
+        Some(v) => Status::Ok(v),
+        None => Status::Missing,
     }
 }
 
@@ -257,13 +267,17 @@ fn parse_uv_target_version(line: &str, current: &Version) -> Option<Version> {
     }
 }
 
-pub fn run() -> Result<()> {
+pub fn run(skip_network: bool) -> Result<()> {
     cliclack::intro("Check system tools")?;
 
     let min = min_versions();
     let mut results: Vec<(String, Status, Option<String>)> = Vec::new();
 
-    let cfasim = check_cfasim();
+    let cfasim = if skip_network {
+        Status::Ok(current_cfasim_version())
+    } else {
+        check_cfasim()
+    };
     let cfasim_hint = match &cfasim {
         Status::UpdateAvailable { .. } => Some("Upgrade cfasim: cfasim update".into()),
         _ => None,
@@ -296,7 +310,11 @@ pub fn run() -> Result<()> {
     };
     results.push(("pnpm".into(), pnpm, pnpm_hint));
 
-    let uv = check_uv();
+    let uv = if skip_network {
+        check_uv_offline()
+    } else {
+        check_uv()
+    };
     let uv_hint = match &uv {
         Status::Missing => {
             Some("Install uv: https://docs.astral.sh/uv/getting-started/installation/".into())
@@ -304,7 +322,7 @@ pub fn run() -> Result<()> {
         Status::UpdateAvailable { .. } => Some("Upgrade uv: uv self update".into()),
         _ => None,
     };
-    results.push(("uv".into(), uv, uv_hint));
+    results.push(("uv \x1b[2m(python projects)\x1b[0m".into(), uv, uv_hint));
 
     let cargo = check("cargo", "--version", &min.cargo);
     let cargo_hint = match &cargo {
@@ -313,23 +331,31 @@ pub fn run() -> Result<()> {
         _ => None,
     };
     let cargo_available = !matches!(cargo, Status::Missing);
-    results.push(("cargo".into(), cargo, cargo_hint));
+    results.push((
+        "cargo \x1b[2m(rust projects)\x1b[0m".into(),
+        cargo,
+        cargo_hint,
+    ));
 
     let wp = check("wasm-pack", "--version", &min.wasm_pack);
     let wp_hint = match &wp {
         Status::Missing => Some(if cargo_available {
-            "Install wasm-pack: cargo install wasm-pack".into()
+            "Install wasm-pack: cargo install wasm-pack --locked".into()
         } else {
             "Install wasm-pack: https://wasm-bindgen.github.io/wasm-pack/installer/".into()
         }),
         Status::Outdated { .. } => Some(if cargo_available {
-            "Upgrade wasm-pack: cargo install wasm-pack --force".into()
+            "Upgrade wasm-pack: cargo install wasm-pack --locked --force".into()
         } else {
             "Upgrade wasm-pack: https://wasm-bindgen.github.io/wasm-pack/installer/".into()
         }),
         _ => None,
     };
-    results.push(("wasm-pack".into(), wp, wp_hint));
+    results.push((
+        "wasm-pack \x1b[2m(rust projects)\x1b[0m".into(),
+        wp,
+        wp_hint,
+    ));
 
     println!();
     for (name, status, hint) in &results {
