@@ -12,6 +12,7 @@
     "cfasim-ui": "^%%cfasim_version%%"
   },
   "devDependencies": {
+    "@cfasim-ui/docs": "^%%cfasim_version%%",
     "@vitejs/plugin-vue": "^6.0.5",
     "typescript": "^5.9.3",
     "vite": "^8.0.1",

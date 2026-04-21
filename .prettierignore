@@ -5,3 +5,10 @@ pnpm-lock.yaml
 **/public/
 CHANGELOG.md
 .github/workflows/release.yml
+cfasim-ui/docs/index.json
+cfasim-ui/docs/components/
+cfasim-ui/docs/charts/
+cfasim-ui/docs/shared/
+cfasim-ui/docs/pyodide/
+cfasim-ui/docs/wasm/
+cfasim-ui/docs/theme/

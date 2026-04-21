@@ -1,3 +1,7 @@
+---
+keywords: [button, click, action, primary, secondary]
+---
+
 # Button
 
 A button for triggering actions. Supports primary and secondary variants.

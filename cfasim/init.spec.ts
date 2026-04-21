@@ -64,26 +64,28 @@ test.describe("cfasim init", () => {
 
   // During release prep the workspace version has been bumped but not yet
   // published to npm. Scaffolded projects would fail `pnpm install` in that
-  // window — skip the suite until the bump lands on the registry.
+  // window — skip the suite until every required package lands on the registry.
   const uiVersion = JSON.parse(
     readFileSync(resolve(ROOT, "cfasim-ui/cfasim-ui/package.json"), "utf8"),
   ).version;
-  let published = false;
-  try {
-    const out = execSync(`npm view cfasim-ui@${uiVersion} version`, {
-      stdio: ["ignore", "pipe", "ignore"],
-    })
-      .toString()
-      .trim();
-    published = out.length > 0;
-  } catch {
-    published = false;
-  }
+  const requiredPackages = ["cfasim-ui", "@cfasim-ui/docs"];
+  const missing = requiredPackages.filter((pkg) => {
+    try {
+      const out = execSync(`npm view ${pkg}@${uiVersion} version`, {
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+        .toString()
+        .trim();
+      return out.length === 0;
+    } catch {
+      return true;
+    }
+  });
 
   test.beforeAll(async () => {
     test.skip(
-      !published,
-      `cfasim-ui@${uiVersion} is not published to npm yet. Skipping until release lands`,
+      missing.length > 0,
+      `Not yet published at ${uiVersion}: ${missing.join(", ")}. Skipping until release lands`,
     );
     // Build CLI
     execSync("cargo build -p cfasim", { cwd: ROOT });

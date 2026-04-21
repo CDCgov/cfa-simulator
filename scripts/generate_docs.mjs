@@ -12,11 +12,34 @@
  *   defineEmits<{ event: [...] }>()
  */
 
-import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs";
-import { resolve } from "node:path";
+import {
+  cpSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+  mkdirSync,
+} from "node:fs";
+import { basename, resolve } from "node:path";
+import matter from "gray-matter";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const DOCS_ROOT = resolve(ROOT, "docs/cfasim-ui");
+const PACKAGE_ROOT = resolve(ROOT, "cfasim-ui/docs");
+const INCLUDE_RE = /<!--\s*@include:\s*\.\/_api\/[^>]*-->/;
+
+// Workspace packages whose src/ trees get shipped (minus tests) in @cfasim-ui/docs.
+const WORKSPACE_PACKAGES = [
+  "components",
+  "charts",
+  "shared",
+  "pyodide",
+  "wasm",
+  "theme",
+];
+
+function isTestFile(path) {
+  return path.endsWith(".test.ts") || path.endsWith(".spec.ts");
+}
 
 // [slug, output dir, vue source path, doc source path]
 const components = [
@@ -272,23 +295,69 @@ function generateMarkdown(meta) {
 
 // --- Main ---
 
-// Process components: copy doc + generate API table
+const packageVersion = JSON.parse(
+  readFileSync(resolve(PACKAGE_ROOT, "package.json"), "utf-8"),
+).version;
+
+// Reset and copy each workspace package's src/ (minus tests) into cfasim-ui/docs/<pkg>/
+for (const pkg of WORKSPACE_PACKAGES) {
+  const srcDir = resolve(ROOT, `cfasim-ui/${pkg}/src`);
+  const destDir = resolve(PACKAGE_ROOT, pkg);
+  rmSync(destDir, { recursive: true, force: true });
+  cpSync(srcDir, destDir, {
+    recursive: true,
+    filter: (path) => !isTestFile(path),
+  });
+}
+
+const index = {
+  version: packageVersion,
+  package: "@cfasim-ui/docs",
+  content: { components: [], charts: [] },
+};
+
 for (const [slug, outDir, vuePath, docPath] of components) {
   const dir = resolve(DOCS_ROOT, outDir);
   const apiDir = resolve(dir, "_api");
   mkdirSync(apiDir, { recursive: true });
 
-  copyFileSync(resolve(ROOT, docPath), resolve(dir, `${slug}.md`));
-
+  const docSource = readFileSync(resolve(ROOT, docPath), "utf-8");
   const meta = analyzeComponent(resolve(ROOT, vuePath));
-  const md = generateMarkdown(meta);
-  writeFileSync(resolve(apiDir, `${slug}.md`), md);
+  const apiMd = generateMarkdown(meta);
+
+  // VitePress: copy src .md as-is + write API table to _api/
+  writeFileSync(resolve(dir, `${slug}.md`), docSource);
+  writeFileSync(resolve(apiDir, `${slug}.md`), apiMd);
+
+  // @cfasim-ui/docs: the component's src tree was already copied above;
+  // overwrite the src .md with the self-contained built version.
+  const name = basename(vuePath, ".vue");
+  const pkgComponentDir = resolve(PACKAGE_ROOT, outDir, name);
+  const parsed = matter(docSource);
+  const keywords = Array.isArray(parsed.data.keywords)
+    ? parsed.data.keywords
+    : [];
+  const builtMd = parsed.content.replace(INCLUDE_RE, apiMd).trimStart();
+  writeFileSync(resolve(pkgComponentDir, `${name}.md`), builtMd);
+
+  index.content[outDir].push({
+    name,
+    slug,
+    docs: `${outDir}/${name}/${name}.md`,
+    source: `${outDir}/${name}/${name}.vue`,
+    keywords,
+  });
 
   console.log(
-    `  ${outDir}/${slug}.md (${meta.props.length} props, ${meta.models.length} models, ${meta.emits.length} emits)`,
+    `  ${outDir}/${slug}.md (${meta.props.length} props, ${meta.models.length} models, ${meta.emits.length} emits, ${keywords.length} keywords)`,
   );
 }
 
+writeFileSync(
+  resolve(PACKAGE_ROOT, "index.json"),
+  JSON.stringify(index, null, 2) + "\n",
+);
+
 console.log(
-  `\nGenerated docs for ${components.length} components into docs/cfasim-ui/`,
+  `\nGenerated docs for ${components.length} components into docs/cfasim-ui/ and cfasim-ui/docs/`,
 );

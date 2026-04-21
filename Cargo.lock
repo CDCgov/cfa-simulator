@@ -235,6 +235,8 @@ dependencies = [
  "include_dir",
  "is_ci",
  "semver",
+ "serde",
+ "serde_json",
  "tar",
  "tempfile",
  "tokio",
