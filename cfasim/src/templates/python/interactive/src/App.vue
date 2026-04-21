@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive } from "vue";
 import { SidebarLayout, NumberInput, Button } from "cfasim-ui/components";
+import { LineChart } from "cfasim-ui/charts";
 import { useModel } from "cfasim-ui/pyodide";
 import { useUrlParams } from "cfasim-ui/shared";
 
@@ -21,14 +22,13 @@ const { outputs, loading } = useOutputs("simulate", params);
     </template>
     <h1>%%project_name%%</h1>
     <p v-if="loading">Loading...</p>
-    <template v-else-if="outputs?.series">
-      <ul>
-        <li v-for="(_, i) in outputs.series.column('time')" :key="i">
-          t={{ outputs.series.column("time")[i] }}, v={{
-            outputs.series.column("values")[i]
-          }}
-        </li>
-      </ul>
-    </template>
+    <LineChart
+      v-else-if="outputs?.series"
+      :data="Array.from(outputs.series.column('values'))"
+      :height="300"
+      x-label="time"
+      y-label="value"
+      tooltip-trigger="hover"
+    />
   </SidebarLayout>
 </template>

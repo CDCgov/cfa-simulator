@@ -2,9 +2,15 @@
 __pycache__/
 *.egg-info/
 /build/
+.pytest_cache/
 
 # UI
 node_modules/
 /dist/
 interactive/public/*.whl
 interactive/public/wheels.json
+
+# Tests
+/test-results/
+/playwright-report/
+/playwright/.cache/
