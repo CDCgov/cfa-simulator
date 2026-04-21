@@ -1,6 +1,16 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.3.12] - 2026-04-21
+
+### Features
+
+- Add cfasim docs command and @cfasim-ui/docs package
+
+### Refactor
+
+- Adjust template structure to include ui under interactive/
+
 ## [0.3.11] - 2026-04-21
 
 ### Bug Fixes

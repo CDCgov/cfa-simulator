@@ -1,6 +1,6 @@
 {
   "name": "cfasim-ui",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "type": "module",
   "description": "Unified package for all cfasim-ui sub-packages",
   "license": "Apache-2.0",
