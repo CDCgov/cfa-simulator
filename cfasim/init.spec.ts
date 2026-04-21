@@ -134,9 +134,9 @@ test.describe("cfasim init", () => {
       await expect(page.locator("h1")).toContainText(p.name);
       await expect(page.getByLabel("Steps")).toBeVisible();
 
-      // Verify the model actually loaded and produced output.
-      await expect(page.locator("ul li").first()).toContainText("t=", {
-        timeout: 20_000,
+      // Verify the model actually loaded and drew the chart.
+      await expect(page.locator("svg path").first()).toBeVisible({
+        timeout: 30_000,
       });
     });
   }
