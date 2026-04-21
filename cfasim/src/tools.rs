@@ -318,12 +318,12 @@ pub fn run() -> Result<()> {
     let wp = check("wasm-pack", "--version", &min.wasm_pack);
     let wp_hint = match &wp {
         Status::Missing => Some(if cargo_available {
-            "Install wasm-pack: cargo install wasm-pack".into()
+            "Install wasm-pack: cargo install wasm-pack --locked".into()
         } else {
             "Install wasm-pack: https://wasm-bindgen.github.io/wasm-pack/installer/".into()
         }),
         Status::Outdated { .. } => Some(if cargo_available {
-            "Upgrade wasm-pack: cargo install wasm-pack --force".into()
+            "Upgrade wasm-pack: cargo install wasm-pack --locked --force".into()
         } else {
             "Upgrade wasm-pack: https://wasm-bindgen.github.io/wasm-pack/installer/".into()
         }),
