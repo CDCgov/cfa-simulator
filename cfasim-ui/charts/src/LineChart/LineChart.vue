@@ -5,8 +5,26 @@ import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
 import { saveSvg, savePng, downloadCsv } from "../ChartMenu/download.js";
 import { placeTooltip } from "../tooltip-position.js";
 
+/**
+ * Numeric input accepted by the chart. `number[]` and any standard numeric
+ * typed array are supported, so the output of
+ * `ModelOutput.column('x')` (e.g. a `Float64Array`) can be passed directly
+ * without copying into a plain array.
+ */
+export type LineChartData =
+  | readonly number[]
+  | Float64Array
+  | Float32Array
+  | Int32Array
+  | Uint32Array
+  | Int16Array
+  | Uint16Array
+  | Int8Array
+  | Uint8Array
+  | Uint8ClampedArray;
+
 export interface Series {
-  data: number[];
+  data: LineChartData;
   color?: string;
   dashed?: boolean;
   strokeWidth?: number;
@@ -23,8 +41,8 @@ export interface Series {
 }
 
 export interface Area {
-  upper: number[];
-  lower: number[];
+  upper: LineChartData;
+  lower: LineChartData;
   color?: string;
   opacity?: number;
 }
@@ -54,7 +72,7 @@ export interface AreaSection {
 
 const props = withDefaults(
   defineProps<{
-    data?: number[];
+    data?: LineChartData;
     series?: Series[];
     areas?: Area[];
     areaSections?: AreaSection[];
@@ -240,7 +258,7 @@ const extent = computed(() => {
   return { min, max, range: max - min || 1 };
 });
 
-function toPath(data: number[]): string {
+function toPath(data: LineChartData): string {
   if (data.length === 0) return "";
   const { min, range } = extent.value;
   const len = maxLen.value;
@@ -262,7 +280,7 @@ function toPath(data: number[]): string {
   return d;
 }
 
-function toPoints(data: number[]): { x: number; y: number }[] {
+function toPoints(data: LineChartData): { x: number; y: number }[] {
   const { min, range } = extent.value;
   const len = maxLen.value;
   const xScale = innerW.value / (len - 1 || 1);
@@ -279,7 +297,7 @@ function toPoints(data: number[]): { x: number; y: number }[] {
   return pts;
 }
 
-function toAreaPath(upper: number[], lower: number[]): string {
+function toAreaPath(upper: LineChartData, lower: LineChartData): string {
   const len = Math.min(upper.length, lower.length);
   if (len === 0) return "";
   const { min, range } = extent.value;
