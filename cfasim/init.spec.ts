@@ -118,6 +118,13 @@ test.describe("cfasim init", () => {
   });
 
   for (const p of projects) {
+    test(`${p.template} project typechecks`, () => {
+      execSync("pnpm run typecheck", {
+        cwd: resolve(TMP_DIR, p.name),
+        stdio: "pipe",
+      });
+    });
+
     test(`${p.template} project renders`, async ({ page }) => {
       await page.goto(`http://localhost:${p.port}`);
 
