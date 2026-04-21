@@ -28,13 +28,48 @@ A responsive SVG line chart with support for multiple series, axis labels, and c
   </template>
 </ComponentDemo>
 
+### x/y
+
+Pass paired `x` and `y` arrays to plot points at specific x positions.
+`y` is equivalent to `data` (both names are accepted), and they both
+take typed arrays. For multi-series
+charts, set `x` and `y` (or `data`) on each `Series`.
+
+<ComponentDemo>
+  <LineChart
+    :x="[0, 1, 2, 5, 10, 20, 50]"
+    :y="[0, 2, 5, 12, 22, 30, 38]"
+    :height="200"
+    x-label="Days (log-ish)"
+    y-label="Cases"
+    tooltip-trigger="hover"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :x="[0, 1, 2, 5, 10, 20, 50]"
+  :y="[0, 2, 5, 12, 22, 30, 38]"
+  :height="200"
+  x-label="Days"
+  y-label="Cases"
+  tooltip-trigger="hover"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+When `x` is omitted, `y`/`data` values are plotted at indices 0, 1, 2, etc.
+
 ### Multiple series
 
 <ComponentDemo>
   <LineChart
     :series="[
       { data: [0, 10, 25, 45, 60, 55, 40, 20, 8], color: '#fb7e38', strokeWidth: 3 },
-      { data: [0, 5, 12, 20, 28, 25, 18, 10, 4], color: '#0057b7', strokeWidth: 3 },
+      { x: [0, 1, 3, 4, 6, 7, 8], y: [0, 5, 20, 28, 18, 10, 4], color: '#0057b7', strokeWidth: 3 },
     ]"
     :height="200"
     x-label="Weeks"
@@ -52,7 +87,8 @@ A responsive SVG line chart with support for multiple series, axis labels, and c
       strokeWidth: 3,
     },
     {
-      data: [0, 5, 12, 20, 28, 25, 18, 10, 4],
+      x: [0, 1, 3, 4, 6, 7, 8],
+      y: [0, 5, 20, 28, 18, 10, 4],
       color: '#0057b7',
       strokeWidth: 3,
     },
@@ -439,7 +475,9 @@ type LineChartData =
 
 ```ts
 interface Series {
-  data: LineChartData;
+  y?: LineChartData; // y-values (preferred)
+  data?: LineChartData; // y-values (alternative name; one of y/data must be set)
+  x?: LineChartData; // optional parallel x-values
   color?: string;
   dashed?: boolean;
   strokeWidth?: number;
