@@ -18,21 +18,46 @@ The fastest way to start is with `uvx`, which runs `cfasim` ephemerally without 
 uvx cfasim init
 ```
 
-Follow the prompts to pick a project name and choose the **Python** template. `cfasim init` generates a Vite + Vue app with a working Pyodide model already wired up, ready to `pnpm dev`.
+Follow the prompts to pick a project name and choose the **Python** template. The generated project is a Python package at the root, with the interactive UI in an `interactive/` subfolder:
+
+```
+my-project/
+├── pyproject.toml
+├── src/
+│   └── my_project/
+│       └── __init__.py
+└── interactive/
+    ├── index.html
+    ├── package.json
+    ├── vite.config.ts
+    ├── tsconfig.json
+    └── src/
+        ├── App.vue
+        ├── env.d.ts
+        └── main.ts
+```
+
+After scaffolding:
+
+```bash
+cd my-project/interactive
+pnpm install
+pnpm run dev
+```
 
 See [Getting Started](../getting-started) for other ways to install `cfasim`.
 
 ## Adding cfasim-ui to an existing Python project
 
-This section assumes you already have a Python package with a simulation function — for example, `my_model/` with a `pyproject.toml` and an `__init__.py` exporting a `simulate(...)` function. What you don't have yet is a frontend.
+This section assumes you already have a Python package with a simulation function — for example, a project with `pyproject.toml` at the root and `src/my_model/__init__.py` exporting a `simulate(...)` function. What you don't have yet is a frontend.
 
-The steps below walk through adding a new `ui/` directory next to your model, wiring it up with pnpm, Vite, Vue, and cfasim-ui, and pointing the Pyodide plugin at your existing Python package.
+The steps below walk through adding a new `interactive/` directory inside your project, wiring it up with pnpm, Vite, Vue, and cfasim-ui, and pointing the Pyodide plugin at the Python package at the project root.
 
 ### Prepare your Python model
 
 Make sure your model's `pyproject.toml` has `cfasim-model` listed as a dependency, and that your `simulate` function returns a `model_outputs(...)` result. The `cfasim-model` package provides the `ModelOutput` and `model_outputs` helpers that the UI uses to read your simulation results.
 
-**`my_model/pyproject.toml`** (minimum required):
+**`pyproject.toml`** (minimum required):
 
 ```toml
 [build-system]
@@ -46,7 +71,7 @@ requires-python = ">=3.11"
 dependencies = ["cfasim-model"]
 ```
 
-**`my_model/src/my_model/__init__.py`**:
+**`src/my_model/__init__.py`**:
 
 ```python
 import numpy as np
@@ -64,11 +89,11 @@ Each top-level function becomes a callable entry point from the UI side.
 
 ### Create a frontend directory
 
-Next to your Python package, create a new directory for the frontend and initialize it with pnpm:
+Inside your project, create a new `interactive/` directory for the frontend and initialize it with pnpm:
 
 ```bash
-mkdir ui
-cd ui
+mkdir interactive
+cd interactive
 pnpm init
 ```
 
@@ -95,9 +120,9 @@ Add scripts to the generated `package.json`:
 
 ### Configure Vite
 
-`cfasim-ui/pyodide/vite` provides a Vite plugin that builds your Python model into a wheel and serves it to Pyodide at dev time. Point the `model` option at your existing Python package (relative to the `ui/` directory):
+`cfasim-ui/pyodide/vite` provides a Vite plugin that builds your Python model into a wheel and serves it to Pyodide at dev time. Point the `model` option at your project root (relative to the `interactive/` directory), where `pyproject.toml` lives:
 
-**`ui/vite.config.ts`**:
+**`interactive/vite.config.ts`**:
 
 ```ts
 import { defineConfig } from "vite";
@@ -105,7 +130,7 @@ import vue from "@vitejs/plugin-vue";
 import { cfasimPyodide } from "cfasim-ui/pyodide/vite";
 
 export default defineConfig({
-  plugins: [vue(), cfasimPyodide({ model: "../my_model" })],
+  plugins: [vue(), cfasimPyodide({ model: ".." })],
 });
 ```
 
@@ -137,7 +162,7 @@ Add a minimal `tsconfig.json`:
 
 ### Wire up the app
 
-**`ui/index.html`**:
+**`interactive/index.html`**:
 
 ```html
 <!doctype html>
@@ -158,7 +183,7 @@ Add a minimal `tsconfig.json`:
 </html>
 ```
 
-**`ui/src/main.ts`**:
+**`interactive/src/main.ts`**:
 
 ```ts
 import { createApp } from "vue";
@@ -168,7 +193,7 @@ import App from "./App.vue";
 createApp(App).mount("#app");
 ```
 
-**`ui/src/App.vue`**:
+**`interactive/src/App.vue`**:
 
 ```vue
 <script setup lang="ts">

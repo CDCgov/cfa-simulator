@@ -282,8 +282,12 @@ pub fn run(
         }
     }
 
+    let cd_path = match template {
+        Template::Python => format!("{dir}/interactive"),
+        Template::Rust => dir.clone(),
+    };
     let next_steps = format!(
-        "Done! Created {name}.\n\n  Next steps:\n    cd {dir}\n    pnpm install\n    pnpm run dev"
+        "Done! Created {name}.\n\n  Next steps:\n    cd {cd_path}\n    pnpm install\n    pnpm run dev"
     );
 
     if interactive {

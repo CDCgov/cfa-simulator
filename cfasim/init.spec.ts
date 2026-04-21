@@ -25,16 +25,21 @@ function scaffoldProject(name: string, template: Template) {
   execSync(`${CLI} init --dir ${dir} --template ${template} --local`);
 }
 
+function uiDir(name: string, template: Template) {
+  const dir = resolve(TMP_DIR, name);
+  return template === "python" ? resolve(dir, "interactive") : dir;
+}
+
 function startVite(
   name: string,
+  template: Template,
   port: number,
 ): { proc: ChildProcess; url: string } {
-  const dir = resolve(TMP_DIR, name);
   const proc = spawn(
     "pnpm",
     ["exec", "vite", "--port", String(port), "--strictPort"],
     {
-      cwd: dir,
+      cwd: uiDir(name, template),
       stdio: ["ignore", "inherit", "inherit"],
     },
   );
@@ -92,12 +97,12 @@ test.describe("cfasim init", () => {
     // Scaffold and install each project
     for (const p of projects) {
       scaffoldProject(p.name, p.template);
-      execSync("pnpm install", { cwd: resolve(TMP_DIR, p.name) });
+      execSync("pnpm install", { cwd: uiDir(p.name, p.template) });
     }
 
     // Start vite dev servers
     for (const p of projects) {
-      const { proc, url } = startVite(p.name, p.port);
+      const { proc, url } = startVite(p.name, p.template, p.port);
       procs.push(proc);
       await waitForServer(url);
     }
