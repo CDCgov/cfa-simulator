@@ -410,11 +410,36 @@ until the user clicks Download:
 
 <!--@include: ./_api/line-chart.md-->
 
+### Data
+
+`data`, `series[].data`, and `areas[].upper`/`lower` accept a plain
+`number[]` or any standard numeric typed array (`Float64Array`,
+`Int32Array`, etc.). This lets you pass the output of
+`ModelOutput.column()` directly — no `Array.from(...)` copy is needed:
+
+```vue
+<LineChart :data="outputs.series.column('values')" />
+```
+
+```ts
+type LineChartData =
+  | readonly number[]
+  | Float64Array
+  | Float32Array
+  | Int32Array
+  | Uint32Array
+  | Int16Array
+  | Uint16Array
+  | Int8Array
+  | Uint8Array
+  | Uint8ClampedArray;
+```
+
 ### Series
 
 ```ts
 interface Series {
-  data: number[];
+  data: LineChartData;
   color?: string;
   dashed?: boolean;
   strokeWidth?: number;

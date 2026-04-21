@@ -16,6 +16,54 @@ describe("LineChart", () => {
     expect(dataPath.attributes("fill")).toBe("none");
   });
 
+  it("accepts a typed array as data", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const wrapper = mount(LineChart, {
+      props: {
+        data: new Float64Array([0, 10, 20]),
+        height: 100,
+        menu: false,
+      },
+    });
+    const path = wrapper.find("path");
+    expect(path.attributes("d")).toBeTruthy();
+    const vueWarnings = warn.mock.calls.filter((c) =>
+      String(c[0] ?? "").includes("[Vue warn]"),
+    );
+    expect(vueWarnings).toEqual([]);
+    warn.mockRestore();
+  });
+
+  it("accepts a typed array inside a series", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        series: [
+          { data: new Int32Array([0, 5, 10]), dots: true },
+          { data: new Float64Array([10, 5, 0]) },
+        ],
+        height: 100,
+        menu: false,
+      },
+    });
+    expect(wrapper.findAll("path").length).toBe(2);
+    expect(wrapper.findAll("circle").length).toBe(3);
+  });
+
+  it("generates CSV from typed array data", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        data: new Float64Array([1.5, 2.5, 3.5]),
+        height: 100,
+        menu: false,
+        downloadLink: true,
+      },
+    });
+    const link = wrapper.find("a.line-chart-download-link");
+    expect(link.attributes("href")).toContain(
+      encodeURIComponent("index,value\n0,1.5\n1,2.5\n2,3.5"),
+    );
+  });
+
   it("renders multiple series as separate paths", () => {
     const wrapper = mount(LineChart, {
       props: {

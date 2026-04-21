@@ -1,5 +1,6 @@
 export {
   default as LineChart,
+  type LineChartData,
   type Series,
   type Area,
   type AreaSection,
