@@ -5,3 +5,8 @@ target/
 node_modules/
 /dist/
 interactive/public/wasm/
+
+# Tests
+/test-results/
+/playwright-report/
+/playwright/.cache/

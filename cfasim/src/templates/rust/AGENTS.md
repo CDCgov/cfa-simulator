@@ -21,10 +21,18 @@ The JSON output gives every component's `name`, `slug`, `keywords`, and absolute
 - `pnpm dev` — start the Vite dev server (rebuilds WASM on Rust changes)
 - `pnpm build` — production build
 - `pnpm typecheck` — vue-tsc type checking
-- `cargo test` — run Rust model tests
+- `pnpm test:e2e:install` — one-time: download the Playwright Chromium browser binary
+- `pnpm test:e2e` — Playwright integration test (boots the dev server, loads the app)
+- `cargo test` — run Rust model unit tests (extract pure helpers from `#[wasm_bindgen]` functions so they're testable natively)
 
 ## Conventions
 
 - Import UI components from `cfasim-ui/components`, charts from `cfasim-ui/charts`, the model hook from `cfasim-ui/wasm`, and utilities from `cfasim-ui/shared`.
 - Use `useUrlParams` (from `cfasim-ui/shared`) to sync reactive parameters to the URL query string.
 - Model functions should return types that implement `Serialize`; the `useModel` composable handles transfer between the WASM worker and the main thread.
+
+## After making changes
+
+- After any change: run `pnpm typecheck`.
+- After changes to the Rust model (`src/lib.rs`): run `cargo test`.
+- After major changes (new UI wiring, model signature changes, chart/output changes): run `pnpm test:e2e` to verify the app still boots and produces output end-to-end.
