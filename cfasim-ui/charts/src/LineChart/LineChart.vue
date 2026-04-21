@@ -498,14 +498,23 @@ const sectionLabels = computed<{
   if (!sections?.length) return { labels: [], extraHeight: 0 };
 
   const items: PositionedSectionLabel[] = [];
+  const chartRight = padding.value.left + innerW.value;
   for (const sec of sections) {
     if (!sec.label && !sec.description) continue;
     if (sec.legend === "inline" || sec.legend === false) continue;
-    const cx = (sectionXPixel(sec, "start") + sectionXPixel(sec, "end")) / 2;
     const labelText = sec.label ?? "";
     const descText = sec.description ?? "";
     const maxChars = Math.max(labelText.length, descText.length);
     const textWidth = maxChars * SECTION_LABEL_CHAR_WIDTH;
+    // Anchor the indicator circle to the start of the area. The circle is
+    // drawn at (cx - textWidth/2 - 2), so solve for cx to place it at the
+    // section's start pixel. Clamp so the label's right edge stays within
+    // the chart if it would otherwise overflow.
+    const startPx = sectionXPixel(sec, "start");
+    const labelRightPad = 8;
+    const preferred = startPx + textWidth / 2 + 2;
+    const maxCx = chartRight - textWidth / 2 - labelRightPad;
+    const cx = Math.min(preferred, maxCx);
     const color =
       sec.color ??
       (sec.seriesIndex != null
