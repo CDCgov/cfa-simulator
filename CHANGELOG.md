@@ -1,6 +1,17 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.3.11] - 2026-04-21
+
+### Bug Fixes
+
+- Embed workspace files inside cfasim crate for cargo publish
+
+### Documentation
+
+- Make snippets for install easier to copy
+- Adjust copy on docs homepage
+
 ## [0.3.10] - 2026-04-20
 
 ### Bug Fixes
