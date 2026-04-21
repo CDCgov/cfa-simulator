@@ -2,10 +2,9 @@
 __pycache__/
 *.egg-info/
 /build/
-/dist/
 
 # UI
-interactive/node_modules/
-interactive/dist/
+node_modules/
+/dist/
 interactive/public/*.whl
 interactive/public/wheels.json

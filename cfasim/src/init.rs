@@ -283,7 +283,7 @@ pub fn run(
     }
 
     let next_steps = format!(
-        "Done! Created {name}.\n\n  Next steps:\n    cd {dir}/interactive\n    pnpm install\n    pnpm run dev"
+        "Done! Created {name}.\n\n  Next steps:\n    cd {dir}\n    pnpm install\n    pnpm run dev"
     );
 
     if interactive {

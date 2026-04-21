@@ -18,7 +18,7 @@ The fastest way to start is with `uvx`, which runs `cfasim` ephemerally without 
 uvx cfasim init
 ```
 
-Follow the prompts to pick a project name and choose the **Python** template. The generated project is a Python package at the root, with the interactive UI in an `interactive/` subfolder:
+Follow the prompts to pick a project name and choose the **Python** template. The generated project is a Python package at the root, with the interactive UI source in an `interactive/` subfolder. All tasks run from the project root:
 
 ```
 my-project/
@@ -26,11 +26,11 @@ my-project/
 ├── src/
 │   └── my_project/
 │       └── __init__.py
+├── package.json
+├── vite.config.ts
+├── tsconfig.json
 └── interactive/
     ├── index.html
-    ├── package.json
-    ├── vite.config.ts
-    ├── tsconfig.json
     └── src/
         ├── App.vue
         ├── env.d.ts
@@ -40,7 +40,7 @@ my-project/
 After scaffolding:
 
 ```bash
-cd my-project/interactive
+cd my-project
 pnpm install
 pnpm run dev
 ```
@@ -87,14 +87,13 @@ def simulate(steps, rate):
 
 Each top-level function becomes a callable entry point from the UI side.
 
-### Create a frontend directory
+### Set up the frontend
 
-Inside your project, create a new `interactive/` directory for the frontend and initialize it with pnpm:
+At your project root, initialize a `package.json` and create an `interactive/` subfolder for the Vue source:
 
 ```bash
-mkdir interactive
-cd interactive
 pnpm init
+mkdir -p interactive/src
 ```
 
 Install runtime and dev dependencies:
@@ -120,9 +119,9 @@ Add scripts to the generated `package.json`:
 
 ### Configure Vite
 
-`cfasim-ui/pyodide/vite` provides a Vite plugin that builds your Python model into a wheel and serves it to Pyodide at dev time. Point the `model` option at your project root (relative to the `interactive/` directory), where `pyproject.toml` lives:
+`cfasim-ui/pyodide/vite` provides a Vite plugin that builds your Python model into a wheel and serves it to Pyodide at dev time. Put `vite.config.ts` at the project root and set Vite's `root` to `interactive/` so the Vue source is served from there; redirect the build output to a top-level `dist/`:
 
-**`interactive/vite.config.ts`**:
+**`vite.config.ts`**:
 
 ```ts
 import { defineConfig } from "vite";
@@ -130,11 +129,13 @@ import vue from "@vitejs/plugin-vue";
 import { cfasimPyodide } from "cfasim-ui/pyodide/vite";
 
 export default defineConfig({
+  root: "interactive",
+  build: { outDir: "../dist", emptyOutDir: true },
   plugins: [vue(), cfasimPyodide({ model: ".." })],
 });
 ```
 
-The plugin runs `uv build` on that directory and generates a `public/wheels.json` file so the Pyodide worker can find your wheel.
+`model: ".."` resolves from the Vite root (`interactive/`) back to the project root where `pyproject.toml` lives. The plugin runs `uv build` on that directory and generates an `interactive/public/wheels.json` file so the Pyodide worker can find your wheel.
 
 Other options:
 
@@ -142,7 +143,7 @@ Other options:
 - `pipCommand` — command used to invoke pip when downloading `pypiDeps` (default: `"uvx pip"`). Set to `"pip"` or `"uv run pip"` if you'd rather use a pip that's already on your PATH or in your project's venv.
 - `pythonVersion` — Python version passed to pip's `--python-version` flag when downloading `pypiDeps` (default: `"3.12"`). Should match the Python shipped by your Pyodide runtime.
 
-Add a minimal `tsconfig.json`:
+Add a minimal `tsconfig.json` at the project root:
 
 ```json
 {
@@ -156,7 +157,7 @@ Add a minimal `tsconfig.json`:
     "isolatedModules": true,
     "skipLibCheck": true
   },
-  "include": ["src"]
+  "include": ["interactive/src"]
 }
 ```
 
@@ -234,11 +235,13 @@ const { outputs, loading } = useOutputs("simulate", params);
 
 ### Run it
 
+From the project root:
+
 ```bash
 pnpm dev
 ```
 
-The Vite plugin will build your Python wheel on startup. Changes to your Python code will trigger a rebuild when you refresh.
+The Vite plugin will build your Python wheel on startup. Changes to your Python code will trigger a rebuild when you refresh. `pnpm build` produces a static site in `dist/` at the project root.
 
 ## Next steps
 
