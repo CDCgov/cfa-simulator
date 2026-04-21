@@ -34,7 +34,11 @@ enum Commands {
     /// Update cfasim to the latest release
     Update,
     /// Check your system for the tools needed to develop cfasim projects
-    Tools,
+    Tools {
+        /// Skip network-bound update checks (faster, works offline)
+        #[arg(long)]
+        offline: bool,
+    },
     /// List cfasim-ui components and charts (LLM-friendly with --json)
     Docs {
         /// Emit the raw JSON directory instead of the human-readable listing
@@ -52,7 +56,7 @@ enum TemplateArg {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let is_update = matches!(cli.command, Commands::Update);
-    let is_tools = matches!(cli.command, Commands::Tools);
+    let is_tools = matches!(cli.command, Commands::Tools { .. });
     let is_docs = matches!(cli.command, Commands::Docs { .. });
     if !is_update {
         settings::prompt_for_updates_if_first_run();
@@ -70,7 +74,7 @@ fn main() -> Result<()> {
             init::run(dir, template, local).map_err(|e| anyhow::anyhow!("{e}"))
         }
         Commands::Update => update::run(),
-        Commands::Tools => tools::run(),
+        Commands::Tools { offline } => tools::run(offline),
         Commands::Docs { json } => docs::run(json),
     };
 

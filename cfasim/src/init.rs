@@ -282,15 +282,15 @@ pub fn run(
         }
     }
 
-    let next_steps = format!(
-        "Done! Created {name}.\n\n  Next steps:\n    cd {dir}\n    pnpm install\n    pnpm run dev"
-    );
-
     if interactive {
-        cliclack::outro(next_steps)?;
-    } else {
-        println!("{}", next_steps);
+        println!();
+        if let Err(e) = crate::tools::run(true) {
+            eprintln!("Note: tool check skipped: {e}");
+        }
+        println!();
     }
+
+    println!("Next steps:\n  cd {dir}\n  pnpm install\n  pnpm run dev");
 
     Ok(())
 }
