@@ -666,6 +666,193 @@ describe("LineChart", () => {
     });
   });
 
+  describe("x/y data", () => {
+    function dataPath(wrapper: ReturnType<typeof mount>): string {
+      // In a simple chart the last <path> element is the series line.
+      const paths = wrapper.findAll("path");
+      return paths[paths.length - 1].attributes("d") ?? "";
+    }
+
+    it("plots points at the supplied x positions", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          x: [0, 1, 10],
+          y: [0, 5, 10],
+          width: 410, // innerW = 410 - 50 - 10 = 350
+          height: 100,
+          menu: false,
+        },
+      });
+      const d = dataPath(wrapper);
+      // With x=[0,1,10] and innerW=350 starting at padding.left=50, the
+      // middle point should sit at 50 + (1/10)*350 = 85, not evenly spaced.
+      // The matches look for `M50,...L85,...L400,...`.
+      expect(d).toMatch(/^M50,/);
+      expect(d).toMatch(/L85,/);
+      expect(d).toMatch(/L400,/);
+    });
+
+    it("accepts y as an alias for data", () => {
+      const fromY = mount(LineChart, {
+        props: { y: [0, 10, 20], height: 100, menu: false },
+      });
+      const fromData = mount(LineChart, {
+        props: { data: [0, 10, 20], height: 100, menu: false },
+      });
+      expect(dataPath(fromY)).toBe(dataPath(fromData));
+    });
+
+    it("prefers y over data when both are set", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          y: [0, 10, 20],
+          data: [999, 999, 999],
+          height: 100,
+          menu: false,
+          downloadLink: true,
+        },
+      });
+      const href = wrapper
+        .find("a.line-chart-download-link")
+        .attributes("href")!;
+      expect(decodeURIComponent(href)).toContain("0,0\n1,10\n2,20");
+      expect(decodeURIComponent(href)).not.toContain("999");
+    });
+
+    it("accepts y on Series (per-series)", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [
+            { x: [0, 1, 2], y: [0, 10, 20] },
+            { x: [0, 1, 2], y: [20, 10, 0] },
+          ],
+          height: 100,
+          menu: false,
+        },
+      });
+      expect(wrapper.findAll("path").length).toBe(2);
+    });
+
+    it("derives x-extent from explicit x values (not indices)", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          x: [100, 200, 400],
+          y: [1, 2, 3],
+          width: 400,
+          height: 100,
+          menu: false,
+        },
+      });
+      const ticks = wrapper
+        .findAll('[data-testid="x-tick"]')
+        .map((t) => t.text());
+      // Tick values should reflect the x range 100..400, not 0..2.
+      expect(ticks.some((t) => Number(t) >= 100 && Number(t) <= 400)).toBe(
+        true,
+      );
+      expect(ticks).not.toContain("2");
+    });
+
+    it("accepts per-series x and y values", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [
+            { y: [0, 10, 20], x: [0, 5, 10] },
+            { y: [5, 15, 25], x: [2, 7, 12] },
+          ],
+          width: 400,
+          height: 100,
+          menu: false,
+        },
+      });
+      expect(wrapper.findAll("path").length).toBe(2);
+    });
+
+    it("accepts typed arrays for x and y", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          x: new Float64Array([0, 1.5, 10]),
+          y: new Float64Array([0, 5, 10]),
+          height: 100,
+          menu: false,
+        },
+      });
+      expect(dataPath(wrapper)).toBeTruthy();
+    });
+
+    it("ignores xMin when explicit x is provided", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          x: [10, 20, 30],
+          y: [1, 2, 3],
+          xMin: 1000, // should be ignored
+          xTicks: [10, 20, 30],
+          width: 400,
+          height: 100,
+          menu: false,
+        },
+      });
+      const ticks = wrapper
+        .findAll('[data-testid="x-tick"]')
+        .map((t) => t.text());
+      expect(ticks).toEqual(expect.arrayContaining(["10", "20", "30"]));
+      expect(ticks).not.toContain("1010");
+    });
+
+    it("skips points with non-finite x", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          x: [0, NaN, 10],
+          y: [0, 5, 10],
+          height: 100,
+          menu: false,
+        },
+      });
+      // Path should have a break: M...M... (two segments).
+      const d = dataPath(wrapper);
+      expect((d.match(/M/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("emits CSV with an x column when x is shared", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          x: [0, 2.5, 10],
+          y: [1, 2, 3],
+          height: 100,
+          menu: false,
+          downloadLink: true,
+        },
+      });
+      const href = wrapper
+        .find("a.line-chart-download-link")
+        .attributes("href")!;
+      expect(decodeURIComponent(href)).toContain("x,value\n0,1\n2.5,2\n10,3");
+    });
+
+    it("emits hover with index from nearest-x search", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          x: [0, 1, 10],
+          y: [0, 5, 10],
+          width: 410,
+          height: 100,
+          menu: false,
+          tooltipTrigger: "hover" as const,
+        },
+        attachTo: document.body,
+      });
+      const overlay = wrapper
+        .findAll("rect")
+        .find((r) => r.attributes("fill") === "transparent")!;
+      // Click near pixel x for data-x=1 (at ~85px). Should select index 1.
+      await overlay.trigger("mousemove", { clientX: 85, clientY: 50 });
+      const events = wrapper.emitted("hover")!;
+      const last = events[events.length - 1][0] as { index: number };
+      expect(last.index).toBe(1);
+      wrapper.unmount();
+    });
+  });
+
   describe("areaSections", () => {
     it("renders area section fill paths", () => {
       const wrapper = mount(LineChart, {

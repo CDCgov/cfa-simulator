@@ -24,7 +24,19 @@ export type LineChartData =
   | Uint8ClampedArray;
 
 export interface Series {
-  data: LineChartData;
+  /**
+   * Y-values. One of `y` or `data` must be supplied; `y` wins if both
+   * are set.
+   */
+  y?: LineChartData;
+  /** Y-values (alternative name for `y`). */
+  data?: LineChartData;
+  /**
+   * Optional x-values, parallel to `y`/`data`. When set, the chart
+   * plots points at the given x positions (irregular spacing supported).
+   * When omitted, points are plotted at indices 0, 1, 2, ...
+   */
+  x?: LineChartData;
   color?: string;
   dashed?: boolean;
   strokeWidth?: number;
@@ -43,6 +55,8 @@ export interface Series {
 export interface Area {
   upper: LineChartData;
   lower: LineChartData;
+  /** Optional x-values parallel to `upper`/`lower`. See `Series.x`. */
+  x?: LineChartData;
   color?: string;
   opacity?: number;
 }
@@ -72,7 +86,16 @@ export interface AreaSection {
 
 const props = withDefaults(
   defineProps<{
+    /** Y-values. Equivalent to `data`. If both are set, `y` wins. */
+    y?: LineChartData;
+    /** Y-values (alternative name for `y`). */
     data?: LineChartData;
+    /**
+     * Optional x-values paired with `y`/`data`. When provided, points
+     * are plotted at the given x positions instead of at their indices.
+     * Ignored when `series` is used — set `x` on each `Series` instead.
+     */
+    x?: LineChartData;
     series?: Series[];
     areas?: Area[];
     areaSections?: AreaSection[];
@@ -83,6 +106,11 @@ const props = withDefaults(
     xLabel?: string;
     yLabel?: string;
     yMin?: number;
+    /**
+     * Offset applied to index-based x values (e.g. `xMin: 10` starts the
+     * x axis at 10 instead of 0). Ignored when any series or area has
+     * explicit `x` values.
+     */
     xMin?: number;
     /**
      * Tick placement on the x-axis. Number = interval in data units
@@ -211,9 +239,23 @@ const innerH = computed(
   () => height.value - padding.value.top - padding.value.bottom,
 );
 
-const allSeries = computed<Series[]>(() => {
-  if (props.series && props.series.length > 0) return props.series;
-  if (props.data) return [{ data: props.data }];
+/**
+ * Internal series shape where `data` (y-values) is always resolved.
+ * `Series.y` takes precedence over `Series.data` when both are set.
+ */
+type ResolvedSeries = Omit<Series, "data" | "y"> & { data: LineChartData };
+
+const EMPTY_DATA: readonly number[] = [];
+
+function resolveSeries(s: Series): ResolvedSeries {
+  return { ...s, data: s.y ?? s.data ?? EMPTY_DATA };
+}
+
+const allSeries = computed<ResolvedSeries[]>(() => {
+  if (props.series && props.series.length > 0)
+    return props.series.map(resolveSeries);
+  const topY = props.y ?? props.data;
+  if (topY) return [{ data: topY, x: props.x }];
   return [];
 });
 
@@ -230,6 +272,62 @@ const maxLen = computed(() => {
   }
   return m;
 });
+
+/** True when any series/area supplies explicit x-values (irregular x mode). */
+const hasExplicitX = computed(
+  () =>
+    allSeries.value.some((s) => s.x != null) ||
+    allAreas.value.some((a) => a.x != null),
+);
+
+/** Data-space x value for the i-th point of a series. */
+function seriesXAt(s: { x?: LineChartData }, i: number): number {
+  return s.x ? Number(s.x[i]) : i;
+}
+
+/** Data-space x value for the i-th point of an area. */
+function areaXAt(a: Area, i: number): number {
+  return a.x ? Number(a.x[i]) : i;
+}
+
+/**
+ * Display-only offset: added to tick values and tooltip x-labels so
+ * `xMin: 10` with index-based data shows "10, 11, …" without changing
+ * where points are drawn. Ignored when explicit `x` is provided.
+ */
+const xDisplayOffset = computed(() =>
+  hasExplicitX.value ? 0 : (props.xMin ?? 0),
+);
+
+const xExtent = computed(() => {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const s of allSeries.value) {
+    for (let i = 0; i < s.data.length; i++) {
+      const v = seriesXAt(s, i);
+      if (!isFinite(v)) continue;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+  }
+  for (const a of allAreas.value) {
+    const n = Math.max(a.upper.length, a.lower.length);
+    for (let i = 0; i < n; i++) {
+      const v = areaXAt(a, i);
+      if (!isFinite(v)) continue;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+  }
+  if (!isFinite(min)) return { min: 0, max: 0 };
+  return { min, max };
+});
+
+function xPixel(v: number): number {
+  const { min, max } = xExtent.value;
+  const range = max - min || 1;
+  return padding.value.left + ((v - min) / range) * innerW.value;
+}
 
 const extent = computed(() => {
   let min = Infinity;
@@ -258,21 +356,21 @@ const extent = computed(() => {
   return { min, max, range: max - min || 1 };
 });
 
-function toPath(data: LineChartData): string {
+function toPath(s: ResolvedSeries): string {
+  const data = s.data;
   if (data.length === 0) return "";
   const { min, range } = extent.value;
-  const len = maxLen.value;
-  const xScale = innerW.value / (len - 1 || 1);
   const yScale = innerH.value / range;
   const py = padding.value.top + innerH.value;
   let d = "";
   let inSegment = false;
   for (let i = 0; i < data.length; i++) {
-    if (!isFinite(data[i])) {
+    const xv = seriesXAt(s, i);
+    if (!isFinite(data[i]) || !isFinite(xv)) {
       inSegment = false;
       continue;
     }
-    const x = padding.value.left + i * xScale;
+    const x = xPixel(xv);
     const y = py - (data[i] - min) * yScale;
     d += inSegment ? `L${x},${y}` : `M${x},${y}`;
     inSegment = true;
@@ -280,38 +378,36 @@ function toPath(data: LineChartData): string {
   return d;
 }
 
-function toPoints(data: LineChartData): { x: number; y: number }[] {
+function toPoints(s: ResolvedSeries): { x: number; y: number }[] {
+  const data = s.data;
   const { min, range } = extent.value;
-  const len = maxLen.value;
-  const xScale = innerW.value / (len - 1 || 1);
   const yScale = innerH.value / range;
   const py = padding.value.top + innerH.value;
   const pts: { x: number; y: number }[] = [];
   for (let i = 0; i < data.length; i++) {
-    if (!isFinite(data[i])) continue;
-    pts.push({
-      x: padding.value.left + i * xScale,
-      y: py - (data[i] - min) * yScale,
-    });
+    const xv = seriesXAt(s, i);
+    if (!isFinite(data[i]) || !isFinite(xv)) continue;
+    pts.push({ x: xPixel(xv), y: py - (data[i] - min) * yScale });
   }
   return pts;
 }
 
-function toAreaPath(upper: LineChartData, lower: LineChartData): string {
-  const len = Math.min(upper.length, lower.length);
+function toAreaPath(a: Area): string {
+  const len = Math.min(a.upper.length, a.lower.length);
   if (len === 0) return "";
   const { min, range } = extent.value;
-  const ml = maxLen.value;
-  const xScale = innerW.value / (ml - 1 || 1);
   const yScale = innerH.value / range;
   const py = padding.value.top + innerH.value;
-  const x = (i: number) => padding.value.left + i * xScale;
   const y = (v: number) => py - (v - min) * yScale;
-  // Collect contiguous segments where both upper and lower are finite
+  // Collect contiguous segments where both upper/lower and x are finite
   const segments: number[][] = [];
   let seg: number[] = [];
   for (let i = 0; i < len; i++) {
-    if (isFinite(upper[i]) && isFinite(lower[i])) {
+    if (
+      isFinite(a.upper[i]) &&
+      isFinite(a.lower[i]) &&
+      isFinite(areaXAt(a, i))
+    ) {
       seg.push(i);
     } else if (seg.length) {
       segments.push(seg);
@@ -321,27 +417,39 @@ function toAreaPath(upper: LineChartData, lower: LineChartData): string {
   if (seg.length) segments.push(seg);
   let d = "";
   for (const s of segments) {
-    d += `M${x(s[0])},${y(upper[s[0]])}`;
-    for (let j = 1; j < s.length; j++) d += `L${x(s[j])},${y(upper[s[j]])}`;
+    d += `M${xPixel(areaXAt(a, s[0]))},${y(a.upper[s[0]])}`;
+    for (let j = 1; j < s.length; j++)
+      d += `L${xPixel(areaXAt(a, s[j]))},${y(a.upper[s[j]])}`;
     for (let j = s.length - 1; j >= 0; j--)
-      d += `L${x(s[j])},${y(lower[s[j]])}`;
+      d += `L${xPixel(areaXAt(a, s[j]))},${y(a.lower[s[j]])}`;
     d += "Z";
   }
   return d;
 }
 
+/**
+ * Pixel x of a section boundary. Maps through the referenced series'
+ * `x` array when available, then falls back to series 0, then to the
+ * raw index (index-mode).
+ */
+function sectionXPixel(section: AreaSection, which: "start" | "end"): number {
+  const idx = which === "start" ? section.startIndex : section.endIndex;
+  const s =
+    (section.seriesIndex != null && allSeries.value[section.seriesIndex]) ||
+    allSeries.value[0];
+  if (s) return xPixel(seriesXAt(s, idx));
+  return xPixel(idx);
+}
+
 function toSectionPath(section: AreaSection, closed = true): string {
-  const len = maxLen.value;
-  const xScale = innerW.value / (len - 1 || 1);
   const py = padding.value.top + innerH.value;
-  const x = (i: number) => padding.value.left + i * xScale;
 
   // No seriesIndex: full-height rectangle spanning the range
   if (section.seriesIndex == null) {
-    const start = Math.max(0, section.startIndex);
-    const end = Math.min(len - 1, section.endIndex);
-    if (start > end) return "";
-    return `M${x(start)},${padding.value.top}L${x(end)},${padding.value.top}L${x(end)},${py}L${x(start)},${py}Z`;
+    const sx = sectionXPixel(section, "start");
+    const ex = sectionXPixel(section, "end");
+    if (sx > ex) return "";
+    return `M${sx},${padding.value.top}L${ex},${padding.value.top}L${ex},${py}L${sx},${py}Z`;
   }
 
   const s = allSeries.value[section.seriesIndex];
@@ -354,14 +462,14 @@ function toSectionPath(section: AreaSection, closed = true): string {
   const end = Math.min(s.data.length - 1, section.endIndex);
   if (start > end) return "";
 
-  let d = `M${x(start)},${y(s.data[start])}`;
+  let d = `M${xPixel(seriesXAt(s, start))},${y(s.data[start])}`;
   for (let i = start + 1; i <= end; i++) {
     if (!isFinite(s.data[i])) continue;
-    d += `L${x(i)},${y(s.data[i])}`;
+    d += `L${xPixel(seriesXAt(s, i))},${y(s.data[i])}`;
   }
   if (closed) {
-    d += `L${x(end)},${py}`;
-    d += `L${x(start)},${py}`;
+    d += `L${xPixel(seriesXAt(s, end))},${py}`;
+    d += `L${xPixel(seriesXAt(s, start))},${py}`;
     d += "Z";
   }
   return d;
@@ -389,15 +497,11 @@ const sectionLabels = computed<{
   const sections = props.areaSections;
   if (!sections?.length) return { labels: [], extraHeight: 0 };
 
-  const len = maxLen.value;
-  const xScale = innerW.value / (len - 1 || 1);
-
   const items: PositionedSectionLabel[] = [];
   for (const sec of sections) {
     if (!sec.label && !sec.description) continue;
     if (sec.legend === "inline" || sec.legend === false) continue;
-    const cx =
-      padding.value.left + ((sec.startIndex + sec.endIndex) / 2) * xScale;
+    const cx = (sectionXPixel(sec, "start") + sectionXPixel(sec, "end")) / 2;
     const labelText = sec.label ?? "";
     const descText = sec.description ?? "";
     const maxChars = Math.max(labelText.length, descText.length);
@@ -563,47 +667,61 @@ const yTickItems = computed(() => {
 });
 
 const xTickItems = computed(() => {
+  const { min: xMin, max: xMax } = xExtent.value;
+  if (xMin === xMax) return [];
+  const offset = xDisplayOffset.value;
   const len = maxLen.value;
-  if (len <= 1) return [];
-  const offset = props.xMin ?? 0;
-  const xMin = offset;
-  const xMax = offset + (len - 1);
 
-  const toX = (v: number) =>
-    snap(padding.value.left + ((v - offset) / (len - 1)) * innerW.value);
+  // Tick values are in data-space; display labels add `xDisplayOffset`.
   const fmt = (v: number, i: number) => {
-    if (props.xTickFormat) return props.xTickFormat(v, i);
-    const labels = props.xLabels;
-    const idx = v - offset;
-    if (labels && Number.isInteger(idx) && idx >= 0 && idx < labels.length) {
-      return labels[idx];
+    const display = v + offset;
+    if (props.xTickFormat) return props.xTickFormat(display, i);
+    if (
+      !hasExplicitX.value &&
+      props.xLabels &&
+      Number.isInteger(v) &&
+      v >= 0 &&
+      v < props.xLabels.length
+    ) {
+      return props.xLabels[v];
     }
-    return formatTick(v);
+    return formatTick(display);
   };
 
   let values: number[];
   if (Array.isArray(props.xTicks)) {
-    values = props.xTicks.filter((v) => v >= xMin && v <= xMax);
+    // User supplies display-space values; shift to data-space.
+    values = props.xTicks
+      .map((v) => v - offset)
+      .filter((v) => v >= xMin && v <= xMax);
   } else if (typeof props.xTicks === "number") {
-    values = intervalValues(xMin, xMax, props.xTicks);
-  } else if (props.xLabels && props.xLabels.length === len) {
+    // Align to multiples of the step in display space (preserves
+    // e.g. `xMin: 3, xTicks: 5` → display ticks 5, 10, 15 behavior).
+    values = intervalValues(xMin + offset, xMax + offset, props.xTicks).map(
+      (v) => v - offset,
+    );
+  } else if (
+    !hasExplicitX.value &&
+    props.xLabels &&
+    props.xLabels.length === len
+  ) {
     const targetTicks = Math.max(3, Math.floor(innerW.value / 80));
     const step = Math.max(1, Math.round((len - 1) / targetTicks));
     values = [];
-    for (let i = 0; i < len; i += step) values.push(offset + i);
+    for (let i = 0; i < len; i += step) values.push(i);
   } else {
     const targetTicks = Math.max(3, Math.floor(innerW.value / 80));
-    const step = niceStep(len - 1, targetTicks);
-    values = [];
-    for (let i = 0; i <= len - 1; i += step) {
-      values.push(Math.round(i) + offset);
-    }
+    const step = niceStep(xMax - xMin, targetTicks);
+    values = intervalValues(xMin + offset, xMax + offset, step).map(
+      (v) => v - offset,
+    );
   }
+
   const leftEdge = padding.value.left;
   const rightEdge = padding.value.left + innerW.value;
   const edgeSnapPx = 1;
   return values.map((v, i) => {
-    const x = toX(v);
+    const x = snap(xPixel(v));
     let anchor: "start" | "middle" | "end" = "middle";
     if (x - leftEdge <= edgeSnapPx) anchor = "start";
     else if (rightEdge - x <= edgeSnapPx) anchor = "end";
@@ -626,13 +744,20 @@ function toCsv(): string {
   const series = allSeries.value;
   if (series.length === 0) return "";
   const len = maxLen.value;
+  // Use an `x` column when every series shares the same x source;
+  // otherwise fall back to `index`.
+  const sharedX = series.every((s) => s.x === series[0].x)
+    ? series[0].x
+    : undefined;
+  const xHeader = sharedX ? "x" : "index";
   const headers =
     series.length === 1
-      ? ["index", "value"]
-      : ["index", ...series.map((_, i) => `series_${i}`)];
+      ? [xHeader, "value"]
+      : [xHeader, ...series.map((_, i) => `series_${i}`)];
   const rows = [headers.join(",")];
   for (let r = 0; r < len; r++) {
-    const cells = [r.toString()];
+    const xCell = sharedX ? String(sharedX[r]) : r.toString();
+    const cells = [xCell];
     for (const s of series) {
       cells.push(r < s.data.length ? String(s.data[r]) : "");
     }
@@ -652,43 +777,82 @@ const hasTooltipSlot = computed(
   () => !!props.tooltipData || !!props.tooltipTrigger,
 );
 
-const hoverX = computed(() => {
-  if (hoverIndex.value === null) return 0;
-  const len = maxLen.value;
-  const xScale = innerW.value / (len - 1 || 1);
-  return padding.value.left + hoverIndex.value * xScale;
+/** Data-space x of the hovered point (via the first series). */
+const hoverDataX = computed(() => {
+  const idx = hoverIndex.value;
+  const s0 = allSeries.value[0];
+  if (idx === null || !s0) return null;
+  return seriesXAt(s0, idx);
 });
 
+const hoverX = computed(() =>
+  hoverDataX.value === null ? 0 : xPixel(hoverDataX.value),
+);
+
+/** Index of the series point closest to the given data-space x. */
+function nearestIndex(s: ResolvedSeries, targetX: number): number | null {
+  const len = s.data.length;
+  if (len === 0) return null;
+  let bestIdx = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < len; i++) {
+    const svx = seriesXAt(s, i);
+    if (!isFinite(svx)) continue;
+    const d = Math.abs(svx - targetX);
+    if (d < bestDist) {
+      bestDist = d;
+      bestIdx = i;
+    }
+  }
+  return bestDist === Infinity ? null : bestIdx;
+}
+
 const hoverDots = computed(() => {
-  const idx = hoverIndex.value;
-  if (idx === null) return [];
+  const targetX = hoverDataX.value;
+  if (targetX === null) return [];
   const { min, range } = extent.value;
   const yScale = innerH.value / range;
   const py = padding.value.top + innerH.value;
-  return allSeries.value
-    .filter((s) => idx < s.data.length && isFinite(s.data[idx]))
-    .map((s) => ({
-      x: hoverX.value,
-      y: py - (s.data[idx] - min) * yScale,
+  const dots: { x: number; y: number; color: string }[] = [];
+  for (const s of allSeries.value) {
+    const nIdx = nearestIndex(s, targetX);
+    if (nIdx === null) continue;
+    const yv = s.data[nIdx];
+    if (!isFinite(yv)) continue;
+    dots.push({
+      x: xPixel(seriesXAt(s, nIdx)),
+      y: py - (yv - min) * yScale,
       color: s.color ?? "currentColor",
-    }));
+    });
+  }
+  return dots;
 });
 
 const hoverSlotProps = computed(() => {
   const idx = hoverIndex.value;
-  if (idx === null) return null;
-  const offset = props.xMin ?? 0;
-  const xLabel = props.xTickFormat
-    ? props.xTickFormat(idx + offset, idx)
-    : props.xLabels?.[idx];
+  const targetX = hoverDataX.value;
+  if (idx === null || targetX === null) return null;
+  const offset = xDisplayOffset.value;
+  const displayX = targetX + offset;
+  let xLabel: string | undefined;
+  if (props.xTickFormat) {
+    xLabel = props.xTickFormat(displayX, idx);
+  } else if (!hasExplicitX.value) {
+    xLabel = props.xLabels?.[idx];
+  } else {
+    xLabel = formatTick(displayX);
+  }
   return {
     index: idx,
     xLabel,
-    values: allSeries.value.map((s, i) => ({
-      value: s.data[idx],
-      color: s.color ?? "currentColor",
-      seriesIndex: i,
-    })),
+    values: allSeries.value.map((s, i) => {
+      const nIdx = nearestIndex(s, targetX);
+      return {
+        value: nIdx !== null ? Number(s.data[nIdx]) : NaN,
+        color: s.color ?? "currentColor",
+        seriesIndex: i,
+      };
+    }),
     data: props.tooltipData?.[idx] ?? null,
   };
 });
@@ -705,12 +869,13 @@ function pointerFromEvent(
 function indexFromPointer(clientX: number): number | null {
   const rect = containerRef.value?.getBoundingClientRect();
   if (!rect) return null;
-  const len = maxLen.value;
-  if (len <= 1) return null;
+  const s0 = allSeries.value[0];
+  if (!s0 || s0.data.length === 0) return null;
+  const { min: xMin, max: xMax } = xExtent.value;
+  const range = xMax - xMin || 1;
   const mouseX = clientX - rect.left;
-  const xScale = innerW.value / (len - 1 || 1);
-  const dataX = (mouseX - padding.value.left) / xScale;
-  return Math.round(Math.max(0, Math.min(len - 1, dataX)));
+  const targetX = xMin + ((mouseX - padding.value.left) / innerW.value) * range;
+  return nearestIndex(s0, targetX);
 }
 
 function updateHover(event: MouseEvent | TouchEvent) {
@@ -974,7 +1139,7 @@ const menuItems = computed<ChartMenuItem[]>(() => {
       <path
         v-for="(a, i) in allAreas"
         :key="'area' + i"
-        :d="toAreaPath(a.upper, a.lower)"
+        :d="toAreaPath(a)"
         :fill="a.color ?? 'currentColor'"
         :fill-opacity="a.opacity ?? 0.2"
         stroke="none"
@@ -983,7 +1148,7 @@ const menuItems = computed<ChartMenuItem[]>(() => {
       <template v-for="(s, i) in allSeries" :key="i">
         <path
           v-if="s.line !== false"
-          :d="toPath(s.data)"
+          :d="toPath(s)"
           fill="none"
           :stroke="s.color ?? 'currentColor'"
           :stroke-width="s.strokeWidth ?? 1.5"
@@ -992,7 +1157,7 @@ const menuItems = computed<ChartMenuItem[]>(() => {
         />
         <template v-if="s.dots">
           <circle
-            v-for="(pt, j) in toPoints(s.data)"
+            v-for="(pt, j) in toPoints(s)"
             :key="j"
             :cx="pt.x"
             :cy="pt.y"
@@ -1029,26 +1194,18 @@ const menuItems = computed<ChartMenuItem[]>(() => {
         <!-- vertical edge lines for full-height sections -->
         <template v-if="sec.seriesIndex == null">
           <line
-            :x1="
-              snap(padding.left + sec.startIndex * (innerW / (maxLen - 1 || 1)))
-            "
+            :x1="snap(sectionXPixel(sec, 'start'))"
             :y1="padding.top"
-            :x2="
-              snap(padding.left + sec.startIndex * (innerW / (maxLen - 1 || 1)))
-            "
+            :x2="snap(sectionXPixel(sec, 'start'))"
             :y2="padding.top + innerH"
             :stroke="sec.color ?? '#999'"
             :stroke-width="sec.strokeWidth ?? 2"
             :stroke-dasharray="sec.dashed ? '6 3' : undefined"
           />
           <line
-            :x1="
-              snap(padding.left + sec.endIndex * (innerW / (maxLen - 1 || 1)))
-            "
+            :x1="snap(sectionXPixel(sec, 'end'))"
             :y1="padding.top"
-            :x2="
-              snap(padding.left + sec.endIndex * (innerW / (maxLen - 1 || 1)))
-            "
+            :x2="snap(sectionXPixel(sec, 'end'))"
             :y2="padding.top + innerH"
             :stroke="sec.color ?? '#999'"
             :stroke-width="sec.strokeWidth ?? 2"
@@ -1057,21 +1214,17 @@ const menuItems = computed<ChartMenuItem[]>(() => {
         </template>
         <!-- tick marks at section boundaries -->
         <line
-          :x1="
-            snap(padding.left + sec.startIndex * (innerW / (maxLen - 1 || 1)))
-          "
+          :x1="snap(sectionXPixel(sec, 'start'))"
           :y1="padding.top + innerH - 4"
-          :x2="
-            snap(padding.left + sec.startIndex * (innerW / (maxLen - 1 || 1)))
-          "
+          :x2="snap(sectionXPixel(sec, 'start'))"
           :y2="padding.top + innerH + 4"
           stroke="currentColor"
           stroke-opacity="0.4"
         />
         <line
-          :x1="snap(padding.left + sec.endIndex * (innerW / (maxLen - 1 || 1)))"
+          :x1="snap(sectionXPixel(sec, 'end'))"
           :y1="padding.top + innerH - 4"
-          :x2="snap(padding.left + sec.endIndex * (innerW / (maxLen - 1 || 1)))"
+          :x2="snap(sectionXPixel(sec, 'end'))"
           :y2="padding.top + innerH + 4"
           stroke="currentColor"
           stroke-opacity="0.4"
