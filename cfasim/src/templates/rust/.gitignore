@@ -1,3 +1,7 @@
-node_modules/
-public/wasm/
+# Rust
 target/
+
+# UI
+interactive/node_modules/
+interactive/dist/
+interactive/public/wasm/
