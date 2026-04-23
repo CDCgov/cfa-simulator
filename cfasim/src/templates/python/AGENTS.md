@@ -24,6 +24,8 @@ The JSON output gives every component's `name`, `slug`, `keywords`, and absolute
 - `pnpm test:e2e:install` — one-time: download the Playwright Chromium browser binary
 - `pnpm test:e2e` — Playwright integration test (boots the dev server, loads the app)
 - `uv run pytest` — run Python model unit tests in `tests/`
+- `uv run ruff format` — format Python code (`--check` to verify without writing)
+- `uv run ruff check` — lint Python code (`--fix` to auto-fix)
 
 ## Conventions
 
@@ -34,5 +36,5 @@ The JSON output gives every component's `name`, `slug`, `keywords`, and absolute
 ## After making changes
 
 - After any change: run `pnpm typecheck`.
-- After changes to the Python model (`src/%%module_name%%/`): run `uv run pytest`.
+- After changes to the Python model (`src/%%module_name%%/`): run `uv run ruff format` and `uv run pytest`.
 - After major changes (new UI wiring, model signature changes, chart/output changes): run `pnpm test:e2e` to verify the app still boots and produces output end-to-end.
