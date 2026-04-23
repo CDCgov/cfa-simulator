@@ -12,7 +12,7 @@ dependencies = ["cfasim-model"]
 dev = ["pytest>=8.0", "ruff>=0.9"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["src"]
 
 [tool.ruff]
 # target-version is inferred from project.requires-python
