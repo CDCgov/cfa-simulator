@@ -1,6 +1,8 @@
 mod docs;
 mod init;
+mod project;
 mod settings;
+mod test;
 mod tools;
 mod update;
 mod update_check;
@@ -45,6 +47,15 @@ enum Commands {
         #[arg(long)]
         json: bool,
     },
+    /// Run tests for the current cfasim project (unit and e2e by default)
+    Test {
+        /// Run only unit tests (`uv run pytest` or `cargo test`)
+        #[arg(long)]
+        unit: bool,
+        /// Run only end-to-end tests (`pnpm test:e2e`)
+        #[arg(long)]
+        e2e: bool,
+    },
 }
 
 #[derive(Clone, ValueEnum)]
@@ -58,6 +69,7 @@ fn main() -> Result<()> {
     let is_update = matches!(cli.command, Commands::Update);
     let is_tools = matches!(cli.command, Commands::Tools { .. });
     let is_docs = matches!(cli.command, Commands::Docs { .. });
+    let is_test = matches!(cli.command, Commands::Test { .. });
     if !is_update {
         settings::prompt_for_updates_if_first_run();
     }
@@ -76,9 +88,10 @@ fn main() -> Result<()> {
         Commands::Update => update::run(),
         Commands::Tools { offline } => tools::run(offline),
         Commands::Docs { json } => docs::run(json),
+        Commands::Test { unit, e2e } => test::run(unit, e2e),
     };
 
-    if !is_update && !is_tools && !is_docs {
+    if !is_update && !is_tools && !is_docs && !is_test {
         update_check::maybe_print_update_hint();
     }
     result
