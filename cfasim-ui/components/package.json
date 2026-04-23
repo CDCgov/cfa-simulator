@@ -1,6 +1,6 @@
 {
   "name": "@cfasim-ui/components",
-  "version": "0.3.13",
+  "version": "0.3.14",
   "type": "module",
   "description": "Vue 3 UI components for cfasim-ui",
   "license": "Apache-2.0",

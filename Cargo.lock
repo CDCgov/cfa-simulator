@@ -224,7 +224,7 @@ checksum = "6d43a04d8753f35258c91f8ec639f792891f748a1edbd759cf1dcea3382ad83c"
 
 [[package]]
 name = "cfasim"
-version = "0.3.13"
+version = "0.3.14"
 dependencies = [
  "anyhow",
  "axoupdater",
@@ -246,7 +246,7 @@ dependencies = [
 
 [[package]]
 name = "cfasim-model"
-version = "0.3.13"
+version = "0.3.14"
 dependencies = [
  "js-sys",
  "wasm-bindgen",

@@ -1,6 +1,19 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.3.14] - 2026-04-23
+
+### Features
+
+- Cfasim tools runs pnpm install and offers Playwright browsers when inside a cfasim project
+- Cfasim test runs unit and e2e tests with --unit and --e2e flags
+- Cfasim run starts the vite dev server
+
+### Refactor
+
+- Step-loop model templates; python template adds ruff
+- Colocate tests with packages, drop playwright setup infra
+
 ## [0.3.13] - 2026-04-23
 
 ### Bug Fixes
