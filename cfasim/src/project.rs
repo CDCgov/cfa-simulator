@@ -11,6 +11,18 @@ pub struct Project {
     pub has_playwright: bool,
 }
 
+/// Like `detect`, but bails with the standard "not inside a cfasim project"
+/// message when `dir` doesn't match. Used by commands that are meaningless
+/// outside a project (e.g. `cfasim test`, `cfasim run`).
+pub fn detect_or_fail(dir: &Path) -> anyhow::Result<Project> {
+    detect(dir).ok_or_else(|| {
+        anyhow::anyhow!(
+            "not inside a cfasim project (expected package.json with cfasim-ui \
+             dep, plus pyproject.toml or Cargo.toml)"
+        )
+    })
+}
+
 /// Detect a cfasim project rooted at `dir`. Returns `None` if `dir` isn't a
 /// cfasim project (no `package.json` with a `cfasim-ui` dep) or doesn't match
 /// either of the python/rust template shapes.
