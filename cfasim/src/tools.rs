@@ -1,5 +1,7 @@
 use anyhow::Result;
 use semver::Version;
+use std::io::IsTerminal;
+use std::path::Path;
 use std::process::Command;
 use std::sync::mpsc;
 use std::thread;
@@ -268,6 +270,16 @@ fn parse_uv_target_version(line: &str, current: &Version) -> Option<Version> {
 }
 
 pub fn run(skip_network: bool) -> Result<()> {
+    run_inner(skip_network, true)
+}
+
+/// Tool diagnostic without the "install deps in detected project" prompt —
+/// used by `cfasim init`, which already scaffolds and prints its own next steps.
+pub fn run_checks_only(skip_network: bool) -> Result<()> {
+    run_inner(skip_network, false)
+}
+
+fn run_inner(skip_network: bool, offer_setup: bool) -> Result<()> {
     cliclack::intro("Check system tools")?;
 
     let min = min_versions();
@@ -371,7 +383,100 @@ pub fn run(skip_network: bool) -> Result<()> {
         format!("{ready} of {total} tools ready")
     };
     cliclack::outro(summary)?;
+
+    if offer_setup {
+        offer_project_setup();
+    }
     Ok(())
+}
+
+fn has_dep(package_json: &serde_json::Value, name: &str) -> bool {
+    for key in ["dependencies", "devDependencies", "peerDependencies"] {
+        if let Some(deps) = package_json.get(key).and_then(|v| v.as_object()) {
+            if deps.contains_key(name) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn is_cfasim_project_with_playwright(dir: &Path) -> bool {
+    let Ok(text) = std::fs::read_to_string(dir.join("package.json")) else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return false;
+    };
+    if !has_dep(&value, "cfasim-ui") {
+        return false;
+    }
+    [
+        "playwright.config.ts",
+        "playwright.config.js",
+        "playwright.config.mjs",
+        "playwright.config.cjs",
+    ]
+    .iter()
+    .any(|f| dir.join(f).is_file())
+}
+
+// Mirrors the Windows .cmd fallback in spawn_version — corepack-managed pnpm
+// ships as a .cmd shim that CreateProcessW won't auto-resolve from PATHEXT.
+fn run_pnpm(args: &[&str], cwd: &Path) -> bool {
+    if let Ok(s) = Command::new("pnpm").args(args).current_dir(cwd).status() {
+        return s.success();
+    }
+    if cfg!(windows) {
+        if let Ok(s) = Command::new("pnpm.cmd")
+            .args(args)
+            .current_dir(cwd)
+            .status()
+        {
+            return s.success();
+        }
+    }
+    false
+}
+
+fn offer_project_setup() {
+    let Ok(cwd) = std::env::current_dir() else {
+        return;
+    };
+    if !is_cfasim_project_with_playwright(&cwd) {
+        return;
+    }
+    if !std::io::stdin().is_terminal() {
+        return;
+    }
+    if !tool_exists("pnpm") {
+        return;
+    }
+
+    println!("\n\x1b[1mDetected cfasim project with Playwright.\x1b[0m");
+    println!("Running \x1b[36mpnpm install\x1b[0m...\n");
+
+    if !run_pnpm(&["install"], &cwd) {
+        eprintln!("\n\x1b[33mpnpm install failed — skipping browser install\x1b[0m");
+        return;
+    }
+    println!();
+
+    let install_browsers =
+        cliclack::confirm("Install Playwright browsers (chromium) for e2e testing?")
+            .initial_value(true)
+            .interact()
+            .unwrap_or(false);
+
+    if !install_browsers {
+        return;
+    }
+    println!();
+    if !run_pnpm(&["exec", "playwright", "install", "chromium"], &cwd) {
+        eprintln!(
+            "\n\x1b[33mPlaywright install failed — try: pnpm exec playwright install chromium\x1b[0m"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -541,5 +646,67 @@ mod tests {
         let text = "Would update uv from v0.11.7 to v0.11.7\n";
         let current = Version::new(0, 11, 7);
         assert_eq!(parse_uv_target_version(text, &current), None);
+    }
+
+    #[test]
+    fn detects_cfasim_project_with_playwright() {
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join("package.json"),
+            r#"{"dependencies":{"vue":"^3","cfasim-ui":"^0.3.0"},"devDependencies":{"@playwright/test":"^1"}}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("playwright.config.ts"), "").unwrap();
+        assert!(is_cfasim_project_with_playwright(dir.path()));
+    }
+
+    #[test]
+    fn detects_cfasim_in_dev_dependencies() {
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join("package.json"),
+            r#"{"devDependencies":{"cfasim-ui":"^0.3.0"}}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("playwright.config.mjs"), "").unwrap();
+        assert!(is_cfasim_project_with_playwright(dir.path()));
+    }
+
+    #[test]
+    fn skips_when_no_cfasim_ui_dep() {
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join("package.json"),
+            r#"{"dependencies":{"vue":"^3"}}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("playwright.config.ts"), "").unwrap();
+        assert!(!is_cfasim_project_with_playwright(dir.path()));
+    }
+
+    #[test]
+    fn skips_when_no_playwright_config() {
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join("package.json"),
+            r#"{"dependencies":{"cfasim-ui":"^0.3.0"}}"#,
+        )
+        .unwrap();
+        assert!(!is_cfasim_project_with_playwright(dir.path()));
+    }
+
+    #[test]
+    fn skips_when_no_package_json() {
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::write(dir.path().join("playwright.config.ts"), "").unwrap();
+        assert!(!is_cfasim_project_with_playwright(dir.path()));
+    }
+
+    #[test]
+    fn skips_when_package_json_invalid() {
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::write(dir.path().join("package.json"), "not json").unwrap();
+        std::fs::write(dir.path().join("playwright.config.ts"), "").unwrap();
+        assert!(!is_cfasim_project_with_playwright(dir.path()));
     }
 }
