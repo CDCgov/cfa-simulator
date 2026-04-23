@@ -1,7 +1,6 @@
 use anyhow::Result;
 use semver::Version;
 use std::io::IsTerminal;
-use std::path::Path;
 use std::process::Command;
 use std::sync::mpsc;
 use std::thread;
@@ -390,24 +389,6 @@ fn run_inner(skip_network: bool, offer_setup: bool) -> Result<()> {
     Ok(())
 }
 
-// Mirrors the Windows .cmd fallback in spawn_version — corepack-managed pnpm
-// ships as a .cmd shim that CreateProcessW won't auto-resolve from PATHEXT.
-fn run_pnpm(args: &[&str], cwd: &Path) -> bool {
-    if let Ok(s) = Command::new("pnpm").args(args).current_dir(cwd).status() {
-        return s.success();
-    }
-    if cfg!(windows) {
-        if let Ok(s) = Command::new("pnpm.cmd")
-            .args(args)
-            .current_dir(cwd)
-            .status()
-        {
-            return s.success();
-        }
-    }
-    false
-}
-
 fn offer_project_setup() {
     let Ok(cwd) = std::env::current_dir() else {
         return;
@@ -428,8 +409,8 @@ fn offer_project_setup() {
     println!("\n\x1b[1mDetected cfasim project with Playwright.\x1b[0m");
     println!("Running \x1b[36mpnpm install\x1b[0m...\n");
 
-    if !run_pnpm(&["install"], &cwd) {
-        eprintln!("\n\x1b[33mpnpm install failed — skipping browser install\x1b[0m");
+    if !crate::proc::run_pnpm(&["install"], &cwd).is_ok_and(|ec| ec.success()) {
+        crate::proc::warn("pnpm install failed — skipping browser install");
         return;
     }
     println!();
@@ -444,10 +425,10 @@ fn offer_project_setup() {
         return;
     }
     println!();
-    if !run_pnpm(&["exec", "playwright", "install", "chromium"], &cwd) {
-        eprintln!(
-            "\n\x1b[33mPlaywright install failed — try: pnpm exec playwright install chromium\x1b[0m"
-        );
+    if !crate::proc::run_pnpm(&["exec", "playwright", "install", "chromium"], &cwd)
+        .is_ok_and(|ec| ec.success())
+    {
+        crate::proc::warn("Playwright install failed — try: pnpm exec playwright install chromium");
     }
 }
 

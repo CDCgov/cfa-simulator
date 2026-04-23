@@ -1,6 +1,8 @@
 mod docs;
 mod init;
+mod proc;
 mod project;
+mod run;
 mod settings;
 mod test;
 mod tools;
@@ -56,6 +58,12 @@ enum Commands {
         #[arg(long)]
         e2e: bool,
     },
+    /// Start the Vite dev server for the current cfasim project
+    Run {
+        /// Extra arguments forwarded to `vite` (prefix with `--`, e.g. `cfasim run -- --port 5174`)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
 }
 
 #[derive(Clone, ValueEnum)]
@@ -70,6 +78,7 @@ fn main() -> Result<()> {
     let is_tools = matches!(cli.command, Commands::Tools { .. });
     let is_docs = matches!(cli.command, Commands::Docs { .. });
     let is_test = matches!(cli.command, Commands::Test { .. });
+    let is_run = matches!(cli.command, Commands::Run { .. });
     if !is_update {
         settings::prompt_for_updates_if_first_run();
     }
@@ -89,9 +98,10 @@ fn main() -> Result<()> {
         Commands::Tools { offline } => tools::run(offline),
         Commands::Docs { json } => docs::run(json),
         Commands::Test { unit, e2e } => test::run(unit, e2e),
+        Commands::Run { args } => run::run(args),
     };
 
-    if !is_update && !is_tools && !is_docs && !is_test {
+    if !is_update && !is_tools && !is_docs && !is_test && !is_run {
         update_check::maybe_print_update_hint();
     }
     result
