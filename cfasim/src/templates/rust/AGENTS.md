@@ -21,8 +21,7 @@ The JSON output gives every component's `name`, `slug`, `keywords`, and absolute
 - `pnpm dev` — start the Vite dev server (rebuilds WASM on Rust changes)
 - `pnpm build` — production build
 - `pnpm typecheck` — vue-tsc type checking
-- `pnpm test:e2e:install` — one-time: download the Playwright Chromium browser binary
-- `pnpm test:e2e` — Playwright integration test (boots the dev server, loads the app)
+- `pnpm test:e2e` — Playwright integration test (boots the dev server, loads the app). If Chromium is missing, run `cfasim tools` to install it.
 - `cargo test` — run Rust model unit tests (extract pure helpers from `#[wasm_bindgen]` functions so they're testable natively)
 
 ## Conventions

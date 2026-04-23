@@ -6,8 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "vue-tsc --noEmit",
-    "test:e2e": "playwright test",
-    "test:e2e:install": "playwright install chromium"
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "vue": "^3.5.30",
