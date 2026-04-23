@@ -1,6 +1,25 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.3.13] - 2026-04-23
+
+### Bug Fixes
+
+- Align area section labels to start of area (#22)
+
+### Chores
+
+- Use install --locked for wasm-pack (#32)
+
+### Features
+
+- LineChart accepts typed arrays directly
+- LineChart accepts x and y props for point data
+
+### Tests
+
+- Add unit + Playwright integration tests to scaffolding templates
+
 ## [0.3.12] - 2026-04-21
 
 ### Features
