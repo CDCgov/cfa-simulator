@@ -284,7 +284,7 @@ pub fn run(
 
     if interactive {
         println!();
-        if let Err(e) = crate::tools::run(true) {
+        if let Err(e) = crate::tools::run_checks_only(true) {
             eprintln!("Note: tool check skipped: {e}");
         }
         println!();
