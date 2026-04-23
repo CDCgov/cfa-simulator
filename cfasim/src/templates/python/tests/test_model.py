@@ -1,12 +1,11 @@
 import numpy as np
 
-from %%module_name%% import double, simulate
+from %%module_name%% import simulate, step
 
 
-def test_double():
-    assert double(3) == 6
-    assert double(0) == 0
-    assert double(-4) == -8
+def test_step():
+    assert step(0.0, 3.0) == 3.0
+    assert step(5.0, 2.5) == 7.5
 
 
 def test_simulate_shape():

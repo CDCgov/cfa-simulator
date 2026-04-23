@@ -1,16 +1,22 @@
 use cfasim_model::{model_outputs, ModelOutput};
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen]
-pub fn double(n: i32) -> i32 {
-    n * 2
+fn step(state: f64, rate: f64) -> f64 {
+    state + rate
 }
 
 // Pure helper so the numerical logic is testable natively.
 // wasm-bindgen functions that return `JsValue` can't run under `cargo test`.
 fn compute(steps: u32, rate: f64) -> (Vec<f64>, Vec<f64>) {
-    let time: Vec<f64> = (0..steps).map(|i| i as f64).collect();
-    let values: Vec<f64> = (0..steps).map(|i| rate * i as f64).collect();
+    let n = steps as usize;
+    let mut time = Vec::with_capacity(n);
+    let mut values = Vec::with_capacity(n);
+    let mut state = 0.0;
+    for t in 0..steps {
+        time.push(t as f64);
+        values.push(state);
+        state = step(state, rate);
+    }
     (time, values)
 }
 
@@ -30,10 +36,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_double() {
-        assert_eq!(double(3), 6);
-        assert_eq!(double(0), 0);
-        assert_eq!(double(-4), -8);
+    fn test_step() {
+        assert_eq!(step(0.0, 3.0), 3.0);
+        assert_eq!(step(5.0, 2.5), 7.5);
     }
 
     #[test]
