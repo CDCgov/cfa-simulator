@@ -17,18 +17,48 @@ let wheelMap: Record<string, string> = {};
 
 const baseUrl = import.meta.env.BASE_URL ?? "/";
 
+const DEFAULT_PYODIDE_PACKAGES = ["micropip", "numpy"];
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let micropip: any;
 
+async function fetchPyodidePackages(): Promise<string[]> {
+  const url = `${self.location.origin}${baseUrl}pyodide-packages.json`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn(
+        `[pyodide-worker] ${url} returned ${res.status}; falling back to default packages`,
+      );
+      return DEFAULT_PYODIDE_PACKAGES;
+    }
+    const list = await res.json();
+    if (!Array.isArray(list)) {
+      console.warn(
+        `[pyodide-worker] ${url} did not contain an array; falling back to default packages`,
+      );
+      return DEFAULT_PYODIDE_PACKAGES;
+    }
+    return list as string[];
+  } catch (err) {
+    console.warn(
+      `[pyodide-worker] failed to load ${url}; falling back to default packages`,
+      err,
+    );
+    return DEFAULT_PYODIDE_PACKAGES;
+  }
+}
+
 const pyodideReadyPromise = (async () => {
-  // @ts-expect-error - Pyodide types from CDN
-  const { loadPyodide } = await import(
-    /* @vite-ignore */ "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/pyodide.mjs"
-  );
-  // Load micropip and numpy in parallel with Pyodide bootstrap
-  const pyodide = await loadPyodide({
-    packages: ["micropip", "numpy"],
-  });
+  const [pyodideModule, packages] = await Promise.all([
+    // @ts-expect-error - Pyodide types from CDN
+    import(
+      /* @vite-ignore */ "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/pyodide.mjs"
+    ),
+    fetchPyodidePackages(),
+  ]);
+  const { loadPyodide } = pyodideModule;
+  const pyodide = await loadPyodide({ packages });
 
   micropip = pyodide.pyimport("micropip");
 
