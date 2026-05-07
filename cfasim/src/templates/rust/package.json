@@ -1,6 +1,7 @@
 {
   "name": "%%project_name%%",
   "private": true,
+  "packageManager": "pnpm@10.28.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
