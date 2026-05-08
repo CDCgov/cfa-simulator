@@ -1,6 +1,20 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.3.15] - 2026-05-08
+
+### Bug Fixes
+
+- **templates:** Pin pnpm version in scaffolded package.json
+
+### Chores
+
+- **deps:** Bump rustls-webpki from 0.103.12 to 0.103.13
+
+### Features
+
+- **pyodide:** Make worker packages configurable via vite plugin
+
 ## [0.3.14] - 2026-04-23
 
 ### Features
