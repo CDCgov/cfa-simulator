@@ -1,7 +1,11 @@
 export { default as Box } from "./Box/Box.vue";
 export type { BoxVariant } from "./Box/Box.vue";
 export { default as Button } from "./Button/Button.vue";
+export { default as Container } from "./Container/Container.vue";
+export type { ContainerGap } from "./Container/Container.vue";
 export { default as Expander } from "./Expander/Expander.vue";
+export { default as Grid } from "./Grid/Grid.vue";
+export type { GridCols, GridGap } from "./Grid/Grid.vue";
 export { default as Hint } from "./Hint/Hint.vue";
 export { default as Icon } from "./Icon/Icon.vue";
 export { default as LightDarkToggle } from "./LightDarkToggle/LightDarkToggle.vue";

@@ -56,10 +56,22 @@ const components = [
     "cfasim-ui/components/src/Button/Button.md",
   ],
   [
+    "container",
+    "components",
+    "cfasim-ui/components/src/Container/Container.vue",
+    "cfasim-ui/components/src/Container/Container.md",
+  ],
+  [
     "expander",
     "components",
     "cfasim-ui/components/src/Expander/Expander.vue",
     "cfasim-ui/components/src/Expander/Expander.md",
+  ],
+  [
+    "grid",
+    "components",
+    "cfasim-ui/components/src/Grid/Grid.vue",
+    "cfasim-ui/components/src/Grid/Grid.md",
   ],
   [
     "hint",
