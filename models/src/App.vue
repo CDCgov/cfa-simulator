@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { ref, watchEffect } from "vue";
 import { RouterView } from "vue-router";
-import { SidebarLayout } from "@cfasim-ui/components";
+import { SidebarLayout, SelectBox } from "@cfasim-ui/components";
 import type { Tab } from "@cfasim-ui/components";
 import { models } from "./router";
 
@@ -9,6 +10,20 @@ const tabs: Tab[] = models.map((m) => ({
   label: m.name,
   to: m.path,
 }));
+
+const themeOptions = [
+  { value: "default", label: "Default" },
+  { value: "cdc", label: "CDC" },
+];
+const theme = ref(localStorage.getItem("theme") ?? "default");
+watchEffect(() => {
+  if (theme.value === "default") {
+    document.documentElement.removeAttribute("data-theme");
+  } else {
+    document.documentElement.setAttribute("data-theme", theme.value);
+  }
+  localStorage.setItem("theme", theme.value);
+});
 </script>
 
 <template>
@@ -17,6 +32,16 @@ const tabs: Tab[] = models.map((m) => ({
       <div id="model-sidebar" class="model-sidebar"></div>
     </template>
     <template #topbar>
+      <label class="theme-label">
+        Theme:
+        <SelectBox
+          v-model="theme"
+          :options="themeOptions"
+          aria-label="Theme"
+          hide-label
+          class="theme-select"
+        />
+      </label>
       <a
         href="https://cdcgov.github.io/cfa-simulator/docs/"
         class="topbar-link"
@@ -59,5 +84,17 @@ const tabs: Tab[] = models.map((m) => ({
 
 .topbar-link:hover {
   color: var(--color-text);
+}
+
+.theme-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.theme-select {
+  min-width: 8rem;
 }
 </style>

@@ -76,6 +76,19 @@ const chartSeries = computed<Series[]>(() => {
     />
   </Teleport>
   <h1>Reed-Frost Epidemic</h1>
+  <p>
+    The
+    <a
+      href="https://en.wikipedia.org/wiki/Reed%E2%80%93Frost_model"
+      target="_blank"
+      rel="noopener noreferrer"
+      >Reed-Frost model</a
+    >
+    is a simple discrete-time, chain-binomial epidemic model. Each generation,
+    every susceptible individual becomes infected with probability 1 − (1 −
+    p)<sup>I</sup>, where <em>p</em> is the per-contact transmission probability
+    and <em>I</em> is the current number of infectious individuals.
+  </p>
   <p v-if="error" style="color: red">{{ error }}</p>
   <LineChart
     v-if="chartSeries.length"
