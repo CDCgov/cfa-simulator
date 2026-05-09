@@ -1,6 +1,6 @@
 import numpy as np
 
-from %%module_name%% import simulate, step
+from {{ module_name }} import simulate, step
 
 
 def test_step():
