@@ -1,14 +1,23 @@
+{% if runtime == "python" -%}
 # Python
 __pycache__/
 *.egg-info/
 /build/
 .pytest_cache/
+{%- elif runtime == "rust" -%}
+# Rust
+target/
+{%- endif %}
 
 # UI
 node_modules/
 /dist/
+{% if runtime == "python" -%}
 interactive/public/*.whl
 interactive/public/wheels.json
+{%- elif runtime == "rust" -%}
+interactive/public/wasm/
+{%- endif %}
 
 # Tests
 /test-results/

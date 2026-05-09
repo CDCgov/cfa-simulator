@@ -4,14 +4,14 @@ test("app renders and the model produces output", async ({ page }) => {
   await page.goto("/");
 
   await expect(
-    page.getByRole("heading", { level: 1, name: "%%project_name%%" }),
+    page.getByRole("heading", { level: 1, name: "{{ project_name }}" }),
   ).toBeVisible();
   await expect(page.getByLabel("Steps")).toBeVisible();
   await expect(page.getByLabel("Rate")).toBeVisible();
 
-  // WASM loads and the model runs before the chart appears.
+  // Wait for the model to boot and produce output before the chart appears.
   await expect(page.locator("svg path").first()).toBeVisible({
-    timeout: 15_000,
+    timeout: 30_000,
   });
 });
 

@@ -1,4 +1,5 @@
 use include_dir::{include_dir, Dir};
+use minijinja::{context, Environment};
 use std::collections::HashMap;
 use std::fmt;
 use std::fs;
@@ -9,6 +10,7 @@ use std::process::Command;
 const TEMPLATE_URL: &str =
     "https://github.com/cdcgov/cfa-simulator/archive/refs/heads/latest.tar.gz";
 const TEMPLATE_PREFIX: &str = "cfa-simulator-latest/cfasim/src/templates/";
+const SHARED_DIR: &str = "_shared";
 
 static TEMPLATES: Dir = include_dir!("$CARGO_MANIFEST_DIR/src/templates");
 
@@ -19,10 +21,17 @@ pub enum Template {
 }
 
 impl Template {
-    fn prefix(&self) -> &str {
+    fn dir_name(&self) -> &str {
         match self {
-            Template::Python => "python/",
-            Template::Rust => "rust/",
+            Template::Python => "python",
+            Template::Rust => "rust",
+        }
+    }
+
+    fn runtime(&self) -> &str {
+        match self {
+            Template::Python => "python",
+            Template::Rust => "rust",
         }
     }
 }
@@ -36,41 +45,57 @@ impl fmt::Display for Template {
     }
 }
 
-fn download_templates(
-    template: &Template,
-) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
+/// Files keyed by their path relative to the template root (no leading
+/// `python/` or `_shared/`). `_shared/` files are inserted first; template-
+/// specific files overlay them, so a file in `python/` with the same relative
+/// path wins.
+type TemplateFiles = HashMap<String, String>;
+
+fn download_templates(template: &Template) -> Result<TemplateFiles, Box<dyn std::error::Error>> {
     let response = ureq::get(TEMPLATE_URL).call()?;
     let reader = response.into_body().into_reader();
     let decoder = flate2::read::GzDecoder::new(reader);
     let mut archive = tar::Archive::new(decoder);
 
-    let full_prefix = format!("{}{}", TEMPLATE_PREFIX, template.prefix());
-    let mut templates = HashMap::new();
+    let shared_prefix = format!("{}{}/", TEMPLATE_PREFIX, SHARED_DIR);
+    let template_prefix = format!("{}{}/", TEMPLATE_PREFIX, template.dir_name());
+
+    let mut shared = TemplateFiles::new();
+    let mut specific = TemplateFiles::new();
 
     for entry in archive.entries()? {
         let mut entry = entry?;
         let path = entry.path()?.to_string_lossy().to_string();
-
-        if path.starts_with(&full_prefix) && entry.header().entry_type().is_file() {
-            let relative = path.strip_prefix(&full_prefix).unwrap().to_string();
-            eprintln!("  fetched: {}", relative);
-            let mut content = String::new();
-            entry.read_to_string(&mut content)?;
-            templates.insert(relative, content);
+        if !entry.header().entry_type().is_file() {
+            continue;
         }
+
+        let (bucket, prefix) = if path.starts_with(&shared_prefix) {
+            (&mut shared, &shared_prefix)
+        } else if path.starts_with(&template_prefix) {
+            (&mut specific, &template_prefix)
+        } else {
+            continue;
+        };
+
+        let relative = path.strip_prefix(prefix).unwrap().to_string();
+        eprintln!("  fetched: {}", relative);
+        let mut content = String::new();
+        entry.read_to_string(&mut content)?;
+        bucket.insert(relative, content);
     }
 
-    if templates.is_empty() {
+    if specific.is_empty() {
         return Err("No template files found in the downloaded archive".into());
     }
 
-    Ok(templates)
+    Ok(merge(shared, specific))
 }
 
 fn collect_files(
     dir: &Dir,
     base: &Path,
-    out: &mut HashMap<String, String>,
+    out: &mut TemplateFiles,
 ) -> Result<(), Box<dyn std::error::Error>> {
     for file in dir.files() {
         let relative = file
@@ -90,37 +115,58 @@ fn collect_files(
     Ok(())
 }
 
-fn embedded_templates(
-    template: &Template,
-) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
-    let subdir = TEMPLATES
-        .get_dir(template.prefix().trim_end_matches('/'))
+fn embedded_templates(template: &Template) -> Result<TemplateFiles, Box<dyn std::error::Error>> {
+    let mut shared = TemplateFiles::new();
+    if let Some(shared_dir) = TEMPLATES.get_dir(SHARED_DIR) {
+        collect_files(shared_dir, shared_dir.path(), &mut shared)?;
+    }
+
+    let template_subdir = TEMPLATES
+        .get_dir(template.dir_name())
         .ok_or_else(|| format!("Embedded template directory not found for {}", template))?;
+    let mut specific = TemplateFiles::new();
+    collect_files(template_subdir, template_subdir.path(), &mut specific)?;
 
-    let mut templates = HashMap::new();
-    collect_files(subdir, subdir.path(), &mut templates)?;
-
-    if templates.is_empty() {
+    if specific.is_empty() {
         return Err("No template files found in embedded directory".into());
     }
 
-    Ok(templates)
+    Ok(merge(shared, specific))
+}
+
+fn merge(mut shared: TemplateFiles, specific: TemplateFiles) -> TemplateFiles {
+    shared.extend(specific);
+    shared
 }
 
 fn to_module_name(name: &str) -> String {
     name.replace('-', "_")
 }
 
-fn render(template: &str, name: &str) -> String {
-    template
-        .replace("%%project_name%%", name)
-        .replace("%%module_name%%", &to_module_name(name))
-        .replace("%%cfasim_version%%", env!("CARGO_PKG_VERSION"))
+fn build_env() -> Environment<'static> {
+    let mut env = Environment::new();
+    // Don't auto-escape — these aren't HTML, they're source files.
+    env.set_auto_escape_callback(|_| minijinja::AutoEscape::None);
+    // Preserve any final newline in the source file.
+    env.set_keep_trailing_newline(true);
+    env
 }
 
-fn render_path(path: &str, name: &str) -> String {
-    path.replace("%%project_name%%", name)
-        .replace("%%module_name%%", &to_module_name(name))
+fn render(
+    env: &Environment,
+    template: &str,
+    name: &str,
+    runtime: &str,
+) -> Result<String, minijinja::Error> {
+    env.render_str(
+        template,
+        context! {
+            project_name => name,
+            module_name => to_module_name(name),
+            cfasim_version => env!("CARGO_PKG_VERSION"),
+            runtime => runtime,
+        },
+    )
 }
 
 fn write_file(base: &Path, relative: &str, content: &str) -> std::io::Result<()> {
@@ -164,9 +210,15 @@ fn scaffold(
         .into());
     }
 
+    let env = build_env();
+    let runtime = template.runtime();
+
     for (relative_path, content) in &templates {
-        let output_path = render_path(relative_path, name);
-        write_file(project_dir, &output_path, &render(content, name))?;
+        let output_path = render(&env, relative_path, name, runtime)
+            .map_err(|e| format!("rendering path {relative_path}: {e}"))?;
+        let rendered = render(&env, content, name, runtime)
+            .map_err(|e| format!("rendering {relative_path}: {e}"))?;
+        write_file(project_dir, &output_path, &rendered)?;
     }
 
     Ok(())

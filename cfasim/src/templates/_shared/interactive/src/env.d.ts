@@ -3,8 +3,9 @@ declare module "*.vue" {
   const component: DefineComponent<{}, {}, any>;
   export default component;
 }
-
+{% if runtime == "python" %}
 declare module "*.py?raw" {
   const content: string;
   export default content;
 }
+{% endif %}

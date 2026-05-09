@@ -10,7 +10,7 @@ The JSON output gives every component's `name`, `slug`, `keywords`, and absolute
 
 ## What this project is
 
-`%%project_name%%` is a [cfasim](https://cdcgov.github.io/cfa-simulator/docs/) simulation. cfasim is a framework for interactive simulations built with Rust, Vue 3, and WebAssembly. The Rust model code compiles to WASM via [wasm-pack](https://rustwasm.github.io/wasm-pack/) and runs in the browser.
+`{{ project_name }}` is a [cfasim](https://cdcgov.github.io/cfa-simulator/docs/) simulation. cfasim is a framework for interactive simulations built with Rust, Vue 3, and WebAssembly. The Rust model code compiles to WASM via [wasm-pack](https://rustwasm.github.io/wasm-pack/) and runs in the browser.
 
 - Rust model: `src/lib.rs` — `#[wasm_bindgen]` functions (e.g. `simulate`) called from the frontend
 - Vue frontend: `interactive/src/App.vue` — wires UI components to the model via `useModel` from `cfasim-ui/wasm`
