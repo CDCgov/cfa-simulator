@@ -29,7 +29,9 @@ export default defineConfig({
             items: [
               { text: "Box", link: "/cfasim-ui/components/box" },
               { text: "Button", link: "/cfasim-ui/components/button" },
+              { text: "Container", link: "/cfasim-ui/components/container" },
               { text: "Expander", link: "/cfasim-ui/components/expander" },
+              { text: "Grid", link: "/cfasim-ui/components/grid" },
               { text: "Hint", link: "/cfasim-ui/components/hint" },
               { text: "Icon", link: "/cfasim-ui/components/icon" },
               {

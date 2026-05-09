@@ -7,7 +7,9 @@ import "./demo-theme.css";
 import {
   Box,
   Button,
+  Container,
   Expander,
+  Grid,
   Hint,
   Icon,
   LightDarkToggle,
@@ -34,7 +36,9 @@ export default {
   enhanceApp({ app }) {
     app.component("Box", Box);
     app.component("Button", Button);
+    app.component("Container", Container);
     app.component("Expander", Expander);
+    app.component("Grid", Grid);
     app.component("Hint", Hint);
     app.component("Icon", Icon);
     app.component("LightDarkToggle", LightDarkToggle);
