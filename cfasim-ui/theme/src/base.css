@@ -129,11 +129,6 @@ body {
   font-size: var(--font-size-md);
 }
 
-:root,
-body {
-  overflow: hidden;
-}
-
 h1,
 h2,
 h3,
