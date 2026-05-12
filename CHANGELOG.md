@@ -1,6 +1,16 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.3.17] - 2026-05-12
+
+### Bug Fixes
+
+- **theme:** Remove body overflow hidden
+
+### Features
+
+- **components:** Add two-handle range slider to NumberInput
+
 ## [0.3.16] - 2026-05-12
 
 ### Chores
