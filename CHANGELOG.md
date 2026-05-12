@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.3.18] - 2026-05-12
+
+### Features
+
+- **components:** Add sliderDisplay prop to NumberInput
+
 ## [0.3.17] - 2026-05-12
 
 ### Bug Fixes
