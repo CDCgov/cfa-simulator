@@ -4,3 +4,5 @@ packages:
   - "models"
 
 neverBuiltDependencies: []
+ignoredBuiltDependencies:
+  - vue-demi
