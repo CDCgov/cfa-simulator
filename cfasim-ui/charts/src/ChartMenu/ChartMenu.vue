@@ -12,16 +12,23 @@ export interface ChartMenuItem {
   action: () => void;
 }
 
-defineProps<{
-  items: ChartMenuItem[];
-}>();
+const props = withDefaults(
+  defineProps<{
+    items: ChartMenuItem[];
+    /** Force the dropdown style even when only one item is provided. */
+    forceDropdown?: boolean;
+  }>(),
+  { forceDropdown: false },
+);
+
+const useDropdown = () => props.forceDropdown || props.items.length > 1;
 </script>
 
 <template>
   <div class="chart-menu-trigger-area">
     <!-- Single item: plain button -->
     <button
-      v-if="items.length === 1"
+      v-if="!useDropdown()"
       class="chart-menu-button chart-menu-single"
       :aria-label="items[0].label"
       @click="items[0].action"

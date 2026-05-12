@@ -31,22 +31,22 @@ const props = withDefaults(
     columnConfig?: Record<string, ColumnConfig>;
     menu?: boolean | string;
     /**
-     * Custom CSV content for the Download CSV menu item and download link.
-     * Can be a raw CSV string or a function returning one. When omitted, CSV
-     * is generated from the table data.
+     * Custom CSV content for the Download menu item. Can be a raw CSV string
+     * or a function returning one. When omitted, CSV is generated from the
+     * table data.
      */
     csv?: string | (() => string);
     /** Filename (without extension) for downloaded CSV files. */
     filename?: string;
     /**
-     * Show a plain text link below the table to download the CSV data.
-     * Pass `true` for the default label ("Download data (CSV)") or a string
-     * to customize the link text. When set, the Download CSV menu item is
-     * hidden.
+     * Label for the Download item in the table's top-right menu.
+     * Defaults to "Download".
      */
-    downloadLink?: boolean | string;
+    downloadMenuLink?: string;
+    /** Stretch the table to fill its container's width. */
+    fullWidth?: boolean;
   }>(),
-  { menu: true },
+  { menu: true, fullWidth: false, downloadMenuLink: "Download" },
 );
 
 function columnLabel(name: string): string {
@@ -55,7 +55,10 @@ function columnLabel(name: string): string {
 
 function columnStyle(name: string): Record<string, string> | undefined {
   const w = props.columnConfig?.[name]?.width;
-  if (w == null) return undefined;
+  if (w == null) {
+    if (props.fullWidth) return undefined;
+    return { width: COLUMN_WIDTHS.medium, minWidth: COLUMN_WIDTHS.medium };
+  }
   const value = typeof w === "number" ? `${w}px` : COLUMN_WIDTHS[w];
   return { width: value, minWidth: value };
 }
@@ -135,36 +138,24 @@ function toCsv(): string {
   return lines.join("\n");
 }
 
-const menuItems = computed<ChartMenuItem[]>(() => {
-  if (props.downloadLink) return [];
-  return [
-    {
-      label: "Download CSV",
-      action: () => downloadCsv(toCsv(), menuFilename()),
-    },
-  ];
-});
+const menuItems = computed<ChartMenuItem[]>(() => [
+  {
+    label: props.downloadMenuLink,
+    action: () => downloadCsv(toCsv(), menuFilename()),
+  },
+]);
 
-const downloadLinkText = computed(() => {
-  if (!props.downloadLink) return null;
-  return typeof props.downloadLink === "string"
-    ? props.downloadLink
-    : "Download data (CSV)";
-});
-
-const csvHref = computed(() => {
-  if (!props.downloadLink) return null;
-  return `data:text/csv;charset=utf-8,${encodeURIComponent(toCsv())}`;
-});
-
-const showMenu = computed(() => props.menu && menuItems.value.length > 0);
+const showMenu = computed(() => Boolean(props.menu));
 </script>
 
 <template>
-  <div class="TableOuter" :class="{ 'has-menu': showMenu }">
-    <ChartMenu v-if="showMenu" :items="menuItems" />
+  <div
+    class="TableOuter"
+    :class="{ 'full-width': fullWidth, 'has-menu': showMenu }"
+  >
+    <ChartMenu v-if="showMenu" :items="menuItems" force-dropdown />
     <div class="TableWrapper">
-      <table class="Table">
+      <table class="Table" :class="{ 'full-width': fullWidth }">
         <colgroup>
           <col
             v-for="col in columns"
@@ -197,14 +188,6 @@ const showMenu = computed(() => props.menu && menuItems.value.length > 0);
         </tbody>
       </table>
     </div>
-    <a
-      v-if="downloadLinkText"
-      class="data-table-download-link"
-      :href="csvHref!"
-      :download="`${menuFilename()}.csv`"
-    >
-      {{ downloadLinkText }}
-    </a>
   </div>
 </template>
 
@@ -214,17 +197,8 @@ const showMenu = computed(() => props.menu && menuItems.value.length > 0);
   display: inline-block;
 }
 
-.TableOuter.has-menu {
-  margin-top: 32px;
-}
-
-.TableOuter :deep(.chart-menu-trigger-area) {
-  top: -32px;
-  right: 0;
-}
-
-.TableOuter:hover :deep(.chart-menu-button) {
-  opacity: 1;
+.TableOuter.full-width {
+  display: block;
 }
 
 .TableWrapper {
@@ -238,6 +212,11 @@ const showMenu = computed(() => props.menu && menuItems.value.length > 0);
   border-collapse: collapse;
   font-variant-numeric: tabular-nums;
   border: 1px solid var(--color-border);
+  table-layout: fixed;
+}
+
+.Table.full-width {
+  width: 100%;
 }
 
 .Table tr,
@@ -251,6 +230,7 @@ const showMenu = computed(() => props.menu && menuItems.value.length > 0);
 .Table td {
   padding: 0.75em 1.25em;
   white-space: nowrap;
+  text-align: left;
 }
 
 .Table th {
@@ -268,10 +248,16 @@ const showMenu = computed(() => props.menu && menuItems.value.length > 0);
   border-bottom: none;
 }
 
-.data-table-download-link {
-  display: block;
-  text-align: right;
-  font-size: var(--font-size-sm);
-  margin-top: 0.25em;
+.TableOuter :deep(.chart-menu-trigger-area) {
+  top: 4px;
+  right: 4px;
+}
+
+.TableOuter :deep(.chart-menu-button) {
+  opacity: 1;
+}
+
+.TableOuter.has-menu .Table thead th:last-child {
+  padding-right: 2.5em;
 }
 </style>

@@ -87,19 +87,48 @@ A table for displaying columnar data. Accepts a plain record of arrays or a `Mod
   </template>
 </ComponentDemo>
 
-### Download data link
+### Full width
 
-Pass `download-link` to render a plain text link below the table for
-downloading the CSV data. Set it to `true` for the default label or a
-string to customize it. When set, the Download CSV menu item is hidden.
-Use `filename` to control the downloaded filename, and `csv` to supply
-custom CSV content.
+By default the table sizes to its content (columns default to a fixed
+medium width, so they're evenly spaced). Pass `full-width` to stretch the
+table to fill its container; columns without an explicit width will share
+the available space equally.
+
+<ComponentDemo>
+  <DataTable
+    :data="{ day: [0, 1, 2, 3, 4], susceptible: [1000, 980, 945, 900, 860], infected: [1, 21, 56, 101, 141] }"
+    full-width
+  />
+
+<template #code>
+
+```vue
+<DataTable
+  :data="{
+    day: [0, 1, 2, 3, 4],
+    susceptible: [1000, 980, 945, 900, 860],
+    infected: [1, 21, 56, 101, 141],
+  }"
+  full-width
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Download menu
+
+A `⋯` menu appears in the top-right corner of every table with a
+**Download** item that exports the data as CSV. Use `download-menu-link`
+to customize the menu item label, `filename` to control the downloaded
+filename, and `csv` to supply custom CSV content. Pass `:menu="false"`
+to hide the menu entirely.
 
 <ComponentDemo>
   <DataTable
     :data="{ day: [0, 1, 2, 3, 4], cases: [1, 21, 56, 101, 141] }"
     filename="sir-cases"
-    download-link="Download cases (CSV)"
+    download-menu-link="Download cases (CSV)"
   />
 
 <template #code>
@@ -111,7 +140,7 @@ custom CSV content.
     cases: [1, 21, 56, 101, 141],
   }"
   filename="sir-cases"
-  download-link="Download cases (CSV)"
+  download-menu-link="Download cases (CSV)"
 />
 ```
 

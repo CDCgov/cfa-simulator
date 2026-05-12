@@ -130,6 +130,34 @@ describe("Table", () => {
     expect(col.attributes("style")).toContain("min-width: 120px");
   });
 
+  it("applies a default medium width to columns without explicit width", () => {
+    const wrapper = mount(DataTable, {
+      props: { data: { day: [0], infected: [10] } },
+    });
+    const cols = wrapper.findAll("col");
+    for (const col of cols) {
+      expect(col.attributes("style")).toContain("width: 150px");
+    }
+  });
+
+  it("omits column widths when fullWidth is set (no explicit width)", () => {
+    const wrapper = mount(DataTable, {
+      props: { data: { day: [0], infected: [10] }, fullWidth: true },
+    });
+    const cols = wrapper.findAll("col");
+    for (const col of cols) {
+      expect(col.attributes("style")).toBeUndefined();
+    }
+  });
+
+  it("adds the full-width class to the table and outer when fullWidth is true", () => {
+    const wrapper = mount(DataTable, {
+      props: { data: { day: [0] }, fullWidth: true },
+    });
+    expect(wrapper.find("table").classes()).toContain("full-width");
+    expect(wrapper.find(".TableOuter").classes()).toContain("full-width");
+  });
+
   it("applies column alignment to th and td", () => {
     const wrapper = mount(DataTable, {
       props: {
@@ -158,65 +186,42 @@ describe("Table", () => {
     expect(th.attributes("style")).toBeUndefined();
   });
 
-  describe("download link", () => {
-    it("does not render a download link by default", () => {
+  describe("download menu", () => {
+    it("renders the menu by default with a Download item", () => {
       const wrapper = mount(DataTable, {
         props: { data: { day: [0, 1], value: [10, 20] } },
       });
-      expect(wrapper.find("a.data-table-download-link").exists()).toBe(false);
+      const menu = wrapper.findComponent({ name: "ChartMenu" });
+      expect(menu.exists()).toBe(true);
+      expect(menu.props("items")).toEqual([
+        expect.objectContaining({ label: "Download" }),
+      ]);
+      expect(menu.props("forceDropdown")).toBe(true);
     });
 
-    it("renders a link with default text when downloadLink=true", () => {
-      const wrapper = mount(DataTable, {
-        props: {
-          data: { day: [0, 1], value: [10, 20] },
-          downloadLink: true,
-        },
-      });
-      const link = wrapper.find("a.data-table-download-link");
-      expect(link.exists()).toBe(true);
-      expect(link.text()).toBe("Download data (CSV)");
-      expect(link.attributes("download")).toBe("data.csv");
-      expect(link.attributes("href")).toContain(
-        encodeURIComponent("day,value\n0,10\n1,20"),
-      );
-    });
-
-    it("renders a link with custom text and filename", () => {
+    it("uses downloadMenuLink as the menu item label", () => {
       const wrapper = mount(DataTable, {
         props: {
           data: { day: [0], value: [10] },
-          downloadLink: "Get the data",
-          filename: "cases",
+          downloadMenuLink: "Download cases (CSV)",
         },
       });
-      const link = wrapper.find("a.data-table-download-link");
-      expect(link.text()).toBe("Get the data");
-      expect(link.attributes("download")).toBe("cases.csv");
+      const menu = wrapper.findComponent({ name: "ChartMenu" });
+      expect(menu.props("items")[0].label).toBe("Download cases (CSV)");
     });
 
-    it("uses custom csv content in the link", () => {
+    it("hides the menu when menu prop is false", () => {
       const wrapper = mount(DataTable, {
-        props: {
-          data: { day: [0], value: [10] },
-          downloadLink: true,
-          csv: "date,cases\n2024-01-01,10",
-        },
-      });
-      const link = wrapper.find("a.data-table-download-link");
-      expect(link.attributes("href")).toContain(
-        encodeURIComponent("date,cases\n2024-01-01,10"),
-      );
-    });
-
-    it("hides the menu when downloadLink is set and no other items remain", () => {
-      const wrapper = mount(DataTable, {
-        props: {
-          data: { day: [0], value: [10] },
-          downloadLink: true,
-        },
+        props: { data: { day: [0] }, menu: false },
       });
       expect(wrapper.findComponent({ name: "ChartMenu" }).exists()).toBe(false);
+    });
+
+    it("does not render the legacy download link", () => {
+      const wrapper = mount(DataTable, {
+        props: { data: { day: [0], value: [10] } },
+      });
+      expect(wrapper.find("a.data-table-download-link").exists()).toBe(false);
     });
   });
 
