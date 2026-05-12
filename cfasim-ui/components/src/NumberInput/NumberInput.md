@@ -16,6 +16,12 @@ const ageRange = ref([18, 65])
 const coverageRange = ref([0.2, 0.8])
 const minAge = ref(18)
 const maxAge = ref(65)
+const dayMs = 24 * 60 * 60 * 1000
+const dateStart = Date.UTC(2024, 0, 1)
+const dateEnd = Date.UTC(2024, 11, 31)
+const dateRange = ref([Date.UTC(2024, 2, 1), Date.UTC(2024, 8, 30)])
+const formatDate = (ms) =>
+  new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" })
 </script>
 
 <ComponentDemo>
@@ -220,6 +226,51 @@ Range mode works with `percent` and `live` as well:
   percent
   live
   :max="1"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Custom slider display
+
+Pass `slider-display` (a `(value: number) => string` function) to format the
+thumb labels and the min/max labels however you like. The internal model is
+still a number — only the displayed text changes. This applies to single
+sliders and ranges; the regular text input is unaffected.
+
+<ComponentDemo>
+  <div style="width: 300px">
+    <NumberInput
+      v-model:range="dateRange"
+      label="Date range"
+      :min="dateStart"
+      :max="dateEnd"
+      :step="dayMs"
+      :slider-display="formatDate"
+    />
+  </div>
+
+<template #code>
+
+```vue
+<script setup>
+import { ref } from "vue";
+const dayMs = 24 * 60 * 60 * 1000;
+const dateStart = Date.UTC(2024, 0, 1);
+const dateEnd = Date.UTC(2024, 11, 31);
+const dateRange = ref([Date.UTC(2024, 2, 1), Date.UTC(2024, 8, 30)]);
+const formatDate = (ms) =>
+  new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+</script>
+
+<NumberInput
+  v-model:range="dateRange"
+  label="Date range"
+  :min="dateStart"
+  :max="dateEnd"
+  :step="dayMs"
+  :slider-display="formatDate"
 />
 ```
 

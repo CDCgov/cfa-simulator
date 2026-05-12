@@ -29,6 +29,10 @@ const props = defineProps<{
   numberType?: "integer" | "float";
   required?: boolean;
   decimals?: number;
+  // Custom formatter for slider thumb labels and min/max labels. Overrides
+  // the default percent/decimal formatting when provided. Only consulted in
+  // slider/range mode — the text input keeps its own number-shaped formatting.
+  sliderDisplay?: (value: number) => string;
 }>();
 
 function isRangeValue(v: unknown): v is NumberRange {
@@ -109,6 +113,7 @@ function roundToDecimals(v: number, d: number): number {
 
 function formatSliderValue(v: number | undefined) {
   if (v == null) return "";
+  if (props.sliderDisplay) return props.sliderDisplay(v);
   const d = displayDecimals.value;
   if (props.percent) return (v * 100).toFixed(d) + "%";
   return v.toLocaleString("en-US", {
