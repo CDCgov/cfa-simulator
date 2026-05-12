@@ -1,6 +1,6 @@
 {
   "name": "@cfasim-ui/docs",
-  "version": "0.3.18",
+  "version": "0.4.0",
   "description": "LLM-friendly component and chart documentation for cfasim-ui",
   "license": "Apache-2.0",
   "repository": {

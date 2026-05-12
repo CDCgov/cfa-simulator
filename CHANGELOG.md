@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.4.0] - 2026-05-12
+
+### Features
+
+- **charts:** Add BarChart and extract shared composables
+- **pyodide:** Generalize workers and add callPython
+
 ## [0.3.18] - 2026-05-12
 
 ### Features
