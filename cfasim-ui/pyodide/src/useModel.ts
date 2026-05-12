@@ -1,7 +1,14 @@
 import { ref, toRaw, toValue, watch } from "vue";
 import type { MaybeRef } from "vue";
 import type { ModelOutput } from "@cfasim-ui/shared";
-import { asyncRunPython, loadModule } from "./pyodideWorkerApi.js";
+import { callPython, loadModule } from "./pyodideWorkerApi.js";
+
+function plainKwargs(
+  ctx: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!ctx) return undefined;
+  return Object.fromEntries(Object.entries(ctx).map(([k, v]) => [k, toRaw(v)]));
+}
 
 export function useModel<T = unknown>(moduleName: string) {
   const result = ref<T>();
@@ -18,17 +25,7 @@ export function useModel<T = unknown>(moduleName: string) {
     error.value = undefined;
     try {
       await loaded;
-      const argNames = context ? Object.keys(context) : [];
-      const callArgs = argNames.join(", ");
-      const plainContext = context
-        ? Object.fromEntries(
-            Object.entries(context).map(([k, v]) => [k, toRaw(v)]),
-          )
-        : undefined;
-      const response = await asyncRunPython(
-        `import ${moduleName}\n${moduleName}.${fn}(${callArgs})`,
-        plainContext,
-      );
+      const response = await callPython(moduleName, fn, plainKwargs(context));
       if (response.error) {
         error.value = response.error;
       } else {
@@ -56,15 +53,7 @@ export function useModel<T = unknown>(moduleName: string) {
         outputsError.value = undefined;
         try {
           await loaded;
-          const plain = Object.fromEntries(
-            Object.entries(p).map(([k, v]) => [k, toRaw(v)]),
-          );
-          const argNames = Object.keys(plain);
-          const callArgs = argNames.join(", ");
-          const response = await asyncRunPython(
-            `import ${moduleName}\n${moduleName}.${fn}(${callArgs})`,
-            plain,
-          );
+          const response = await callPython(moduleName, fn, plainKwargs(p));
           if (response.error) {
             outputsError.value = response.error;
           } else {

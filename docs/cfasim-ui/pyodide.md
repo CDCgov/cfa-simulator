@@ -86,34 +86,73 @@ modelOutputToCSV(output); // CSV string
 | `bool` | `Uint8Array`   | Booleans (0/1)                     |
 | `enum` | `Uint32Array`  | Integer indices with string labels |
 
+## Workers
+
+Each worker is an independent Pyodide interpreter. By default a single worker
+named `"default"` is spawned on first use. Pass any string as the `worker`
+argument to spin up additional named interpreters for parallel runs (e.g.
+`"baseline"` and `"intervention"` for side-by-side comparisons).
+
+Workers spawn lazily — you only pay for what you use. Modules registered via
+`loadModule()` are remembered globally and auto-installed on any worker that
+spawns later.
+
+```ts
+import { callPython, loadModule } from "@cfasim-ui/pyodide";
+
+// "my_model" gets installed on whichever worker each call lands on.
+await loadModule("my_model");
+
+const [baseline, intervention] = await Promise.all([
+  callPython("my_model", "simulate", { vaccine: 0 }, "baseline"),
+  callPython("my_model", "simulate", { vaccine: 0.5 }, "intervention"),
+]);
+```
+
 ## Lower-level API
 
 For more control, use the worker API directly:
 
 ```ts
-import { asyncRunPython, loadModule } from "@cfasim-ui/pyodide";
+import { callPython, loadModule } from "@cfasim-ui/pyodide";
 
 await loadModule("my_module");
-const { result, error } = await asyncRunPython(
-  "import my_module\nmy_module.run()",
-);
+const { result, error } = await callPython("my_module", "run", { n: 5 });
+```
+
+### callPython
+
+Calls `module.fn(**kwargs)` on the named worker. Faster than `asyncRunPython`
+for repeated calls — the worker caches the imported module and dispatches
+straight to the function, skipping Python source parsing on every invocation.
+
+```ts
+function callPython(
+  module: string,
+  fn: string,
+  kwargs?: Record<string, unknown>,
+  worker?: string, // defaults to "default"
+): Promise<{ result?: unknown; error?: string }>;
 ```
 
 ### asyncRunPython
 
-Executes a Python script string on a Pyodide Web Worker.
+Executes an arbitrary Python script string. Use this for ad-hoc Python that
+isn't a function call on a loaded module.
 
 ```ts
 function asyncRunPython(
   script: string,
   context?: Record<string, unknown>,
-  worker?: "baseline" | "intervention",
+  worker?: string, // defaults to "default"
 ): Promise<{ result?: unknown; error?: string }>;
 ```
 
 ### loadModule
 
-Installs a Python wheel on all workers. The module name is looked up in `wheels.json` served from the app's public directory.
+Marks `moduleName` as a shared module: installs it on every currently-spawned
+worker, and registers it so any future worker auto-installs it on spawn. The
+module name is looked up in `wheels.json` served from the app's public directory.
 
 ```ts
 function loadModule(
@@ -123,11 +162,46 @@ function loadModule(
 
 ### loadModuleOnWorker
 
-Same as `loadModule` but targets a specific worker.
+Installs a module on a single named worker only — doesn't mark it as shared.
+Use when one worker should diverge from the others.
 
 ```ts
 function loadModuleOnWorker(
   moduleName: string,
-  worker: "baseline" | "intervention",
+  worker: string,
 ): Promise<{ result?: unknown; error?: string }>;
 ```
+
+### warmWorkers
+
+Pre-spawns named workers (and optionally pre-installs modules) so the first
+call returns without waiting for Pyodide to boot. Workers spawn lazily by
+default; call this when you know up front that you'll need parallel
+interpreters and want to overlap their cold-start with the rest of page load.
+
+```ts
+function warmWorkers(options: {
+  workers: string[];
+  modules?: string[];
+}): Promise<void>;
+```
+
+```ts
+// Kick off warmup at app startup. Don't await — let Pyodide boot in the
+// background while the rest of the UI mounts.
+import { warmWorkers } from "@cfasim-ui/pyodide";
+
+warmWorkers({
+  workers: ["baseline", "intervention"],
+  modules: ["my_model"],
+});
+```
+
+```ts
+// Or await it if you want to gate UI on workers being ready.
+await warmWorkers({ workers: ["a", "b", "c"], modules: ["my_model"] });
+```
+
+Modules passed in `modules` are also registered as shared (same as if you'd
+called `loadModule()` for each), so any worker spawned later — including the
+implicit `"default"` worker — auto-installs them on first use.

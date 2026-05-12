@@ -5,13 +5,25 @@ import {
 } from "@cfasim-ui/shared";
 import type { ColumnDescriptor, ModelOutputsWire } from "@cfasim-ui/shared";
 
-interface WorkerMessage {
+interface RunMessage {
   id: number;
-  type?: "run" | "loadModule";
-  python?: string;
-  module?: string;
+  type?: "run";
+  python: string;
   context?: Record<string, unknown>;
 }
+interface CallMessage {
+  id: number;
+  type: "call";
+  module: string;
+  fn: string;
+  kwargs?: Record<string, unknown>;
+}
+interface LoadModuleMessage {
+  id: number;
+  type: "loadModule";
+  module: string;
+}
+type WorkerMessage = RunMessage | CallMessage | LoadModuleMessage;
 
 let wheelMap: Record<string, string> = {};
 
@@ -92,24 +104,29 @@ function installAllWheels(): Promise<void> {
   return installPromise;
 }
 
-const modulePromises = new Map<string, Promise<void>>();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const modulePromises = new Map<string, Promise<any>>();
 
 function ensureModule(
   pyodide: Awaited<typeof pyodideReadyPromise>,
   moduleName: string,
-): Promise<void> {
-  if (!modulePromises.has(moduleName)) {
-    if (!wheelMap[moduleName]) throw new Error(`Unknown module: ${moduleName}`);
-    const promise = (async () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any> {
+  let p = modulePromises.get(moduleName);
+  if (!p) {
+    if (!wheelMap[moduleName]) {
+      return Promise.reject(new Error(`Unknown module: ${moduleName}`));
+    }
+    p = (async () => {
       await installAllWheels();
-      pyodide.pyimport(moduleName);
+      return pyodide.pyimport(moduleName);
     })();
-    promise.catch(() => {
+    p.catch(() => {
       modulePromises.delete(moduleName);
     });
-    modulePromises.set(moduleName, promise);
+    modulePromises.set(moduleName, p);
   }
-  return modulePromises.get(moduleName)!;
+  return p;
 }
 
 // Map Python struct format characters to TypedArray constructors
@@ -127,18 +144,20 @@ const FORMAT_TO_TYPED_ARRAY: Record<
   d: Float64Array,
 };
 
+// Copy a Pyodide getBuffer() result into a JS-owned typed array. Releases the
+// underlying Python buffer; the returned view's ArrayBuffer is safe to transfer.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function extractNumpyBuffer(proxy: any): ArrayBuffer {
+function copyPyBuffer(proxy: any): ArrayBufferView {
   const pyBuffer = proxy.getBuffer();
   const Ctor = FORMAT_TO_TYPED_ARRAY[pyBuffer.format] ?? Float64Array;
-  const typed = new Ctor(
+  const view = new Ctor(
     pyBuffer.data.buffer.slice(
       pyBuffer.data.byteOffset,
       pyBuffer.data.byteOffset + pyBuffer.data.byteLength,
     ),
   );
   pyBuffer.release();
-  return typed.buffer as ArrayBuffer;
+  return view;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -161,7 +180,7 @@ function convertModelOutputs(jsResult: any): ModelOutputsWire | null {
     for (const buf of wire.buffers) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if (buf && typeof buf === "object" && (buf as any).getBuffer) {
-        buffers.push(extractNumpyBuffer(buf));
+        buffers.push(copyPyBuffer(buf).buffer as ArrayBuffer);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if ((buf as any).destroy) (buf as any).destroy();
       } else if (buf instanceof ArrayBuffer) {
@@ -187,76 +206,94 @@ function convertModelOutputs(jsResult: any): ModelOutputsWire | null {
   return { __modelOutputs: true, outputs };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function convertResult(rawResult: any): unknown {
+  if (!rawResult || typeof rawResult.destroy !== "function") return rawResult;
+  try {
+    if (typeof rawResult.toJs === "function") {
+      return rawResult.toJs({ dict_converter: Object.fromEntries });
+    }
+    if (typeof rawResult.getBuffer === "function") {
+      return copyPyBuffer(rawResult);
+    }
+    return rawResult.toString();
+  } finally {
+    rawResult.destroy();
+  }
+}
+
+function send(id: number, result: unknown) {
+  const modelOutputs = convertModelOutputs(result);
+  if (modelOutputs) {
+    postModelOutputsWithTransfer(self, id, modelOutputs);
+  } else {
+    postWithTransfer(self, id, result);
+  }
+}
+
 self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
   const pyodide = await pyodideReadyPromise;
-  const { id, type, python, module: moduleName, context } = event.data;
+  const msg = event.data;
+  const { id } = msg;
 
   try {
-    if (type === "loadModule" && moduleName) {
-      await ensureModule(pyodide, moduleName);
+    if (msg.type === "loadModule") {
+      await ensureModule(pyodide, msg.module);
       postWithTransfer(self, id, true);
       return;
     }
 
-    let globals;
-    if (context) {
-      const dict = pyodide.globals.get("dict");
-      globals = dict(Object.entries(context));
-    }
-
-    const t0 = performance.now();
-
-    // Use synchronous runPython (models don't use top-level await)
-    const rawResult = pyodide.runPython(
-      python!,
-      globals ? { globals } : undefined,
-    );
-
-    const tPython = performance.now();
-
-    // Destroy PyProxy if returned to prevent memory leaks
-    let result = rawResult;
-    if (rawResult && typeof rawResult === "object" && rawResult.destroy) {
-      if (rawResult.toJs) {
-        result = rawResult.toJs({ dict_converter: Object.fromEntries });
-      } else if (rawResult.getBuffer) {
-        // Single numpy array: use getBuffer() for direct typed array access
-        const pyBuffer = rawResult.getBuffer();
-        const Ctor = FORMAT_TO_TYPED_ARRAY[pyBuffer.format] ?? Float64Array;
-        result = new Ctor(
-          pyBuffer.data.buffer.slice(
-            pyBuffer.data.byteOffset,
-            pyBuffer.data.byteOffset + pyBuffer.data.byteLength,
-          ),
-        );
-        pyBuffer.release();
-      } else {
-        result = rawResult.toString();
+    if (msg.type === "call") {
+      const mod = await ensureModule(pyodide, msg.module);
+      const t0 = performance.now();
+      // mod[fn] creates a fresh PyProxy on every access — release in finally.
+      const pyFn = mod[msg.fn];
+      let result: unknown;
+      try {
+        if (typeof pyFn !== "function") {
+          throw new Error(`Module ${msg.module} has no function ${msg.fn}`);
+        }
+        const rawResult = msg.kwargs ? pyFn.callKwargs(msg.kwargs) : pyFn();
+        result = convertResult(rawResult);
+      } finally {
+        if (pyFn && typeof pyFn.destroy === "function") pyFn.destroy();
       }
-      rawResult.destroy();
+      const tEnd = performance.now();
+      console.log(
+        `[pyodide-worker] ${msg.module}.${msg.fn} ${
+          Math.round((tEnd - t0) * 10) / 10
+        }ms`,
+      );
+      send(id, result);
+      return;
     }
 
-    // Destroy globals proxy if created
-    if (globals && globals.destroy) {
-      globals.destroy();
+    // type === "run" or omitted
+    let globals;
+    if (msg.context) {
+      const dict = pyodide.globals.get("dict");
+      try {
+        globals = dict(Object.entries(msg.context));
+      } finally {
+        dict.destroy();
+      }
     }
-
-    const tConvert = performance.now();
-    const bench = {
-      python_ms: Math.round((tPython - t0) * 10) / 10,
-      convert_ms: Math.round((tConvert - tPython) * 10) / 10,
-    };
+    const t0 = performance.now();
+    let result: unknown;
+    try {
+      const rawResult = pyodide.runPython(
+        msg.python,
+        globals ? { globals } : undefined,
+      );
+      result = convertResult(rawResult);
+    } finally {
+      if (globals && globals.destroy) globals.destroy();
+    }
+    const tEnd = performance.now();
     console.log(
-      `[pyodide-worker] python=${bench.python_ms}ms convert=${bench.convert_ms}ms`,
+      `[pyodide-worker] runPython ${Math.round((tEnd - t0) * 10) / 10}ms`,
     );
-
-    // Check for ModelOutputs wire format
-    const modelOutputs = convertModelOutputs(result);
-    if (modelOutputs) {
-      postModelOutputsWithTransfer(self, id, modelOutputs);
-    } else {
-      postWithTransfer(self, id, result);
-    }
+    send(id, result);
   } catch (error) {
     postErrorWithTransfer(self, id, error);
   }
