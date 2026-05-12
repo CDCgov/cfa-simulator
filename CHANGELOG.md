@@ -1,6 +1,21 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.3.16] - 2026-05-12
+
+### Chores
+
+- **pnpm:** Silence vue-demi build-script warning
+
+### Features
+
+- **components:** Add Container and Grid layout components
+- **models:** Add CDC theme selector and Reed-Frost intro
+
+### Refactor
+
+- **cfasim:** Share template files via _shared/ + minijinja
+
 ## [0.3.15] - 2026-05-08
 
 ### Bug Fixes
