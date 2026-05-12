@@ -12,6 +12,10 @@ const days = ref(10)
 const population = ref(100000)
 const coverage = ref(0.5)
 const r0 = ref(3.5)
+const ageRange = ref([18, 65])
+const coverageRange = ref([0.2, 0.8])
+const minAge = ref(18)
+const maxAge = ref(65)
 </script>
 
 <ComponentDemo>
@@ -110,6 +114,112 @@ const days = ref(10);
   :min="1"
   :max="18"
   slider
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Range slider
+
+Bind `v-model:range` with a `[low, high]` tuple to render a two-handle
+slider. Range mode is enabled automatically by the binding — there's no
+explicit toggle prop.
+
+<ComponentDemo>
+  <div style="width: 300px">
+    <NumberInput
+      v-model:range="ageRange"
+      label="Age range"
+      :min="0"
+      :max="100"
+      number-type="integer"
+    />
+  </div>
+
+<template #code>
+
+```vue
+<script setup>
+import { ref } from "vue";
+const ageRange = ref([18, 65]);
+</script>
+
+<NumberInput
+  v-model:range="ageRange"
+  label="Age range"
+  :min="0"
+  :max="100"
+  number-type="integer"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Range slider with split bindings
+
+When your state stores the bounds in separate refs (rather than as a tuple),
+bind them directly with `v-model:lower` and `v-model:upper`. You can bind
+either pair or combine them with `v-model:range` — writes from the component
+go to every bound sink.
+
+<ComponentDemo>
+  <div style="width: 300px">
+    <NumberInput
+      v-model:lower="minAge"
+      v-model:upper="maxAge"
+      label="Age range (split)"
+      :min="0"
+      :max="100"
+      number-type="integer"
+    />
+  </div>
+
+<template #code>
+
+```vue
+<script setup>
+import { ref } from "vue";
+const minAge = ref(18);
+const maxAge = ref(65);
+</script>
+
+<NumberInput
+  v-model:lower="minAge"
+  v-model:upper="maxAge"
+  label="Age range"
+  :min="0"
+  :max="100"
+  number-type="integer"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+Range mode works with `percent` and `live` as well:
+
+<ComponentDemo>
+  <div style="width: 300px">
+    <NumberInput
+      v-model:range="coverageRange"
+      label="Coverage range"
+      percent
+      live
+      :max="1"
+    />
+  </div>
+
+<template #code>
+
+```vue
+<NumberInput
+  v-model:range="coverageRange"
+  label="Coverage range"
+  percent
+  live
+  :max="1"
 />
 ```
 

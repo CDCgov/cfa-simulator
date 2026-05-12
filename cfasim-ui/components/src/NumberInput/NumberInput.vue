@@ -1,9 +1,19 @@
 <script setup lang="ts">
-import { ref, watch, computed } from "vue";
+import { ref, watch, computed, onMounted, getCurrentInstance } from "vue";
 import { SliderRoot, SliderTrack, SliderRange, SliderThumb } from "reka-ui";
 import Hint from "../Hint/Hint.vue";
 
+export type NumberRange = [number, number];
+
+// The default `v-model` is always a scalar number. For range mode, bind
+// `v-model:range` (a tuple) and/or the split `v-model:lower`/`v-model:upper`.
+// Mode is auto-detected from which v-model bindings the parent provides;
+// no explicit toggle prop. Precedence on read: lower/upper > range >
+// slider defaults.
 const model = defineModel<number>();
+const range = defineModel<NumberRange>("range");
+const lower = defineModel<number>("lower");
+const upper = defineModel<number>("upper");
 
 const props = defineProps<{
   label?: string;
@@ -20,6 +30,37 @@ const props = defineProps<{
   required?: boolean;
   decimals?: number;
 }>();
+
+function isRangeValue(v: unknown): v is NumberRange {
+  return Array.isArray(v) && v.length === 2;
+}
+
+// Auto-detect range mode from the parent's v-model bindings. We check both
+// the listener (which Vue attaches as `onUpdate:<name>` on the vnode) and
+// the initial value — that way one-way `:range="x"` bindings also work.
+// Determined once at setup; mode doesn't change for the component's life.
+const instance = getCurrentInstance();
+const vnodeProps = instance?.vnode.props;
+const isRange =
+  !!vnodeProps?.["onUpdate:range"] ||
+  !!vnodeProps?.["onUpdate:lower"] ||
+  !!vnodeProps?.["onUpdate:upper"] ||
+  range.value !== undefined ||
+  lower.value !== undefined ||
+  upper.value !== undefined;
+
+// Range implies slider — a two-handle range has no sensible text-input form.
+const isSlider = computed(() => !!props.slider || isRange);
+
+// Warn if the parent bound the default `v-model` in range mode — it will
+// never receive updates, which is almost always a bug.
+onMounted(() => {
+  if (isRange && !!vnodeProps?.["onUpdate:modelValue"]) {
+    console.warn(
+      "[NumberInput] In range mode, the default `v-model` is unused. Bind `v-model:range` or `v-model:lower`/`v-model:upper` instead.",
+    );
+  }
+});
 
 const sliderMin = computed(() => props.min ?? (props.percent ? 0 : 0));
 const sliderMax = computed(() => props.max ?? (props.percent ? 1 : 100));
@@ -121,13 +162,50 @@ function stripCommas(s: string): string {
   return s.replace(/,/g, "");
 }
 
-const local = ref(formatForDisplay(toDisplay(model.value)));
-const sliderLocal = ref(model.value);
+// Resolve the current value across all bindings:
+// - In range mode: lower/upper take precedence; falls back per-side to
+//   `range`; finally to slider min/max. The default `v-model` is
+//   unused in this mode.
+// - In single mode: just the default `v-model`.
+function effectiveValue(): number | NumberRange | undefined {
+  if (isRange) {
+    const tuple = range.value;
+    const lo = lower.value ?? tuple?.[0];
+    const hi = upper.value ?? tuple?.[1];
+    if (lo !== undefined || hi !== undefined) {
+      return [lo ?? sliderMin.value, hi ?? sliderMax.value];
+    }
+    return undefined;
+  }
+  return model.value;
+}
+
+// Initial single-value display string. The text input isn't rendered in
+// range mode, so `local` is only consulted in single mode.
+const initialEffective = effectiveValue();
+const initialSingle =
+  typeof initialEffective === "number" ? initialEffective : undefined;
+const local = ref(formatForDisplay(toDisplay(initialSingle)));
+
+// Slider state is always an array, even in single mode (reka-ui's API).
+// In range mode it holds [low, high]; in single mode it holds [value].
+function modelToSliderArray(v: number | NumberRange | undefined): number[] {
+  if (isRange) {
+    if (isRangeValue(v)) return [v[0], v[1]];
+    return [sliderMin.value, sliderMax.value];
+  }
+  if (typeof v === "number") return [v];
+  return [sliderMin.value];
+}
+const sliderArrayLocal = ref<number[]>(modelToSliderArray(initialEffective));
 const validationError = ref<string>();
 
-watch(model, (v) => {
-  local.value = formatForDisplay(toDisplay(v));
-  sliderLocal.value = v;
+watch([model, range, lower, upper], () => {
+  const v = effectiveValue();
+  if (!isRange && !isRangeValue(v)) {
+    local.value = formatForDisplay(toDisplay(v as number | undefined));
+  }
+  sliderArrayLocal.value = modelToSliderArray(v);
   validationError.value = validate(v);
 });
 
@@ -179,21 +257,17 @@ function onBlur() {
 
 let liveTimeout: ReturnType<typeof setTimeout> | null = null;
 function onInputEvent() {
-  if (!props.live || props.slider) return;
+  if (!props.live || isSlider.value) return;
   if (liveTimeout) clearTimeout(liveTimeout);
   liveTimeout = setTimeout(commit, 300);
 }
 function onChangeEvent() {
-  if (!props.live || props.slider) return;
+  if (!props.live || isSlider.value) return;
   if (liveTimeout) clearTimeout(liveTimeout);
   commit();
 }
 
-// Validates a model value (or undefined for empty). Single source of truth
-// for required / min / max errors — used on commit, programmatic updates,
-// and arrow-key stepping.
-function validate(v: number | undefined): string | undefined {
-  if (v == null) return props.required ? "Required" : undefined;
+function validateScalar(v: number): string | undefined {
   const display = toDisplay(v) as number;
   if (inputMin.value != null && display < inputMin.value) {
     return `Min ${inputMin.value}${props.percent ? "%" : ""}`;
@@ -204,11 +278,28 @@ function validate(v: number | undefined): string | undefined {
   return undefined;
 }
 
+// Single source of truth for required / min / max errors — used on commit,
+// programmatic updates, and arrow-key stepping. In range mode, returns the
+// first failing handle's error, suffixed with "(lower)" or "(upper)".
+function validate(v: number | NumberRange | undefined): string | undefined {
+  if (v == null) return props.required ? "Required" : undefined;
+  if (isRangeValue(v)) {
+    const lo = validateScalar(v[0]);
+    if (lo) return `${lo} (lower)`;
+    const hi = validateScalar(v[1]);
+    if (hi) return `${hi} (upper)`;
+    return undefined;
+  }
+  return validateScalar(v);
+}
+
 function commit() {
-  // An empty field clears the model — distinct from garbage input.
+  // commit() is only reachable when !isSlider (only text-input events call
+  // it). Default `v-model` is scalar-only.
+  const current = model.value;
   if (local.value.trim() === "") {
     model.value = undefined;
-    sliderLocal.value = undefined;
+    sliderArrayLocal.value = modelToSliderArray(undefined);
     validationError.value = validate(undefined);
     return;
   }
@@ -219,8 +310,8 @@ function commit() {
   // turn pure garbage ("abc") into 0. Reset to the current model value so
   // invalid input doesn't linger in the field.
   if (!/\d/.test(cleaned)) {
-    local.value = formatForDisplay(toDisplay(model.value));
-    validationError.value = validate(model.value);
+    local.value = formatForDisplay(toDisplay(current));
+    validationError.value = validate(current);
     return;
   }
   if (cleaned !== local.value) {
@@ -240,22 +331,43 @@ function commit() {
   if (error) return;
 
   model.value = next;
-  sliderLocal.value = model.value;
+  sliderArrayLocal.value = [next];
+}
+
+function commitSliderArray(v: number[], asModel: boolean): void {
+  const coerced = v.map(coerceInteger);
+  sliderArrayLocal.value = coerced;
+  if (!isRange) {
+    local.value = formatForDisplay(toDisplay(coerced[0]));
+  }
+  if (asModel) {
+    if (isRange) {
+      // Emit to all range sinks; consumers without a matching v-model just
+      // ignore their `update:*` event. The default `v-model` is unused in
+      // range mode.
+      range.value = [coerced[0], coerced[1]] as NumberRange;
+      lower.value = coerced[0];
+      upper.value = coerced[1];
+    } else {
+      model.value = coerced[0];
+    }
+  }
+}
+
+function thumbAriaLabel(i: number): string | undefined {
+  if (!props.label) return undefined;
+  if (!isRange) return props.label;
+  return i === 0 ? `${props.label} (lower)` : `${props.label} (upper)`;
 }
 
 function onSliderUpdate(v: number[] | undefined) {
   if (!v) return;
-  const val = coerceInteger(v[0]);
-  sliderLocal.value = val;
-  local.value = formatForDisplay(toDisplay(val));
-  if (props.live) {
-    model.value = val;
-  }
+  commitSliderArray(v, !!props.live);
 }
 
 function onSliderCommit(v: number[] | undefined) {
   if (!v) return;
-  model.value = coerceInteger(v[0]);
+  commitSliderArray(v, true);
 }
 
 function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
@@ -268,21 +380,26 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
   if (inputMin.value != null) next = Math.max(next, inputMin.value);
   if (inputMax.value != null) next = Math.min(next, inputMax.value);
   local.value = formatForDisplay(next);
-  model.value = fromDisplay(next);
-  sliderLocal.value = model.value;
+  const nextModel = fromDisplay(next);
+  model.value = nextModel;
+  sliderArrayLocal.value = [nextModel];
 }
 </script>
 
 <template>
-  <label v-if="props.label" class="input-label">
+  <component
+    :is="props.label ? 'label' : 'div'"
+    :class="props.label ? 'input-label' : undefined"
+  >
     <span
+      v-if="props.label"
       class="input-label-row"
       :class="{ 'visually-hidden': props.hideLabel }"
     >
       {{ props.label }}
       <Hint v-if="props.hint && !props.hideLabel" :text="props.hint" />
     </span>
-    <span v-if="!props.slider" class="input-wrapper">
+    <span v-if="!isSlider" class="input-wrapper">
       <input
         type="text"
         :inputmode="props.numberType === 'integer' ? 'numeric' : 'decimal'"
@@ -306,10 +423,10 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
     <span v-if="validationError" class="input-error" role="alert">
       {{ validationError }}
     </span>
-    <div v-if="props.slider" class="slider-container">
+    <div v-if="isSlider" class="slider-container">
       <SliderRoot
         class="slider-root"
-        :model-value="sliderLocal != null ? [sliderLocal] : [sliderMin]"
+        :model-value="sliderArrayLocal"
         :min="sliderMin"
         :max="sliderMax"
         :step="sliderStep"
@@ -319,9 +436,14 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
         <SliderTrack class="slider-track">
           <SliderRange class="slider-range" />
         </SliderTrack>
-        <SliderThumb class="slider-thumb" :aria-label="props.label">
+        <SliderThumb
+          v-for="(v, i) in sliderArrayLocal"
+          :key="i"
+          class="slider-thumb"
+          :aria-label="thumbAriaLabel(i)"
+        >
           <span class="slider-current">
-            {{ formatSliderValue(sliderLocal) }}
+            {{ formatSliderValue(v) }}
           </span>
         </SliderThumb>
       </SliderRoot>
@@ -330,57 +452,7 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
         <span>{{ formatSliderValue(sliderMax) }}</span>
       </div>
     </div>
-  </label>
-  <div v-else>
-    <span v-if="!props.slider" class="input-wrapper">
-      <input
-        type="text"
-        :inputmode="props.numberType === 'integer' ? 'numeric' : 'decimal'"
-        v-model="local"
-        :placeholder="props.placeholder"
-        :aria-invalid="!!validationError"
-        :aria-required="props.required || undefined"
-        :required="props.required"
-        @blur="onBlur"
-        @keydown.enter="commit"
-        @keydown.up="onArrowStep($event, 1)"
-        @keydown.down="onArrowStep($event, -1)"
-        @input="
-          reformatInput($event);
-          onInputEvent();
-        "
-        @change="onChangeEvent"
-      />
-      <span v-if="props.percent" class="input-suffix">%</span>
-    </span>
-    <span v-if="validationError" class="input-error" role="alert">
-      {{ validationError }}
-    </span>
-    <div v-if="props.slider" class="slider-container">
-      <SliderRoot
-        class="slider-root"
-        :model-value="sliderLocal != null ? [sliderLocal] : [sliderMin]"
-        :min="sliderMin"
-        :max="sliderMax"
-        :step="sliderStep"
-        @update:model-value="onSliderUpdate"
-        @value-commit="onSliderCommit"
-      >
-        <SliderTrack class="slider-track">
-          <SliderRange class="slider-range" />
-        </SliderTrack>
-        <SliderThumb class="slider-thumb" :aria-label="props.label">
-          <span class="slider-current">
-            {{ formatSliderValue(sliderLocal) }}
-          </span>
-        </SliderThumb>
-      </SliderRoot>
-      <div class="slider-labels">
-        <span>{{ formatSliderValue(sliderMin) }}</span>
-        <span>{{ formatSliderValue(sliderMax) }}</span>
-      </div>
-    </div>
-  </div>
+  </component>
 </template>
 
 <style scoped>

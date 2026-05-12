@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
-import NumberInput from "./NumberInput.vue";
+import NumberInput, { type NumberRange } from "./NumberInput.vue";
 
 describe("NumberInput", () => {
   it("renders hint trigger when hint prop is provided", () => {
@@ -814,5 +814,314 @@ describe("NumberInput", () => {
 
     await wrapper.setProps({ modelValue: 5000 });
     expect((input.element as HTMLInputElement).value).toBe("5,000");
+  });
+
+  describe("range mode", () => {
+    it("renders two thumbs when range is bound", () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          range: [20, 80] as NumberRange,
+          label: "Range",
+          min: 0,
+          max: 100,
+        },
+      });
+      const thumbs = wrapper.findAllComponents({ name: "SliderThumb" });
+      expect(thumbs.length).toBe(2);
+    });
+
+    it("range implies slider — no text input is rendered", () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          range: [20, 80] as NumberRange,
+          min: 0,
+          max: 100,
+        },
+      });
+      expect(wrapper.find("input").exists()).toBe(false);
+      expect(wrapper.findComponent({ name: "SliderRoot" }).exists()).toBe(true);
+    });
+
+    it("emits tuple updates while dragging when live", async () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          range: [20, 80] as NumberRange,
+          live: true,
+          min: 0,
+          max: 100,
+        },
+      });
+      const slider = wrapper.findComponent({ name: "SliderRoot" });
+      slider.vm.$emit("update:modelValue", [25, 75]);
+      const emits = wrapper.emitted("update:range");
+      expect(emits?.[emits.length - 1]).toEqual([[25, 75]]);
+    });
+
+    it("does not emit on drag without live", async () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          range: [20, 80] as NumberRange,
+          min: 0,
+          max: 100,
+        },
+      });
+      const slider = wrapper.findComponent({ name: "SliderRoot" });
+      slider.vm.$emit("update:modelValue", [30, 70]);
+      expect(wrapper.emitted("update:range")).toBeUndefined();
+    });
+
+    it("coerces each handle to integer when numberType is integer", () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          range: [20, 80] as NumberRange,
+          numberType: "integer" as const,
+          min: 0,
+          max: 100,
+        },
+      });
+      const slider = wrapper.findComponent({ name: "SliderRoot" });
+      slider.vm.$emit("valueCommit", [10.7, 75.3]);
+      const emits = wrapper.emitted("update:range");
+      expect(emits?.[emits.length - 1]).toEqual([[10, 75]]);
+    });
+
+    it("validates each handle against min/max", async () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          range: [20, 80] as NumberRange,
+          min: 10,
+          max: 90,
+        },
+      });
+      expect(wrapper.find(".input-error").exists()).toBe(false);
+
+      await wrapper.setProps({ range: [5, 80] });
+      expect(wrapper.find(".input-error").text()).toBe("Min 10 (lower)");
+
+      await wrapper.setProps({ range: [20, 95] });
+      expect(wrapper.find(".input-error").text()).toBe("Max 90 (upper)");
+
+      await wrapper.setProps({ range: [20, 80] });
+      expect(wrapper.find(".input-error").exists()).toBe(false);
+    });
+
+    it("passes tuple to slider in percent mode", () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          range: [0.25, 0.75] as NumberRange,
+          percent: true,
+          min: 0,
+          max: 1,
+        },
+      });
+      const slider = wrapper.findComponent({ name: "SliderRoot" });
+      expect(slider.props("modelValue")).toEqual([0.25, 0.75]);
+    });
+
+    it("labels thumbs as lower/upper for accessibility", () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          range: [20, 80] as NumberRange,
+          label: "Range",
+          min: 0,
+          max: 100,
+        },
+      });
+      const thumbs = wrapper.findAll(".slider-thumb");
+      expect(thumbs[0].attributes("aria-label")).toBe("Range (lower)");
+      expect(thumbs[1].attributes("aria-label")).toBe("Range (upper)");
+    });
+
+    it("falls back to [min, max] when range is bound but undefined", () => {
+      // Simulate `v-model:range="someUndefinedRef"` — the listener is
+      // present so we enter range mode, but the initial value is undefined.
+      const wrapper = mount(NumberInput, {
+        props: {
+          "onUpdate:range": () => {},
+          min: 10,
+          max: 90,
+        },
+      });
+      const slider = wrapper.findComponent({ name: "SliderRoot" });
+      expect(slider.props("modelValue")).toEqual([10, 90]);
+    });
+
+    it("syncs slider when range model changes externally", async () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          range: [20, 80] as NumberRange,
+          min: 0,
+          max: 100,
+        },
+      });
+      const slider = wrapper.findComponent({ name: "SliderRoot" });
+      expect(slider.props("modelValue")).toEqual([20, 80]);
+
+      await wrapper.setProps({ range: [40, 60] });
+      expect(slider.props("modelValue")).toEqual([40, 60]);
+    });
+
+    describe("named v-models (lower/upper)", () => {
+      it("initializes the slider from lower/upper without a tuple binding", () => {
+        const wrapper = mount(NumberInput, {
+          props: {
+            lower: 25,
+            upper: 75,
+            min: 0,
+            max: 100,
+          },
+        });
+        const slider = wrapper.findComponent({ name: "SliderRoot" });
+        expect(slider.props("modelValue")).toEqual([25, 75]);
+      });
+
+      it("emits all three range sinks (range + lower + upper) on commit", () => {
+        const wrapper = mount(NumberInput, {
+          props: {
+            range: [20, 80] as NumberRange,
+            lower: 20,
+            upper: 80,
+            min: 0,
+            max: 100,
+          },
+        });
+        const slider = wrapper.findComponent({ name: "SliderRoot" });
+        slider.vm.$emit("valueCommit", [35, 65]);
+
+        const tuple = wrapper.emitted("update:range");
+        const lo = wrapper.emitted("update:lower");
+        const hi = wrapper.emitted("update:upper");
+        expect(tuple?.[tuple.length - 1]).toEqual([[35, 65]]);
+        expect(lo?.[lo.length - 1]).toEqual([35]);
+        expect(hi?.[hi.length - 1]).toEqual([65]);
+      });
+
+      it("named values take precedence over the tuple when both are bound", () => {
+        // Range says [10, 90], but explicit lower=30 should win for the
+        // lower bound. (Mixing both is unusual, but precedence must be
+        // predictable.)
+        const wrapper = mount(NumberInput, {
+          props: {
+            range: [10, 90] as NumberRange,
+            lower: 30,
+            min: 0,
+            max: 100,
+          },
+        });
+        const slider = wrapper.findComponent({ name: "SliderRoot" });
+        expect(slider.props("modelValue")).toEqual([30, 90]);
+      });
+
+      it("updates slider when only lower changes externally", async () => {
+        const wrapper = mount(NumberInput, {
+          props: {
+            lower: 25,
+            upper: 75,
+            min: 0,
+            max: 100,
+          },
+        });
+        const slider = wrapper.findComponent({ name: "SliderRoot" });
+        expect(slider.props("modelValue")).toEqual([25, 75]);
+
+        await wrapper.setProps({ lower: 40 });
+        expect(slider.props("modelValue")).toEqual([40, 75]);
+      });
+
+      it("falls back to slider max when only lower is bound", () => {
+        const wrapper = mount(NumberInput, {
+          props: {
+            lower: 30,
+            min: 0,
+            max: 100,
+          },
+        });
+        const slider = wrapper.findComponent({ name: "SliderRoot" });
+        expect(slider.props("modelValue")).toEqual([30, 100]);
+      });
+
+      it("fires update:lower / update:upper during drag when live", () => {
+        const wrapper = mount(NumberInput, {
+          props: {
+            lower: 25,
+            upper: 75,
+            live: true,
+            min: 0,
+            max: 100,
+          },
+        });
+        const slider = wrapper.findComponent({ name: "SliderRoot" });
+        slider.vm.$emit("update:modelValue", [27, 73]);
+
+        const lo = wrapper.emitted("update:lower");
+        const hi = wrapper.emitted("update:upper");
+        expect(lo?.[lo.length - 1]).toEqual([27]);
+        expect(hi?.[hi.length - 1]).toEqual([73]);
+      });
+
+      it("coerces named-model commits to integer", () => {
+        const wrapper = mount(NumberInput, {
+          props: {
+            lower: 25,
+            upper: 75,
+            numberType: "integer" as const,
+            min: 0,
+            max: 100,
+          },
+        });
+        const slider = wrapper.findComponent({ name: "SliderRoot" });
+        slider.vm.$emit("valueCommit", [27.8, 72.3]);
+
+        const lo = wrapper.emitted("update:lower");
+        const hi = wrapper.emitted("update:upper");
+        expect(lo?.[lo.length - 1]).toEqual([27]);
+        expect(hi?.[hi.length - 1]).toEqual([72]);
+      });
+
+      it("warns when default v-model is bound in range mode", () => {
+        // The default v-model is unused once a range binding is present —
+        // catch the likely misconfig.
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        mount(NumberInput, {
+          props: {
+            "onUpdate:modelValue": () => {},
+            lower: 10,
+            upper: 90,
+            min: 0,
+            max: 100,
+          },
+        });
+        expect(warn).toHaveBeenCalledOnce();
+        expect(warn.mock.calls[0][0]).toMatch(/v-model/);
+        warn.mockRestore();
+      });
+
+      it("does not warn when only range bindings are present", () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        mount(NumberInput, {
+          props: {
+            lower: 10,
+            upper: 90,
+            min: 0,
+            max: 100,
+          },
+        });
+        expect(warn).not.toHaveBeenCalled();
+        warn.mockRestore();
+      });
+
+      it("does not warn in single mode with default v-model only", () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        mount(NumberInput, {
+          props: {
+            modelValue: 42,
+            "onUpdate:modelValue": () => {},
+            label: "Count",
+          },
+        });
+        expect(warn).not.toHaveBeenCalled();
+        warn.mockRestore();
+      });
+    });
   });
 });
