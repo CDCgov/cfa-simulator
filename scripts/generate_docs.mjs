@@ -122,6 +122,12 @@ const components = [
     "cfasim-ui/components/src/Toggle/Toggle.md",
   ],
   [
+    "bar-chart",
+    "charts",
+    "cfasim-ui/charts/src/BarChart/BarChart.vue",
+    "cfasim-ui/charts/src/BarChart/BarChart.md",
+  ],
+  [
     "choropleth-map",
     "charts",
     "cfasim-ui/charts/src/ChoroplethMap/ChoroplethMap.vue",

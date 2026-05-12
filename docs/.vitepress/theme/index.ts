@@ -20,7 +20,12 @@ import {
   TextInput,
   Toggle,
 } from "@cfasim-ui/components";
-import { ChoroplethMap, DataTable, LineChart } from "@cfasim-ui/charts";
+import {
+  BarChart,
+  ChoroplethMap,
+  DataTable,
+  LineChart,
+} from "@cfasim-ui/charts";
 import usStates from "us-atlas/states-10m.json";
 import usCounties from "us-atlas/counties-10m.json";
 import ComponentDemo from "./ComponentDemo.vue";
@@ -48,6 +53,7 @@ export default {
     app.component("Spinner", Spinner);
     app.component("TextInput", TextInput);
     app.component("Toggle", Toggle);
+    app.component("BarChart", BarChart);
     app.component("ChoroplethMap", ChoroplethMap);
     app.component("DataTable", DataTable);
     app.component("LineChart", LineChart);

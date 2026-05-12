@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted } from "vue";
+import { computed, ref } from "vue";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
-import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
-import { saveSvg, savePng, downloadCsv } from "../ChartMenu/download.js";
-import { placeTooltip } from "../tooltip-position.js";
+import {
+  snap,
+  formatTick,
+  computeTickValues,
+  seriesToCsv,
+  useChartSize,
+  useChartTooltip,
+  useChartMenu,
+  useChartPadding,
+  INLINE_LEGEND_HEIGHT,
+  type ChartData,
+} from "../_shared/index.js";
 
 /**
  * Numeric input accepted by the chart. `number[]` and any standard numeric
@@ -11,17 +20,7 @@ import { placeTooltip } from "../tooltip-position.js";
  * `ModelOutput.column('x')` (e.g. a `Float64Array`) can be passed directly
  * without copying into a plain array.
  */
-export type LineChartData =
-  | readonly number[]
-  | Float64Array
-  | Float32Array
-  | Int32Array
-  | Uint32Array
-  | Int16Array
-  | Uint16Array
-  | Int8Array
-  | Uint8Array
-  | Uint8ClampedArray;
+export type LineChartData = ChartData;
 
 export interface Series {
   /**
@@ -180,64 +179,30 @@ defineSlots<{
   }): unknown;
 }>();
 
-const containerRef = ref<HTMLElement | null>(null);
-const svgRef = ref<SVGSVGElement | null>(null);
-const measuredWidth = ref(0);
-let observer: ResizeObserver | null = null;
-let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
-
-onMounted(() => {
-  if (containerRef.value) {
-    measuredWidth.value = containerRef.value.clientWidth;
-    observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      if (props.debounce) {
-        if (resizeTimeout) clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(() => {
-          measuredWidth.value = entry.contentRect.width;
-        }, props.debounce);
-      } else {
-        measuredWidth.value = entry.contentRect.width;
-      }
-    });
-    observer.observe(containerRef.value);
-  }
-});
-
-onUnmounted(() => {
-  observer?.disconnect();
-  if (resizeTimeout) clearTimeout(resizeTimeout);
+const { containerRef, measuredWidth } = useChartSize({
+  debounce: () => props.debounce,
 });
 
 const width = computed(() => props.width ?? (measuredWidth.value || 400));
 const height = computed(() => props.height ?? 200);
-
-const INLINE_LEGEND_HEIGHT = 20;
 
 const hasInlineLegend = computed(
   () =>
     allSeries.value.some((s) => s.legend) ||
     props.areaSections?.some(
       (s) => s.legend === "inline" && (s.label || s.description),
-    ),
+    ) ||
+    false,
 );
 
-const padding = computed(() => ({
-  top:
-    (props.title ? 30 : 10) +
-    (hasInlineLegend.value ? INLINE_LEGEND_HEIGHT : 0),
-  right: 10,
-  bottom: props.xLabel ? 46 : 30,
-  left: props.yLabel ? 66 : 50,
-}));
-
-const innerW = computed(
-  () => width.value - padding.value.left - padding.value.right,
-);
-const innerH = computed(
-  () => height.value - padding.value.top - padding.value.bottom,
-);
+const { padding, innerW, innerH } = useChartPadding({
+  title: () => props.title,
+  xLabel: () => props.xLabel,
+  yLabel: () => props.yLabel,
+  hasInlineLegend: () => hasInlineLegend.value,
+  width: () => width.value,
+  height: () => height.value,
+});
 
 /**
  * Internal series shape where `data` (y-values) is always resolved.
@@ -607,47 +572,6 @@ const sectionLabelBaseY = computed(
     SECTION_LABEL_TOP_MARGIN,
 );
 
-function niceStep(range: number, targetTicks: number): number {
-  const rough = range / targetTicks;
-  const mag = Math.pow(10, Math.floor(Math.log10(rough)));
-  const norm = rough / mag;
-  let step: number;
-  if (norm <= 1.5) step = 1;
-  else if (norm <= 3) step = 2;
-  else if (norm <= 7) step = 5;
-  else step = 10;
-  return step * mag;
-}
-
-/** Round to nearest half-pixel so 1px SVG strokes stay sharp. */
-function snap(v: number): number {
-  return Math.round(v) + 0.5;
-}
-
-const numFmt = new Intl.NumberFormat();
-function formatTick(v: number): string {
-  if (Math.abs(v) >= 1000) return numFmt.format(v);
-  if (Number.isInteger(v)) return v.toString();
-  return v.toFixed(1);
-}
-
-/** Generate interval-spaced values in [min, max], inclusive. */
-function intervalValues(min: number, max: number, step: number): number[] {
-  if (!(step > 0) || !isFinite(step)) return [];
-  const out: number[] = [];
-  const start = Math.ceil(min / step) * step;
-  // Cap iteration to avoid runaway loops from pathological inputs.
-  const maxIterations = 1000;
-  for (
-    let i = 0, v = start;
-    v <= max + 1e-9 && i < maxIterations;
-    i++, v = start + i * step
-  ) {
-    out.push(v);
-  }
-  return out;
-}
-
 const yTickItems = computed(() => {
   const { min, max } = extent.value;
   const toY = (v: number) =>
@@ -663,15 +587,12 @@ const yTickItems = computed(() => {
     return [{ value: fmt(min), y: snap(padding.value.top + innerH.value / 2) }];
   }
 
-  let values: number[];
-  if (Array.isArray(props.yTicks)) {
-    values = props.yTicks.filter((v) => v >= min && v <= max);
-  } else if (typeof props.yTicks === "number") {
-    values = intervalValues(min, max, props.yTicks);
-  } else {
-    const targetTicks = Math.max(3, Math.floor(innerH.value / 50));
-    values = intervalValues(min, max, niceStep(max - min, targetTicks));
-  }
+  const values = computeTickValues({
+    min,
+    max,
+    ticks: props.yTicks,
+    targetTickCount: innerH.value / 50,
+  });
   return values.map((v) => ({ value: fmt(v), y: toY(v) }));
 });
 
@@ -698,32 +619,26 @@ const xTickItems = computed(() => {
   };
 
   let values: number[];
-  if (Array.isArray(props.xTicks)) {
-    // User supplies display-space values; shift to data-space.
-    values = props.xTicks
-      .map((v) => v - offset)
-      .filter((v) => v >= xMin && v <= xMax);
-  } else if (typeof props.xTicks === "number") {
-    // Align to multiples of the step in display space (preserves
-    // e.g. `xMin: 3, xTicks: 5` → display ticks 5, 10, 15 behavior).
-    values = intervalValues(xMin + offset, xMax + offset, props.xTicks).map(
-      (v) => v - offset,
-    );
-  } else if (
+  if (
+    props.xTicks == null &&
     !hasExplicitX.value &&
     props.xLabels &&
     props.xLabels.length === len
   ) {
+    // xLabels fallback: pick evenly-spaced index ticks so every label
+    // bucket gets at most one tick.
     const targetTicks = Math.max(3, Math.floor(innerW.value / 80));
     const step = Math.max(1, Math.round((len - 1) / targetTicks));
     values = [];
     for (let i = 0; i < len; i += step) values.push(i);
   } else {
-    const targetTicks = Math.max(3, Math.floor(innerW.value / 80));
-    const step = niceStep(xMax - xMin, targetTicks);
-    values = intervalValues(xMin + offset, xMax + offset, step).map(
-      (v) => v - offset,
-    );
+    values = computeTickValues({
+      min: xMin,
+      max: xMax,
+      ticks: props.xTicks,
+      targetTickCount: innerW.value / 80,
+      displayOffset: offset,
+    });
   }
 
   const leftEdge = padding.value.left;
@@ -738,50 +653,12 @@ const xTickItems = computed(() => {
   });
 });
 
-function menuFilename() {
-  if (props.filename) return props.filename;
-  return typeof props.menu === "string" ? props.menu : "chart";
-}
-
-function getSvgEl(): SVGSVGElement | null {
-  return svgRef.value;
-}
-
 function toCsv(): string {
   if (typeof props.csv === "function") return props.csv();
   if (typeof props.csv === "string") return props.csv;
-  const series = allSeries.value;
-  if (series.length === 0) return "";
-  const len = maxLen.value;
-  // Use an `x` column when every series shares the same x source;
-  // otherwise fall back to `index`.
-  const sharedX = series.every((s) => s.x === series[0].x)
-    ? series[0].x
-    : undefined;
-  const xHeader = sharedX ? "x" : "index";
-  const headers =
-    series.length === 1
-      ? [xHeader, "value"]
-      : [xHeader, ...series.map((_, i) => `series_${i}`)];
-  const rows = [headers.join(",")];
-  for (let r = 0; r < len; r++) {
-    const xCell = sharedX ? String(sharedX[r]) : r.toString();
-    const cells = [xCell];
-    for (const s of series) {
-      cells.push(r < s.data.length ? String(s.data[r]) : "");
-    }
-    rows.push(cells.join(","));
-  }
-  return rows.join("\n");
+  return seriesToCsv(allSeries.value);
 }
 
-// Tooltip hover state
-const TOUCH_Y_OFFSET = 50;
-const hoverIndex = ref<number | null>(null);
-const isTouching = ref(false);
-const tooltipRef = ref<HTMLElement | null>(null);
-const pointer = ref<{ clientX: number; clientY: number } | null>(null);
-const tooltipPos = ref<{ left: number; top: number } | null>(null);
 const hasTooltipSlot = computed(
   () => !!props.tooltipData || !!props.tooltipTrigger,
 );
@@ -866,15 +743,6 @@ const hoverSlotProps = computed(() => {
   };
 });
 
-function pointerFromEvent(
-  event: MouseEvent | TouchEvent,
-): { clientX: number; clientY: number } | null {
-  if ("touches" in event) {
-    return event.touches[0] ?? null;
-  }
-  return event;
-}
-
 function indexFromPointer(clientX: number): number | null {
   const rect = containerRef.value?.getBoundingClientRect();
   if (!rect) return null;
@@ -887,114 +755,31 @@ function indexFromPointer(clientX: number): number | null {
   return nearestIndex(s0, targetX);
 }
 
-function updateHover(event: MouseEvent | TouchEvent) {
-  const pt = pointerFromEvent(event);
-  if (!pt) return;
-  const idx = indexFromPointer(pt.clientX);
-  if (idx === null) return;
-  hoverIndex.value = idx;
-  pointer.value = { clientX: pt.clientX, clientY: pt.clientY };
-  emit("hover", { index: idx });
-}
-
-watch(
-  [pointer, hoverIndex],
-  () => {
-    if (hoverIndex.value === null || !pointer.value) {
-      tooltipPos.value = null;
-      return;
-    }
-    const el = tooltipRef.value;
-    const container = containerRef.value;
-    if (!el || !container) return;
-    const rect = container.getBoundingClientRect();
-    const offset = isTouching.value ? TOUCH_Y_OFFSET : 0;
-    const { left, top } = placeTooltip(
-      pointer.value.clientX,
-      pointer.value.clientY - offset,
-      el.offsetWidth,
-      el.offsetHeight,
-      props.tooltipClamp,
-      rect,
-    );
-    tooltipPos.value = { left: left - rect.left, top: top - rect.top };
-  },
-  { flush: "post" },
-);
-
-function onChartMouseMove(event: MouseEvent) {
-  updateHover(event);
-}
-
-function onChartMouseLeave() {
-  if (props.tooltipTrigger !== "click") {
-    hoverIndex.value = null;
-    emit("hover", null);
-  }
-}
-
-function onChartClick(event: MouseEvent) {
-  if (props.tooltipTrigger !== "click") return;
-  const pt = pointerFromEvent(event);
-  if (!pt) return;
-  const idx = indexFromPointer(pt.clientX);
-  if (idx === null) return;
-  hoverIndex.value = hoverIndex.value === idx ? null : idx;
-  emit("hover", hoverIndex.value !== null ? { index: idx } : null);
-}
-
-function onTouchStart(event: TouchEvent) {
-  isTouching.value = true;
-  updateHover(event);
-}
-
-function onTouchMove(event: TouchEvent) {
-  updateHover(event);
-}
-
-function onTouchEnd() {
-  isTouching.value = false;
-  hoverIndex.value = null;
-  emit("hover", null);
-}
-
-const downloadLinkText = computed(() => {
-  if (!props.downloadLink) return null;
-  return typeof props.downloadLink === "string"
-    ? props.downloadLink
-    : "Download data (CSV)";
+const {
+  hoverIndex,
+  tooltipRef,
+  tooltipPos,
+  handlers: tooltipHandlers,
+} = useChartTooltip({
+  enabled: () => hasTooltipSlot.value,
+  trigger: () => props.tooltipTrigger,
+  clamp: () => props.tooltipClamp,
+  pointerToIndex: indexFromPointer,
+  containerRef,
+  onHover: (payload) => emit("hover", payload),
 });
 
-const csvHref = computed(() => {
-  if (!props.downloadLink) return null;
-  return `data:text/csv;charset=utf-8,${encodeURIComponent(toCsv())}`;
-});
-
-const menuItems = computed<ChartMenuItem[]>(() => {
-  const fname = menuFilename();
-  const items: ChartMenuItem[] = [
-    {
-      label: "Save as SVG",
-      action: () => {
-        const el = getSvgEl();
-        if (el) saveSvg(el, fname);
-      },
-    },
-    {
-      label: "Save as PNG",
-      action: () => {
-        const el = getSvgEl();
-        if (el) savePng(el, fname);
-      },
-    },
-  ];
-  if (!props.downloadLink) {
-    items.push({
-      label: "Download CSV",
-      action: () => downloadCsv(toCsv(), fname),
-    });
-  }
-  return items;
+const {
+  svgRef,
+  items: menuItems,
+  downloadLinkText,
+  csvHref,
+  resolvedFilename: menuFilename,
+} = useChartMenu({
+  filename: () => props.filename,
+  legacyMenuLabel: () => props.menu,
+  getCsv: toCsv,
+  downloadLink: () => props.downloadLink,
 });
 </script>
 
@@ -1272,12 +1057,7 @@ const menuItems = computed<ChartMenuItem[]>(() => {
         :height="innerH"
         fill="transparent"
         style="cursor: crosshair; touch-action: none"
-        @mousemove="onChartMouseMove"
-        @mouseleave="onChartMouseLeave"
-        @click="onChartClick"
-        @touchstart.prevent="onTouchStart"
-        @touchmove.prevent="onTouchMove"
-        @touchend="onTouchEnd"
+        v-on="tooltipHandlers"
       />
       <!-- area section labels -->
       <g v-for="(item, i) in sectionLabels.labels" :key="'seclab' + i">
