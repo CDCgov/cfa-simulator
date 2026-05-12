@@ -6,6 +6,11 @@ export {
   type AreaSection,
 } from "./LineChart/LineChart.vue";
 export {
+  default as BarChart,
+  type BarChartData,
+  type BarSeries,
+} from "./BarChart/BarChart.vue";
+export {
   default as ChoroplethMap,
   type GeoType,
   type StateData,

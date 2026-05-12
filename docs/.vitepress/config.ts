@@ -52,6 +52,7 @@ export default defineConfig({
             text: "Charts",
             collapsed: false,
             items: [
+              { text: "BarChart", link: "/cfasim-ui/charts/bar-chart" },
               {
                 text: "ChoroplethMap",
                 link: "/cfasim-ui/charts/choropleth-map",
