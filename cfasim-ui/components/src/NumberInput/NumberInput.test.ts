@@ -801,6 +801,33 @@ describe("NumberInput", () => {
     expect((input.element as HTMLInputElement).value).toBe("2.500");
   });
 
+  it("applies sliderDisplay to single-slider thumb and labels", () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 50,
+        slider: true,
+        min: 0,
+        max: 100,
+        sliderDisplay: (v: number) => `${v} days`,
+      },
+    });
+    expect(wrapper.find(".slider-current").text()).toBe("50 days");
+    const labels = wrapper.findAll(".slider-labels span");
+    expect(labels[0].text()).toBe("0 days");
+    expect(labels[1].text()).toBe("100 days");
+  });
+
+  it("ignores sliderDisplay for regular (non-slider) inputs", () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 50,
+        sliderDisplay: (v: number) => `${v} days`,
+      },
+    });
+    const input = wrapper.find("input");
+    expect((input.element as HTMLInputElement).value).toBe("50");
+  });
+
   it("syncs local value when model changes externally", async () => {
     const wrapper = mount(NumberInput, {
       props: {
@@ -944,6 +971,27 @@ describe("NumberInput", () => {
       });
       const slider = wrapper.findComponent({ name: "SliderRoot" });
       expect(slider.props("modelValue")).toEqual([10, 90]);
+    });
+
+    it("uses sliderDisplay to format thumb labels and min/max labels", () => {
+      const fmt = (v: number) => new Date(v).toISOString().slice(0, 10);
+      const start = Date.UTC(2024, 0, 1);
+      const mid = Date.UTC(2024, 5, 1);
+      const end = Date.UTC(2024, 11, 31);
+      const wrapper = mount(NumberInput, {
+        props: {
+          range: [mid, end] as NumberRange,
+          min: start,
+          max: end,
+          sliderDisplay: fmt,
+        },
+      });
+      const thumbs = wrapper.findAll(".slider-thumb");
+      expect(thumbs[0].text()).toBe("2024-06-01");
+      expect(thumbs[1].text()).toBe("2024-12-31");
+      const labels = wrapper.findAll(".slider-labels span");
+      expect(labels[0].text()).toBe("2024-01-01");
+      expect(labels[1].text()).toBe("2024-12-31");
     });
 
     it("syncs slider when range model changes externally", async () => {
