@@ -135,13 +135,17 @@ menu, and CSV export wiring with [`LineChart`](./line-chart).
 
 ### Custom value tick format
 
+Use `value-tick-format` to format the value-axis labels. `tooltip-value-format` controls the tooltip values independently; if omitted, the tooltip uses `value-tick-format`.
+
 <ComponentDemo>
   <BarChart
     :data="[0.12, 0.34, 0.56, 0.78]"
     :categories="['A', 'B', 'C', 'D']"
     :value-tick-format="(v) => `${(v * 100).toFixed(0)}%`"
+    :tooltip-value-format="(v) => `${(v * 100).toFixed(1)}%`"
     :height="220"
     y-label="Coverage"
+    tooltip-trigger="hover"
   />
 
 <template #code>
@@ -151,8 +155,10 @@ menu, and CSV export wiring with [`LineChart`](./line-chart).
   :data="[0.12, 0.34, 0.56, 0.78]"
   :categories="['A', 'B', 'C', 'D']"
   :value-tick-format="(v) => `${(v * 100).toFixed(0)}%`"
+  :tooltip-value-format="(v) => `${(v * 100).toFixed(1)}%`"
   :height="220"
   y-label="Coverage"
+  tooltip-trigger="hover"
 />
 ```
 

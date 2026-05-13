@@ -104,7 +104,7 @@ When `x` is omitted, `y`/`data` values are plotted at indices 0, 1, 2, etc.
 
 ### Tooltip
 
-Hover over the chart to see a tooltip with values at each data point. Set `tooltip-trigger="hover"` to enable the built-in tooltip with crosshair and highlight dots. Use the `#tooltip` slot for custom content.
+Hover over the chart to see a tooltip with values at each data point. Set `tooltip-trigger="hover"` to enable the built-in tooltip with crosshair and highlight dots. Use the `#tooltip` slot for custom content. Pass `tooltip-value-format` to control how numeric values render (e.g. percentages, currency); it falls back to `y-tick-format` when omitted.
 
 <ComponentDemo>
   <LineChart

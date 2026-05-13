@@ -634,6 +634,49 @@ describe("LineChart", () => {
       wrapper.unmount();
     });
 
+    it("uses tooltipValueFormat for tooltip values", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1000, 2000, 3000],
+          tooltipValueFormat: (v: number) => `$${v.toLocaleString()}`,
+          width: 400,
+          height: 200,
+          menu: false,
+          tooltipTrigger: "hover" as const,
+        },
+        attachTo: document.body,
+      });
+      const overlay = wrapper
+        .findAll("rect")
+        .find((r) => r.attributes("fill") === "transparent")!;
+      await overlay.trigger("mousemove", { clientX: 200, clientY: 50 });
+      const row = wrapper.find(".line-chart-tooltip-row");
+      expect(row.exists()).toBe(true);
+      expect(row.text()).toMatch(/^\$[\d,]+$/);
+      wrapper.unmount();
+    });
+
+    it("falls back to yTickFormat for tooltip values when tooltipValueFormat is not set", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1, 2, 3],
+          yTickFormat: (v: number) => `${v}%`,
+          width: 400,
+          height: 200,
+          menu: false,
+          tooltipTrigger: "hover" as const,
+        },
+        attachTo: document.body,
+      });
+      const overlay = wrapper
+        .findAll("rect")
+        .find((r) => r.attributes("fill") === "transparent")!;
+      await overlay.trigger("mousemove", { clientX: 200, clientY: 50 });
+      const row = wrapper.find(".line-chart-tooltip-row");
+      expect(row.text()).toMatch(/\d+%$/);
+      wrapper.unmount();
+    });
+
     it("anchors edge x-ticks to start/end to prevent clipping", () => {
       const wrapper = mount(LineChart, {
         props: {

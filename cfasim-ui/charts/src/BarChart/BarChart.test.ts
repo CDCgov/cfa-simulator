@@ -527,6 +527,51 @@ describe("BarChart", () => {
       wrapper.unmount();
     });
 
+    it("uses tooltipValueFormat for tooltip values", async () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [1000, 2000],
+          categories: ["A", "B"],
+          tooltipTrigger: "hover" as const,
+          tooltipValueFormat: (v: number) => `$${v.toLocaleString()}`,
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+        attachTo: document.body,
+      });
+      const overlay = wrapper
+        .findAll("rect")
+        .find((r) => r.attributes("fill") === "transparent")!;
+      await overlay.trigger("mousemove", { clientX: 100, clientY: 100 });
+      const row = wrapper.find(".bar-chart-tooltip-row");
+      expect(row.exists()).toBe(true);
+      expect(row.text()).toMatch(/^\$[\d,]+$/);
+      wrapper.unmount();
+    });
+
+    it("falls back to valueTickFormat for tooltip values", async () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20],
+          categories: ["A", "B"],
+          tooltipTrigger: "hover" as const,
+          valueTickFormat: (v: number) => `${v}%`,
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+        attachTo: document.body,
+      });
+      const overlay = wrapper
+        .findAll("rect")
+        .find((r) => r.attributes("fill") === "transparent")!;
+      await overlay.trigger("mousemove", { clientX: 100, clientY: 100 });
+      const row = wrapper.find(".bar-chart-tooltip-row");
+      expect(row.text()).toMatch(/\d+%$/);
+      wrapper.unmount();
+    });
+
     it("provides category, values, and data to the tooltip slot", async () => {
       const wrapper = mount(BarChart, {
         props: {

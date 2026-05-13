@@ -113,6 +113,24 @@ describe("ChoroplethMap", () => {
     expect(california!.find("title").text()).toContain("42");
   });
 
+  it("formats numeric tooltip values via tooltipValueFormat", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        data: [{ id: "06", value: 1234 }],
+        tooltipValueFormat: (v: number) => `$${v.toLocaleString()}`,
+      },
+    });
+    const california = wrapper
+      .findAll(".state-path")
+      .find((p) => p.find("title").text().includes("California"));
+    const titleText = california!.find("title").text();
+    expect(titleText).toContain("$1,234");
+    expect(titleText).not.toMatch(/: 1234\b/);
+  });
+
   it("applies threshold color scale", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {

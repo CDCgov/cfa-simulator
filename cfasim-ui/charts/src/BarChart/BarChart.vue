@@ -57,6 +57,11 @@ const props = withDefaults(
     valueTicks?: number | number[];
     /** Formatter for value-axis tick labels. */
     valueTickFormat?: (value: number) => string;
+    /**
+     * Formatter for numeric values shown in the default tooltip. Receives
+     * the raw value. Defaults to the same tick formatter used for axes.
+     */
+    tooltipValueFormat?: (value: number) => string;
     /** Formatter for category-axis labels. Receives the resolved category string. */
     categoryFormat?: (label: string, index: number) => string;
     /**
@@ -397,6 +402,12 @@ const DEFAULT_COLORS = [
 
 function defaultColor(i: number): string {
   return DEFAULT_COLORS[i % DEFAULT_COLORS.length];
+}
+
+function formatTooltipValue(v: number): string {
+  if (props.tooltipValueFormat) return props.tooltipValueFormat(v);
+  if (props.valueTickFormat) return props.valueTickFormat(v);
+  return formatTick(v);
 }
 
 const valueTickItems = computed(() => {
@@ -775,7 +786,7 @@ const hoverBand = computed(() => {
               class="bar-chart-tooltip-swatch"
               :style="{ background: v.color }"
             />
-            {{ isFinite(v.value) ? formatTick(v.value) : "—" }}
+            {{ isFinite(v.value) ? formatTooltipValue(v.value) : "—" }}
           </div>
         </div>
       </slot>

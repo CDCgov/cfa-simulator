@@ -83,6 +83,12 @@ const props = withDefaults(
       value?: number | string;
     }) => string;
     /**
+     * Formatter for numeric values shown in the default tooltip. Receives
+     * the raw value. Ignored when `tooltipFormat` is provided (the caller
+     * controls the entire tooltip in that case).
+     */
+    tooltipValueFormat?: (value: number) => string;
+    /**
      * Boundary for tooltip flip/clamp. `"none"` always places to the right of
      * the pointer with no clamping. `"chart"` (default) uses the map
      * container's bounding box. `"window"` uses the viewport.
@@ -392,6 +398,14 @@ function stateValue(
   return dataMap.value.get(String(feat.id));
 }
 
+function formatTooltipValue(value: number | string | undefined): string {
+  if (value == null) return "";
+  if (typeof value === "number" && props.tooltipValueFormat) {
+    return props.tooltipValueFormat(value);
+  }
+  return String(value);
+}
+
 const featMap = computed(() => {
   const m = new Map<string, (typeof featuresGeo.value.features)[number]>();
   for (const f of featuresGeo.value.features) m.set(String(f.id), f);
@@ -429,8 +443,10 @@ function showTooltip(
   const data = { id: String(feat.id), name, value };
   if (props.tooltipFormat) {
     tooltipEl.innerHTML = props.tooltipFormat(data);
+  } else if (value == null) {
+    tooltipEl.textContent = name;
   } else {
-    tooltipEl.textContent = value != null ? `${name}: ${value}` : name;
+    tooltipEl.textContent = `${name}: ${formatTooltipValue(value)}`;
   }
   const chartRect = containerRef.value?.getBoundingClientRect();
   const { left, top } = placeTooltip(
@@ -643,7 +659,11 @@ const menuItems = computed<ChartMenuItem[]>(() => {
         >
           <title v-if="!tooltipTrigger">
             {{ stateName(feat)
-            }}{{ stateValue(feat) != null ? `: ${stateValue(feat)}` : "" }}
+            }}{{
+              stateValue(feat) != null
+                ? `: ${formatTooltipValue(stateValue(feat))}`
+                : ""
+            }}
           </title>
         </path>
         <path

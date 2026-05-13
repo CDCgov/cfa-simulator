@@ -129,6 +129,11 @@ const props = withDefaults(
     /** Formatter for y-axis tick labels. Receives the raw numeric value. */
     yTickFormat?: (value: number) => string;
     /**
+     * Formatter for numeric values shown in the default tooltip. Receives
+     * the raw value. Defaults to the same tick formatter used for axes.
+     */
+    tooltipValueFormat?: (value: number) => string;
+    /**
      * @deprecated Use `xTickFormat` (e.g. `(_, i) => labels[i]`) together
      * with `xTicks` for explicit control. Still honored for tooltip x-labels
      * and as a default x-tick formatter when `xTickFormat` is not provided.
@@ -214,6 +219,12 @@ const EMPTY_DATA: readonly number[] = [];
 
 function resolveSeries(s: Series): ResolvedSeries {
   return { ...s, data: s.y ?? s.data ?? EMPTY_DATA };
+}
+
+function formatTooltipValue(v: number): string {
+  if (props.tooltipValueFormat) return props.tooltipValueFormat(v);
+  if (props.yTickFormat) return props.yTickFormat(v);
+  return formatTick(v);
 }
 
 const allSeries = computed<ResolvedSeries[]>(() => {
@@ -1122,7 +1133,7 @@ const {
               class="line-chart-tooltip-swatch"
               :style="{ background: v.color }"
             />
-            {{ isFinite(v.value) ? formatTick(v.value) : "—" }}
+            {{ isFinite(v.value) ? formatTooltipValue(v.value) : "—" }}
           </div>
         </div>
       </slot>

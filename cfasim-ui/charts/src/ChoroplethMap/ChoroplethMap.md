@@ -322,6 +322,47 @@ Set `geoType="hsas"` to render Health Service Area boundaries. HSAs are dissolve
   </template>
 </ComponentDemo>
 
+### Custom tooltip number format
+
+Pass `tooltip-value-format` to format numeric values shown in the tooltip
+(both the native SVG `<title>` and the interactive HTML tooltip when
+`tooltip-trigger` is set). Use `tooltip-format` instead if you want full
+control over the tooltip's HTML.
+
+<ComponentDemo>
+  <ChoroplethMap
+    :topology="statesTopo"
+    :data="[
+      { id: '06', value: 39538223 },
+      { id: '48', value: 29145505 },
+      { id: '12', value: 21538187 },
+      { id: '36', value: 20201249 },
+    ]"
+    :tooltip-value-format="(v) => v.toLocaleString('en-US')"
+    title="US population (2020)"
+    :height="300"
+  />
+
+<template #code>
+
+```vue
+<ChoroplethMap
+  :topology="statesTopo"
+  :data="[
+    { id: '06', value: 39538223 },
+    { id: '48', value: 29145505 },
+    { id: '12', value: 21538187 },
+    { id: '36', value: 20201249 },
+  ]"
+  :tooltip-value-format="(v) => v.toLocaleString('en-US')"
+  title="US population (2020)"
+  :height="300"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 <!--@include: ./_api/choropleth-map.md-->
 
 ### StateData
