@@ -9,7 +9,7 @@ import {
   useSlots,
 } from "vue";
 import { geoPath, geoAlbersUsa } from "d3-geo";
-import { zoom as d3Zoom } from "d3-zoom";
+import { zoom as d3Zoom, zoomIdentity } from "d3-zoom";
 import { select } from "d3-selection";
 import { feature, mesh, merge } from "topojson-client";
 import type { Topology, GeometryCollection } from "topojson-specification";
@@ -180,6 +180,9 @@ let lastPointer: { x: number; y: number } | null = null;
 let tooltipVisible = false;
 let zoomBehavior: ReturnType<typeof d3Zoom<SVGSVGElement, unknown>> | null =
   null;
+// True once the user has zoomed or panned away from the identity transform.
+// Drives the visibility of the reset button.
+const isZoomed = ref(false);
 // rAF-throttled cursor coords for moveTooltip; we coalesce many mousemove
 // events into one transform write per animation frame.
 let pendingMoveX = 0;
@@ -250,6 +253,8 @@ function setupZoom() {
       if (mapGroupRef.value) {
         mapGroupRef.value.setAttribute("transform", event.transform);
       }
+      const t = event.transform;
+      isZoomed.value = t.k !== 1 || t.x !== 0 || t.y !== 0;
     })
     .on("end", () => {
       isZooming = false;
@@ -269,6 +274,13 @@ function teardownZoom() {
     select(svgRef.value).on(".zoom", null);
     zoomBehavior = null;
   }
+}
+
+function resetZoom() {
+  if (!svgRef.value || !zoomBehavior) return;
+  // Snap straight back to identity; the zoom callback fires and clears
+  // isZoomed, which hides the button.
+  zoomBehavior.transform(select(svgRef.value), zoomIdentity);
 }
 
 watch(
@@ -294,30 +306,10 @@ const aspectRatio = computed(() => {
 const width = computed(() => CANONICAL_WIDTH);
 const height = computed(() => CANONICAL_WIDTH * aspectRatio.value);
 
-// Explicit size when either width or height is passed. The missing
-// dimension is derived from the viewBox aspect so the SVG box and the
-// rendered map content match exactly — no `preserveAspectRatio="meet"`
-// whitespace. The wrapper width is locked to match so the header centers
-// over the map rather than over a wider container.
-const explicitWidth = computed<number | null>(() => {
-  if (props.width != null) return props.width;
-  if (props.height != null) return props.height / aspectRatio.value;
-  return null;
-});
-
-const svgSizeStyle = computed(() => {
-  const w = explicitWidth.value;
-  if (w == null) return {};
-  return {
-    width: `${w}px`,
-    height: `${w * aspectRatio.value}px`,
-  };
-});
-
-const wrapperSizeStyle = computed(() => {
-  const w = explicitWidth.value;
-  return w == null ? {} : { width: `${w}px` };
-});
+// Layout is fluid: the wrapper fills its parent's width and the SVG fills
+// the wrapper via CSS. `props.width` / `props.height`, when both are
+// passed, only shape the viewBox aspect ratio — they don't pin a display
+// size, so the map always scales to the available width without overflow.
 
 type NamedGeometry = GeometryCollection<{ name: string }>;
 type StatesTopo = Topology<{ states: NamedGeometry }>;
@@ -885,11 +877,7 @@ watch(
 </script>
 
 <template>
-  <div
-    ref="containerRef"
-    :class="['choropleth-wrapper', { pannable: pan }]"
-    :style="wrapperSizeStyle"
-  >
+  <div ref="containerRef" :class="['choropleth-wrapper', { pannable: pan }]">
     <ChartMenu v-if="menu" :items="menuItems" />
     <!--
       Title + legend live as an HTML overlay on top of the SVG so they keep
@@ -935,7 +923,6 @@ watch(
     <svg
       ref="svgRef"
       :viewBox="`0 0 ${width} ${height}`"
-      :style="svgSizeStyle"
       preserveAspectRatio="xMidYMid meet"
     >
       <!--
@@ -946,6 +933,15 @@ watch(
       -->
       <g ref="mapGroupRef" />
     </svg>
+    <button
+      v-if="(zoom || pan) && isZoomed"
+      type="button"
+      class="choropleth-reset"
+      aria-label="Reset zoom"
+      @click="resetZoom"
+    >
+      Reset
+    </button>
     <ChoroplethTooltip v-if="hasInteractiveTooltip" ref="tooltipChildRef">
       <template #default="raw">
         <slot name="tooltip" v-bind="narrowSlotProps(raw)">
@@ -997,6 +993,26 @@ watch(
 
 .state-path {
   cursor: pointer;
+}
+
+.choropleth-reset {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--color-text-secondary, #555);
+  background: var(--color-bg-0, #fff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 4px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.choropleth-reset:hover {
+  background: var(--color-bg-1, #f8f9fa);
+  color: var(--color-text, #212529);
 }
 
 /*
