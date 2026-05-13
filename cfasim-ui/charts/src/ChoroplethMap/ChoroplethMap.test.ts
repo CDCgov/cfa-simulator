@@ -603,4 +603,186 @@ describe("ChoroplethMap", () => {
 
     wrapper.unmount();
   });
+
+  it("emits update:focus with the clicked feature id", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 600, height: 400 },
+    });
+    const california = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06");
+    await california!.trigger("click");
+    const events = wrapper.emitted("update:focus");
+    expect(events).toHaveLength(1);
+    expect(events![0][0]).toBe("06");
+  });
+
+  it("emits null when clicking the currently focused feature (toggle off)", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 600, height: 400, focus: "06" },
+    });
+    const california = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06");
+    await california!.trigger("click");
+    const events = wrapper.emitted("update:focus");
+    expect(events).toHaveLength(1);
+    expect(events![0][0]).toBeNull();
+  });
+
+  it("toggle works when focus is set by name rather than id", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        focus: "California",
+      },
+    });
+    const california = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06");
+    await california!.trigger("click");
+    expect(wrapper.emitted("update:focus")![0][0]).toBeNull();
+  });
+
+  it("applies a non-identity transform when focus prop is set", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        focus: "06",
+        focusZoomLevel: 5,
+      },
+    });
+    await flushPromises();
+    const g = wrapper.find("g");
+    const transform = g.attributes("transform") ?? "";
+    // d3-zoom serializes as "translate(x,y) scale(k)".
+    expect(transform).toContain("scale(5)");
+    expect(transform).toMatch(/^translate\(/);
+    wrapper.unmount();
+  });
+
+  it("resolves focus by feature name as well as id", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        focus: "California",
+        focusZoomLevel: 3,
+      },
+    });
+    await flushPromises();
+    const g = wrapper.find("g");
+    expect(g.attributes("transform") ?? "").toContain("scale(3)");
+    wrapper.unmount();
+  });
+
+  it("clears the transform when focus is set back to null", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        focus: "06",
+      },
+    });
+    await flushPromises();
+    expect(wrapper.find("g").attributes("transform") ?? "").toContain("scale");
+    await wrapper.setProps({ focus: null });
+    await flushPromises();
+    // Clear-focus snaps instantly (only zoom-IN animates).
+    const transform = wrapper.find("g").attributes("transform") ?? "";
+    expect(transform).toMatch(/scale\(1\)/);
+    wrapper.unmount();
+  });
+
+  it("shows the focused feature's tooltip when a tooltip slot is configured", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        data: [{ id: "06", value: 42 }],
+        focus: "06",
+      },
+      slots: {
+        tooltip: `<template #tooltip="{ name, value }">
+          <div class="focus-tip">{{ name }} :: {{ value }}</div>
+        </template>`,
+      },
+    });
+    await flushPromises();
+    const tip = document.body.querySelector(".focus-tip");
+    expect(tip).not.toBeNull();
+    expect(tip!.textContent).toContain("California :: 42");
+    const tipWrapper = tip!.parentElement as HTMLElement;
+    expect(tipWrapper.style.visibility).toBe("visible");
+    wrapper.unmount();
+  });
+
+  it("clearing focus interrupts any in-flight zoom-in animation", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: { topology: statesTopo, width: 600, height: 400 },
+    });
+    await flushPromises();
+    // Trigger zoom-in (animates), then immediately clear (snaps).
+    await wrapper.setProps({ focus: "06" });
+    await wrapper.setProps({ focus: null });
+    await flushPromises();
+    // Without the svg.interrupt() guard the still-running transition would
+    // overwrite the identity snap on its next frame.
+    const transform = wrapper.find("g").attributes("transform") ?? "";
+    expect(transform).toMatch(/scale\(1\)/);
+    wrapper.unmount();
+  });
+
+  it("applies the hover-style highlight to focused features", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        focus: "06",
+      },
+    });
+    await flushPromises();
+    const california = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06")!;
+    expect(california.attributes("stroke")).toBe("#555");
+    // Pick any other state and confirm it kept the default stroke.
+    const other = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") !== "06")!;
+    expect(other.attributes("stroke")).not.toBe("#555");
+    wrapper.unmount();
+  });
+
+  it("accepts an array of ids to focus on multiple features", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        focus: ["06", "36"],
+        focusZoomLevel: 2,
+      },
+    });
+    await flushPromises();
+    expect(wrapper.find("g").attributes("transform") ?? "").toContain(
+      "scale(2)",
+    );
+    wrapper.unmount();
+  });
 });

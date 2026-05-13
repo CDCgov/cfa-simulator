@@ -11,6 +11,9 @@ import {
 import { geoPath, geoAlbersUsa } from "d3-geo";
 import { zoom as d3Zoom, zoomIdentity } from "d3-zoom";
 import { select } from "d3-selection";
+// Side-effect import: enables `selection.transition()` on d3 selections so
+// `applyFocus` can animate the zoom transform.
+import "d3-transition";
 import { feature, mesh, merge } from "topojson-client";
 import type { Topology, GeometryCollection } from "topojson-specification";
 import { fipsToHsa, hsaNames } from "./hsaMapping.js";
@@ -102,6 +105,18 @@ const props = withDefaults(
      * container's bounding box. `"window"` uses the viewport.
      */
     tooltipClamp?: "none" | "chart" | "window";
+    /**
+     * Feature id(s) (FIPS code, HSA code, or feature name) to pan/zoom to.
+     * Pass `null` or an empty array to clear. Works with `v-model:focus`:
+     * clicking an unfocused feature emits its id; clicking a focused
+     * feature emits `null` (toggle off). Users can pan/zoom away from the
+     * focused area even when `zoom` and `pan` are disabled, and the
+     * built-in Reset button also clears focus. If a tooltip is configured,
+     * focusing a feature shows its tooltip.
+     */
+    focus?: string | string[] | null;
+    /** Scale factor applied when `focus` is set. Default: 4 */
+    focusZoomLevel?: number;
   }>(),
   {
     geoType: "states",
@@ -113,6 +128,7 @@ const props = withDefaults(
     zoom: false,
     pan: false,
     tooltipClamp: "chart",
+    focusZoomLevel: 4,
   },
 );
 
@@ -125,6 +141,7 @@ const emit = defineEmits<{
     e: "stateHover",
     state: { id: string; name: string; value?: number | string } | null,
   ): void;
+  (e: "update:focus", focus: string | null): void;
 }>();
 
 type ChoroplethFeature = GeoJSON.Feature<
@@ -170,6 +187,10 @@ const pathsByFeatureId = new Map<string, SVGPathElement>();
 const tooltipDataById = new Map<string, TooltipPayload>();
 let bordersPathEl: SVGPathElement | null = null;
 let hoveredEl: SVGPathElement | null = null;
+// Paths currently styled as focused. Tracked separately from hover so the
+// two states compose: hovering a focused path keeps the highlight on
+// un-hover, and clearing focus while still hovering keeps the hover style.
+const focusedPathEls = new Set<SVGPathElement>();
 let isZooming = false;
 // TODO: map hover/tooltip causes performance issues on mobile (SVG stroke-width
 // changes + compositing layers degrade zoom/pan). Disabled on touch devices.
@@ -219,6 +240,7 @@ onMounted(() => {
   setupZoom();
   setupInteraction();
   rebuildPaths();
+  applyFocus();
   attachTooltipObserver();
   window.addEventListener("scroll", dismissOnViewportChange, {
     passive: true,
@@ -240,11 +262,14 @@ onUnmounted(() => {
 
 function setupZoom() {
   if (!svgRef.value || !mapGroupRef.value) return;
-  if (!props.zoom && !props.pan) return;
 
   const svg = select(svgRef.value);
+  // Always span focusZoomLevel and at least the standard 12× ceiling so the
+  // user can wheel further in/out of a focused view. Programmatic
+  // `.transform()` calls are clamped to this range too.
+  const maxScale = Math.max(12, props.focusZoomLevel);
   zoomBehavior = d3Zoom<SVGSVGElement, unknown>()
-    .scaleExtent(props.zoom ? [1, 12] : [1, 1])
+    .scaleExtent([1, maxScale])
     .on("start", () => {
       isZooming = true;
       clearHover();
@@ -260,11 +285,25 @@ function setupZoom() {
       isZooming = false;
     });
 
-  if (!props.pan) {
-    zoomBehavior.filter(
-      (event) => event.type === "wheel" || event.type === "dblclick",
-    );
-  }
+  // Dynamic filter: re-evaluated per event, so toggling `focus`,
+  // `zoom`, or `pan` doesn't require tearing down the zoom behavior.
+  // When focus is active we always allow drag + wheel so users can
+  // explore away from the focused area regardless of `zoom`/`pan`.
+  // Programmatic `.transform()` calls bypass this filter entirely.
+  zoomBehavior.filter((event) => {
+    const focused = normalizedFocus.value.length > 0;
+    const allowZoom = !!props.zoom || focused;
+    const allowPan = !!props.pan || focused;
+    if (event.type === "wheel" || event.type === "dblclick") {
+      if (!allowZoom) return false;
+    } else if (event.type === "mousedown" || event.type === "touchstart") {
+      if (!allowPan) return false;
+    } else if (!allowZoom && !allowPan) {
+      return false;
+    }
+    // Mirror d3-zoom's default rejections (ctrl-click, non-primary buttons).
+    return (!event.ctrlKey || event.type === "wheel") && !event.button;
+  });
 
   svg.call(zoomBehavior);
 }
@@ -276,20 +315,148 @@ function teardownZoom() {
   }
 }
 
-function resetZoom() {
-  if (!svgRef.value || !zoomBehavior) return;
-  // Snap straight back to identity; the zoom callback fires and clears
-  // isZoomed, which hides the button.
-  zoomBehavior.transform(select(svgRef.value), zoomIdentity);
+// Resolve user-facing focus identifiers (FIPS, HSA codes, or feature names)
+// to canonical feature ids. Used both for highlighting/zoom and for the
+// click-to-toggle "is this feature currently focused?" check.
+function resolveFocusIds(rawIds: string[]): Set<string> {
+  const byId = featuresById.value;
+  const nameIdx = nameToFeatureId.value;
+  const out = new Set<string>();
+  for (const raw of rawIds) {
+    const id = byId.has(raw) ? raw : nameIdx.get(raw);
+    if (id != null) out.add(id);
+  }
+  return out;
 }
 
+function resolveFocusFeatures(rawIds: string[]): ChoroplethFeature[] {
+  const byId = featuresById.value;
+  const out: ChoroplethFeature[] = [];
+  for (const id of resolveFocusIds(rawIds)) {
+    const f = byId.get(id);
+    if (f) out.push(f);
+  }
+  return out;
+}
+
+// Duration of the focus zoom transition (ms). Initial mount and explicit
+// "clear focus" still snap instantly; only focus-prop changes animate.
+const FOCUS_ANIM_MS = 450;
+// Tracks whether applyFocus has been called once — initial mount apply
+// is instant, subsequent updates animate.
+let focusApplied = false;
+
+function applyFocus() {
+  if (!svgRef.value || !zoomBehavior) return;
+  const ids = normalizedFocus.value;
+  const features = ids.length > 0 ? resolveFocusFeatures(ids) : [];
+
+  // Compute the new highlight set first so we can diff against the
+  // previous one without re-resolving twice.
+  const nextFocused = new Set<SVGPathElement>();
+  for (const f of features) {
+    const p = pathsByFeatureId.get(String(f.id));
+    if (p) nextFocused.add(p);
+  }
+
+  // Restore strokes on paths that are no longer focused. Skip those still
+  // hovered — hover keeps its own highlight.
+  for (const p of focusedPathEls) {
+    if (nextFocused.has(p) || p === hoveredEl) continue;
+    restoreDefaultStroke(p);
+  }
+  // Apply highlight to newly-focused paths (skip those already hovered:
+  // hover style is visually identical, no DOM churn needed).
+  for (const p of nextFocused) {
+    if (!focusedPathEls.has(p) && p !== hoveredEl) applyHighlightStroke(p);
+  }
+  focusedPathEls.clear();
+  for (const p of nextFocused) focusedPathEls.add(p);
+
+  const svg = select(svgRef.value);
+  // Always cancel any in-flight transition first — d3-transition queues
+  // same-named transitions rather than replacing them, so rapid focus
+  // changes would otherwise chain animations end-to-end. Also lets a
+  // straight-snap path actually take effect mid-animation.
+  svg.interrupt();
+  // First apply (initial mount) is instant. Only zoom-IN animates;
+  // clearing snaps back. Matches resetZoom's instant feel.
+  const animate = focusApplied && features.length > 0;
+  focusApplied = true;
+
+  if (features.length === 0) {
+    zoomBehavior.transform(svg, zoomIdentity);
+    clearHover();
+    return;
+  }
+
+  // Compute pan + scale onto the focused features' bounding box, in
+  // viewBox (canonical) coordinates.
+  const [[x0, y0], [x1, y1]] = pathGenerator.value.bounds({
+    type: "FeatureCollection",
+    features,
+  });
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  const k = props.focusZoomLevel;
+  const target = zoomIdentity
+    .translate(width.value / 2 - k * cx, height.value / 2 - k * cy)
+    .scale(k);
+
+  const showFocusTooltip = () => {
+    if (!hasInteractiveTooltip.value) return;
+    const firstId = String(features[0].id);
+    const pathEl = pathsByFeatureId.get(firstId);
+    if (!pathEl) return;
+    // Read the rect *after* the transform commits so the tooltip lands at
+    // the focused feature's on-screen position.
+    const rect = pathEl.getBoundingClientRect();
+    showTooltip(
+      firstId,
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+    );
+  };
+
+  if (animate) {
+    // d3-zoom + d3-transition: `transition.call(zoomBehavior.transform,
+    // target)` interpolates the transform smoothly, firing the zoom
+    // callback per frame so pan + scale animate together. Hide any prior
+    // tooltip up front so it doesn't track the moving viewport; re-show
+    // once the new target is reached.
+    hideTooltip();
+    svg
+      .transition()
+      .duration(FOCUS_ANIM_MS)
+      .call(zoomBehavior.transform, target)
+      .on("end", showFocusTooltip);
+  } else {
+    zoomBehavior.transform(svg, target);
+    showFocusTooltip();
+  }
+}
+
+function resetZoom() {
+  if (!svgRef.value || !zoomBehavior) return;
+  const svg = select(svgRef.value);
+  // Cancel any in-flight focus animation before snapping so the transition
+  // can't keep writing transforms after we set identity.
+  svg.interrupt();
+  zoomBehavior.transform(svg, zoomIdentity);
+  // Keep v-model:focus in sync when the user resets a focused view.
+  if (normalizedFocus.value.length > 0) emit("update:focus", null);
+}
+
+// `focusZoomLevel` only affects scaleExtent + the next focus apply. The
+// d3-zoom filter reads `props.zoom` / `props.pan` dynamically, so we don't
+// need to tear down zoom on those changes.
 watch(
-  () => [props.zoom, props.pan],
+  () => props.focusZoomLevel,
   () => {
-    teardownZoom();
-    teardownInteraction();
-    setupZoom();
-    setupInteraction();
+    if (zoomBehavior) {
+      zoomBehavior.scaleExtent([1, Math.max(12, props.focusZoomLevel)]);
+    }
+    applyFocus();
   },
 );
 
@@ -388,6 +555,26 @@ const nameToFeatureId = computed(() => {
     }
   }
   return m;
+});
+
+// id → feature lookup used by `applyFocus`. Cached so focus changes don't
+// trigger a linear scan through 3k+ features per apply.
+const featuresById = computed(() => {
+  const m = new Map<string, ChoroplethFeature>();
+  for (const f of featuresGeo.value.features) {
+    if (f.id != null) m.set(String(f.id), f as ChoroplethFeature);
+  }
+  return m;
+});
+
+// Stable, deduped array form of `props.focus`. Drives the focus watcher;
+// scalar `string` and `string[]` collapse to the same shape so the watcher
+// only fires on a real change.
+const normalizedFocus = computed<string[]>(() => {
+  const f = props.focus;
+  if (f == null) return [];
+  if (Array.isArray(f)) return f;
+  return [f];
 });
 
 const dataMap = computed(() => {
@@ -602,23 +789,32 @@ function hideTooltip() {
   if (el) el.style.visibility = "hidden";
 }
 
-function setHover(pathEl: SVGPathElement) {
-  if (hoveredEl === pathEl) return;
-  if (hoveredEl) {
-    hoveredEl.setAttribute("stroke-width", String(effectiveStrokeWidth.value));
-    hoveredEl.setAttribute("stroke", props.strokeColor);
-  }
-  hoveredEl = pathEl;
-  // Bring hovered path to top so its thicker border is not clipped by neighbors.
+function applyHighlightStroke(pathEl: SVGPathElement) {
+  // Bring path to top so its thicker border isn't clipped by neighbors.
   pathEl.parentNode?.appendChild(pathEl);
   pathEl.setAttribute("stroke-width", String(effectiveStrokeWidth.value + 1));
   pathEl.setAttribute("stroke", "#555");
 }
 
+function restoreDefaultStroke(pathEl: SVGPathElement) {
+  pathEl.setAttribute("stroke-width", String(effectiveStrokeWidth.value));
+  pathEl.setAttribute("stroke", props.strokeColor);
+}
+
+function setHover(pathEl: SVGPathElement) {
+  if (hoveredEl === pathEl) return;
+  if (hoveredEl && !focusedPathEls.has(hoveredEl)) {
+    // Restore previous hover unless it's also focused — focus keeps the
+    // highlight on its own.
+    restoreDefaultStroke(hoveredEl);
+  }
+  hoveredEl = pathEl;
+  applyHighlightStroke(pathEl);
+}
+
 function clearHover() {
   if (hoveredEl) {
-    hoveredEl.setAttribute("stroke-width", String(effectiveStrokeWidth.value));
-    hoveredEl.setAttribute("stroke", props.strokeColor);
+    if (!focusedPathEls.has(hoveredEl)) restoreDefaultStroke(hoveredEl);
     hoveredEl = null;
     emit("stateHover", null);
   }
@@ -643,6 +839,13 @@ function onDelegatedEvent(event: Event) {
   const payload = { id: data.id, name: data.name, value: data.value };
   if (event.type === "click") {
     emit("stateClick", payload);
+    // Click-to-focus toggle, baked in so `v-model:focus="ref"` Just Works:
+    // clicking the currently focused feature clears focus (emits null);
+    // clicking any other feature emits its id. With a `focus` array, any
+    // click on a member clears everything — parents wanting fine-grained
+    // multi-select handle merging themselves via `@update:focus`.
+    const wasFocused = resolveFocusIds(normalizedFocus.value).has(data.id);
+    emit("update:focus", wasFocused ? null : data.id);
   } else if (event.type === "mouseover") {
     setHover(pathsByFeatureId.get(featId)!);
     if (hasInteractiveTooltip.value)
@@ -682,6 +885,9 @@ function rebuildPaths() {
   tooltipDataById.clear();
   bordersPathEl = null;
   hoveredEl = null;
+  // Old focused paths are about to be detached — drop refs so applyFocus
+  // can re-resolve against the new path tree.
+  focusedPathEls.clear();
 
   const path = pathGenerator.value;
   const features = featuresGeo.value.features;
@@ -755,14 +961,12 @@ function updateFills() {
 }
 
 function updateStrokes() {
-  const stroke = props.strokeColor;
-  const sw = String(effectiveStrokeWidth.value);
   for (const p of pathsByFeatureId.values()) {
-    if (p === hoveredEl) continue;
-    p.setAttribute("stroke", stroke);
-    p.setAttribute("stroke-width", sw);
+    // Highlighted paths (hover / focus) keep their #555 + thicker stroke.
+    if (p === hoveredEl || focusedPathEls.has(p)) continue;
+    restoreDefaultStroke(p);
   }
-  if (bordersPathEl) bordersPathEl.setAttribute("stroke", stroke);
+  if (bordersPathEl) bordersPathEl.setAttribute("stroke", props.strokeColor);
 }
 
 function menuFilename() {
@@ -883,6 +1087,17 @@ watch(
   () => [props.strokeColor, effectiveStrokeWidth.value],
   () => updateStrokes(),
 );
+
+// Focus or projection changed → re-apply the focus transform imperatively.
+// `flush: "post"` so any pending path rebuild from the watcher above has
+// already run; we still use the GeoJSON pathGenerator directly so the SVG
+// path tree isn't actually required, but keeping the order avoids stacking
+// two zoom transforms in the same tick.
+watch(
+  () => [normalizedFocus.value, pathGenerator.value],
+  () => applyFocus(),
+  { flush: "post" },
+);
 </script>
 
 <template>
@@ -943,7 +1158,7 @@ watch(
       <g ref="mapGroupRef" />
     </svg>
     <button
-      v-if="(zoom || pan) && isZoomed"
+      v-if="isZoomed"
       type="button"
       class="choropleth-reset"
       aria-label="Reset zoom"

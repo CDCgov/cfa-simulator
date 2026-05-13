@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import countiesTopoForPerf from "us-atlas/counties-10m.json";
 
 // Build one row per county (~3,143) with a deterministic-ish value so the
@@ -11,6 +11,11 @@ const denseCountyData = computed(() => {
     value: (i * 37) % 100,
   }));
 });
+
+// Focus demo state — bound directly to v-model:focus. The component
+// handles click-to-toggle and emits null when the focused feature is
+// re-clicked.
+const focused = ref(null);
 </script>
 
 # ChoroplethMap
@@ -332,6 +337,71 @@ Set `geoType="hsas"` to render Health Service Area boundaries. HSAs are dissolve
   :legend-title="'Cases'"
   :height="400"
 />
+```
+
+  </template>
+</ComponentDemo>
+
+### Click to focus (`v-model:focus`)
+
+Bind the `focus` prop to pan and zoom to a specific feature. Pass a feature
+id (FIPS code, HSA code, or name) — or an array of ids to focus on a region.
+With `v-model:focus`, clicking an unfocused feature focuses it and clicking
+the focused feature toggles back off. If a tooltip is configured, focusing
+shows that feature's tooltip. Users can pan/zoom freely around the focused
+area; the built-in **Reset** button clears focus and snaps back.
+
+Counties are tiny without a zoom — focus is a natural fit for drill-down.
+
+<ComponentDemo>
+  <ChoroplethMap
+    :topology="countiesTopo"
+    geo-type="counties"
+    v-model:focus="focused"
+    :focus-zoom-level="8"
+    :data="[
+      { id: '06037', value: 100 },
+      { id: '06073', value: 80 },
+      { id: '36061', value: 90 },
+      { id: '17031', value: 85 },
+      { id: '48201', value: 65 },
+      { id: '04013', value: 60 },
+      { id: '12086', value: 55 },
+      { id: '53033', value: 50 },
+    ]"
+    title="Click a county to focus"
+    :legend-title="'Cases'"
+    :height="400"
+  >
+    <template #tooltip="{ name, value }">
+      <div style="font-weight: 600">{{ name }}</div>
+      <div v-if="value != null">Cases: {{ value }}</div>
+      <div v-else style="opacity: 0.6">No data</div>
+    </template>
+  </ChoroplethMap>
+
+<template #code>
+
+```vue
+<script setup>
+import { ref } from "vue";
+const focused = ref(null);
+</script>
+
+<ChoroplethMap
+  :topology="countiesTopo"
+  geo-type="counties"
+  v-model:focus="focused"
+  :focus-zoom-level="8"
+  :data="data"
+  title="Click a county to focus"
+>
+  <template #tooltip="{ name, value }">
+    <div style="font-weight: 600">{{ name }}</div>
+    <div v-if="value != null">Cases: {{ value }}</div>
+    <div v-else style="opacity: 0.6">No data</div>
+  </template>
+</ChoroplethMap>
 ```
 
   </template>
