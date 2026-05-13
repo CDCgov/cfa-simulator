@@ -2,6 +2,18 @@
 @import "@cfasim-ui/theme/theme.css";
 @import "@cfasim-ui/theme/utilities.css";
 
+/*
+ * VitePress signals dark mode with `.dark` on `<html>` and signals light mode
+ * by *removing* the class — it never adds `.light`. Our theme defaults
+ * `:root` to `color-scheme: light dark`, which makes `light-dark()` follow the
+ * OS preference. When the OS is dark but VitePress is manually set to light,
+ * the page chrome is light but our component CSS variables resolve to dark.
+ * Align with VitePress's convention: absence of `.dark` means light.
+ */
+:root:not(.dark) {
+  color-scheme: light;
+}
+
 .demo-preview {
   font-size: 14px;
 }
