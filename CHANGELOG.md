@@ -1,6 +1,26 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.4.2] - 2026-05-13
+
+### Bug Fixes
+
+- **charts:** Stop ChoroplethMap tooltip jumping between hover targets
+
+### Chores
+
+- Bump charts CSS bundle size limit to 10 KB
+
+### Features
+
+- **charts:** Tooltip slot for ChoroplethMap + imperative path rendering
+- **charts:** Wrap title + legend in floating panel with overridable bg
+- **charts:** ChoroplethMap zoom-reset button, fully fluid sizing
+
+### Performance
+
+- **charts:** Scale ChoroplethMap via viewBox + move legend to HTML
+
 ## [0.4.1] - 2026-05-13
 
 ### Features
