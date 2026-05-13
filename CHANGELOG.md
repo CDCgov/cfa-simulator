@@ -1,6 +1,14 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.4.1] - 2026-05-13
+
+### Features
+
+- **charts:** Left-align DataTable, add fullWidth and download menu
+- **charts:** Add tooltipValueFormat to LineChart, BarChart, ChoroplethMap
+- **charts:** Accept ArrayLike (typed arrays) for tooltipData
+
 ## [0.4.0] - 2026-05-12
 
 ### Features
