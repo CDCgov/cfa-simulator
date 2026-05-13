@@ -1,6 +1,21 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.4.3] - 2026-05-13
+
+### Bug Fixes
+
+- **docs:** Force light color-scheme when VitePress is in light mode
+- **charts:** Externalize d3-transition (drops ~10 KB gzip)
+
+### Documentation
+
+- Shorten dense map description
+
+### Features
+
+- **charts:** Add focus state to ChoroplethMap
+
 ## [0.4.2] - 2026-05-13
 
 ### Bug Fixes
