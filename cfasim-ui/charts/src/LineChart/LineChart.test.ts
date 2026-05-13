@@ -479,6 +479,33 @@ describe("LineChart", () => {
     wrapper.unmount();
   });
 
+  it("accepts a typed array for tooltipData", async () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        data: [10, 20, 30, 40, 50],
+        tooltipData: new Float64Array([0.1, 0.2, 0.3, 0.4, 0.5]),
+        tooltipTrigger: "hover" as const,
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+      slots: {
+        tooltip: `
+          <template #default="props">
+            <div data-testid="slot-data">{{ props.data }}</div>
+          </template>
+        `,
+      },
+      attachTo: document.body,
+    });
+    const overlay = wrapper
+      .findAll("rect")
+      .find((r) => r.attributes("fill") === "transparent")!;
+    await overlay.trigger("mousemove", { clientX: 200, clientY: 50 });
+    expect(wrapper.find('[data-testid="slot-data"]').text()).toMatch(/^0\./);
+    wrapper.unmount();
+  });
+
   describe("tick customization", () => {
     function xTickLabels(wrapper: ReturnType<typeof mount>) {
       return wrapper.findAll('[data-testid="x-tick"]').map((t) => t.text());

@@ -77,8 +77,12 @@ const props = withDefaults(
     debounce?: number;
     menu?: boolean | string;
     valueGrid?: boolean;
-    /** Custom per-index data passed to the tooltip slot. */
-    tooltipData?: unknown[];
+    /**
+     * Custom per-index data passed to the tooltip slot. Accepts a plain
+     * array or any `ArrayLike` (e.g. a typed array column from a
+     * `ModelOutput`).
+     */
+    tooltipData?: ArrayLike<unknown>;
     /** Tooltip activation mode. */
     tooltipTrigger?: "hover" | "click";
     /** Boundary for tooltip flip/clamp. Default "chart". */

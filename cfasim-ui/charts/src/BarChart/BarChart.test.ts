@@ -572,6 +572,34 @@ describe("BarChart", () => {
       wrapper.unmount();
     });
 
+    it("accepts a typed array for tooltipData", async () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20, 30],
+          categories: ["A", "B", "C"],
+          tooltipData: new Float64Array([1.5, 2.5, 3.5]),
+          tooltipTrigger: "hover" as const,
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+        slots: {
+          tooltip: `
+            <template #default="props">
+              <div data-testid="slot-data">{{ props.data }}</div>
+            </template>
+          `,
+        },
+        attachTo: document.body,
+      });
+      const overlay = wrapper
+        .findAll("rect")
+        .find((r) => r.attributes("fill") === "transparent")!;
+      await overlay.trigger("mousemove", { clientX: 100, clientY: 100 });
+      expect(wrapper.find('[data-testid="slot-data"]').text()).toBe("1.5");
+      wrapper.unmount();
+    });
+
     it("provides category, values, and data to the tooltip slot", async () => {
       const wrapper = mount(BarChart, {
         props: {
