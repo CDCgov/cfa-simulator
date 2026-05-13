@@ -526,13 +526,22 @@ function attachTooltipObserver() {
   const el = tooltipChildRef.value?.getEl();
   if (!el) return;
   tooltipObserver?.disconnect();
+  // First measurement bootstraps placement (the very first hover used the
+  // 0×0 fallback). After that we just silently refresh the cached size —
+  // every hover uses whatever was measured on the previous render, so
+  // switching between hover targets never causes the tooltip to re-flip
+  // mid-hover.
+  let primed = false;
   tooltipObserver = new ResizeObserver((entries) => {
     const r = entries[0]?.contentRect;
     if (!r) return;
     lastTooltipSize.width = r.width;
     lastTooltipSize.height = r.height;
-    if (tooltipVisible && lastPointer) {
+    if (!primed && tooltipVisible && lastPointer) {
+      primed = true;
       applyTooltipPosition(lastPointer.x, lastPointer.y);
+    } else {
+      primed = true;
     }
   });
   tooltipObserver.observe(el);
