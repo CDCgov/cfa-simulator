@@ -739,7 +739,7 @@ const sortedThresholdStops = computed(() =>
   (props.colorScale as ThresholdStop[]).slice().sort((a, b) => a.min - b.min),
 );
 
-const titleHeight = computed(() => (props.title ? 24 : 0));
+const titleHeight = computed(() => (props.title ? 30 : 0));
 const legendHeight = computed(() => (showLegend.value ? 28 : 0));
 const topOffset = computed(() => titleHeight.value + legendHeight.value);
 
@@ -760,6 +760,13 @@ const gradientStops = computed(() => {
   return result;
 });
 
+// Compact formatter so legend ticks for large ranges (e.g. populations in
+// the millions) don't render wide enough to collide with each other.
+const compactTickFormat = new Intl.NumberFormat("en-US", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
 const continuousTicks = computed(() => {
   const { min, max } = extent.value;
   const range = max - min;
@@ -768,9 +775,12 @@ const continuousTicks = computed(() => {
   for (let i = 1; i <= count; i++) {
     const t = i / (count + 1);
     const v = min + range * t;
-    const formatted = Number.isInteger(v)
-      ? String(v)
-      : v.toFixed(1).replace(/\.0$/, "");
+    const formatted =
+      Math.abs(v) >= 1000
+        ? compactTickFormat.format(v)
+        : Number.isInteger(v)
+          ? String(v)
+          : v.toFixed(1).replace(/\.0$/, "");
     ticks.push({ value: formatted, pct: t * 100 });
   }
   return ticks;
@@ -794,9 +804,13 @@ const discreteLegendItems = computed(() => {
   return items;
 });
 
+const LEGEND_BAR_WIDTH = 160;
+const legendTitleWidth = computed(() =>
+  props.legendTitle ? props.legendTitle.length * 8 + 12 : 0,
+);
+
 const discreteLegendTotalWidth = computed(() => {
-  const titleWidth = props.legendTitle ? props.legendTitle.length * 8 + 12 : 0;
-  let w = titleWidth;
+  let w = legendTitleWidth.value;
   for (const item of discreteLegendItems.value) {
     w += 16 + item.label.length * 7 + 12;
   }
@@ -804,8 +818,7 @@ const discreteLegendTotalWidth = computed(() => {
 });
 
 const discreteLegendPositions = computed(() => {
-  const titleWidth = props.legendTitle ? props.legendTitle.length * 8 + 12 : 0;
-  let x = titleWidth;
+  let x = legendTitleWidth.value;
   return discreteLegendItems.value.map((item) => {
     const pos = x;
     x += 16 + item.label.length * 7 + 12;
@@ -817,9 +830,55 @@ const legendXOffset = computed(() => {
   if (isCategorical.value || isThreshold.value) {
     return (width.value - discreteLegendTotalWidth.value) / 2;
   }
-  const barWidth = 160;
-  const titleWidth = props.legendTitle ? props.legendTitle.length * 8 + 12 : 0;
-  return (width.value - titleWidth - barWidth) / 2;
+  return (width.value - legendTitleWidth.value - LEGEND_BAR_WIDTH) / 2;
+});
+
+// Single page-coloured panel that wraps both the title and the legend (when
+// present), so they read as one floating header rather than two strips, and
+// any panned map paths underneath them are masked. SVG coords (not the
+// legend's local frame) since this lives outside the legend <g>.
+const TOP_GAP = 8; // breathing room between SVG top edge and the panel
+const TITLE_Y = 24; // title text baseline — also see template
+const TITLE_VISIBLE_TOP = TITLE_Y - 10; // cap-top for font-size 14
+const TITLE_VISIBLE_BOTTOM = TITLE_Y + 4; // descender
+const topBandBgRect = computed(() => {
+  const haveTitle = !!props.title;
+  const haveLegend = showLegend.value;
+  if (!haveTitle && !haveLegend) return null;
+  const isContinuous = haveLegend && !isCategorical.value && !isThreshold.value;
+  const padX = 12;
+  const padY = 8;
+
+  // Width: widest of title text (estimated) vs legend content.
+  const titleW = haveTitle ? props.title!.length * 8 : 0;
+  const legendW = haveLegend
+    ? isContinuous
+      ? legendTitleWidth.value + LEGEND_BAR_WIDTH
+      : discreteLegendTotalWidth.value
+    : 0;
+  const contentW = Math.max(titleW, legendW);
+
+  // Vertical content extents. Legend <g> is at y = titleHeight + 18; in
+  // its local frame, visible content spans roughly -6 to +7 (discrete) or
+  // -6 to +24 (continuous, includes tick labels).
+  const legendCenter = titleHeight.value + 18;
+  const contentTop = Math.min(
+    haveTitle ? TITLE_VISIBLE_TOP : Infinity,
+    haveLegend ? legendCenter - 6 : Infinity,
+  );
+  const contentBottom = Math.max(
+    haveTitle ? TITLE_VISIBLE_BOTTOM : -Infinity,
+    haveLegend ? legendCenter + (isContinuous ? 24 : 7) : -Infinity,
+  );
+  // Clamp top so the panel never butts against the SVG edge.
+  const y = Math.max(contentTop - padY, TOP_GAP);
+
+  return {
+    x: (width.value - contentW) / 2 - padX,
+    y,
+    width: contentW + padX * 2,
+    height: contentBottom + padY - y,
+  };
 });
 
 const menuItems = computed<ChartMenuItem[]>(() => {
@@ -874,53 +933,45 @@ watch(
         target.
       -->
       <g ref="mapGroupRef" />
-      <!-- Legend -->
+      <!--
+        Page-coloured panel that wraps the title + legend as one floating
+        header. Sits between the map paths and the title/legend so panned
+        map content underneath is masked.
+      -->
+      <rect
+        v-if="topBandBgRect"
+        class="choropleth-legend-bg"
+        v-bind="topBandBgRect"
+        rx="4"
+      />
       <g
         v-if="showLegend"
         class="choropleth-legend"
         :transform="`translate(${legendXOffset},${legendY})`"
       >
-        <!-- Categorical or Threshold: dots with labels -->
+        <text v-if="legendTitle" class="choropleth-legend-title" y="5">
+          {{ legendTitle }}
+        </text>
         <template v-if="isCategorical || isThreshold">
-          <text
-            v-if="legendTitle"
-            :y="5"
-            font-size="13"
-            font-weight="600"
-            fill="currentColor"
-          >
-            {{ legendTitle }}
-          </text>
           <template v-for="(item, i) in discreteLegendItems" :key="item.key">
             <rect
               :x="discreteLegendPositions[i]"
-              :y="-5"
+              y="-5"
               width="12"
               height="12"
               rx="3"
               :fill="item.color"
             />
             <text
+              class="choropleth-legend-label"
               :x="discreteLegendPositions[i] + 16"
-              :y="5"
-              font-size="13"
-              fill="currentColor"
+              y="5"
             >
               {{ item.label }}
             </text>
           </template>
         </template>
-        <!-- Continuous: gradient bar with ticks -->
         <template v-else>
-          <text
-            v-if="legendTitle"
-            :y="5"
-            font-size="13"
-            font-weight="600"
-            fill="currentColor"
-          >
-            {{ legendTitle }}
-          </text>
           <defs>
             <linearGradient :id="gradientId" x1="0" x2="1" y1="0" y2="0">
               <stop
@@ -932,39 +983,25 @@ watch(
             </linearGradient>
           </defs>
           <rect
-            :x="legendTitle ? legendTitle.length * 8 + 12 : 0"
-            :y="-6"
-            :width="160"
-            :height="12"
+            :x="legendTitleWidth"
+            y="-6"
+            :width="LEGEND_BAR_WIDTH"
+            height="12"
             rx="2"
             :fill="`url(#${gradientId})`"
           />
           <text
             v-for="tick in continuousTicks"
             :key="tick.value"
-            :x="
-              (legendTitle ? legendTitle.length * 8 + 12 : 0) +
-              (tick.pct / 100) * 160
-            "
-            :y="20"
-            font-size="11"
-            fill="currentColor"
-            opacity="0.7"
-            text-anchor="middle"
+            class="choropleth-legend-tick"
+            :x="legendTitleWidth + (tick.pct / 100) * LEGEND_BAR_WIDTH"
+            y="20"
           >
             {{ tick.value }}
           </text>
         </template>
       </g>
-      <text
-        v-if="title"
-        :x="width / 2"
-        :y="18"
-        text-anchor="middle"
-        font-size="14"
-        font-weight="600"
-        fill="currentColor"
-      >
+      <text v-if="title" class="choropleth-title" :x="width / 2" :y="TITLE_Y">
         {{ title }}
       </text>
     </svg>
@@ -984,6 +1021,14 @@ watch(
 
 <style scoped>
 .choropleth-wrapper {
+  /*
+   * Override at the consumer level to change the legend/title panel fill:
+   *   .my-map { --choropleth-legend-bg: rgba(0, 0, 0, 0.6); }
+   * Defaults to the theme's page background so the panel reads as a
+   * floating extension of the page surface.
+   */
+  --choropleth-legend-bg: var(--color-bg-0, #fff);
+
   position: relative;
   width: 100%;
 }
@@ -1002,5 +1047,34 @@ watch(
 
 .state-path {
   cursor: pointer;
+}
+
+.choropleth-legend-bg {
+  fill: var(--choropleth-legend-bg);
+}
+
+.choropleth-title {
+  font-size: 14px;
+  font-weight: 600;
+  fill: currentColor;
+  text-anchor: middle;
+}
+
+.choropleth-legend-title {
+  font-size: 13px;
+  font-weight: 600;
+  fill: currentColor;
+}
+
+.choropleth-legend-label {
+  font-size: 13px;
+  fill: currentColor;
+}
+
+.choropleth-legend-tick {
+  font-size: 11px;
+  fill: currentColor;
+  opacity: 0.7;
+  text-anchor: middle;
 }
 </style>
