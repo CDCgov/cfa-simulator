@@ -75,8 +75,7 @@ describe("ChoroplethMap", () => {
         title: "US Cases",
       },
     });
-    const title = wrapper.find("svg > text");
-    expect(title.text()).toBe("US Cases");
+    expect(wrapper.find(".choropleth-title").text()).toBe("US Cases");
   });
 
   it("applies custom color scale", () => {
@@ -316,12 +315,12 @@ describe("ChoroplethMap", () => {
     });
     const legend = wrapper.find(".choropleth-legend");
     expect(legend.exists()).toBe(true);
-    const texts = legend.findAll("text");
-    expect(texts[0].text()).toBe("Risk");
-    expect(texts[1].text()).toBe("low");
-    expect(texts[2].text()).toBe("high");
-    const rects = legend.findAll("rect");
-    expect(rects).toHaveLength(2);
+    expect(legend.find(".choropleth-legend-title").text()).toBe("Risk");
+    const items = legend.findAll(".choropleth-legend-item");
+    expect(items).toHaveLength(2);
+    expect(items[0].text()).toBe("low");
+    expect(items[1].text()).toBe("high");
+    expect(legend.findAll(".choropleth-legend-swatch")).toHaveLength(2);
   });
 
   it("renders threshold legend with circles and labels", () => {
@@ -340,10 +339,10 @@ describe("ChoroplethMap", () => {
     });
     const legend = wrapper.find(".choropleth-legend");
     expect(legend.exists()).toBe(true);
-    const texts = legend.findAll("text");
-    expect(texts[0].text()).toBe("Level");
-    expect(texts[1].text()).toBe("Low");
-    expect(texts[2].text()).toBe("High");
+    expect(legend.find(".choropleth-legend-title").text()).toBe("Level");
+    const items = legend.findAll(".choropleth-legend-item");
+    expect(items[0].text()).toBe("Low");
+    expect(items[1].text()).toBe("High");
   });
 
   it("renders threshold legend with min values when no label", () => {
@@ -359,13 +358,14 @@ describe("ChoroplethMap", () => {
         ],
       },
     });
-    const legend = wrapper.find(".choropleth-legend");
-    const texts = legend.findAll("text");
-    expect(texts[0].text()).toBe("0");
-    expect(texts[1].text()).toBe("50");
+    const items = wrapper
+      .find(".choropleth-legend")
+      .findAll(".choropleth-legend-item");
+    expect(items[0].text()).toBe("0");
+    expect(items[1].text()).toBe("50");
   });
 
-  it("renders continuous legend with gradient rect and ticks", () => {
+  it("renders continuous legend with gradient bar and ticks", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         topology: statesTopo,
@@ -380,12 +380,12 @@ describe("ChoroplethMap", () => {
     });
     const legend = wrapper.find(".choropleth-legend");
     expect(legend.exists()).toBe(true);
-    const texts = legend.findAll("text");
-    expect(texts[0].text()).toBe("Severity");
-    expect(legend.find("rect").exists()).toBe(true);
-    expect(legend.find("linearGradient").exists()).toBe(true);
-    // tick labels
-    expect(texts.length).toBeGreaterThanOrEqual(3);
+    expect(legend.find(".choropleth-legend-title").text()).toBe("Severity");
+    const gradient = legend.find(".choropleth-legend-gradient");
+    expect(gradient.exists()).toBe(true);
+    expect(gradient.attributes("style") || "").toContain("linear-gradient");
+    const ticks = legend.findAll(".choropleth-legend-ticks > span");
+    expect(ticks.length).toBeGreaterThanOrEqual(3);
   });
 
   it("hides legend when legend=false", () => {

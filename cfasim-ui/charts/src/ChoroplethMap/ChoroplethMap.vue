@@ -5,7 +5,6 @@ import {
   watch,
   onMounted,
   onUnmounted,
-  useId,
   toRaw,
   useSlots,
 } from "vue";
@@ -152,8 +151,6 @@ const narrowSlotProps = (
   raw: { feature: unknown } & Omit<TooltipPayload, "feature">,
 ): TooltipPayload => raw as TooltipPayload;
 
-const uid = useId();
-const gradientId = `choropleth-gradient-${uid}`;
 const containerRef = ref<HTMLElement | null>(null);
 const svgRef = ref<SVGSVGElement | null>(null);
 const mapGroupRef = ref<SVGGElement | null>(null);
@@ -167,7 +164,6 @@ const slots = useSlots();
 const hasInteractiveTooltip = computed(
   () => !!props.tooltipTrigger || !!props.tooltipFormat || !!slots.tooltip,
 );
-const measuredWidth = ref(0);
 // Imperative path bookkeeping. Plain Maps rather than refs — Vue never reads
 // these from a render scope, so mutating them does not trigger re-renders.
 const pathsByFeatureId = new Map<string, SVGPathElement>();
@@ -178,7 +174,6 @@ let isZooming = false;
 // TODO: map hover/tooltip causes performance issues on mobile (SVG stroke-width
 // changes + compositing layers degrade zoom/pan). Disabled on touch devices.
 const isTouchDevice = typeof window !== "undefined" && "ontouchstart" in window;
-let containerObserver: ResizeObserver | null = null;
 let tooltipObserver: ResizeObserver | null = null;
 const lastTooltipSize = { width: 0, height: 0 };
 let lastPointer: { x: number; y: number } | null = null;
@@ -210,27 +205,34 @@ function teardownInteraction() {
   g.removeEventListener("mouseout", onDelegatedMouseOut);
 }
 
+// Scroll / resize don't reliably emit mouseout on the underlying path even
+// though the cursor's relationship to the map has changed — the tooltip
+// would otherwise get stuck at its old `position: fixed` coordinates.
+function dismissOnViewportChange() {
+  clearHover();
+}
+
 onMounted(() => {
-  if (containerRef.value) {
-    measuredWidth.value = containerRef.value.clientWidth;
-    containerObserver = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) measuredWidth.value = entry.contentRect.width;
-    });
-    containerObserver.observe(containerRef.value);
-  }
   setupZoom();
   setupInteraction();
   rebuildPaths();
   attachTooltipObserver();
+  window.addEventListener("scroll", dismissOnViewportChange, {
+    passive: true,
+    capture: true,
+  });
+  window.addEventListener("resize", dismissOnViewportChange, { passive: true });
 });
 
 onUnmounted(() => {
-  containerObserver?.disconnect();
   tooltipObserver?.disconnect();
   if (pendingMoveFrame) cancelAnimationFrame(pendingMoveFrame);
   teardownZoom();
   teardownInteraction();
+  window.removeEventListener("scroll", dismissOnViewportChange, {
+    capture: true,
+  });
+  window.removeEventListener("resize", dismissOnViewportChange);
 });
 
 function setupZoom() {
@@ -279,12 +281,43 @@ watch(
   },
 );
 
-const width = computed(() => props.width ?? (measuredWidth.value || 600));
+// Canonical internal coordinate system. All layout (projection, legend,
+// title) is computed at this size; the SVG's viewBox makes the browser
+// scale the entire canvas to whatever the container provides, so there's no
+// JS work on container resize. `props.width` / `props.height`, when set,
+// drive the rendered SVG element size but not these canonical coords.
+const CANONICAL_WIDTH = 1000;
 const aspectRatio = computed(() => {
   if (props.width && props.height) return props.height / props.width;
   return 0.625;
 });
-const height = computed(() => width.value * aspectRatio.value);
+const width = computed(() => CANONICAL_WIDTH);
+const height = computed(() => CANONICAL_WIDTH * aspectRatio.value);
+
+// Explicit size when either width or height is passed. The missing
+// dimension is derived from the viewBox aspect so the SVG box and the
+// rendered map content match exactly — no `preserveAspectRatio="meet"`
+// whitespace. The wrapper width is locked to match so the header centers
+// over the map rather than over a wider container.
+const explicitWidth = computed<number | null>(() => {
+  if (props.width != null) return props.width;
+  if (props.height != null) return props.height / aspectRatio.value;
+  return null;
+});
+
+const svgSizeStyle = computed(() => {
+  const w = explicitWidth.value;
+  if (w == null) return {};
+  return {
+    width: `${w}px`,
+    height: `${w * aspectRatio.value}px`,
+  };
+});
+
+const wrapperSizeStyle = computed(() => {
+  const w = explicitWidth.value;
+  return w == null ? {} : { width: `${w}px` };
+});
 
 type NamedGeometry = GeometryCollection<{ name: string }>;
 type StatesTopo = Topology<{ states: NamedGeometry }>;
@@ -338,8 +371,8 @@ const stateBordersPath = computed(() => {
 const projection = computed(() =>
   geoAlbersUsa().fitExtent(
     [
-      [0, topOffset.value],
-      [width.value, height.value + topOffset.value],
+      [0, 0],
+      [width.value, height.value],
     ],
     featuresGeo.value,
   ),
@@ -667,6 +700,10 @@ function rebuildPaths() {
     p.setAttribute("fill", colorFor(id));
     p.setAttribute("stroke", stroke);
     p.setAttribute("stroke-width", sw);
+    // Keep stroke width pixel-accurate regardless of how the browser scales
+    // the viewBox to fit the container — otherwise borders appear thicker
+    // as the map is enlarged.
+    p.setAttribute("vector-effect", "non-scaling-stroke");
     if (wantsTitleFallback) {
       const title = document.createElementNS(SVG_NS, "title");
       title.textContent = titleText(name, value);
@@ -691,6 +728,7 @@ function rebuildPaths() {
     b.setAttribute("stroke-width", "1");
     b.setAttribute("stroke-linejoin", "round");
     b.setAttribute("pointer-events", "none");
+    b.setAttribute("vector-effect", "non-scaling-stroke");
     frag.appendChild(b);
     bordersPathEl = b;
   }
@@ -738,14 +776,6 @@ const showLegend = computed(
 const sortedThresholdStops = computed(() =>
   (props.colorScale as ThresholdStop[]).slice().sort((a, b) => a.min - b.min),
 );
-
-const titleHeight = computed(() => (props.title ? 30 : 0));
-const legendHeight = computed(() => (showLegend.value ? 28 : 0));
-const topOffset = computed(() => titleHeight.value + legendHeight.value);
-
-const svgHeight = computed(() => height.value + topOffset.value);
-
-const legendY = computed(() => titleHeight.value + 18);
 
 const gradientStops = computed(() => {
   const steps = 10;
@@ -804,81 +834,13 @@ const discreteLegendItems = computed(() => {
   return items;
 });
 
-const LEGEND_BAR_WIDTH = 160;
-const legendTitleWidth = computed(() =>
-  props.legendTitle ? props.legendTitle.length * 8 + 12 : 0,
-);
-
-const discreteLegendTotalWidth = computed(() => {
-  let w = legendTitleWidth.value;
-  for (const item of discreteLegendItems.value) {
-    w += 16 + item.label.length * 7 + 12;
-  }
-  return w - (discreteLegendItems.value.length > 0 ? 12 : 0);
-});
-
-const discreteLegendPositions = computed(() => {
-  let x = legendTitleWidth.value;
-  return discreteLegendItems.value.map((item) => {
-    const pos = x;
-    x += 16 + item.label.length * 7 + 12;
-    return pos;
-  });
-});
-
-const legendXOffset = computed(() => {
-  if (isCategorical.value || isThreshold.value) {
-    return (width.value - discreteLegendTotalWidth.value) / 2;
-  }
-  return (width.value - legendTitleWidth.value - LEGEND_BAR_WIDTH) / 2;
-});
-
-// Single page-coloured panel that wraps both the title and the legend (when
-// present), so they read as one floating header rather than two strips, and
-// any panned map paths underneath them are masked. SVG coords (not the
-// legend's local frame) since this lives outside the legend <g>.
-const TOP_GAP = 8; // breathing room between SVG top edge and the panel
-const TITLE_Y = 24; // title text baseline — also see template
-const TITLE_VISIBLE_TOP = TITLE_Y - 10; // cap-top for font-size 14
-const TITLE_VISIBLE_BOTTOM = TITLE_Y + 4; // descender
-const topBandBgRect = computed(() => {
-  const haveTitle = !!props.title;
-  const haveLegend = showLegend.value;
-  if (!haveTitle && !haveLegend) return null;
-  const isContinuous = haveLegend && !isCategorical.value && !isThreshold.value;
-  const padX = 12;
-  const padY = 8;
-
-  // Width: widest of title text (estimated) vs legend content.
-  const titleW = haveTitle ? props.title!.length * 8 : 0;
-  const legendW = haveLegend
-    ? isContinuous
-      ? legendTitleWidth.value + LEGEND_BAR_WIDTH
-      : discreteLegendTotalWidth.value
-    : 0;
-  const contentW = Math.max(titleW, legendW);
-
-  // Vertical content extents. Legend <g> is at y = titleHeight + 18; in
-  // its local frame, visible content spans roughly -6 to +7 (discrete) or
-  // -6 to +24 (continuous, includes tick labels).
-  const legendCenter = titleHeight.value + 18;
-  const contentTop = Math.min(
-    haveTitle ? TITLE_VISIBLE_TOP : Infinity,
-    haveLegend ? legendCenter - 6 : Infinity,
-  );
-  const contentBottom = Math.max(
-    haveTitle ? TITLE_VISIBLE_BOTTOM : -Infinity,
-    haveLegend ? legendCenter + (isContinuous ? 24 : 7) : -Infinity,
-  );
-  // Clamp top so the panel never butts against the SVG edge.
-  const y = Math.max(contentTop - padY, TOP_GAP);
-
-  return {
-    x: (width.value - contentW) / 2 - padX,
-    y,
-    width: contentW + padX * 2,
-    height: contentBottom + padY - y,
-  };
+// Linear-gradient CSS for the continuous legend bar, derived from the same
+// stops the SVG version used.
+const gradientCss = computed(() => {
+  const stops = gradientStops.value
+    .map((s) => `${s.color} ${s.offset}`)
+    .join(", ");
+  return `linear-gradient(to right, ${stops})`;
 });
 
 const menuItems = computed<ChartMenuItem[]>(() => {
@@ -923,9 +885,59 @@ watch(
 </script>
 
 <template>
-  <div ref="containerRef" :class="['choropleth-wrapper', { pannable: pan }]">
+  <div
+    ref="containerRef"
+    :class="['choropleth-wrapper', { pannable: pan }]"
+    :style="wrapperSizeStyle"
+  >
     <ChartMenu v-if="menu" :items="menuItems" />
-    <svg ref="svgRef" :width="width" :height="svgHeight">
+    <!--
+      Title + legend live as an HTML overlay on top of the SVG so they keep
+      their intrinsic px sizes regardless of how the browser scales the
+      viewBox to fit the container.
+    -->
+    <div v-if="title || showLegend" class="choropleth-header">
+      <div v-if="title" class="choropleth-title">{{ title }}</div>
+      <div v-if="showLegend" class="choropleth-legend">
+        <span v-if="legendTitle" class="choropleth-legend-title">
+          {{ legendTitle }}
+        </span>
+        <template v-if="isCategorical || isThreshold">
+          <span
+            v-for="item in discreteLegendItems"
+            :key="item.key"
+            class="choropleth-legend-item"
+          >
+            <span
+              class="choropleth-legend-swatch"
+              :style="{ background: item.color }"
+            />
+            {{ item.label }}
+          </span>
+        </template>
+        <div v-else class="choropleth-legend-continuous">
+          <div
+            class="choropleth-legend-gradient"
+            :style="{ background: gradientCss }"
+          />
+          <div class="choropleth-legend-ticks">
+            <span
+              v-for="tick in continuousTicks"
+              :key="tick.value"
+              :style="{ left: tick.pct + '%' }"
+            >
+              {{ tick.value }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <svg
+      ref="svgRef"
+      :viewBox="`0 0 ${width} ${height}`"
+      :style="svgSizeStyle"
+      preserveAspectRatio="xMidYMid meet"
+    >
       <!--
         Path elements are created imperatively in `rebuildPaths()`; Vue never
         diffs the per-feature subtree so reactive state changes don't walk
@@ -933,77 +945,6 @@ watch(
         target.
       -->
       <g ref="mapGroupRef" />
-      <!--
-        Page-coloured panel that wraps the title + legend as one floating
-        header. Sits between the map paths and the title/legend so panned
-        map content underneath is masked.
-      -->
-      <rect
-        v-if="topBandBgRect"
-        class="choropleth-legend-bg"
-        v-bind="topBandBgRect"
-        rx="4"
-      />
-      <g
-        v-if="showLegend"
-        class="choropleth-legend"
-        :transform="`translate(${legendXOffset},${legendY})`"
-      >
-        <text v-if="legendTitle" class="choropleth-legend-title" y="5">
-          {{ legendTitle }}
-        </text>
-        <template v-if="isCategorical || isThreshold">
-          <template v-for="(item, i) in discreteLegendItems" :key="item.key">
-            <rect
-              :x="discreteLegendPositions[i]"
-              y="-5"
-              width="12"
-              height="12"
-              rx="3"
-              :fill="item.color"
-            />
-            <text
-              class="choropleth-legend-label"
-              :x="discreteLegendPositions[i] + 16"
-              y="5"
-            >
-              {{ item.label }}
-            </text>
-          </template>
-        </template>
-        <template v-else>
-          <defs>
-            <linearGradient :id="gradientId" x1="0" x2="1" y1="0" y2="0">
-              <stop
-                v-for="s in gradientStops"
-                :key="s.offset"
-                :offset="s.offset"
-                :stop-color="s.color"
-              />
-            </linearGradient>
-          </defs>
-          <rect
-            :x="legendTitleWidth"
-            y="-6"
-            :width="LEGEND_BAR_WIDTH"
-            height="12"
-            rx="2"
-            :fill="`url(#${gradientId})`"
-          />
-          <text
-            v-for="tick in continuousTicks"
-            :key="tick.value"
-            class="choropleth-legend-tick"
-            :x="legendTitleWidth + (tick.pct / 100) * LEGEND_BAR_WIDTH"
-            y="20"
-          >
-            {{ tick.value }}
-          </text>
-        </template>
-      </g>
-      <text v-if="title" class="choropleth-title" :x="width / 2" :y="TITLE_Y">
-        {{ title }}
-      </text>
     </svg>
     <ChoroplethTooltip v-if="hasInteractiveTooltip" ref="tooltipChildRef">
       <template #default="raw">
@@ -1033,6 +974,15 @@ watch(
   width: 100%;
 }
 
+.choropleth-wrapper svg {
+  display: block;
+  /* Fluid scaling via viewBox: the SVG fills its container's width and the
+   * browser derives height from the viewBox aspect ratio. Overridden when
+   * `props.width` / `props.height` are explicitly set on the component. */
+  width: 100%;
+  height: auto;
+}
+
 .choropleth-wrapper.pannable svg {
   cursor: grab;
 }
@@ -1049,32 +999,80 @@ watch(
   cursor: pointer;
 }
 
-.choropleth-legend-bg {
-  fill: var(--choropleth-legend-bg);
+/*
+ * Title + legend overlay. Lives in HTML so its sizes are independent of
+ * the SVG viewBox scaling — text stays at its declared px size at any
+ * container width.
+ */
+.choropleth-header {
+  /*
+   * In-flow above the map — the map gets its full canvas, no overlap to
+   * worry about. Centered via `width: fit-content` + `margin: auto`.
+   */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  margin: 0 auto;
+  padding: 8px 14px;
+  border-radius: 4px;
+  background: var(--choropleth-legend-bg);
+  color: currentColor;
 }
 
 .choropleth-title {
   font-size: 14px;
   font-weight: 600;
-  fill: currentColor;
-  text-anchor: middle;
+  line-height: 1.2;
+}
+
+.choropleth-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 13px;
+  line-height: 1.2;
 }
 
 .choropleth-legend-title {
-  font-size: 13px;
   font-weight: 600;
-  fill: currentColor;
 }
 
-.choropleth-legend-label {
-  font-size: 13px;
-  fill: currentColor;
+.choropleth-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.choropleth-legend-tick {
+.choropleth-legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.choropleth-legend-continuous {
+  display: flex;
+  flex-direction: column;
+  width: 160px;
+}
+
+.choropleth-legend-gradient {
+  height: 12px;
+  border-radius: 2px;
+}
+
+.choropleth-legend-ticks {
+  position: relative;
+  height: 14px;
+  margin-top: 4px;
   font-size: 11px;
-  fill: currentColor;
   opacity: 0.7;
-  text-anchor: middle;
+}
+
+.choropleth-legend-ticks > span {
+  position: absolute;
+  transform: translateX(-50%);
 }
 </style>
