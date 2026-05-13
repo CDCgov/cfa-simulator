@@ -23,6 +23,7 @@ export default defineConfig({
         "@cfasim-ui/shared",
         "d3-geo",
         "d3-selection",
+        "d3-transition",
         "d3-zoom",
         "topojson-client",
       ],
