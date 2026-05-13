@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mount, flushPromises } from "@vue/test-utils";
 import ChoroplethMap from "./ChoroplethMap.vue";
 import usStates from "us-atlas/states-10m.json";
 import usCounties from "us-atlas/counties-10m.json";
@@ -531,5 +531,76 @@ describe("ChoroplethMap", () => {
     await firstPath.trigger("mouseout");
     expect(wrapper.emitted("stateHover")).toHaveLength(2);
     expect(wrapper.emitted("stateHover")![1][0]).toBeNull();
+  });
+
+  it("renders #tooltip slot content on hover and stays mounted on mouseout", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        data: [{ id: "06", value: 42 }],
+      },
+      slots: {
+        tooltip: `<template #tooltip="{ name, value }">
+          <div class="custom-tip">{{ name }} :: {{ value }}</div>
+        </template>`,
+      },
+    });
+    // Slot presence should suppress the native SVG <title> fallback.
+    expect(wrapper.find(".state-path title").exists()).toBe(false);
+
+    const california = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06");
+    expect(california).toBeDefined();
+    await california!.trigger("mouseover");
+    // showTooltip awaits one tick to measure before positioning; flush
+    // microtasks so the direct DOM write has happened.
+    await flushPromises();
+
+    const tip = document.body.querySelector(".custom-tip");
+    expect(tip).not.toBeNull();
+    expect(tip!.textContent).toContain("California :: 42");
+    const tipWrapper = tip!.parentElement as HTMLElement;
+    expect(tipWrapper.style.visibility).toBe("visible");
+
+    // On mouseout the slot DOM stays mounted; only visibility flips so the
+    // next hover patches props rather than remounting.
+    await california!.trigger("mouseout");
+    await flushPromises();
+    const tipAfter = document.body.querySelector(".custom-tip");
+    expect(tipAfter).toBe(tip);
+    expect((tipAfter!.parentElement as HTMLElement).style.visibility).toBe(
+      "hidden",
+    );
+
+    wrapper.unmount();
+  });
+
+  it("renders tooltipFormat HTML when no slot is provided", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        data: [{ id: "06", value: 42 }],
+        tooltipFormat: ({ name, value }) =>
+          `<b class="legacy-tip">${name}=${value}</b>`,
+      },
+    });
+    const california = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06");
+    await california!.trigger("mouseover");
+    await flushPromises();
+
+    const tip = document.body.querySelector(".legacy-tip");
+    expect(tip).not.toBeNull();
+    expect(tip!.textContent).toBe("California=42");
+
+    wrapper.unmount();
   });
 });

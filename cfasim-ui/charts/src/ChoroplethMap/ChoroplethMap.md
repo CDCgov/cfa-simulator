@@ -1,3 +1,18 @@
+<script setup>
+import { computed } from "vue";
+import countiesTopoForPerf from "us-atlas/counties-10m.json";
+
+// Build one row per county (~3,143) with a deterministic-ish value so the
+// perf example can render every region with a custom tooltip.
+const denseCountyData = computed(() => {
+  const geoms = countiesTopoForPerf.objects.counties.geometries;
+  return geoms.map((g, i) => ({
+    id: String(g.id).padStart(5, "0"),
+    value: (i * 37) % 100,
+  }));
+});
+</script>
+
 # ChoroplethMap
 
 A US choropleth map using D3's Albers USA projection, which repositions Alaska and Hawaii to the bottom left. Supports state-level, county-level, and HSA-level (Health Service Areas) rendering via the `geoType` prop.
@@ -325,9 +340,8 @@ Set `geoType="hsas"` to render Health Service Area boundaries. HSAs are dissolve
 ### Custom tooltip number format
 
 Pass `tooltip-value-format` to format numeric values shown in the tooltip
-(both the native SVG `<title>` and the interactive HTML tooltip when
-`tooltip-trigger` is set). Use `tooltip-format` instead if you want full
-control over the tooltip's HTML.
+(both the native SVG `<title>` and the interactive HTML tooltip). Use the
+`#tooltip` slot if you want full control over the tooltip's content.
 
 <ComponentDemo>
   <ChoroplethMap
@@ -358,6 +372,110 @@ control over the tooltip's HTML.
   title="US population (2020)"
   :height="300"
 />
+```
+
+  </template>
+</ComponentDemo>
+
+### Dense county map (~3,143 features) for tooltip perf profiling
+
+Renders every US county with a value and a custom tooltip slot. Useful as a
+manual perf harness — open DevTools Performance, record a hover/sweep across
+many counties, and inspect tooltip update cost. The tooltip element is
+mounted once and patched in place; `mousemove` writes the position
+straight to the DOM.
+
+<ComponentDemo>
+  <ChoroplethMap
+    :topology="countiesTopo"
+    geo-type="counties"
+    :data="denseCountyData"
+    :pan="true"
+    :zoom="true"
+    :color-scale="{ min: '#f0f5ff', max: '#08306b' }"
+    title="All US counties — tooltip perf demo"
+    :height="500"
+  >
+    <template #tooltip="{ id, name, value }">
+      <div style="font-weight: 600">{{ name }}</div>
+      <div style="opacity: 0.7; font-size: 0.85em">FIPS {{ id }}</div>
+      <div>Value: {{ value }}</div>
+    </template>
+  </ChoroplethMap>
+
+<template #code>
+
+```vue
+<script setup>
+import countiesTopo from "us-atlas/counties-10m.json";
+
+// One row per county
+const data = countiesTopo.objects.counties.geometries.map((g, i) => ({
+  id: String(g.id).padStart(5, "0"),
+  value: (i * 37) % 100,
+}));
+</script>
+
+<ChoroplethMap
+  :topology="countiesTopo"
+  geo-type="counties"
+  :data="data"
+  pan
+  zoom
+>
+  <template #tooltip="{ id, name, value }">
+    <div style="font-weight: 600">{{ name }}</div>
+    <div style="opacity: 0.7; font-size: 0.85em">FIPS {{ id }}</div>
+    <div>Value: {{ value }}</div>
+  </template>
+</ChoroplethMap>
+```
+
+  </template>
+</ComponentDemo>
+
+### Custom tooltip content (`#tooltip` slot)
+
+Use the `#tooltip` slot to render any Vue template — components, scoped
+styles, multi-line layouts — instead of the default `name: value`. The slot
+receives `{ id, name, value, feature }` for the hovered region. Providing the
+slot automatically enables interactive (HTML) tooltips, so you don't need to
+set `tooltip-trigger`.
+
+<ComponentDemo>
+  <ChoroplethMap
+    :topology="statesTopo"
+    :data="[
+      { id: '06', value: 39538223 },
+      { id: '48', value: 29145505 },
+      { id: '12', value: 21538187 },
+      { id: '36', value: 20201249 },
+      { id: '17', value: 12812508 },
+    ]"
+    title="US population (2020)"
+    :height="300"
+  >
+    <template #tooltip="{ name, value }">
+      <div style="font-weight:600">{{ name }}</div>
+      <div v-if="typeof value === 'number'">
+        Pop: {{ value.toLocaleString('en-US') }}
+      </div>
+      <div v-else style="opacity:0.6">No data</div>
+    </template>
+  </ChoroplethMap>
+
+<template #code>
+
+```vue
+<ChoroplethMap :topology="statesTopo" :data="data" title="US population (2020)">
+  <template #tooltip="{ name, value }">
+    <div style="font-weight: 600">{{ name }}</div>
+    <div v-if="typeof value === 'number'">
+      Pop: {{ value.toLocaleString("en-US") }}
+    </div>
+    <div v-else style="opacity: 0.6">No data</div>
+  </template>
+</ChoroplethMap>
 ```
 
   </template>
