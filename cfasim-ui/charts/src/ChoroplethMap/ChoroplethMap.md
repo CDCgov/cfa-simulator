@@ -447,13 +447,9 @@ Pass `tooltip-value-format` to format numeric values shown in the tooltip
   </template>
 </ComponentDemo>
 
-### Dense county map (~3,143 features) for tooltip perf profiling
+### Dense county map
 
-Renders every US county with a value and a custom tooltip slot. Useful as a
-manual perf harness — open DevTools Performance, record a hover/sweep across
-many counties, and inspect tooltip update cost. The tooltip element is
-mounted once and patched in place; `mousemove` writes the position
-straight to the DOM.
+Renders every US county with a value and a custom tooltip slot.
 
 <ComponentDemo>
   <ChoroplethMap
