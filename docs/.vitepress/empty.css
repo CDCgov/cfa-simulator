@@ -1,0 +1,3 @@
+/* Dev-mode stub for @cfasim-ui/{components,charts}/style.css.
+ * In dev we alias the library to src/, so component <style scoped> blocks
+ * inject themselves via @vitejs/plugin-vue and the built CSS isn't needed. */

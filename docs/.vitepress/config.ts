@@ -1,8 +1,84 @@
 import { defineConfig } from "vitepress";
+import { resolve } from "node:path";
+import {
+  components,
+  findComponentForSource,
+  regenerateComponent,
+} from "../../scripts/generate_docs.mjs";
+
+const ROOT = resolve(import.meta.dirname, "../..");
+
+// VitePress and the root vite resolve to different nested copies of vite,
+// so importing `ViteDevServer` from either side conflicts with the other.
+// We only need `server.watcher` (a chokidar FSWatcher), so type just that.
+type WatcherOnly = {
+  watcher: {
+    add(paths: readonly string[]): void;
+    on(event: "change", cb: (path: string) => void): void;
+  };
+};
+
+/**
+ * Dev-mode plugin: watch each component's source .md and .vue in
+ * cfasim-ui/{components,charts}/src/**, and on change re-run the
+ * per-component generator. Writing the regenerated .md back into
+ * docs/cfasim-ui/ lets VitePress's own watcher trigger HMR.
+ */
+function watchComponentSources() {
+  return {
+    name: "cfasim-watch-component-sources",
+    apply: "serve" as const,
+    configureServer(server: WatcherOnly) {
+      const watched = components.flatMap(([, , vuePath, docPath]) => [
+        resolve(ROOT, vuePath),
+        resolve(ROOT, docPath),
+      ]);
+      server.watcher.add(watched);
+
+      server.watcher.on("change", (path) => {
+        const entry = findComponentForSource(path);
+        if (!entry) return;
+        try {
+          regenerateComponent(entry);
+          console.log(`[cfasim] regenerated ${entry[1]}/${entry[0]}.md`);
+        } catch (err) {
+          console.error(`[cfasim] regen failed for ${path}:`, err);
+        }
+      });
+    },
+  };
+}
 
 export default defineConfig({
   title: "CFA Simulator Docs",
   base: "/cfa-simulator/docs/",
+  vite: {
+    resolve: {
+      alias: [
+        // Map the built CSS subpaths to an empty stub — in dev, scoped
+        // styles inject via @vitejs/plugin-vue from the aliased src/.
+        {
+          find: "@cfasim-ui/components/style.css",
+          replacement: resolve(import.meta.dirname, "empty.css"),
+        },
+        {
+          find: "@cfasim-ui/charts/style.css",
+          replacement: resolve(import.meta.dirname, "empty.css"),
+        },
+        // Resolve package imports to source so Vue SFC edits hot-reload
+        // without needing `plz build` first.
+        {
+          find: "@cfasim-ui/components",
+          replacement: resolve(ROOT, "cfasim-ui/components/src/index.ts"),
+        },
+        {
+          find: "@cfasim-ui/charts",
+          replacement: resolve(ROOT, "cfasim-ui/charts/src/index.ts"),
+        },
+      ],
+    },
+    plugins: [watchComponentSources()],
+  },
   themeConfig: {
     outline: [2, 3],
     search: {

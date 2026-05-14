@@ -10,6 +10,9 @@
  *   defineProps<InterfaceName>()  (resolves interface in same script block)
  *   defineModel<Type>()
  *   defineEmits<{ event: [...] }>()
+ *
+ * Can be used as a CLI (full rebuild) or imported for incremental regen
+ * during `vitepress dev` (see docs/.vitepress/config.ts).
  */
 
 import {
@@ -20,6 +23,7 @@ import {
   mkdirSync,
 } from "node:fs";
 import { basename, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -42,7 +46,7 @@ function isTestFile(path) {
 }
 
 // [slug, output dir, vue source path, doc source path]
-const components = [
+export const components = [
   [
     "box",
     "components",
@@ -311,30 +315,19 @@ function generateMarkdown(meta) {
   return sections.join("\n");
 }
 
-// --- Main ---
+// --- Per-component generation ---
 
-const packageVersion = JSON.parse(
-  readFileSync(resolve(PACKAGE_ROOT, "package.json"), "utf-8"),
-).version;
-
-// Reset and copy each workspace package's src/ (minus tests) into cfasim-ui/docs/<pkg>/
-for (const pkg of WORKSPACE_PACKAGES) {
-  const srcDir = resolve(ROOT, `cfasim-ui/${pkg}/src`);
-  const destDir = resolve(PACKAGE_ROOT, pkg);
-  rmSync(destDir, { recursive: true, force: true });
-  cpSync(srcDir, destDir, {
-    recursive: true,
-    filter: (path) => !isTestFile(path),
-  });
-}
-
-const index = {
-  version: packageVersion,
-  package: "@cfasim-ui/docs",
-  content: { components: [], charts: [] },
-};
-
-for (const [slug, outDir, vuePath, docPath] of components) {
+/**
+ * Regenerate the docs files for a single component. Used by the CLI loop
+ * and by the dev-mode Vite plugin when a source .md or .vue changes.
+ *
+ * @param entry  One row from `components`
+ * @param opts.updatePackage  When true, also rewrites the @cfasim-ui/docs
+ *                            package output (full CLI run). Skipped in dev.
+ * @returns      Per-component metadata for the @cfasim-ui/docs index.json
+ */
+export function regenerateComponent(entry, { updatePackage } = {}) {
+  const [slug, outDir, vuePath, docPath] = entry;
   const dir = resolve(DOCS_ROOT, outDir);
   const apiDir = resolve(dir, "_api");
   mkdirSync(apiDir, { recursive: true });
@@ -347,35 +340,87 @@ for (const [slug, outDir, vuePath, docPath] of components) {
   writeFileSync(resolve(dir, `${slug}.md`), docSource);
   writeFileSync(resolve(apiDir, `${slug}.md`), apiMd);
 
-  // @cfasim-ui/docs: the component's src tree was already copied above;
-  // overwrite the src .md with the self-contained built version.
   const name = basename(vuePath, ".vue");
-  const pkgComponentDir = resolve(PACKAGE_ROOT, outDir, name);
   const parsed = matter(docSource);
   const keywords = Array.isArray(parsed.data.keywords)
     ? parsed.data.keywords
     : [];
-  const builtMd = parsed.content.replace(INCLUDE_RE, apiMd).trimStart();
-  writeFileSync(resolve(pkgComponentDir, `${name}.md`), builtMd);
 
-  index.content[outDir].push({
-    name,
-    slug,
-    docs: `${outDir}/${name}/${name}.md`,
-    source: `${outDir}/${name}/${name}.vue`,
-    keywords,
+  if (updatePackage) {
+    // @cfasim-ui/docs: the component's src tree was already copied;
+    // overwrite the src .md with the self-contained built version.
+    const pkgComponentDir = resolve(PACKAGE_ROOT, outDir, name);
+    const builtMd = parsed.content.replace(INCLUDE_RE, apiMd).trimStart();
+    writeFileSync(resolve(pkgComponentDir, `${name}.md`), builtMd);
+  }
+
+  return { name, slug, outDir, keywords, meta };
+}
+
+/**
+ * Find the components entry whose vue or md source matches the given path.
+ * Accepts absolute or repo-relative paths.
+ */
+export function findComponentForSource(filePath) {
+  const rel = filePath.startsWith(ROOT)
+    ? filePath.slice(ROOT.length + 1)
+    : filePath;
+  return components.find(([, , vuePath, docPath]) => {
+    return rel === vuePath || rel === docPath;
   });
+}
+
+/**
+ * Full rebuild: refresh the @cfasim-ui/docs package src trees + regenerate
+ * every component's docs and write the package index.json.
+ */
+export function generateAll() {
+  const packageVersion = JSON.parse(
+    readFileSync(resolve(PACKAGE_ROOT, "package.json"), "utf-8"),
+  ).version;
+
+  for (const pkg of WORKSPACE_PACKAGES) {
+    const srcDir = resolve(ROOT, `cfasim-ui/${pkg}/src`);
+    const destDir = resolve(PACKAGE_ROOT, pkg);
+    rmSync(destDir, { recursive: true, force: true });
+    cpSync(srcDir, destDir, {
+      recursive: true,
+      filter: (path) => !isTestFile(path),
+    });
+  }
+
+  const index = {
+    version: packageVersion,
+    package: "@cfasim-ui/docs",
+    content: { components: [], charts: [] },
+  };
+
+  for (const entry of components) {
+    const result = regenerateComponent(entry, { updatePackage: true });
+    index.content[result.outDir].push({
+      name: result.name,
+      slug: result.slug,
+      docs: `${result.outDir}/${result.name}/${result.name}.md`,
+      source: `${result.outDir}/${result.name}/${result.name}.vue`,
+      keywords: result.keywords,
+    });
+    console.log(
+      `  ${result.outDir}/${result.slug}.md (${result.meta.props.length} props, ${result.meta.models.length} models, ${result.meta.emits.length} emits, ${result.keywords.length} keywords)`,
+    );
+  }
+
+  writeFileSync(
+    resolve(PACKAGE_ROOT, "index.json"),
+    JSON.stringify(index, null, 2) + "\n",
+  );
 
   console.log(
-    `  ${outDir}/${slug}.md (${meta.props.length} props, ${meta.models.length} models, ${meta.emits.length} emits, ${keywords.length} keywords)`,
+    `\nGenerated docs for ${components.length} components into docs/cfasim-ui/ and cfasim-ui/docs/`,
   );
 }
 
-writeFileSync(
-  resolve(PACKAGE_ROOT, "index.json"),
-  JSON.stringify(index, null, 2) + "\n",
-);
+// --- CLI entry ---
 
-console.log(
-  `\nGenerated docs for ${components.length} components into docs/cfasim-ui/ and cfasim-ui/docs/`,
-);
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  generateAll();
+}

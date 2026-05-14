@@ -118,9 +118,10 @@ pnpm exec vite build --config demos/sidebar-layout/vite.config.ts && \
 pnpm exec vite build --config demos/sidebar-tabs/vite.config.ts
 """
 
-# Serve docs locally
+# Serve docs locally. No `build` dep: the VitePress config aliases
+# @cfasim-ui/{components,charts} to src/ so Vue SFC edits hot-reload.
 [taskgroup.docs.dev]
-depends = ["build", "docs.generate", "docs.demos"]
+depends = ["docs.generate", "docs.demos"]
 run = "pnpm exec vitepress dev"
 
 # Build static files for docs
