@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { readdirSync, writeFileSync, mkdirSync } from "node:fs";
+import { readdirSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 
 /**
@@ -38,6 +38,10 @@ export function cfasimPyodide(options) {
   function build(root) {
     const publicDir = resolve(root, "public");
     mkdirSync(publicDir, { recursive: true });
+    // Clear stale wheels so wheels.json only lists this build's output.
+    for (const f of readdirSync(publicDir)) {
+      if (f.endsWith(".whl")) rmSync(resolve(publicDir, f));
+    }
     for (const dep of options?.pypiDeps ?? []) {
       execSync(
         `${pipCommand} download ${dep} --dest public --no-deps --python-version ${pythonVersion} --platform any`,
