@@ -683,7 +683,7 @@ describe("ChoroplethMap", () => {
     wrapper.unmount();
   });
 
-  it("clears the transform when focus is set back to null", async () => {
+  it("preserves the zoom transform when focus is set back to null", async () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
       props: {
@@ -691,15 +691,19 @@ describe("ChoroplethMap", () => {
         width: 600,
         height: 400,
         focus: "06",
+        focusZoomLevel: 3,
       },
     });
     await flushPromises();
-    expect(wrapper.find("g").attributes("transform") ?? "").toContain("scale");
+    const before = wrapper.find("g").attributes("transform") ?? "";
+    expect(before).toContain("scale(3)");
     await wrapper.setProps({ focus: null });
     await flushPromises();
-    // Clear-focus snaps instantly (only zoom-IN animates).
-    const transform = wrapper.find("g").attributes("transform") ?? "";
-    expect(transform).toMatch(/scale\(1\)/);
+    // Wait long enough for any (unwanted) animation to have completed.
+    await new Promise((r) => setTimeout(r, 550));
+    // Unfocus keeps the current pan/zoom — only Reset returns to identity.
+    const after = wrapper.find("g").attributes("transform") ?? "";
+    expect(after).toBe(before);
     wrapper.unmount();
   });
 
@@ -728,20 +732,27 @@ describe("ChoroplethMap", () => {
     wrapper.unmount();
   });
 
-  it("clearing focus interrupts any in-flight zoom-in animation", async () => {
+  it("rapid focus changes don't chain animations end-to-end", async () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
-      props: { topology: statesTopo, width: 600, height: 400 },
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        focusZoomLevel: 3,
+      },
     });
     await flushPromises();
-    // Trigger zoom-in (animates), then immediately clear (snaps).
+    // Trigger zoom-in to CA, then immediately retarget to TX before the
+    // first animation finishes. Without svg.interrupt(), d3-transition
+    // would queue the second transition and the map would visibly fly
+    // through CA before settling on TX.
     await wrapper.setProps({ focus: "06" });
-    await wrapper.setProps({ focus: null });
+    await wrapper.setProps({ focus: "48" });
     await flushPromises();
-    // Without the svg.interrupt() guard the still-running transition would
-    // overwrite the identity snap on its next frame.
+    await new Promise((r) => setTimeout(r, 550));
     const transform = wrapper.find("g").attributes("transform") ?? "";
-    expect(transform).toMatch(/scale\(1\)/);
+    expect(transform).toContain("scale(3)");
     wrapper.unmount();
   });
 

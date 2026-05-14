@@ -107,12 +107,14 @@ const props = withDefaults(
     tooltipClamp?: "none" | "chart" | "window";
     /**
      * Feature id(s) (FIPS code, HSA code, or feature name) to pan/zoom to.
-     * Pass `null` or an empty array to clear. Works with `v-model:focus`:
-     * clicking an unfocused feature emits its id; clicking a focused
-     * feature emits `null` (toggle off). Users can pan/zoom away from the
-     * focused area even when `zoom` and `pan` are disabled, and the
-     * built-in Reset button also clears focus. If a tooltip is configured,
-     * focusing a feature shows its tooltip.
+     * Pass `null` or an empty array to clear focus — the current pan/zoom
+     * transform is preserved, only the focused highlight is removed. Works
+     * with `v-model:focus`: clicking an unfocused feature emits its id;
+     * clicking a focused feature emits `null` (toggle off). Users can
+     * pan/zoom away from the focused area even when `zoom` and `pan` are
+     * disabled, and the built-in Reset button clears focus *and* resets
+     * the zoom to its initial state. If a tooltip is configured, focusing
+     * a feature shows its tooltip.
      */
     focus?: string | string[] | null;
     /** Scale factor applied when `focus` is set. Default: 4 */
@@ -339,11 +341,12 @@ function resolveFocusFeatures(rawIds: string[]): ChoroplethFeature[] {
   return out;
 }
 
-// Duration of the focus zoom transition (ms). Initial mount and explicit
-// "clear focus" still snap instantly; only focus-prop changes animate.
+// Duration (ms) of focus zoom-in and Reset-button zoom-out transitions.
+// Initial mount applies instantly; clearing focus is a no-op on the
+// transform (the Reset button is the only path back to identity).
 const FOCUS_ANIM_MS = 450;
 // Tracks whether applyFocus has been called once — initial mount apply
-// is instant, subsequent updates animate.
+// is instant, subsequent focus-in calls animate.
 let focusApplied = false;
 
 function applyFocus() {
@@ -373,22 +376,23 @@ function applyFocus() {
   focusedPathEls.clear();
   for (const p of nextFocused) focusedPathEls.add(p);
 
-  const svg = select(svgRef.value);
-  // Always cancel any in-flight transition first — d3-transition queues
-  // same-named transitions rather than replacing them, so rapid focus
-  // changes would otherwise chain animations end-to-end. Also lets a
-  // straight-snap path actually take effect mid-animation.
-  svg.interrupt();
-  // First apply (initial mount) is instant. Only zoom-IN animates;
-  // clearing snaps back. Matches resetZoom's instant feel.
-  const animate = focusApplied && features.length > 0;
-  focusApplied = true;
-
+  // Clearing focus doesn't touch the zoom transform — the user keeps
+  // whatever pan/zoom they had. Only the Reset button snaps back to
+  // identity. Drop the highlight + tooltip and we're done.
   if (features.length === 0) {
-    zoomBehavior.transform(svg, zoomIdentity);
+    focusApplied = true;
     clearHover();
     return;
   }
+
+  const svg = select(svgRef.value);
+  // Always cancel any in-flight transition first — d3-transition queues
+  // same-named transitions rather than replacing them, so rapid focus
+  // changes would otherwise chain animations end-to-end.
+  svg.interrupt();
+  // First apply (initial mount) is instant; subsequent focus-in animates.
+  const animate = focusApplied;
+  focusApplied = true;
 
   // Compute pan + scale onto the focused features' bounding box, in
   // viewBox (canonical) coordinates.
@@ -438,13 +442,17 @@ function applyFocus() {
 
 function resetZoom() {
   if (!svgRef.value || !zoomBehavior) return;
-  const svg = select(svgRef.value);
-  // Cancel any in-flight focus animation before snapping so the transition
-  // can't keep writing transforms after we set identity.
-  svg.interrupt();
-  zoomBehavior.transform(svg, zoomIdentity);
-  // Keep v-model:focus in sync when the user resets a focused view.
+  // Reset both the zoom transform AND any active focus. The watcher's
+  // applyFocus call (post-flush) only tears down the highlight strokes
+  // now; this transition handles the actual zoom-out animation.
   if (normalizedFocus.value.length > 0) emit("update:focus", null);
+  const svg = select(svgRef.value);
+  svg.interrupt();
+  hideTooltip();
+  svg
+    .transition()
+    .duration(FOCUS_ANIM_MS)
+    .call(zoomBehavior.transform, zoomIdentity);
 }
 
 // `focusZoomLevel` only affects scaleExtent + the next focus apply. The
