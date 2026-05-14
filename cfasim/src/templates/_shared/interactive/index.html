@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{{ project_name }}</title>
+    {% if runtime == "python" %}
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    {% endif %}
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
