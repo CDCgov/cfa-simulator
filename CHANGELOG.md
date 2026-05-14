@@ -1,6 +1,16 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.4.4] - 2026-05-14
+
+### Bug Fixes
+
+- **pyodide:** Clear stale wheels before each build
+
+### Features
+
+- **docs:** Hot-reload library source edits in vitepress dev
+
 ## [0.4.3] - 2026-05-13
 
 ### Bug Fixes
