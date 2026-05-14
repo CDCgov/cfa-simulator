@@ -1,6 +1,14 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.4.5] - 2026-05-14
+
+### Features
+
+- **scaffold:** Preconnect to jsdelivr in Pyodide template
+- **ChoroplethMap:** Animate Reset, preserve zoom on unfocus
+- **ChoroplethMap:** DataGeoType + multi-feature focus with overlay layer
+
 ## [0.4.4] - 2026-05-14
 
 ### Bug Fixes
