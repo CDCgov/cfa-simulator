@@ -55,6 +55,32 @@ export interface CategoricalStop {
   color: string;
 }
 
+/**
+ * A focused feature. Pass a plain string to focus a feature in the map's
+ * current `geoType` with the default solid highlight, or an object to
+ * specify a different `geoType` (drawn as an overlay on top of the base
+ * map) and/or a `style`.
+ */
+export type FocusStyle = "solid" | "dashed" | "dotted";
+
+export interface FocusItem {
+  /** Feature id (FIPS code, HSA code) or name. */
+  id: string;
+  /** Defaults to the map's `geoType`. Cross-geoType items render as
+   * non-interactive outlines on top of the base map. */
+  geoType?: GeoType;
+  /** Outline style. `"solid"` (default) matches the hover highlight;
+   * `"dashed"` uses long dashes; `"dotted"` uses small round dots —
+   * useful when stacking multiple outlines of different geoTypes. */
+  style?: FocusStyle;
+  /** Stroke color for the outline. Applies to cross-geoType overlay
+   * paths only (base-geoType highlights stay at the default focus
+   * color). Default: `"#fff"`. */
+  stroke?: string;
+}
+
+export type FocusValue = string | FocusItem | Array<string | FocusItem> | null;
+
 const props = withDefaults(
   defineProps<{
     /** TopoJSON topology object (e.g. from us-atlas/states-10m.json or us-atlas/counties-10m.json).
@@ -64,6 +90,15 @@ const props = withDefaults(
     data?: StateData[];
     /** Geographic type: "states" (default), "counties", or "hsas" (Health Service Areas) */
     geoType?: GeoType;
+    /**
+     * GeoType of the entries in `data`, if different from `geoType`. Lets
+     * you color a county-level base map by HSA values (each county fills
+     * with its parent HSA's value) or by state values, without changing
+     * the rendered/interactive geometry. Supported combinations:
+     * `counties` ← `hsas`, `counties` ← `states`, `hsas` ← `states`.
+     * When unset, data ids must match the base `geoType`.
+     */
+    dataGeoType?: GeoType;
     width?: number;
     height?: number;
     colorScale?: ChoroplethColorScale | ThresholdStop[] | CategoricalStop[];
@@ -106,17 +141,20 @@ const props = withDefaults(
      */
     tooltipClamp?: "none" | "chart" | "window";
     /**
-     * Feature id(s) (FIPS code, HSA code, or feature name) to pan/zoom to.
-     * Pass `null` or an empty array to clear focus — the current pan/zoom
-     * transform is preserved, only the focused highlight is removed. Works
-     * with `v-model:focus`: clicking an unfocused feature emits its id;
-     * clicking a focused feature emits `null` (toggle off). Users can
-     * pan/zoom away from the focused area even when `zoom` and `pan` are
-     * disabled, and the built-in Reset button clears focus *and* resets
-     * the zoom to its initial state. If a tooltip is configured, focusing
-     * a feature shows its tooltip.
+     * Feature(s) to pan/zoom to. Accepts a feature id (FIPS code, HSA
+     * code, or feature name), a `FocusItem` object, or an array of
+     * either. `FocusItem` lets you pin features from a different
+     * `geoType` than the base map (drawn as a non-interactive outline) or
+     * pick a `style` ("solid" / "dashed"). All items contribute to the
+     * zoom bounds. Pass `null` or an empty array to clear focus — the
+     * current pan/zoom transform is preserved; only the highlight is
+     * removed. Works with `v-model:focus`: clicking an unfocused feature
+     * (in the base geoType) emits its id; clicking the focused feature
+     * emits `null`. The built-in Reset button clears focus *and* resets
+     * the zoom. If a tooltip is configured, focusing a feature in the
+     * base geoType shows its tooltip.
      */
-    focus?: string | string[] | null;
+    focus?: FocusValue;
     /** Scale factor applied when `focus` is set. Default: 4 */
     focusZoomLevel?: number;
   }>(),
@@ -172,7 +210,14 @@ const narrowSlotProps = (
 
 const containerRef = ref<HTMLElement | null>(null);
 const svgRef = ref<SVGSVGElement | null>(null);
+// `mapGroupRef` is the zoom target. Inside it we split into two layers:
+// `baseGroupRef` holds feature paths + the state-borders mesh and absorbs
+// click/hover events, while `overlayGroupRef` holds focus overlay paths
+// and always sits above so cross-geoType outlines never get covered by a
+// hover-raised base path.
 const mapGroupRef = ref<SVGGElement | null>(null);
+const baseGroupRef = ref<SVGGElement | null>(null);
+const overlayGroupRef = ref<SVGGElement | null>(null);
 const tooltipChildRef = ref<InstanceType<typeof ChoroplethTooltip> | null>(
   null,
 );
@@ -192,7 +237,14 @@ let hoveredEl: SVGPathElement | null = null;
 // Paths currently styled as focused. Tracked separately from hover so the
 // two states compose: hovering a focused path keeps the highlight on
 // un-hover, and clearing focus while still hovering keeps the hover style.
-const focusedPathEls = new Set<SVGPathElement>();
+// Maps each focused base-geoType path to the style it was given so a
+// repeat focus with a different style can re-apply without diffing the
+// attribute set manually.
+const focusedPathStyles = new Map<SVGPathElement, FocusStyle>();
+// Cross-geoType focus items render as standalone outline paths layered on
+// top of the base map. Keyed by `${geoType}:${id}` so we can diff add /
+// remove / restyle on each applyFocus.
+const overlayPathEls = new Map<string, SVGPathElement>();
 let isZooming = false;
 // TODO: map hover/tooltip causes performance issues on mobile (SVG stroke-width
 // changes + compositing layers degrade zoom/pan). Disabled on touch devices.
@@ -317,26 +369,42 @@ function teardownZoom() {
   }
 }
 
-// Resolve user-facing focus identifiers (FIPS, HSA codes, or feature names)
-// to canonical feature ids. Used both for highlighting/zoom and for the
-// click-to-toggle "is this feature currently focused?" check.
-function resolveFocusIds(rawIds: string[]): Set<string> {
-  const byId = featuresById.value;
-  const nameIdx = nameToFeatureId.value;
-  const out = new Set<string>();
-  for (const raw of rawIds) {
-    const id = byId.has(raw) ? raw : nameIdx.get(raw);
-    if (id != null) out.add(id);
+// Resolved focus item: ties a user-supplied FocusItem to the actual
+// GeoJSON feature it refers to plus a stable cross-geoType cache key.
+interface ResolvedFocus {
+  item: FocusItem;
+  geoType: GeoType;
+  feature: ChoroplethFeature;
+  /** Stable key for overlay-path lifecycle: `${geoType}:${featureId}` */
+  key: string;
+}
+
+function resolveFocusItems(items: FocusItem[]): ResolvedFocus[] {
+  const lookups = featuresByGeoType.value;
+  const nameLookups = nameToIdByGeoType.value;
+  const out: ResolvedFocus[] = [];
+  for (const item of items) {
+    const geoType = item.geoType ?? props.geoType;
+    const lookup = lookups.get(geoType);
+    if (!lookup) continue;
+    let f = lookup.get(item.id);
+    if (!f) {
+      // Name fallback in the item's own geoType.
+      const id = nameLookups.get(geoType)?.get(item.id);
+      if (id) f = lookup.get(id);
+    }
+    if (!f) continue;
+    out.push({ item, geoType, feature: f, key: `${geoType}:${String(f.id)}` });
   }
   return out;
 }
 
-function resolveFocusFeatures(rawIds: string[]): ChoroplethFeature[] {
-  const byId = featuresById.value;
-  const out: ChoroplethFeature[] = [];
-  for (const id of resolveFocusIds(rawIds)) {
-    const f = byId.get(id);
-    if (f) out.push(f);
+// Click-to-toggle uses only the base-geoType focus ids — clicks on
+// overlay paths are blocked by pointer-events: none.
+function focusedBaseIds(items: FocusItem[]): Set<string> {
+  const out = new Set<string>();
+  for (const r of resolveFocusItems(items)) {
+    if (r.geoType === props.geoType) out.add(String(r.feature.id));
   }
   return out;
 }
@@ -351,35 +419,40 @@ let focusApplied = false;
 
 function applyFocus() {
   if (!svgRef.value || !zoomBehavior) return;
-  const ids = normalizedFocus.value;
-  const features = ids.length > 0 ? resolveFocusFeatures(ids) : [];
+  const resolved = resolveFocusItems(normalizedFocus.value);
 
-  // Compute the new highlight set first so we can diff against the
-  // previous one without re-resolving twice.
-  const nextFocused = new Set<SVGPathElement>();
-  for (const f of features) {
-    const p = pathsByFeatureId.get(String(f.id));
-    if (p) nextFocused.add(p);
+  // Split into items that live in the base geoType (decorate the
+  // existing path) and items that need their own overlay path.
+  const baseResolved = resolved.filter((r) => r.geoType === props.geoType);
+  const overlayResolved = resolved.filter((r) => r.geoType !== props.geoType);
+
+  // Diff base-geoType highlights, keyed by path element so we can
+  // restyle on style change without churning unrelated paths.
+  const nextBaseStyles = new Map<SVGPathElement, FocusStyle>();
+  for (const r of baseResolved) {
+    const p = pathsByFeatureId.get(String(r.feature.id));
+    if (p) nextBaseStyles.set(p, r.item.style ?? "solid");
   }
-
-  // Restore strokes on paths that are no longer focused. Skip those still
-  // hovered — hover keeps its own highlight.
-  for (const p of focusedPathEls) {
-    if (nextFocused.has(p) || p === hoveredEl) continue;
+  for (const [p] of focusedPathStyles) {
+    if (nextBaseStyles.has(p) || p === hoveredEl) continue;
     restoreDefaultStroke(p);
   }
-  // Apply highlight to newly-focused paths (skip those already hovered:
-  // hover style is visually identical, no DOM churn needed).
-  for (const p of nextFocused) {
-    if (!focusedPathEls.has(p) && p !== hoveredEl) applyHighlightStroke(p);
+  for (const [p, style] of nextBaseStyles) {
+    const prev = focusedPathStyles.get(p);
+    if (prev === style && p !== hoveredEl) continue; // already styled
+    if (p !== hoveredEl) applyHighlightStroke(p, style);
   }
-  focusedPathEls.clear();
-  for (const p of nextFocused) focusedPathEls.add(p);
+  focusedPathStyles.clear();
+  for (const [p, style] of nextBaseStyles) focusedPathStyles.set(p, style);
+
+  // Cross-geoType outlines render as non-interactive paths on top of
+  // the base layer.
+  syncOverlayPaths(overlayResolved);
 
   // Clearing focus doesn't touch the zoom transform — the user keeps
   // whatever pan/zoom they had. Only the Reset button snaps back to
   // identity. Drop the highlight + tooltip and we're done.
-  if (features.length === 0) {
+  if (resolved.length === 0) {
     focusApplied = true;
     clearHover();
     return;
@@ -394,11 +467,11 @@ function applyFocus() {
   const animate = focusApplied;
   focusApplied = true;
 
-  // Compute pan + scale onto the focused features' bounding box, in
-  // viewBox (canonical) coordinates.
+  // Combined bounding box over every resolved feature (regardless of
+  // geoType) so multi-layer focus zooms to fit them all.
   const [[x0, y0], [x1, y1]] = pathGenerator.value.bounds({
     type: "FeatureCollection",
-    features,
+    features: resolved.map((r) => r.feature),
   });
   const cx = (x0 + x1) / 2;
   const cy = (y0 + y1) / 2;
@@ -407,9 +480,13 @@ function applyFocus() {
     .translate(width.value / 2 - k * cx, height.value / 2 - k * cy)
     .scale(k);
 
+  // Tooltip target: prefer the first base-geoType item (overlay paths
+  // are non-interactive and don't carry tooltip data). Falls back to
+  // skipping the tooltip entirely when only overlays are focused.
+  const tooltipTarget = baseResolved[0]?.feature ?? null;
   const showFocusTooltip = () => {
-    if (!hasInteractiveTooltip.value) return;
-    const firstId = String(features[0].id);
+    if (!hasInteractiveTooltip.value || !tooltipTarget) return;
+    const firstId = String(tooltipTarget.id);
     const pathEl = pathsByFeatureId.get(firstId);
     if (!pathEl) return;
     // Read the rect *after* the transform commits so the tooltip lands at
@@ -437,6 +514,45 @@ function applyFocus() {
   } else {
     zoomBehavior.transform(svg, target);
     showFocusTooltip();
+  }
+}
+
+function syncOverlayPaths(items: ResolvedFocus[]) {
+  const g = overlayGroupRef.value;
+  if (!g) return;
+
+  const nextKeys = new Set(items.map((i) => i.key));
+  for (const [key, el] of overlayPathEls) {
+    if (!nextKeys.has(key)) {
+      el.remove();
+      overlayPathEls.delete(key);
+    }
+  }
+
+  const generator = pathGenerator.value;
+  // Overlay strokes need extra weight: they paint on top of the base
+  // map and the (optional) state-borders mesh, so a stroke that matches
+  // the in-place focused base path's weight would visually merge with
+  // the layers underneath.
+  const sw = effectiveStrokeWidth.value + 1.5;
+  for (const { item, feature: f, key } of items) {
+    let el = overlayPathEls.get(key);
+    if (!el) {
+      el = document.createElementNS(SVG_NS, "path") as SVGPathElement;
+      el.setAttribute("d", generator(f) ?? "");
+      el.setAttribute("fill", "none");
+      el.setAttribute("pointer-events", "none");
+      el.setAttribute("vector-effect", "non-scaling-stroke");
+      el.setAttribute("stroke-linejoin", "round");
+      el.setAttribute("class", "focus-overlay");
+      g.appendChild(el);
+      overlayPathEls.set(key, el);
+    }
+    // White contrasts cleanly against the (typically dark) data-colored
+    // fill; callers can override per-item via `FocusItem.stroke`.
+    el.setAttribute("stroke", item.stroke ?? "#fff");
+    el.setAttribute("stroke-width", String(sw));
+    applyDasharray(el, item.style);
   }
 }
 
@@ -553,17 +669,42 @@ const effectiveStrokeWidth = computed(() =>
     : props.strokeWidth,
 );
 
-// O(features + data) name→id index, so `dataMap` doesn't fall back to a
-// linear scan per data point (previously O(features × data)).
-const nameToFeatureId = computed(() => {
-  const m = new Map<string, string>();
-  for (const f of featuresGeo.value.features) {
-    if (f.properties?.name != null && f.id != null) {
-      m.set(f.properties.name, String(f.id));
+// Per-geoType name → id index, mirroring featuresByGeoType. Drives the
+// "pass a feature name instead of an id" fallback for both `data` (with
+// dataGeoType applied) and `focus` (where each FocusItem can specify its
+// own geoType). O(features) per geoType, computed once per topology change.
+const nameToIdByGeoType = computed(() => {
+  const map = new Map<GeoType, Map<string, string>>();
+  for (const [gt, lookup] of featuresByGeoType.value) {
+    const m = new Map<string, string>();
+    for (const [id, f] of lookup) {
+      if (f.properties?.name != null) m.set(f.properties.name, id);
     }
+    map.set(gt, m);
   }
-  return m;
+  return map;
 });
+
+// Maps a base feature id to the id it should look up in `dataMap` under
+// the active `dataGeoType`. Supports county→hsa (via fipsToHsa), county→
+// state (FIPS prefix), and hsa→state (HSA-code prefix). Returns the id
+// unchanged when dataGeoType is unset or equal to the base geoType.
+function baseToDataId(baseId: string): string | undefined {
+  const dataGt = props.dataGeoType;
+  if (!dataGt || dataGt === props.geoType) return baseId;
+  if (props.geoType === "counties" && dataGt === "hsas") {
+    return fipsToHsa[baseId];
+  }
+  if (props.geoType === "counties" && dataGt === "states") {
+    return baseId.slice(0, 2);
+  }
+  if (props.geoType === "hsas" && dataGt === "states") {
+    return baseId.slice(0, 2);
+  }
+  // Other combinations (e.g. coloring HSAs by per-county data) require
+  // aggregation rules we haven't specified — silently treat as no data.
+  return undefined;
+}
 
 // id → feature lookup used by `applyFocus`. Cached so focus changes don't
 // trigger a linear scan through 3k+ features per apply.
@@ -575,23 +716,72 @@ const featuresById = computed(() => {
   return m;
 });
 
-// Stable, deduped array form of `props.focus`. Drives the focus watcher;
-// scalar `string` and `string[]` collapse to the same shape so the watcher
-// only fires on a real change.
-const normalizedFocus = computed<string[]>(() => {
+// Normalized array form of `props.focus`. Bare strings collapse into
+// `{ id }` so downstream code only has to deal with FocusItem objects.
+const normalizedFocus = computed<FocusItem[]>(() => {
   const f = props.focus;
   if (f == null) return [];
-  if (Array.isArray(f)) return f;
-  return [f];
+  const arr = Array.isArray(f) ? f : [f];
+  return arr.map((x) => (typeof x === "string" ? { id: x } : x));
+});
+
+// Per-geoType feature lookups. Populated for any geoType the topology
+// supports (states-only topology → just "states"; counties topology →
+// all three, with HSAs derived via the FIPS→HSA mapping). Used by
+// resolveFocusItems so a single focus call can mix geoTypes.
+const featuresByGeoType = computed(() => {
+  const map = new Map<GeoType, Map<string, ChoroplethFeature>>();
+  // The base geoType is always represented — reuse the existing lookup.
+  map.set(props.geoType, featuresById.value);
+
+  const topo = toRaw(props.topology) as unknown as {
+    objects?: { states?: NamedGeometry; counties?: NamedGeometry };
+  };
+  const objs = topo?.objects;
+  if (!objs) return map;
+
+  type AnyFeature = GeoJSON.Feature<GeoJSON.Geometry | null>;
+  const indexFeatures = (feats: AnyFeature[]) => {
+    const m = new Map<string, ChoroplethFeature>();
+    for (const f of feats) {
+      if (f.id != null) m.set(String(f.id), f as ChoroplethFeature);
+    }
+    return m;
+  };
+
+  if (!map.has("states") && objs.states) {
+    const fc = feature(topo as unknown as Topology, objs.states);
+    map.set(
+      "states",
+      indexFeatures(
+        (fc as GeoJSON.FeatureCollection<GeoJSON.Geometry | null>).features,
+      ),
+    );
+  }
+  if (!map.has("counties") && objs.counties) {
+    const fc = feature(topo as unknown as Topology, objs.counties);
+    map.set(
+      "counties",
+      indexFeatures(
+        (fc as GeoJSON.FeatureCollection<GeoJSON.Geometry | null>).features,
+      ),
+    );
+  }
+  if (!map.has("hsas") && objs.counties) {
+    map.set("hsas", indexFeatures(hsaFeaturesGeo.value.features));
+  }
+  return map;
 });
 
 const dataMap = computed(() => {
   const map = new Map<string, number | string>();
   if (!props.data) return map;
-  const nameIdx = nameToFeatureId.value;
+  // Name fallback resolves in whichever geoType the data is keyed by.
+  const dataGt = props.dataGeoType ?? props.geoType;
+  const nameIdx = nameToIdByGeoType.value.get(dataGt);
   for (const d of props.data) {
     map.set(d.id, d.value);
-    const fid = nameIdx.get(d.id);
+    const fid = nameIdx?.get(d.id);
     if (fid) map.set(fid, d.value);
   }
   return map;
@@ -670,9 +860,15 @@ const categoricalByValue = computed(() => {
   return m;
 });
 
+/** Looks up the data value for a base feature id, honoring `dataGeoType`. */
+function valueFor(baseId: string): number | string | undefined {
+  const dataId = baseToDataId(baseId);
+  return dataId == null ? undefined : dataMap.value.get(dataId);
+}
+
 /** Single color-resolution path. Returns the noData color for missing rows. */
 function colorFor(id: string): string {
-  const value = dataMap.value.get(id);
+  const value = valueFor(id);
   const noData = props.noDataColor!;
   if (value == null) return noData;
   const cat = categoricalByValue.value;
@@ -797,32 +993,69 @@ function hideTooltip() {
   if (el) el.style.visibility = "hidden";
 }
 
-function applyHighlightStroke(pathEl: SVGPathElement) {
+/**
+ * Sets `stroke-dasharray` (and `stroke-linecap` for round dots) on a
+ * path element to match the requested FocusStyle. Used both for
+ * highlighted base paths and for cross-geoType overlay paths.
+ */
+function applyDasharray(el: SVGPathElement, style?: FocusStyle) {
+  if (style === "dashed") {
+    // Long dash + short gap so the pattern reads clearly even when the
+    // overlay is painted on top of a similarly-colored parent-border
+    // mesh.
+    el.setAttribute("stroke-dasharray", "8 4");
+    el.removeAttribute("stroke-linecap");
+  } else if (style === "dotted") {
+    // 0-length dashes with round caps render as evenly-spaced dots.
+    el.setAttribute("stroke-dasharray", "0 5");
+    el.setAttribute("stroke-linecap", "round");
+  } else {
+    el.removeAttribute("stroke-dasharray");
+    el.removeAttribute("stroke-linecap");
+  }
+}
+
+function applyHighlightStroke(
+  pathEl: SVGPathElement,
+  style: FocusStyle = "solid",
+) {
   // Bring path to top so its thicker border isn't clipped by neighbors.
+  // Skip for overlay paths (they live above everything and own their
+  // own z-order via syncOverlayPaths).
   pathEl.parentNode?.appendChild(pathEl);
   pathEl.setAttribute("stroke-width", String(effectiveStrokeWidth.value + 1));
   pathEl.setAttribute("stroke", "#555");
+  applyDasharray(pathEl, style);
 }
 
 function restoreDefaultStroke(pathEl: SVGPathElement) {
   pathEl.setAttribute("stroke-width", String(effectiveStrokeWidth.value));
   pathEl.setAttribute("stroke", props.strokeColor);
+  pathEl.removeAttribute("stroke-dasharray");
+  pathEl.removeAttribute("stroke-linecap");
 }
 
 function setHover(pathEl: SVGPathElement) {
   if (hoveredEl === pathEl) return;
-  if (hoveredEl && !focusedPathEls.has(hoveredEl)) {
+  if (hoveredEl && !focusedPathStyles.has(hoveredEl)) {
     // Restore previous hover unless it's also focused — focus keeps the
     // highlight on its own.
     restoreDefaultStroke(hoveredEl);
   }
   hoveredEl = pathEl;
-  applyHighlightStroke(pathEl);
+  // Hover style follows whatever focus style is in effect (or solid).
+  applyHighlightStroke(pathEl, focusedPathStyles.get(pathEl) ?? "solid");
 }
 
 function clearHover() {
   if (hoveredEl) {
-    if (!focusedPathEls.has(hoveredEl)) restoreDefaultStroke(hoveredEl);
+    const focusStyle = focusedPathStyles.get(hoveredEl);
+    if (focusStyle == null) {
+      restoreDefaultStroke(hoveredEl);
+    } else {
+      // Restore the focused style (in case hover overwrote a dashed item).
+      applyHighlightStroke(hoveredEl, focusStyle);
+    }
     hoveredEl = null;
     emit("stateHover", null);
   }
@@ -852,7 +1085,7 @@ function onDelegatedEvent(event: Event) {
     // clicking any other feature emits its id. With a `focus` array, any
     // click on a member clears everything — parents wanting fine-grained
     // multi-select handle merging themselves via `@update:focus`.
-    const wasFocused = resolveFocusIds(normalizedFocus.value).has(data.id);
+    const wasFocused = focusedBaseIds(normalizedFocus.value).has(data.id);
     emit("update:focus", wasFocused ? null : data.id);
   } else if (event.type === "mouseover") {
     setHover(pathsByFeatureId.get(featId)!);
@@ -886,16 +1119,23 @@ function makePath(d: string | null): SVGPathElement {
 }
 
 function rebuildPaths() {
-  const g = mapGroupRef.value;
-  if (!g) return;
-  while (g.firstChild) g.removeChild(g.firstChild);
+  const baseG = baseGroupRef.value;
+  const overlayG = overlayGroupRef.value;
+  if (!baseG || !overlayG) return;
+  // Only the base group is wiped — the overlay group stays in place so
+  // applyFocus can repopulate it. Overlay path *elements* are dropped
+  // from the tracking map so applyFocus rebuilds them against the new
+  // base tree (their `d` attributes are derived from `pathGenerator`).
+  while (baseG.firstChild) baseG.removeChild(baseG.firstChild);
+  while (overlayG.firstChild) overlayG.removeChild(overlayG.firstChild);
   pathsByFeatureId.clear();
   tooltipDataById.clear();
   bordersPathEl = null;
   hoveredEl = null;
-  // Old focused paths are about to be detached — drop refs so applyFocus
-  // can re-resolve against the new path tree.
-  focusedPathEls.clear();
+  // Old focused / overlay paths are about to be detached — drop refs so
+  // applyFocus can re-resolve against the new path tree.
+  focusedPathStyles.clear();
+  overlayPathEls.clear();
 
   const path = pathGenerator.value;
   const features = featuresGeo.value.features;
@@ -908,7 +1148,7 @@ function rebuildPaths() {
   for (const feat of features) {
     const id = String(feat.id);
     const name = featureName(feat);
-    const value = dataMap.value.get(id);
+    const value = valueFor(id);
     const p = makePath(path(feat));
     p.setAttribute("class", "state-path");
     p.setAttribute("data-feat-id", id);
@@ -947,13 +1187,13 @@ function rebuildPaths() {
     frag.appendChild(b);
     bordersPathEl = b;
   }
-  g.appendChild(frag);
+  baseG.appendChild(frag);
 }
 
 function updateFills() {
   const refreshTitle = !hasInteractiveTooltip.value;
   for (const [id, p] of pathsByFeatureId) {
-    const value = dataMap.value.get(id);
+    const value = valueFor(id);
     const entry = tooltipDataById.get(id);
     p.setAttribute("fill", colorFor(id));
     // Refresh cached tooltip payload so a later hover (or the SVG <title>
@@ -971,7 +1211,7 @@ function updateFills() {
 function updateStrokes() {
   for (const p of pathsByFeatureId.values()) {
     // Highlighted paths (hover / focus) keep their #555 + thicker stroke.
-    if (p === hoveredEl || focusedPathEls.has(p)) continue;
+    if (p === hoveredEl || focusedPathStyles.has(p)) continue;
     restoreDefaultStroke(p);
   }
   if (bordersPathEl) bordersPathEl.setAttribute("stroke", props.strokeColor);
@@ -1084,9 +1324,18 @@ watch(
   () => rebuildPaths(),
 );
 
-// Data or scale → repaint fills (and refresh fallback <title>s).
+// Data or scale → repaint fills (and refresh fallback <title>s). Reading
+// `props.dataGeoType` directly so a change to the parent-mapping mode
+// re-evaluates every county's color even when `dataMap` itself
+// (data-id keyed) is unchanged.
 watch(
-  () => [dataMap.value, props.colorScale, props.noDataColor],
+  () =>
+    [
+      dataMap.value,
+      props.colorScale,
+      props.noDataColor,
+      props.dataGeoType,
+    ] as const,
   () => updateFills(),
 );
 
@@ -1160,10 +1409,16 @@ watch(
       <!--
         Path elements are created imperatively in `rebuildPaths()`; Vue never
         diffs the per-feature subtree so reactive state changes don't walk
-        thousands of vnodes. This <g> is the mount point + event delegation
-        target.
+        thousands of vnodes. `mapGroupRef` carries the zoom transform;
+        `baseGroupRef` holds feature paths + the state-borders mesh and is
+        the event-delegation target; `overlayGroupRef` is the always-on-top
+        focus-overlay layer (separate group so hover-raised base paths
+        can't cover an overlay).
       -->
-      <g ref="mapGroupRef" />
+      <g ref="mapGroupRef">
+        <g ref="baseGroupRef" />
+        <g ref="overlayGroupRef" />
+      </g>
     </svg>
     <button
       v-if="isZoomed"

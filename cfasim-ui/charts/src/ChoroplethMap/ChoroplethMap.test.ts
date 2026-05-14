@@ -796,4 +796,202 @@ describe("ChoroplethMap", () => {
     );
     wrapper.unmount();
   });
+
+  it("renders a cross-geoType FocusItem as a non-interactive overlay path", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: countiesTopo,
+        geoType: "hsas",
+        width: 600,
+        height: 400,
+        focus: [
+          { id: "060766", geoType: "hsas" },
+          { id: "06037", geoType: "counties", style: "dashed" },
+        ],
+        focusZoomLevel: 4,
+      },
+    });
+    await flushPromises();
+    const overlays = wrapper.findAll(".focus-overlay");
+    expect(overlays.length).toBe(1);
+    const overlay = overlays[0];
+    expect(overlay.attributes("stroke")).toBe("#fff");
+    expect(overlay.attributes("stroke-dasharray")).toBe("8 4");
+    expect(overlay.attributes("pointer-events")).toBe("none");
+    expect(overlay.attributes("fill")).toBe("none");
+    wrapper.unmount();
+  });
+
+  it("honors FocusItem.stroke for cross-geoType overlays", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 600,
+        height: 400,
+        focus: { id: "060737", geoType: "hsas", stroke: "#666" },
+      },
+    });
+    await flushPromises();
+    const overlay = wrapper.find(".focus-overlay");
+    expect(overlay.exists()).toBe(true);
+    expect(overlay.attributes("stroke")).toBe("#666");
+    wrapper.unmount();
+  });
+
+  it("removes cross-geoType overlays when focus is cleared", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: countiesTopo,
+        geoType: "hsas",
+        width: 600,
+        height: 400,
+        focus: [
+          { id: "060766", geoType: "hsas" },
+          { id: "06037", geoType: "counties", style: "dashed" },
+        ],
+      },
+    });
+    await flushPromises();
+    expect(wrapper.findAll(".focus-overlay").length).toBe(1);
+    await wrapper.setProps({ focus: null });
+    await flushPromises();
+    expect(wrapper.findAll(".focus-overlay").length).toBe(0);
+    wrapper.unmount();
+  });
+
+  it("applies a solid overlay when style is omitted on a cross-geoType item", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: countiesTopo,
+        geoType: "hsas",
+        width: 600,
+        height: 400,
+        focus: { id: "06037", geoType: "counties" },
+      },
+    });
+    await flushPromises();
+    const overlay = wrapper.find(".focus-overlay");
+    expect(overlay.exists()).toBe(true);
+    expect(overlay.attributes("stroke-dasharray")).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("colors a county base map by HSA values when dataGeoType=hsas", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        dataGeoType: "hsas" as const,
+        width: 600,
+        height: 400,
+        // HSA 060723 is LA County's HSA (per fipsToHsa).
+        data: [{ id: "060723", value: 100 }],
+      },
+    });
+    await flushPromises();
+    // LA County (06037) should pick up HSA 060766's value → not noData.
+    const la = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06037")!;
+    expect(la).toBeDefined();
+    expect(la.attributes("fill")).not.toBe("#ddd");
+    // A county in a different HSA should keep the noData fill.
+    const other = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "36061")!;
+    expect(other.attributes("fill")).toBe("#ddd");
+    wrapper.unmount();
+  });
+
+  it("resolves county fills to parent state values when dataGeoType=states", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        dataGeoType: "states" as const,
+        width: 600,
+        height: 400,
+        // Every California county should pick up "06"'s value.
+        data: [{ id: "06", value: 50 }],
+      },
+    });
+    await flushPromises();
+    const laFill = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06037")!
+      .attributes("fill");
+    const sfFill = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06075")!
+      .attributes("fill");
+    expect(laFill).toBe(sfFill);
+    expect(laFill).not.toBe("#ddd");
+    wrapper.unmount();
+  });
+
+  it("supports name-based data lookup against the data's geoType", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        dataGeoType: "states" as const,
+        width: 600,
+        height: 400,
+        // State name instead of FIPS — should resolve via the states name index.
+        data: [{ id: "California", value: 99 }],
+      },
+    });
+    await flushPromises();
+    const la = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06037")!;
+    expect(la.attributes("fill")).not.toBe("#ddd");
+    wrapper.unmount();
+  });
+
+  it("applies the dotted stroke pattern to a cross-geoType FocusItem", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 600,
+        height: 400,
+        focus: { id: "060737", geoType: "hsas", style: "dotted" },
+      },
+    });
+    await flushPromises();
+    const overlay = wrapper.find(".focus-overlay");
+    expect(overlay.exists()).toBe(true);
+    expect(overlay.attributes("stroke-dasharray")).toBe("0 5");
+    expect(overlay.attributes("stroke-linecap")).toBe("round");
+    wrapper.unmount();
+  });
+
+  it("applies a dashed stroke-dasharray to a same-geoType FocusItem", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        focus: { id: "06", style: "dashed" },
+      },
+    });
+    await flushPromises();
+    const california = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06")!;
+    expect(california.attributes("stroke")).toBe("#555");
+    expect(california.attributes("stroke-dasharray")).toBe("8 4");
+    wrapper.unmount();
+  });
 });

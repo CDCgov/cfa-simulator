@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import countiesTopoForPerf from "us-atlas/counties-10m.json";
+import { fipsToHsa } from "@cfasim-ui/charts";
 
 // Build one row per county (~3,143) with a deterministic-ish value so the
 // perf example can render every region with a custom tooltip.
@@ -16,6 +17,19 @@ const denseCountyData = computed(() => {
 // handles click-to-toggle and emits null when the focused feature is
 // re-clicked.
 const focused = ref(null);
+
+// "Outline a focused feature's parent" demo: focus is a county id;
+// we derive the parent HSA and add it to the focus array as a dashed
+// overlay so clicking a county also outlines its HSA.
+const focusedCounty = ref(null);
+const parentFocus = computed(() => {
+  const fips = focusedCounty.value;
+  if (!fips) return null;
+  const hsa = fipsToHsa[fips];
+  return hsa
+    ? [fips, { id: hsa, geoType: "hsas", style: "dashed", stroke: "#666" }]
+    : fips;
+});
 </script>
 
 # ChoroplethMap
@@ -407,6 +421,124 @@ const focused = ref(null);
   </template>
 </ComponentDemo>
 
+### Color by HSA, interact by county (`dataGeoType`)
+
+Set `dataGeoType` when your data is keyed by a coarser geography than
+the one you want to render. Each county fills with its parent HSA's
+value (via the built-in FIPS → HSA mapping); hover, click, and `focus`
+still operate on the county geometry, and you can layer an HSA outline
+on top with a `FocusItem`.
+
+<ComponentDemo>
+  <ChoroplethMap
+    :topology="countiesTopo"
+    geo-type="counties"
+    data-geo-type="hsas"
+    :pan="true"
+    :zoom="true"
+    :data="[
+      { id: '060737', value: 80 },
+      { id: '060723', value: 60 },
+      { id: '060757', value: 45 },
+      { id: '060807', value: 35 },
+      { id: '060768', value: 25 },
+      { id: '060774', value: 50 },
+    ]"
+    :focus="[
+      { id: '06043' },
+      { id: '060737', geoType: 'hsas', style: 'dashed' },
+    ]"
+    :focus-zoom-level="6"
+    title="HSA-keyed data on a county map"
+    :legend-title="'Cases'"
+    :height="400"
+  />
+
+<template #code>
+
+```vue
+<ChoroplethMap
+  :topology="countiesTopo"
+  geo-type="counties"
+  data-geo-type="hsas"
+  :data="hsaData"
+  :focus="[{ id: '06043' }, { id: '060737', geoType: 'hsas', style: 'dashed' }]"
+  title="HSA-keyed data on a county map"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Outline a focused feature's parent
+
+Use `v-model:focus` together with a computed that derives a parent
+feature (e.g. an HSA from a county via `fipsToHsa`). Pass both as a
+`FocusItem` array — the focused county lights up as usual and the
+parent HSA renders on top as a dashed overlay (`stroke: "#666"` here —
+default is white).
+
+<ComponentDemo>
+  <ChoroplethMap
+    :topology="countiesTopo"
+    geo-type="counties"
+    data-geo-type="hsas"
+    :pan="true"
+    :zoom="true"
+    :focus="parentFocus"
+    @update:focus="focusedCounty = typeof $event === 'string' ? $event : null"
+    :data="[
+      { id: '060737', value: 80 },
+      { id: '060723', value: 60 },
+      { id: '060757', value: 45 },
+      { id: '060807', value: 35 },
+      { id: '060768', value: 25 },
+      { id: '060774', value: 50 },
+    ]"
+    :focus-zoom-level="6"
+    title="Click a county to outline its HSA"
+    :legend-title="'Cases'"
+    :height="400"
+  >
+    <template #tooltip="{ name, value }">
+      <div style="font-weight: 600">{{ name }}</div>
+      <div v-if="value != null">Cases: {{ value }}</div>
+      <div v-else style="opacity: 0.6">No data</div>
+    </template>
+  </ChoroplethMap>
+
+<template #code>
+
+```vue
+<script setup>
+import { ref, computed } from "vue";
+import { fipsToHsa } from "@cfasim-ui/charts";
+
+const focusedCounty = ref(null);
+const focus = computed(() => {
+  const fips = focusedCounty.value;
+  if (!fips) return null;
+  const hsa = fipsToHsa[fips];
+  return hsa
+    ? [fips, { id: hsa, geoType: "hsas", style: "dashed", stroke: "#666" }]
+    : fips;
+});
+</script>
+
+<ChoroplethMap
+  :topology="countiesTopo"
+  geo-type="counties"
+  data-geo-type="hsas"
+  :data="hsaData"
+  :focus="focus"
+  @update:focus="focusedCounty = typeof $event === 'string' ? $event : null"
+  title="Click a county to outline its HSA"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Custom tooltip number format
 
 Pass `tooltip-value-format` to format numeric values shown in the tooltip
@@ -594,5 +726,24 @@ interface CategoricalStop {
   value: string;
   /** CSS color string */
   color: string;
+}
+```
+
+### FocusItem
+
+The `focus` prop accepts a bare id, a `FocusItem`, or an array of either. Use objects when you want to pin features from a different `geoType` than the base map, or pick a non-default outline style.
+
+```ts
+interface FocusItem {
+  /** Feature id (FIPS code, HSA code) or name. */
+  id: string;
+  /** Defaults to the map's geoType. Cross-geoType items render as
+   * non-interactive outlines on top of the base map. */
+  geoType?: "states" | "counties" | "hsas";
+  /** Outline style. "solid" (default) matches the hover highlight;
+   * "dashed" uses long dashes; "dotted" uses small round dots. */
+  style?: "solid" | "dashed" | "dotted";
+  /** Stroke color for cross-geoType overlay paths. Default: "#fff". */
+  stroke?: string;
 }
 ```

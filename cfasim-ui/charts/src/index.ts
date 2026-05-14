@@ -17,7 +17,11 @@ export {
   type ChoroplethColorScale,
   type ThresholdStop,
   type CategoricalStop,
+  type FocusItem,
+  type FocusValue,
+  type FocusStyle,
 } from "./ChoroplethMap/ChoroplethMap.vue";
+export { fipsToHsa, hsaNames } from "./ChoroplethMap/hsaMapping.js";
 export { default as ChartTooltip } from "./ChartTooltip/ChartTooltip.vue";
 export {
   default as DataTable,
