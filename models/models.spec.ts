@@ -4,16 +4,27 @@ test("home page lists all models", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("h1")).toContainText("Models");
   const cards = page.locator(".model-card");
-  await expect(cards).toHaveCount(3);
+  await expect(cards).toHaveCount(4);
   await expect(cards.nth(0)).toContainText("Reed-Frost Epidemic");
-  await expect(cards.nth(1)).toContainText("Python Example");
-  await expect(cards.nth(2)).toContainText("Fetch Example");
+  await expect(cards.nth(1)).toContainText("Ixa Example");
+  await expect(cards.nth(2)).toContainText("Python Example");
+  await expect(cards.nth(3)).toContainText("Fetch Example");
 });
 
 test("reed-frost model renders", async ({ page }) => {
   await page.goto("/reed-frost");
   await expect(page.locator("h1")).toContainText("Reed-Frost Epidemic");
   await expect(page.getByLabel("Population")).toBeVisible();
+});
+
+test("ixa-example model renders", async ({ page }) => {
+  await page.goto("/ixa-example");
+  await expect(page.locator("h1")).toContainText("Ixa Example");
+  await expect(page.getByLabel("Population")).toBeVisible();
+  // Wait for the WASM to finish a run and the chart to draw.
+  await expect(page.locator("svg path").first()).toBeVisible({
+    timeout: 30_000,
+  });
 });
 
 test("python example renders", async ({ page }) => {

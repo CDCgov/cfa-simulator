@@ -18,6 +18,7 @@ static TEMPLATES: Dir = include_dir!("$CARGO_MANIFEST_DIR/src/templates");
 pub enum Template {
     Python,
     Rust,
+    Ixa,
 }
 
 impl Template {
@@ -25,6 +26,7 @@ impl Template {
         match self {
             Template::Python => "python",
             Template::Rust => "rust",
+            Template::Ixa => "ixa",
         }
     }
 
@@ -32,6 +34,7 @@ impl Template {
         match self {
             Template::Python => "python",
             Template::Rust => "rust",
+            Template::Ixa => "ixa",
         }
     }
 }
@@ -41,6 +44,7 @@ impl fmt::Display for Template {
         match self {
             Template::Python => write!(f, "Python"),
             Template::Rust => write!(f, "Rust (WASM)"),
+            Template::Ixa => write!(f, "Ixa (Rust agent-based model on WASM)"),
         }
     }
 }
@@ -302,6 +306,11 @@ pub fn run(
                 Template::Rust,
                 "Rust",
                 "Compiles to WebAssembly via wasm-bindgen",
+            )
+            .item(
+                Template::Ixa,
+                "Ixa",
+                "Agent-based model using the ixa framework on WASM",
             )
             .interact()?,
     };

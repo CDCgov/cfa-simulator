@@ -70,6 +70,7 @@ enum Commands {
 enum TemplateArg {
     Python,
     Rust,
+    Ixa,
 }
 
 fn main() -> Result<()> {
@@ -91,6 +92,7 @@ fn main() -> Result<()> {
             let template = template.map(|t| match t {
                 TemplateArg::Python => init::Template::Python,
                 TemplateArg::Rust => init::Template::Rust,
+                TemplateArg::Ixa => init::Template::Ixa,
             });
             init::run(dir, template, local).map_err(|e| anyhow::anyhow!("{e}"))
         }

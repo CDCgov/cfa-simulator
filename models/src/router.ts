@@ -9,6 +9,13 @@ export const models = [
     component: () => import("./reed-frost/Page.vue"),
   },
   {
+    path: "/ixa-example",
+    name: "Ixa Example",
+    description:
+      "Stochastic SIR using the ixa agent-based framework (Rust/WASM)",
+    component: () => import("./ixa-example/Page.vue"),
+  },
+  {
     path: "/python-example",
     name: "Python Example",
     description: "Simple simulation model running via Pyodide",

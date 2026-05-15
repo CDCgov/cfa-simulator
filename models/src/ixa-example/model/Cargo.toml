@@ -1,0 +1,18 @@
+[package]
+name = "ixa-example"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# ixa's default features include `progress_bar`, which is incompatible with
+# wasm32 (the crate emits a compile_error in that combo). Keep the `logging`
+# feature so the WASM-specific bits (wasm-bindgen, web-sys) referenced by
+# ixa's execution_stats / logging modules are pulled in.
+ixa = { version = "2.0.0-beta2.3", default-features = false, features = ["logging"] }
+wasm-bindgen = "0.2"
+cfasim-model = { path = "../../../../cfasim-model" }
+serde = { version = "1", features = ["derive"] }
+rand_distr = "0.5"
