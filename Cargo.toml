@@ -1,6 +1,6 @@
 [workspace]
 members = ["cfasim", "cfasim-model"]
-exclude = ["models/src/reed-frost/model"]
+exclude = ["models/src/reed-frost/model", "models/src/ixa-example/model"]
 resolver = "2"
 
 [workspace.package]

@@ -8,6 +8,7 @@ export default defineConfig({
   plugins: [
     vue(),
     cfasimWasm({ model: "src/reed-frost/model", name: "rust_example" }),
+    cfasimWasm({ model: "src/ixa-example/model", name: "ixa_example" }),
     cfasimPyodide({
       model: "src/python-example/model",
       pypiDeps: ["cfasim-model"],

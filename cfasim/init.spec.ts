@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 const ROOT = resolve(import.meta.dirname, "..");
 const CLI = resolve(ROOT, "target/debug/cfasim");
 
-type Template = "python" | "rust";
+type Template = "python" | "rust" | "ixa";
 
 const TMP_DIR = mkdtempSync(resolve(tmpdir(), "cfasim-test-"));
 
@@ -55,9 +55,30 @@ async function waitForServer(url: string, timeoutMs = 30_000) {
 }
 
 test.describe("cfasim init", () => {
-  const projects: { name: string; template: Template; port: number }[] = [
-    { name: "test-project-python", template: "python", port: 7201 },
-    { name: "test-project-rust", template: "rust", port: 7202 },
+  const projects: {
+    name: string;
+    template: Template;
+    port: number;
+    paramLabel: string;
+  }[] = [
+    {
+      name: "test-project-python",
+      template: "python",
+      port: 7201,
+      paramLabel: "Steps",
+    },
+    {
+      name: "test-project-rust",
+      template: "rust",
+      port: 7202,
+      paramLabel: "Steps",
+    },
+    {
+      name: "test-project-ixa",
+      template: "ixa",
+      port: 7203,
+      paramLabel: "Population",
+    },
   ];
 
   const procs: ChildProcess[] = [];
@@ -132,7 +153,7 @@ test.describe("cfasim init", () => {
 
       await expect(page.locator("h2")).toContainText(p.name);
       await expect(page.locator("h1")).toContainText(p.name);
-      await expect(page.getByLabel("Steps")).toBeVisible();
+      await expect(page.getByLabel(p.paramLabel)).toBeVisible();
 
       // Verify the model actually loaded and drew the chart.
       await expect(page.locator("svg path").first()).toBeVisible({
