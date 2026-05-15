@@ -1,8 +1,3 @@
-//! Minimal ixa SI epidemic. One initial infection; each infectious person
-//! attempts to infect a uniformly random target at rate `infection_rate`,
-//! forever (no recovery). The `run` function returns cumulative infections
-//! sampled at integer time bins, ready for plotting.
-
 use ixa::prelude::*;
 use ixa::{define_entity, define_global_property, define_property, define_rng, Context};
 use rand_distr::Exp;
@@ -30,10 +25,12 @@ define_property!(
 );
 
 /// Schedule this person's next transmission attempt. When the plan fires,
-/// pick a random target; if susceptible, infect them. Repeat until the run
-/// ends. This is the entire dynamic loop.
+/// pick a random target; if susceptible, infect them.
 fn schedule_next_attempt(ctx: &mut Context, infector: PersonId) {
-    let rate = ctx.get_global_property_value(Params).unwrap().infection_rate;
+    let rate = ctx
+        .get_global_property_value(Params)
+        .unwrap()
+        .infection_rate;
     let dt = ctx.sample_distr(MainRng, Exp::new(rate).unwrap());
     let t = ctx.get_current_time() + dt;
     ctx.add_plan(t, move |ctx| {
@@ -46,9 +43,6 @@ fn schedule_next_attempt(ctx: &mut Context, infector: PersonId) {
     });
 }
 
-/// Run one realization of the simulation with the given RNG seed and
-/// return `(time, cumulative_infections)` sampled at integer time bins on
-/// `[0, max_time]`.
 pub fn run(params: Parameters, seed: u64) -> (Vec<f64>, Vec<f64>) {
     let max_time = params.max_time;
     let population = params.population;

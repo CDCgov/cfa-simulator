@@ -14,7 +14,7 @@ The JSON output gives every component's `name`, `slug`, `keywords`, and absolute
 
 - ixa model: `src/model.rs` — a minimal SI epidemic. `Parameters` struct plus `define_entity!`, `define_property!`, `define_global_property!`, and `define_rng!`; a subscription to `Status` changes drives each newly-infected person to schedule their own next exponential transmission attempt. The `run` function takes `Parameters` and returns `(time, cumulative_infections)`.
 - Stats sink: `src/stats.rs` — wraps `define_data_plugin!` so the model just calls `record_infection(ctx, time)` per event and `cumulative_timeseries(ctx, max_time)` at the end. In-memory replacement for ixa's CSV-on-disk reports, which don't work in WASM.
-- WASM entry: `src/lib.rs` — `#[wasm_bindgen] simulate(...)` packages the user-facing arguments into `Parameters`, calls `model::run`, and returns the timeseries via `cfasim-model`'s `ModelOutput`.
+- WASM entry: `src/lib.rs` — `#[wasm_bindgen] simulate(args: &str)` deserializes a `SimulateArgs` struct from the JSON sent by `App.vue`, builds `Parameters`, calls `model::run`, and returns the timeseries via `cfasim-model`'s `ModelOutput`.
 - Vue frontend: `interactive/src/App.vue` — wires UI components to the model via `useModel` from `cfasim-ui/wasm`
 - UI library: [`cfasim-ui`](https://cdcgov.github.io/cfa-simulator/docs/cfasim-ui/) — Vue components, charts, and composables
 
@@ -30,7 +30,7 @@ The JSON output gives every component's `name`, `slug`, `keywords`, and absolute
 
 - Import UI components from `cfasim-ui/components`, charts from `cfasim-ui/charts`, the model hook from `cfasim-ui/wasm`, and utilities from `cfasim-ui/shared`.
 - Use `useUrlParams` (from `cfasim-ui/shared`) to sync reactive parameters to the URL query string.
-- The order of keys in the App.vue `defaults` object must match the positional argument order of the Rust `simulate` function — `useOutputs` passes them positionally.
+- `App.vue` passes params to `simulate` as a JSON string (`{ json: JSON.stringify(params) }`); the Rust side deserializes into `SimulateArgs`, whose `#[serde(rename_all = "camelCase")]` maps the JS keys (`infectionRate`, `nSimulations`, ...) to snake_case fields. When adding a param, update both the JS `defaults` object and the `SimulateArgs` struct.
 - For in-browser ixa runs, never use `context.report_options().directory(...)` — disk I/O fails in the browser. Collect data in an in-memory plugin (see `src/stats.rs` + `define_data_plugin!` in `src/sir.rs`) and serialize through `ModelOutput`.
 - `.cargo/config.toml` sets `--cfg getrandom_backend="wasm_js"` for the `wasm32-unknown-unknown` target, which is required for `getrandom` (transitively used by `rand` / `rand_distr`) to work in the browser.
 
