@@ -13,9 +13,11 @@ import LightDarkToggle from "../LightDarkToggle/LightDarkToggle.vue";
 
 // Optional vue-router integration (no hard dependency).
 // $router/$route on globalProperties is vue-router's stable public API.
+// $route is defined as a getter that returns the current route, so we
+// must re-read it from globalProperties on each access to track changes.
 const instance = getCurrentInstance();
-const router = instance?.appContext.config.globalProperties.$router;
-const route = instance?.appContext.config.globalProperties.$route;
+const globals = instance?.appContext.config.globalProperties;
+const router = globals?.$router;
 
 export interface Tab {
   value: string;
@@ -68,14 +70,13 @@ const activeTab = computed({
 });
 
 // Sync active tab from route changes in router mode
-if (route) {
+if (globals) {
   watch(
-    () => route.path,
-    () => {
-      if (isRouterMode.value) {
-        const match = props.tabs?.find((t) => t.to === route.path);
-        if (match) tab.value = match.value;
-      }
+    () => globals.$route?.path,
+    (path) => {
+      if (!path || !isRouterMode.value) return;
+      const match = props.tabs?.find((t) => t.to === path);
+      if (match) tab.value = match.value;
     },
     { immediate: true },
   );
