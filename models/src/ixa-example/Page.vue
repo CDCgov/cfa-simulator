@@ -1,14 +1,12 @@
 <script setup lang="ts">
-import { reactive, computed } from "vue";
+import { reactive, computed, ref, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { NumberInput, Button } from "@cfasim-ui/components";
 import { LineChart, DataTable } from "@cfasim-ui/charts";
 import { useModel } from "@cfasim-ui/wasm";
 import { useUrlParams } from "@cfasim-ui/shared";
+import type { TypedColumn } from "@cfasim-ui/shared";
 
-// Keys are passed positionally to `simulate` (via Object.values on the
-// reactive params), so they must match the Rust signature order in
-// `model/src/lib.rs`.
 const defaults = {
   infectionRate: 0.5,
   infectiousPeriod: 3.0,
@@ -24,7 +22,23 @@ const { reset } = useUrlParams(params, defaults, {
   route: useRoute(),
 });
 const { useOutputs } = useModel("ixa_example");
-const { outputs, error } = useOutputs("simulate", params);
+// Bundle params as a JSON string so Rust deserializes a single `SimulateArgs`
+// struct (see `model/src/lib.rs`) instead of receiving each field positionally.
+const simArgs = computed(() => ({ json: JSON.stringify(params) }));
+const { outputs, error, loading } = useOutputs("simulate", simArgs);
+
+// Show a "running" message only if a sim run is still in flight after 500ms,
+// so quick re-runs don't flash a message on every slider tick.
+const showLoading = ref(false);
+let loadingTimer: ReturnType<typeof setTimeout> | undefined;
+watch(loading, (l) => {
+  clearTimeout(loadingTimer);
+  if (l) {
+    loadingTimer = setTimeout(() => (showLoading.value = true), 500);
+  } else {
+    showLoading.value = false;
+  }
+});
 
 // Live-update sliders only while the total work (population × runs) is
 // small enough that each re-run is cheap; above that, fall back to
@@ -42,66 +56,71 @@ function fmtCount(v: number | undefined): string {
 //   3. The deterministic SIR ODE trajectory (dashed).
 // Filtering by column name handles re-runs where nSimulations has changed
 // and the wasm output has more/fewer trajectories than before.
-const chartSeries = computed(() => {
+const isFanColumn = (n: string) => /^cumulative_infections_\d+$/.test(n);
+
+// Incidence = first differences of the cumulative curves. The cumulative
+// columns are forward-filled at integer time bins, so incidence[t] is the
+// number of new infections during the interval (t-1, t]. incidence[0] is
+// defined as 0 to keep array lengths aligned with the time axis.
+function diff(arr: ArrayLike<number>): number[] {
+  const out = new Array(arr.length);
+  out[0] = 0;
+  for (let i = 1; i < arr.length; i++) out[i] = arr[i] - arr[i - 1];
+  return out;
+}
+
+function buildSeries(transform: (col: TypedColumn) => TypedColumn | number[]) {
   const s = outputs.value?.series;
   if (!s) return [];
-  const isFan = (n: string) =>
-    n.startsWith("cumulative_infections_") &&
-    /^cumulative_infections_\d+$/.test(n);
-  const fan = s.names.filter(isFan).map((n) => ({
-    data: s.column(n),
+  const fan = s.names.filter(isFanColumn).map((n) => ({
+    data: transform(s.column(n)),
     color: "#2563eb",
     opacity: 0.2,
   }));
   return [
     ...fan,
     {
-      data: s.column("cumulative_infections_median"),
+      data: transform(s.column("cumulative_infections_median")),
       color: "#f87171",
       strokeWidth: 2,
       legend: "Median observed",
     },
     {
-      data: s.column("cumulative_infections_expected"),
+      data: transform(s.column("cumulative_infections_expected")),
       legend: "Expected (deterministic SIR)",
       dashed: true,
     },
   ];
-});
+}
+
+const charts = computed(() => [
+  {
+    series: buildSeries((c) => c),
+    yLabel: "Cumulative infections",
+    height: 400,
+  },
+  {
+    series: buildSeries(diff),
+    yLabel: "Incidence (new infections per time unit)",
+    height: 300,
+  },
+]);
 
 // Summary stats are computed in Rust (`model/src/stats.rs`) and exposed as
-// a length-1 ModelOutput called `summary`. Each observed metric is reported
-// as a 95% credible interval (linear-interp median, nearest-interp 2.5/97.5
-// percentiles) across the n_simulations runs.
+// a length-1 ModelOutput called `summary`. Observed values are the median
+// across the n_simulations runs.
 const summary = computed(() => {
   const s = outputs.value?.summary;
   if (!s) return null;
   const get = (name: string) => s.column(name)[0];
-  const fmtR0 = (v: number) =>
-    Number.isFinite(v) ? (v as number).toFixed(2) : "—";
+  const fmtR0 = (v: number) => (Number.isFinite(v) ? v.toFixed(2) : "—");
   const fmtAr = (v: number) =>
-    Number.isFinite(v) ? `${((v as number) * 100).toFixed(1)}%` : "—";
-  const fmtCi = (
-    med: number,
-    lo: number,
-    hi: number,
-    fmt: (v: number) => string,
-  ) => (Number.isFinite(med) ? `${fmt(med)} (${fmt(lo)}–${fmt(hi)})` : "—");
+    Number.isFinite(v) ? `${(v * 100).toFixed(1)}%` : "—";
   return {
     metric: ["R₀", "Attack rate"],
     observed: [
-      fmtCi(
-        get("r0_observed_median"),
-        get("r0_observed_lo"),
-        get("r0_observed_hi"),
-        fmtR0,
-      ),
-      fmtCi(
-        get("attack_rate_observed_median"),
-        get("attack_rate_observed_lo"),
-        get("attack_rate_observed_hi"),
-        fmtAr,
-      ),
+      fmtR0(get("r0_observed_median")),
+      fmtAr(get("attack_rate_observed_median")),
     ],
     expected: [fmtR0(get("r0_expected")), fmtAr(get("attack_rate_expected"))],
   };
@@ -152,43 +171,41 @@ const summary = computed(() => {
   </Teleport>
   <h1>Ixa Example</h1>
   <p>
-    Stochastic SIR epidemic simulated with the
+    Stochastic SIR model simulated with the
     <a
       href="https://github.com/CDCgov/ixa"
       target="_blank"
       rel="noopener noreferrer"
       >ixa</a
-    >
-    agent-based modelling framework, compiled to WebAssembly. Each newly
-    infectious person schedules their own recovery and their own next
-    exponential transmission attempt; targets are picked uniformly from the
-    population. The chart shows cumulative infections over time.
+    >. Each newly infectious person schedules their own recovery and their own
+    next transmission attempt; targets are picked uniformly from the population.
   </p>
-  <p v-if="error" style="color: red">{{ error }}</p>
-  <LineChart
-    v-if="chartSeries.length"
-    :series="chartSeries"
-    :height="400"
-    x-label="Time"
-    y-label="Cumulative infections"
-    tooltip-trigger="hover"
-  >
-    <template #tooltip="{ xLabel, values }">
-      <div
-        style="display: flex; flex-direction: column; gap: 4px; min-width: 9rem"
-      >
-        <div v-if="xLabel" style="font-weight: 500">{{ xLabel }}</div>
-        <div style="display: flex; justify-content: space-between; gap: 12px">
-          <span style="color: #f87171">Median</span>
-          <span>{{ fmtCount(values[values.length - 2]?.value) }}</span>
+  <p v-if="error" class="error">{{ error }}</p>
+  <p v-if="showLoading" class="loading">Running simulation…</p>
+  <template v-for="chart in charts" :key="chart.yLabel">
+    <LineChart
+      v-if="chart.series.length"
+      :series="chart.series"
+      :height="chart.height"
+      x-label="Time"
+      :y-label="chart.yLabel"
+      tooltip-trigger="hover"
+    >
+      <template #tooltip="{ xLabel, values }">
+        <div class="chart-tooltip">
+          <div v-if="xLabel" class="chart-tooltip-label">{{ xLabel }}</div>
+          <div class="chart-tooltip-row">
+            <span class="chart-tooltip-median">Median</span>
+            <span>{{ fmtCount(values[values.length - 2]?.value) }}</span>
+          </div>
+          <div class="chart-tooltip-row">
+            <span>Expected</span>
+            <span>{{ fmtCount(values[values.length - 1]?.value) }}</span>
+          </div>
         </div>
-        <div style="display: flex; justify-content: space-between; gap: 12px">
-          <span>Expected</span>
-          <span>{{ fmtCount(values[values.length - 1]?.value) }}</span>
-        </div>
-      </div>
-    </template>
-  </LineChart>
+      </template>
+    </LineChart>
+  </template>
   <DataTable
     v-if="summary"
     :data="summary"
@@ -200,3 +217,30 @@ const summary = computed(() => {
     :menu="false"
   />
 </template>
+
+<style scoped>
+.error {
+  color: red;
+}
+.loading {
+  color: var(--cfa-color-text-muted, #666);
+  font-style: italic;
+}
+.chart-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 9rem;
+}
+.chart-tooltip-label {
+  font-weight: 500;
+}
+.chart-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.chart-tooltip-median {
+  color: #f87171;
+}
+</style>

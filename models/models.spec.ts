@@ -25,6 +25,8 @@ test("ixa-example model renders", async ({ page }) => {
   await expect(page.locator("svg path").first()).toBeVisible({
     timeout: 30_000,
   });
+  // Two LineCharts: cumulative infections and incidence.
+  await expect(page.locator(".line-chart-wrapper")).toHaveCount(2);
 });
 
 test("python example renders", async ({ page }) => {

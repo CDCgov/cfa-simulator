@@ -144,27 +144,6 @@ pub fn median(values: &[f64]) -> f64 {
     }
 }
 
-/// Quantile of a 1-D sample using nearest-index interpolation
-/// (`sorted[round(q · (n − 1))]`). Matches Polars'
-/// `Series.quantile(q, "nearest")`, which uses round-half-away-from-zero.
-/// Skips non-finite values; returns `NaN` for an empty input.
-///
-/// Note: Polars and numpy differ on the default for `median` vs `quantile`
-/// — `median` defaults to linear, `quantile` defaults to nearest — so
-/// `quantile_nearest(values, 0.5)` and `median(values)` can disagree for
-/// even-length samples. This crate keeps both helpers separate to match
-/// that convention (see cfa-measles-simulator's `metapop.__init__`).
-pub fn quantile_nearest(values: &[f64], q: f64) -> f64 {
-    let mut sorted: Vec<f64> = values.iter().copied().filter(|v| v.is_finite()).collect();
-    if sorted.is_empty() {
-        return f64::NAN;
-    }
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    let pos = q * (sorted.len() - 1) as f64;
-    let idx = (pos + 0.5) as usize;
-    sorted[idx.min(sorted.len() - 1)]
-}
-
 /// Pointwise median across an ensemble of equal-length trajectories. Returns
 /// a vector of length `trajectories[0].len()` (or empty if the input is
 /// empty). Non-finite values are skipped per bin; if a bin has no finite
@@ -238,19 +217,6 @@ mod tests {
         assert!(median(&[f64::NAN]).is_nan());
         // NaN is skipped; median of the finite values.
         assert_eq!(median(&[1.0, f64::NAN, 3.0]), 2.0);
-    }
-
-    #[test]
-    fn quantile_nearest_matches_polars_rules() {
-        // For n=5, sorted indices 0..=4. q·(n-1) = q·4.
-        // q=0.5  → pos=2.0, idx=round(2.0+0.5)=2 → sorted[2] = 3.
-        // q=0.025 → pos=0.1, idx=round(0.6)=0   → sorted[0] = 1.
-        // q=0.975 → pos=3.9, idx=round(4.4)=4   → sorted[4] = 5.
-        let v = [1.0, 2.0, 3.0, 4.0, 5.0];
-        assert_eq!(quantile_nearest(&v, 0.5), 3.0);
-        assert_eq!(quantile_nearest(&v, 0.025), 1.0);
-        assert_eq!(quantile_nearest(&v, 0.975), 5.0);
-        assert!(quantile_nearest(&[], 0.5).is_nan());
     }
 
     #[test]

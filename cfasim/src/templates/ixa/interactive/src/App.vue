@@ -5,8 +5,6 @@ import { LineChart } from "cfasim-ui/charts";
 import { useModel } from "cfasim-ui/wasm";
 import { useUrlParams } from "cfasim-ui/shared";
 
-// Keys here are passed positionally to `simulate` in the same order they're
-// declared, so they must match the Rust signature in `src/lib.rs`.
 const defaults = {
   infectionRate: 0.5,
   population: 1000,
@@ -16,7 +14,10 @@ const defaults = {
 const params = reactive({ ...defaults });
 const { reset } = useUrlParams(params, defaults);
 const { useOutputs } = useModel("{{ module_name }}");
-const { outputs, loading } = useOutputs("simulate", params);
+// Bundle params as a JSON string so Rust deserializes a single `SimulateArgs`
+// struct (see `src/lib.rs`) instead of receiving each field positionally.
+const simArgs = computed(() => ({ json: JSON.stringify(params) }));
+const { outputs, loading } = useOutputs("simulate", simArgs);
 
 // One translucent series per realization; the overlap reads as a fan.
 const series = computed(() => {

@@ -3,17 +3,17 @@ mod parameters;
 mod stats;
 
 use cfasim_model::{model_outputs, ModelOutput};
+use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
 use crate::parameters::Parameters;
 
-/// Stochastic SIR ensemble. Runs `n_simulations` independent realizations
-/// (each with seed `seed + i`) and emits one `cumulative_infections_{i}`
-/// column per run, plus a single `cumulative_infections_expected` curve
-/// from the deterministic SIR ODE. The summary's observed R₀ and attack
-/// rate are means over the ensemble.
-#[wasm_bindgen]
-pub fn simulate(
+/// Arguments accepted by `simulate`. JS passes these as a single JSON string
+/// (see `Page.vue`); `serde(rename_all = "camelCase")` bridges the JS field
+/// names to the snake_case Rust ones.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SimulateArgs {
     infection_rate: f64,
     infectious_period: f64,
     population: u32,
@@ -21,7 +21,26 @@ pub fn simulate(
     seed: u32,
     max_time: f64,
     n_simulations: u32,
-) -> JsValue {
+}
+
+/// Stochastic SIR ensemble. Runs `n_simulations` independent realizations
+/// (each with seed `seed + i`) and emits one `cumulative_infections_{i}`
+/// column per run, plus a single `cumulative_infections_expected` curve
+/// from the deterministic SIR ODE. The summary's observed R₀ and attack
+/// rate are means over the ensemble.
+#[wasm_bindgen]
+pub fn simulate(args: &str) -> JsValue {
+    let args: SimulateArgs = serde_json::from_str(args).expect("invalid simulate args");
+    let SimulateArgs {
+        infection_rate,
+        infectious_period,
+        population,
+        initial_infections,
+        seed,
+        max_time,
+        n_simulations,
+    } = args;
+
     let base_params = Parameters {
         infection_rate,
         infectious_period,
@@ -72,15 +91,8 @@ pub fn simulate(
         .unwrap_or(0.0);
     let r0_expected = stats::expected_r0(infection_rate, infectious_period);
 
-    // 95% credible interval is the 2.5–97.5 percentile range of the per-run
-    // values, with the central tendency reported as the linear-interpolation
-    // median. Matches cfa-measles-simulator's `_stats`.
     let ar_median = stats::median(&ar_per_run);
-    let ar_lo = stats::quantile_nearest(&ar_per_run, 0.025);
-    let ar_hi = stats::quantile_nearest(&ar_per_run, 0.975);
     let r0_median = stats::median(&r0_per_run);
-    let r0_lo = stats::quantile_nearest(&r0_per_run, 0.025);
-    let r0_hi = stats::quantile_nearest(&r0_per_run, 0.975);
 
     let n = time.len();
     let median = stats::pointwise_median(&trajectories);
@@ -94,12 +106,8 @@ pub fn simulate(
 
     let summary = ModelOutput::new(1)
         .add_f64("r0_observed_median", vec![r0_median])
-        .add_f64("r0_observed_lo", vec![r0_lo])
-        .add_f64("r0_observed_hi", vec![r0_hi])
         .add_f64("r0_expected", vec![r0_expected])
         .add_f64("attack_rate_observed_median", vec![ar_median])
-        .add_f64("attack_rate_observed_lo", vec![ar_lo])
-        .add_f64("attack_rate_observed_hi", vec![ar_hi])
         .add_f64("attack_rate_expected", vec![ar_expected]);
 
     model_outputs([("series", series), ("summary", summary)])

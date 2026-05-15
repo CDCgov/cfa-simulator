@@ -518,6 +518,7 @@ dependencies = [
  "ixa",
  "rand_distr",
  "serde",
+ "serde_json",
  "wasm-bindgen",
 ]
 
