@@ -23,6 +23,7 @@ cfasim-ui is the shared component and theming library you use to make simulators
 - [Hint](./components/hint) — inline tooltip for help text
 - [Icon](./components/icon) — Material Symbols icon
 - [NumberInput](./components/number-input) — number field with optional slider
+- [ParamEditor](./components/param-editor) — lazy-loaded JSON/TOML/YAML editor for parameter sets
 - [SelectBox](./components/select-box) — dropdown select
 - [Spinner](./components/spinner) — loading indicator
 - [TextInput](./components/text-input) — text field
