@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { ChartAnnotation } from "./annotations.js";
+import type { ChartBounds } from "./useChartPadding.js";
 
 const props = withDefaults(
   defineProps<{
@@ -11,9 +12,16 @@ const props = withDefaults(
      * annotation (e.g. an off-projection point on a map).
      */
     project: (x: number, y: number) => { x: number; y: number } | null;
+    /**
+     * Pixel-space bounds of the plot area. Required for rule annotations
+     * so the line can span the full plot. When omitted, rule annotations
+     * are skipped.
+     */
+    bounds?: ChartBounds;
   }>(),
   {
     annotations: () => [],
+    bounds: undefined,
   },
 );
 
@@ -56,7 +64,18 @@ interface RenderedAnnotation {
   pointerPath: string;
   lineColor: string;
   lineWidth: number;
+  lineDash?: string;
   arrow: boolean;
+  rule?: { x1: number; y1: number; x2: number; y2: number };
+}
+
+function resolveDash(
+  dash: string | number | readonly number[] | undefined,
+): string | undefined {
+  if (dash === undefined) return undefined;
+  if (typeof dash === "number") return `${dash} ${dash}`;
+  if (typeof dash === "string") return dash;
+  return dash.join(" ");
 }
 
 /**
@@ -97,6 +116,12 @@ const items = computed<RenderedAnnotation[]>(() => {
     if (!projected) continue;
     if (!isFinite(projected.x) || !isFinite(projected.y)) continue;
 
+    const pointer = a.pointer ?? "curved";
+    const isRule = pointer.startsWith("rule");
+
+    // Rule pointers require known plot bounds.
+    if (isRule && !props.bounds) continue;
+
     const { x: offsetX, y: offsetY } = a.offset;
     const labelX = projected.x + offsetX;
     const labelY = projected.y + offsetY;
@@ -107,8 +132,24 @@ const items = computed<RenderedAnnotation[]>(() => {
     const haloWidth = a.haloWidth ?? DEFAULT_HALO_WIDTH;
     const lineColor = a.lineColor ?? color;
     const lineWidth = a.lineWidth ?? DEFAULT_LINE_WIDTH;
+    const lineDash = resolveDash(a.lineDash);
     const textAnchor =
       a.textAnchor ?? (offsetX > 0 ? "start" : offsetX < 0 ? "end" : "middle");
+
+    let rule: RenderedAnnotation["rule"];
+    let pointerPath = "";
+    if (isRule && props.bounds) {
+      rule = computeRule(pointer, projected.x, projected.y, props.bounds);
+    } else {
+      pointerPath = buildPointerPath(
+        projected.x,
+        projected.y,
+        labelX,
+        labelY,
+        fontSize,
+        pointer as "curved" | "straight" | "none",
+      );
+    }
 
     out.push({
       lines: a.text.split("\n").map(parseInline),
@@ -121,21 +162,46 @@ const items = computed<RenderedAnnotation[]>(() => {
       color,
       haloColor,
       haloWidth,
-      pointerPath: buildPointerPath(
-        projected.x,
-        projected.y,
-        labelX,
-        labelY,
-        fontSize,
-        a.pointer ?? "curved",
-      ),
+      pointerPath,
       lineColor,
       lineWidth,
-      arrow: a.arrow ?? true,
+      lineDash,
+      arrow: !isRule && (a.arrow ?? true),
+      rule,
     });
   }
   return out;
 });
+
+/**
+ * Endpoints for a rule line through the anchor.
+ * - `ruleX` / `ruleY`: full plot span on the named axis.
+ * - `ruleUp` / `ruleDown` / `ruleFromLeft` / `ruleFromRight`: partial
+ *   rule from one plot edge in to the anchor.
+ */
+function computeRule(
+  pointer: string,
+  ax: number,
+  ay: number,
+  b: ChartBounds,
+): { x1: number; y1: number; x2: number; y2: number } {
+  switch (pointer) {
+    case "ruleX":
+      return { x1: ax, y1: b.top, x2: ax, y2: b.bottom };
+    case "ruleY":
+      return { x1: b.left, y1: ay, x2: b.right, y2: ay };
+    case "ruleUp":
+      return { x1: ax, y1: b.bottom, x2: ax, y2: ay };
+    case "ruleDown":
+      return { x1: ax, y1: b.top, x2: ax, y2: ay };
+    case "ruleFromLeft":
+      return { x1: b.left, y1: ay, x2: ax, y2: ay };
+    case "ruleFromRight":
+      return { x1: b.right, y1: ay, x2: ax, y2: ay };
+    default:
+      return { x1: ax, y1: ay, x2: ax, y2: ay };
+  }
+}
 
 /**
  * Build the pointer line from the anchor to the label.
@@ -226,6 +292,17 @@ function buildPointerPath(
   </defs>
   <g class="chart-annotations" pointer-events="none">
     <template v-for="(item, i) in items" :key="i">
+      <line
+        v-if="item.rule"
+        :x1="item.rule.x1"
+        :y1="item.rule.y1"
+        :x2="item.rule.x2"
+        :y2="item.rule.y2"
+        :stroke="item.lineColor"
+        :stroke-width="item.lineWidth"
+        :stroke-dasharray="item.lineDash"
+        stroke-linecap="round"
+      />
       <path
         v-if="item.pointerPath"
         :d="item.pointerPath"
@@ -233,6 +310,7 @@ function buildPointerPath(
         :stroke="item.lineColor"
         :style="{ color: item.lineColor }"
         :stroke-width="item.lineWidth"
+        :stroke-dasharray="item.lineDash"
         stroke-linecap="round"
         :marker-start="item.arrow ? 'url(#chart-annotation-arrow)' : undefined"
       />

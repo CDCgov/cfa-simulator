@@ -733,6 +733,7 @@ const {
   legendY,
   innerW,
   innerH,
+  bounds,
   hoverIndex,
   tooltipRef,
   tooltipPos,
@@ -1043,6 +1044,7 @@ const {
         v-if="annotations && annotations.length > 0"
         :annotations="annotations"
         :project="projectAnnotation"
+        :bounds="bounds"
       />
       <!-- area section labels -->
       <g v-for="(item, i) in sectionLabels.labels" :key="'seclab' + i">

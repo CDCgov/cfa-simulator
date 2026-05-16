@@ -207,6 +207,74 @@ the boundary between categories 1 and 2). `y` is on the value axis. See
 label and pointer don't get clipped by the data area. Pass a number for
 uniform padding or an object with `top` / `right` / `bottom` / `left`.
 
+Set `pointer` to a rule value (`"ruleX"`, `"ruleY"`, `"ruleUp"`,
+`"ruleDown"`, `"ruleFromLeft"`, `"ruleFromRight"`) to draw a line
+through the anchor instead of the default curved connector. The first
+two span the full plot; the latter four extend from one edge to the
+anchor. `lineColor`, `lineWidth`, and `lineDash` style the line.
+
+<ComponentDemo>
+  <BarChart
+    :data="[12, 19, 7, 24, 16]"
+    :categories="['Mon', 'Tue', 'Wed', 'Thu', 'Fri']"
+    :annotations="[
+      {
+        x: 0,
+        y: 15.6,
+        offset: { x: 6, y: -6 },
+        text: 'Avg 15.6',
+        pointer: 'ruleY',
+        lineDash: '4 3',
+      },
+      {
+        x: 3,
+        y: 20,
+        offset: { x: 8, y: 4 },
+        text: 'Target hit',
+        pointer: 'ruleFromLeft',
+        lineColor: '#0a7',
+      },
+    ]"
+    :chart-padding="{ top: 24, right: 24 }"
+    :height="240"
+    x-label="Day"
+    y-label="Cases"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :data="[12, 19, 7, 24, 16]"
+  :categories="['Mon', 'Tue', 'Wed', 'Thu', 'Fri']"
+  :annotations="[
+    {
+      x: 0,
+      y: 15.6,
+      offset: { x: 6, y: -6 },
+      text: 'Avg 15.6',
+      pointer: 'ruleY',
+      lineDash: '4 3',
+    },
+    {
+      x: 3,
+      y: 20,
+      offset: { x: 8, y: 4 },
+      text: 'Target hit',
+      pointer: 'ruleFromLeft',
+      lineColor: '#0a7',
+    },
+  ]"
+  :chart-padding="{ top: 24, right: 24 }"
+  :height="240"
+  x-label="Day"
+  y-label="Cases"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ## API
 
 <!-- @include: ./_api/bar-chart.md -->

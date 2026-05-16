@@ -491,12 +491,102 @@ interface ChartAnnotation {
   haloColor?: string; // background-matched halo (default: var(--color-bg-0, #fff))
   haloWidth?: number; // default: 3
   textAnchor?: "start" | "middle" | "end"; // default: derived from offset[0] sign
-  lineColor?: string; // pointer-line color override (default: color)
+  lineColor?: string; // connector-line color override (default: color)
   lineWidth?: number; // default: 1
-  pointer?: "curved" | "straight"; // default: "curved"
+  lineDash?: string | number | readonly number[]; // SVG stroke-dasharray
+  // default: "curved"
+  // "ruleX" / "ruleY" span the full plot on the named axis;
+  // "ruleUp" / "ruleDown" / "ruleFromLeft" / "ruleFromRight" run from an edge to the anchor.
+  pointer?:
+    | "curved"
+    | "straight"
+    | "none"
+    | "ruleX"
+    | "ruleY"
+    | "ruleUp"
+    | "ruleDown"
+    | "ruleFromLeft"
+    | "ruleFromRight";
   arrow?: boolean; // triangle marker at the anchor end (default: true)
 }
 ```
+
+### Rules
+
+Set `pointer` to one of the rule values to replace the curved /
+straight connector with a straight line through the anchor:
+
+- `"ruleX"` — vertical line spanning the plot height at the annotation's `x`.
+- `"ruleY"` — horizontal line spanning the plot width at the annotation's `y`.
+- `"ruleUp"` — vertical from the bottom edge up to the anchor.
+- `"ruleDown"` — vertical from the top edge down to the anchor.
+- `"ruleFromLeft"` — horizontal from the left edge in to the anchor.
+- `"ruleFromRight"` — horizontal from the right edge in to the anchor.
+
+`lineColor`, `lineWidth`, and `lineDash` style the line. The label is
+positioned from the anchor as usual via `offset`.
+
+<ComponentDemo>
+  <LineChart
+    :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
+    :annotations="[
+      {
+        x: 5,
+        y: 30,
+        offset: { x: 8, y: 14 },
+        text: 'Peak',
+        pointer: 'ruleX',
+        lineDash: '4 3',
+      },
+      {
+        x: 5,
+        y: 30,
+        offset: { x: -8, y: -6 },
+        text: 'Max',
+        textAnchor: 'end',
+        pointer: 'ruleFromLeft',
+        lineDash: '4 3',
+      },
+    ]"
+    :chart-padding="{ top: 24, right: 24 }"
+    :height="240"
+    x-label="Days"
+    y-label="Cases"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
+  :annotations="[
+    {
+      x: 5,
+      y: 30,
+      offset: { x: 8, y: 14 },
+      text: 'Peak',
+      pointer: 'ruleX',
+      lineDash: '4 3',
+    },
+    {
+      x: 5,
+      y: 30,
+      offset: { x: -8, y: -6 },
+      text: 'Max',
+      textAnchor: 'end',
+      pointer: 'ruleFromLeft',
+      lineDash: '4 3',
+    },
+  ]"
+  :chart-padding="{ top: 24, right: 24 }"
+  :height="240"
+  x-label="Days"
+  y-label="Cases"
+/>
+```
+
+  </template>
+</ComponentDemo>
 
 ### Custom CSV download
 

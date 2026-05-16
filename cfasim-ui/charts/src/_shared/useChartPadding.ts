@@ -74,5 +74,28 @@ export function useChartPadding(opts: ChartPaddingOptions) {
   const innerH = computed(
     () => opts.height() - padding.value.top - padding.value.bottom,
   );
-  return { padding, legendY, innerW, innerH };
+  // Pixel-space rect of the plot area. Single source of truth for any
+  // consumer that needs to span the full plot (e.g. rule annotations,
+  // background fills, clip paths).
+  const bounds = computed(() => {
+    const p = padding.value;
+    return {
+      left: p.left,
+      top: p.top,
+      right: p.left + innerW.value,
+      bottom: p.top + innerH.value,
+      width: innerW.value,
+      height: innerH.value,
+    };
+  });
+  return { padding, legendY, innerW, innerH, bounds };
 }
+
+export type ChartBounds = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+};

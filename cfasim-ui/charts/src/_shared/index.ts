@@ -12,6 +12,7 @@ export {
   INLINE_LEGEND_HEIGHT,
   type ChartPaddingOptions,
   type ChartPadding,
+  type ChartBounds,
 } from "./useChartPadding.js";
 export {
   useChartTooltip,

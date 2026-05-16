@@ -49,24 +49,53 @@ export interface ChartAnnotation {
    * `offset.x`: positive → `start`, negative → `end`, zero → `middle`.
    */
   textAnchor?: "start" | "middle" | "end";
-  /** Pointer-line color override. Defaults to `color`. */
+  /** Pointer- or rule-line color override. Defaults to `color`. */
   lineColor?: string;
-  /** Pointer-line width in pixels. Default: 1. */
+  /** Pointer- or rule-line width in pixels. Default: 1. */
   lineWidth?: number;
   /**
-   * Pointer shape. `"curved"` (default) draws a quarter-arc that emerges
-   * vertically from the anchor and lands horizontally at the label.
-   * `"straight"` draws a single straight line from the anchor to the
-   * label. `"none"` omits the pointer entirely — just the text label is
-   * rendered. When the offset is purely horizontal or vertical (and
-   * `pointer` isn't `"none"`), the pointer is always straight regardless
-   * of this setting.
+   * SVG `stroke-dasharray` for the pointer or rule line. Accepts the
+   * raw string form (`"4 4"`), a single number (uniform dash/gap), or
+   * an array of numbers. Default: solid line.
    */
-  pointer?: "curved" | "straight" | "none";
+  lineDash?: string | number | readonly number[];
+  /**
+   * Connector shape between anchor and label.
+   * - `"curved"` (default): quarter-arc emerging vertically from the
+   *   anchor, landing horizontally at the label.
+   * - `"straight"`: single straight line from anchor to label.
+   * - `"none"`: no connector — just the text label is rendered.
+   * - `"ruleX"`: vertical rule at the annotation's `x` value spanning
+   *   the full plot height. Label still positions via `offset`.
+   * - `"ruleY"`: horizontal rule at the annotation's `y` value spanning
+   *   the full plot width.
+   * - `"ruleUp"`: vertical rule from the plot's bottom edge up to the
+   *   anchor.
+   * - `"ruleDown"`: vertical rule from the plot's top edge down to the
+   *   anchor.
+   * - `"ruleFromLeft"`: horizontal rule from the plot's left edge in to
+   *   the anchor.
+   * - `"ruleFromRight"`: horizontal rule from the plot's right edge in
+   *   to the anchor.
+   *
+   * When the offset is purely horizontal or vertical (and `pointer`
+   * isn't `"none"` or a rule), the pointer is always straight regardless
+   * of this setting. Rule pointers ignore `arrow`.
+   */
+  pointer?:
+    | "curved"
+    | "straight"
+    | "none"
+    | "ruleX"
+    | "ruleY"
+    | "ruleUp"
+    | "ruleDown"
+    | "ruleFromLeft"
+    | "ruleFromRight";
   /**
    * Whether to draw a small filled triangle at the anchor end of the
-   * pointer line. Defaults to `true`. Set to `false` for an
-   * uncapped line.
+   * connector line. Defaults to `true`. Set to `false` for an
+   * uncapped line. Ignored for rule pointers.
    */
   arrow?: boolean;
 }
