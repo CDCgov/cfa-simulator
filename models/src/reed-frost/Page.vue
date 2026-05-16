@@ -46,7 +46,7 @@ const chartSeries = computed<Series[]>(() => {
 
 <template>
   <Teleport to="#model-sidebar">
-    <Button variant="secondary" @click="reset">Reset</Button>
+    <Button variant="secondary" @click="() => reset()">Reset</Button>
     <h2>Parameters</h2>
     <NumberInput
       v-model="params.population"

@@ -17,7 +17,7 @@ const { outputs, loading, error } = useOutputs("simulate", params);
 
 <template>
   <Teleport to="#model-sidebar">
-    <Button variant="secondary" @click="reset">Reset</Button>
+    <Button variant="secondary" @click="() => reset()">Reset</Button>
     <h2>Parameters</h2>
     <NumberInput v-model="params.steps" label="Steps" number-type="integer" />
     <NumberInput v-model="params.rate" label="Rate" number-type="float" />

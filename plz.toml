@@ -13,9 +13,17 @@ run = "pnpm exec prettier --check ."
 git_hook = "pre-commit"
 fail_hook = { suggest_command = "plz fix" }
 
-# Type-check
+# Type-check every TypeScript project (cfasim-ui libs, models app, docs site)
 [tasks.typecheck]
-run = "pnpm exec vue-tsc --noEmit -p cfasim-ui/charts/tsconfig.json && pnpm exec vue-tsc --noEmit -p cfasim-ui/components/tsconfig.json"
+run = """
+pnpm exec vue-tsc --noEmit -p cfasim-ui/charts/tsconfig.json && \
+pnpm exec vue-tsc --noEmit -p cfasim-ui/components/tsconfig.json && \
+pnpm exec vue-tsc --noEmit -p cfasim-ui/shared/tsconfig.json && \
+pnpm exec vue-tsc --noEmit -p cfasim-ui/wasm/tsconfig.json && \
+pnpm exec vue-tsc --noEmit -p cfasim-ui/pyodide/tsconfig.json && \
+pnpm exec vue-tsc --noEmit -p models/tsconfig.json && \
+pnpm exec vue-tsc --noEmit -p docs/tsconfig.json
+"""
 git_hook = "pre-commit"
 
 # Auto-fix formatting
@@ -71,13 +79,22 @@ fail_hook = { suggest_command = "plz cli fix" }
 [taskgroup.cli.fix]
 run = "cargo fmt"
 
-# Run Rust tests
+# Run Rust tests (whole workspace)
 [taskgroup.cli.test]
-run = "cargo test"
+dir = "."
+run = "cargo test --workspace"
 
-# Lint Rust code
+# Lint Rust code: the cargo workspace plus the standalone model crates that
+# are excluded from the workspace (they build for wasm32 and pull in different
+# dependency trees, so they can't sit inside the main resolver).
 [taskgroup.cli.lint]
-run = "cargo clippy -- -D warnings"
+dir = "."
+run = """
+cargo clippy --workspace --all-targets -- -D warnings && \
+cargo clippy --manifest-path models/src/reed-frost/model/Cargo.toml --all-targets -- -D warnings && \
+cargo clippy --manifest-path models/src/ixa-example/model/Cargo.toml --all-targets -- -D warnings
+"""
+git_hook = "pre-commit"
 
 # Integration tests for the CLI (scaffolds projects + Playwright)
 [taskgroup.cli.e2e]

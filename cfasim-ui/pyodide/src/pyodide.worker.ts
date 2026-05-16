@@ -62,11 +62,13 @@ async function fetchPyodidePackages(): Promise<string[]> {
 }
 
 const pyodideReadyPromise = (async () => {
+  // Pyodide is fetched from a CDN at runtime; the URL is not a resolvable module
+  // at typecheck time. The import expression is built dynamically so TS doesn't
+  // try to resolve the literal URL.
+  const pyodideUrl =
+    "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/pyodide.mjs";
   const [pyodideModule, packages] = await Promise.all([
-    // @ts-expect-error - Pyodide types from CDN
-    import(
-      /* @vite-ignore */ "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/pyodide.mjs"
-    ),
+    import(/* @vite-ignore */ pyodideUrl),
     fetchPyodidePackages(),
   ]);
   const { loadPyodide } = pyodideModule;

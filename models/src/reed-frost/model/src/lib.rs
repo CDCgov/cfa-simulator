@@ -35,13 +35,13 @@ pub fn simulate(
         let mut cum = initial_infected;
         generation_col[offset] = 0;
         trajectory_col[offset] = traj as u32;
-        cumulative_infections[offset] = cum as u32;
+        cumulative_infections[offset] = cum;
 
         for t in 1..=gen {
             cum += traj_data.get(t).copied().unwrap_or(0);
             generation_col[offset + t] = t as u32;
             trajectory_col[offset + t] = traj as u32;
-            cumulative_infections[offset + t] = cum as u32;
+            cumulative_infections[offset + t] = cum;
         }
     }
 

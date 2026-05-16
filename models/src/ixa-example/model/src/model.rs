@@ -41,6 +41,7 @@ impl_property!(SecondaryInfections, Person, default_const = SecondaryInfections(
 trait InfectionLoop {
     fn get_params(&self) -> &Parameters;
     fn get_stats(&self) -> &ModelStats;
+    #[cfg_attr(not(test), allow(dead_code))]
     fn infected_people(&self) -> usize;
     fn random_person(&mut self) -> Option<PersonId>;
     fn infect_person(&mut self, p: PersonId, t: Option<f64>, infector: Option<PersonId>);
