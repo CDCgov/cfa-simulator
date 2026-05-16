@@ -61,11 +61,18 @@ export function useChartPadding(opts: ChartPaddingOptions) {
       left: (opts.yLabel() ? 56 : 50) + extra.left,
     };
   });
+  // Y-center of the inline legend strip. Sits at the top of the padding
+  // band (just below any title), so any user-supplied `extraPadding.top`
+  // becomes empty room between the legend and the plot — useful for
+  // annotations that need to extend above the data area.
+  const legendY = computed(
+    () => (opts.title() ? 26 : 10) + INLINE_LEGEND_HEIGHT / 2,
+  );
   const innerW = computed(
     () => opts.width() - padding.value.left - padding.value.right,
   );
   const innerH = computed(
     () => opts.height() - padding.value.top - padding.value.bottom,
   );
-  return { padding, innerW, innerH };
+  return { padding, legendY, innerW, innerH };
 }
