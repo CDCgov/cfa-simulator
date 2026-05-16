@@ -9,7 +9,6 @@ import {
   useChartFoundation,
   makeTooltipValueFormatter,
   ChartAnnotations,
-  INLINE_LEGEND_HEIGHT,
   type ChartData,
   type ChartCommonProps,
   type ChartHoverPayload,
@@ -471,6 +470,7 @@ const {
   width,
   height,
   padding,
+  legendY,
   innerW,
   innerH,
   hoverIndex,
@@ -565,14 +565,14 @@ const hoverBand = computed(() => {
         <template v-for="(item, i) in inlineLegendItems" :key="'ileg' + i">
           <rect
             :x="padding.left + i * 120"
-            :y="padding.top - INLINE_LEGEND_HEIGHT / 2 - 5"
+            :y="legendY - 5"
             width="12"
             height="10"
             :fill="item.color"
           />
           <text
             :x="padding.left + i * 120 + 18"
-            :y="padding.top - INLINE_LEGEND_HEIGHT / 2 + 4"
+            :y="legendY + 4"
             font-size="11"
             fill="currentColor"
           >

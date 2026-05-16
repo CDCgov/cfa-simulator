@@ -9,7 +9,6 @@ import {
   useChartFoundation,
   makeTooltipValueFormatter,
   ChartAnnotations,
-  INLINE_LEGEND_HEIGHT,
   type ChartData,
   type ChartCommonProps,
   type ChartHoverPayload,
@@ -731,6 +730,7 @@ const {
   width,
   height,
   padding,
+  legendY,
   innerW,
   innerH,
   hoverIndex,
@@ -785,9 +785,9 @@ const {
           <line
             v-if="item.type === 'series'"
             :x1="padding.left + i * 120"
-            :y1="padding.top - INLINE_LEGEND_HEIGHT / 2"
+            :y1="legendY"
             :x2="padding.left + i * 120 + 12"
-            :y2="padding.top - INLINE_LEGEND_HEIGHT / 2"
+            :y2="legendY"
             :stroke="item.color"
             stroke-width="2"
             :stroke-dasharray="item.dashed ? '4 2' : undefined"
@@ -796,7 +796,7 @@ const {
           <circle
             v-else
             :cx="padding.left + i * 120 + 4"
-            :cy="padding.top - INLINE_LEGEND_HEIGHT / 2"
+            :cy="legendY"
             r="4"
             :fill="item.color"
             :fill-opacity="item.fillOpacity"
@@ -805,7 +805,7 @@ const {
           />
           <text
             :x="padding.left + i * 120 + 18"
-            :y="padding.top - INLINE_LEGEND_HEIGHT / 2 + 4"
+            :y="legendY + 4"
             font-size="11"
             fill="currentColor"
           >

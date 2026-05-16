@@ -9,6 +9,7 @@ import {
 } from "@cfasim-ui/components";
 import type { ParamEditorValue } from "@cfasim-ui/components";
 import { LineChart, DataTable } from "@cfasim-ui/charts";
+import type { ChartAnnotation } from "@cfasim-ui/charts";
 import { runWasm, cancelWasm } from "@cfasim-ui/wasm";
 import { useUrlParams, ModelOutput } from "@cfasim-ui/shared";
 import type { ColumnDescriptor, TypedColumn } from "@cfasim-ui/shared";
@@ -344,14 +345,50 @@ function buildSeries(transform: (col: TypedColumn) => TypedColumn | number[]) {
   ];
 }
 
+function argmax(values: ArrayLike<number>): number {
+  let bestI = -1;
+  let bestV = -Infinity;
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    if (Number.isFinite(v) && v > bestV) {
+      bestV = v;
+      bestI = i;
+    }
+  }
+  return bestI;
+}
+
+const incidenceAnnotations = computed<ChartAnnotation[]>(() => {
+  const s = outputs.value?.series;
+  if (!s) return [];
+  const med = diff(s.column("cumulative_infections_median"));
+  const i = argmax(med);
+  if (i < 0) return [];
+  return [
+    {
+      x: i,
+      y: med[i],
+      text: `**Peak**\nt = ${i}, ${fmtCount(med[i])}`,
+      offset: { x: 24, y: -28 },
+      color: "#f87171",
+    },
+  ];
+});
+
 const charts = computed(() => [
   {
     series: buildSeries((c) => c),
+    annotations: [] as ChartAnnotation[],
+    padding: undefined,
     yLabel: "Cumulative infections",
     height: 400,
   },
   {
     series: buildSeries(diff),
+    annotations: incidenceAnnotations.value,
+    // Top padding gives the 2-line "Peak" label room between the
+    // inline legend (now pinned to the top) and the curve.
+    padding: { top: 40 },
     yLabel: "Incidence (new infections per time unit)",
     height: 300,
   },
@@ -454,6 +491,8 @@ const summary = computed(() => {
     <LineChart
       v-if="chart.series.length"
       :series="chart.series"
+      :annotations="chart.annotations"
+      :chart-padding="chart.padding"
       :height="chart.height"
       x-label="Time"
       :y-label="chart.yLabel"
