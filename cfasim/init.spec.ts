@@ -117,6 +117,18 @@ test.describe("cfasim init", () => {
       execSync("pnpm install", { cwd: resolve(TMP_DIR, p.name) });
     }
 
+    // Pre-build wasm so `waitForServer` doesn't time out waiting on the
+    // `cfasimWasm` plugin's cold cargo build during vite startup. Mirrors
+    // the plugin's invocation in cfasim-ui/wasm/src/vitePlugin.js.
+    for (const p of projects) {
+      if (p.template === "python") continue; // pyodide template, no wasm-pack
+      const moduleName = p.name.replace(/-/g, "_");
+      execSync(
+        `wasm-pack build .. --target web --out-dir public/wasm/${moduleName}`,
+        { cwd: resolve(TMP_DIR, p.name, "interactive"), stdio: "pipe" },
+      );
+    }
+
     // Start vite dev servers
     for (const p of projects) {
       const { proc, url } = startVite(p.name, p.port);
