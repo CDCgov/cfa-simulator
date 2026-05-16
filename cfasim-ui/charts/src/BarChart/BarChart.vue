@@ -473,6 +473,7 @@ const {
   legendY,
   innerW,
   innerH,
+  bounds,
   hoverIndex,
   tooltipRef,
   tooltipPos,
@@ -738,6 +739,7 @@ const hoverBand = computed(() => {
         v-if="annotations && annotations.length > 0"
         :annotations="annotations"
         :project="projectAnnotation"
+        :bounds="bounds"
       />
     </svg>
     <!-- Tooltip floating content -->

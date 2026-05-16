@@ -1441,6 +1441,245 @@ describe("LineChart", () => {
       expect(x).toBeCloseTo(225, 0);
     });
 
+    it('pointer: "ruleX" draws a vertical line spanning the plot height', () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 20, y: -20 },
+              text: "vline",
+              pointer: "ruleX" as const,
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const line = wrapper.find("g.chart-annotations line");
+      expect(line.exists()).toBe(true);
+      // padding.left=50, innerW=340, x=1 of range [0,2] → 50 + 0.5*340 = 220.
+      // padding.top=10, innerH=160 → top=10, bottom=170.
+      expect(Number(line.attributes("x1"))).toBeCloseTo(220, 0);
+      expect(Number(line.attributes("x2"))).toBeCloseTo(220, 0);
+      expect(Number(line.attributes("y1"))).toBeCloseTo(10, 0);
+      expect(Number(line.attributes("y2"))).toBeCloseTo(170, 0);
+      // Rule replaces the pointer — no pointer <path> is rendered.
+      expect(wrapper.find("g.chart-annotations path").exists()).toBe(false);
+      // Label still renders.
+      expect(wrapper.find("g.chart-annotations text").text()).toContain(
+        "vline",
+      );
+    });
+
+    it('pointer: "ruleY" draws a horizontal line spanning the plot width', () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 20, y: -20 },
+              text: "hline",
+              pointer: "ruleY" as const,
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const line = wrapper.find("g.chart-annotations line");
+      expect(line.exists()).toBe(true);
+      // padding.left=50, innerW=340 → left=50, right=390.
+      // padding.top=10, innerH=160, y=10 of range [0,20] → 10 + 160 - 0.5*160 = 90.
+      expect(Number(line.attributes("x1"))).toBeCloseTo(50, 0);
+      expect(Number(line.attributes("x2"))).toBeCloseTo(390, 0);
+      expect(Number(line.attributes("y1"))).toBeCloseTo(90, 0);
+      expect(Number(line.attributes("y2"))).toBeCloseTo(90, 0);
+    });
+
+    it("rule pointer applies lineColor, lineWidth, and lineDash", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 20, y: -20 },
+              text: "styled",
+              pointer: "ruleX" as const,
+              lineColor: "#f00",
+              lineWidth: 2,
+              lineDash: "4 2",
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const line = wrapper.find("g.chart-annotations line");
+      expect(line.attributes("stroke")).toBe("#f00");
+      expect(line.attributes("stroke-width")).toBe("2");
+      expect(line.attributes("stroke-dasharray")).toBe("4 2");
+    });
+
+    it('pointer: "ruleDown" draws a vertical line from the top edge to the anchor', () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 20, y: -20 },
+              text: "down",
+              pointer: "ruleDown" as const,
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const line = wrapper.find("g.chart-annotations line");
+      // anchor at (220, 90), top of plot at y=10.
+      expect(Number(line.attributes("x1"))).toBeCloseTo(220, 0);
+      expect(Number(line.attributes("y1"))).toBeCloseTo(10, 0);
+      expect(Number(line.attributes("x2"))).toBeCloseTo(220, 0);
+      expect(Number(line.attributes("y2"))).toBeCloseTo(90, 0);
+    });
+
+    it('pointer: "ruleUp" draws a vertical line from the bottom edge to the anchor', () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 20, y: -20 },
+              text: "up",
+              pointer: "ruleUp" as const,
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const line = wrapper.find("g.chart-annotations line");
+      // anchor at (220, 90), bottom of plot at y=170.
+      expect(Number(line.attributes("x1"))).toBeCloseTo(220, 0);
+      expect(Number(line.attributes("y1"))).toBeCloseTo(170, 0);
+      expect(Number(line.attributes("x2"))).toBeCloseTo(220, 0);
+      expect(Number(line.attributes("y2"))).toBeCloseTo(90, 0);
+    });
+
+    it('pointer: "ruleFromLeft" draws a horizontal line from the left edge to the anchor', () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 20, y: -20 },
+              text: "from left",
+              pointer: "ruleFromLeft" as const,
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const line = wrapper.find("g.chart-annotations line");
+      // anchor at (220, 90), left edge at x=50.
+      expect(Number(line.attributes("x1"))).toBeCloseTo(50, 0);
+      expect(Number(line.attributes("y1"))).toBeCloseTo(90, 0);
+      expect(Number(line.attributes("x2"))).toBeCloseTo(220, 0);
+      expect(Number(line.attributes("y2"))).toBeCloseTo(90, 0);
+    });
+
+    it('pointer: "ruleFromRight" draws a horizontal line from the right edge to the anchor', () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 20, y: -20 },
+              text: "from right",
+              pointer: "ruleFromRight" as const,
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const line = wrapper.find("g.chart-annotations line");
+      // anchor at (220, 90), right edge at x=390.
+      expect(Number(line.attributes("x1"))).toBeCloseTo(390, 0);
+      expect(Number(line.attributes("y1"))).toBeCloseTo(90, 0);
+      expect(Number(line.attributes("x2"))).toBeCloseTo(220, 0);
+      expect(Number(line.attributes("y2"))).toBeCloseTo(90, 0);
+    });
+
+    it("partial rule pointers omit the pointer path and arrow", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 20, y: -20 },
+              text: "down",
+              pointer: "ruleDown" as const,
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      expect(wrapper.find("g.chart-annotations path").exists()).toBe(false);
+      expect(wrapper.find("g.chart-annotations line").exists()).toBe(true);
+    });
+
+    it("rule pointer lineDash accepts a number (uniform dash/gap)", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 20, y: -20 },
+              text: "dashed",
+              pointer: "ruleX" as const,
+              lineDash: 3,
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      expect(
+        wrapper.find("g.chart-annotations line").attributes("stroke-dasharray"),
+      ).toBe("3 3");
+    });
+
     it("renders multiple annotations", () => {
       const wrapper = mount(LineChart, {
         props: {

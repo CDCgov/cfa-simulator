@@ -47,7 +47,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
   );
   const height = computed(() => opts.height() ?? DEFAULT_HEIGHT);
 
-  const { padding, legendY, innerW, innerH } = useChartPadding({
+  const { padding, legendY, innerW, innerH, bounds } = useChartPadding({
     title: opts.title,
     xLabel: opts.xLabel,
     yLabel: opts.yLabel,
@@ -93,6 +93,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     legendY,
     innerW,
     innerH,
+    bounds,
     hoverIndex,
     tooltipRef,
     tooltipPos,
