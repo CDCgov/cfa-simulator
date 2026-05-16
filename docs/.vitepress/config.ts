@@ -114,6 +114,10 @@ export default defineConfig({
                 text: "NumberInput",
                 link: "/cfasim-ui/components/number-input",
               },
+              {
+                text: "ParamEditor",
+                link: "/cfasim-ui/components/param-editor",
+              },
               { text: "SelectBox", link: "/cfasim-ui/components/select-box" },
               {
                 text: "SidebarLayout",

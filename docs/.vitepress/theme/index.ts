@@ -14,6 +14,7 @@ import {
   Icon,
   LightDarkToggle,
   NumberInput,
+  ParamEditor,
   SelectBox,
   SidebarLayout,
   Spinner,
@@ -48,6 +49,7 @@ export default {
     app.component("Icon", Icon);
     app.component("LightDarkToggle", LightDarkToggle);
     app.component("NumberInput", NumberInput);
+    app.component("ParamEditor", ParamEditor);
     app.component("SelectBox", SelectBox);
     app.component("SidebarLayout", SidebarLayout);
     app.component("Spinner", Spinner);
