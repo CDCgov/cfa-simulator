@@ -1290,9 +1290,66 @@ describe("LineChart", () => {
       expect(group.find("text").text()).toContain("no pointer");
     });
 
-    it("nudges the start away from the anchor in the offset direction", () => {
-      // Anchor sits on x=0 (and y=0): without the nudge the curve start
-      // would coincide with the axis line.
+    it("renders the arrow head as an inline polygon with the line color (Safari-safe, no marker)", () => {
+      // Safari doesn't implement `context-stroke` on SVG markers, so the
+      // arrow must be drawn as an explicit triangle filled with the line
+      // color rather than via `<marker>` + `marker-start`.
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 30, y: -20 },
+              text: "Peak",
+              lineColor: "#ff0000",
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const group = wrapper.find("g.chart-annotations");
+      // No <marker> / <defs> for annotations — color would break in Safari.
+      expect(group.find("marker").exists()).toBe(false);
+      const polygon = group.find("polygon");
+      expect(polygon.exists()).toBe(true);
+      expect(polygon.attributes("fill")).toBe("#ff0000");
+      // Triangle pointing along local +x, tip at origin, base 6 back, 6 tall.
+      expect(polygon.attributes("points")).toBe("0,0 -6,-3 -6,3");
+      // Path is not driving the arrow via marker-start anymore.
+      const path = group.find("path");
+      expect(path.attributes("marker-start")).toBeUndefined();
+    });
+
+    it("omits the inline arrow when arrow: false", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 30, y: -20 },
+              text: "Peak",
+              arrow: false,
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const group = wrapper.find("g.chart-annotations");
+      expect(group.find("polygon").exists()).toBe(false);
+    });
+
+    it("starts the curved pointer directly above/below the anchor so the arrow lines up", () => {
+      // The curved pointer emerges vertically from the anchor; its start X
+      // must match the anchor X so the arrow head sits directly on the
+      // data point rather than off to one side.
       const wrapper = mount(LineChart, {
         props: {
           data: [0, 5, 10],
@@ -1307,8 +1364,8 @@ describe("LineChart", () => {
       const d = wrapper.find("g.chart-annotations path").attributes("d")!;
       const startMatch = d.match(/^M([\d.-]+),([\d.-]+) /)!;
       const sx = Number(startMatch[1]);
-      // padding.left=50 with no yLabel → anchor X is 50. Nudged right by 3.
-      expect(sx).toBeCloseTo(53, 0);
+      // padding.left=50 with no yLabel → anchor X is 50. No horizontal nudge.
+      expect(sx).toBeCloseTo(50, 0);
     });
 
     it("supports multi-line text via \\n", () => {

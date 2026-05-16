@@ -39,10 +39,6 @@ const LINE_HEIGHT_RATIO = 1.2;
 // of the first text line (between baseline and cap-height). Lands on the
 // x-height middle for most fonts.
 const FIRST_LINE_CENTER_RATIO = 0.35;
-// Nudge the start of the curve a few pixels in the offset direction so
-// it doesn't sit directly on top of axis lines or gridlines at the
-// anchor.
-const START_NUDGE_PX = 3;
 
 interface TextRun {
   text: string;
@@ -66,6 +62,10 @@ interface RenderedAnnotation {
   lineWidth: number;
   lineDash?: string;
   arrow: boolean;
+  // Inline arrow geometry. Rendered as a triangle with explicit fill so it
+  // renders correctly in Safari (which doesn't support `context-stroke` on
+  // SVG markers). Present only when an arrow should be drawn.
+  arrowTip?: { x: number; y: number; angle: number };
   rule?: { x1: number; y1: number; x2: number; y2: number };
 }
 
@@ -138,10 +138,12 @@ const items = computed<RenderedAnnotation[]>(() => {
 
     let rule: RenderedAnnotation["rule"];
     let pointerPath = "";
+    let arrowTip: RenderedAnnotation["arrowTip"];
+    const wantArrow = !isRule && (a.arrow ?? true);
     if (isRule && props.bounds) {
       rule = computeRule(pointer, projected.x, projected.y, props.bounds);
     } else {
-      pointerPath = buildPointerPath(
+      const built = buildPointerPath(
         projected.x,
         projected.y,
         labelX,
@@ -149,6 +151,8 @@ const items = computed<RenderedAnnotation[]>(() => {
         fontSize,
         pointer as "curved" | "straight" | "none",
       );
+      pointerPath = built.path;
+      if (wantArrow && built.arrow) arrowTip = built.arrow;
     }
 
     out.push({
@@ -166,7 +170,8 @@ const items = computed<RenderedAnnotation[]>(() => {
       lineColor,
       lineWidth,
       lineDash,
-      arrow: !isRule && (a.arrow ?? true),
+      arrow: wantArrow,
+      arrowTip,
       rule,
     });
   }
@@ -216,6 +221,15 @@ function computeRule(
  *   label so the endpoint reads as pointing at the first line — not at
  *   the bottom of a multi-line block.
  */
+interface PointerGeom {
+  path: string;
+  // Tip position and rotation (degrees) for the inline arrow head. The
+  // arrow points opposite the path's start tangent — matching the look of
+  // `marker-start` with `orient="auto-start-reverse"`, but rendered as a
+  // plain triangle so the color works in Safari.
+  arrow?: { x: number; y: number; angle: number };
+}
+
 function buildPointerPath(
   ax: number,
   ay: number,
@@ -223,8 +237,8 @@ function buildPointerPath(
   ly: number,
   fontSize: number,
   pointer: "curved" | "straight" | "none",
-): string {
-  if (pointer === "none") return "";
+): PointerGeom {
+  if (pointer === "none") return { path: "" };
   const dx = lx - ax;
   const dy = ly - ay;
 
@@ -243,53 +257,49 @@ function buildPointerPath(
     const segDx = lx - ax;
     const segDy = ey - ay;
     const len = Math.hypot(segDx, segDy);
-    if (len <= ANCHOR_GAP_PX + LABEL_GAP_PX) return "";
+    if (len <= ANCHOR_GAP_PX + LABEL_GAP_PX) return { path: "" };
     const ux = segDx / len;
     const uy = segDy / len;
     const sx = ax + ux * ANCHOR_GAP_PX;
     const sy = ay + uy * ANCHOR_GAP_PX;
     const ex = lx - ux * LABEL_GAP_PX;
     const eyClamped = ey - uy * LABEL_GAP_PX;
-    return `M${sx},${sy} L${ex},${eyClamped}`;
+    // Arrow points back toward the anchor (opposite of (ux, uy)).
+    const angle = (Math.atan2(-uy, -ux) * 180) / Math.PI;
+    return {
+      path: `M${sx},${sy} L${ex},${eyClamped}`,
+      arrow: { x: sx, y: sy, angle },
+    };
   }
 
   const adjDy = targetY - ay;
 
   // Skip the curve if one dimension is too small to clear its gap.
   if (Math.abs(adjDy) <= ANCHOR_GAP_PX || Math.abs(dx) <= LABEL_GAP_PX) {
-    return "";
+    return { path: "" };
   }
 
   const xDir = Math.sign(dx);
   const yDir = Math.sign(adjDy);
-  // Nudge the start horizontally toward the label so the line doesn't
-  // sit on top of axis/grid lines passing through the anchor.
-  const sx = ax + xDir * START_NUDGE_PX;
+  // Start the curve directly above/below the anchor so the arrow head
+  // lines up with the data point rather than sitting off to one side.
+  const sx = ax;
   const sy = ay + yDir * ANCHOR_GAP_PX;
   const ex = lx - xDir * LABEL_GAP_PX;
   const ey = targetY;
-  // Control sits at (sx, targetY) so the curve emerges from the nudged
-  // start tangent vertically and lands on the label horizontally —
-  // a clean quarter-arc shape.
-  return `M${sx},${sy} Q${sx},${targetY} ${ex},${ey}`;
+  // Control sits at (sx, targetY) so the curve emerges from the start
+  // tangent vertically and lands on the label horizontally —
+  // a clean quarter-arc shape. The start tangent is (0, yDir), so the
+  // arrow points (0, -yDir) — straight up when yDir=1, down when yDir=-1.
+  const angle = yDir > 0 ? -90 : 90;
+  return {
+    path: `M${sx},${sy} Q${sx},${targetY} ${ex},${ey}`,
+    arrow: { x: sx, y: sy, angle },
+  };
 }
 </script>
 
 <template>
-  <defs>
-    <marker
-      id="chart-annotation-arrow"
-      viewBox="0 0 8 8"
-      refX="7"
-      refY="4"
-      markerWidth="6"
-      markerHeight="6"
-      orient="auto-start-reverse"
-      markerUnits="userSpaceOnUse"
-    >
-      <path d="M0,0 L8,4 L0,8 Z" fill="context-stroke" />
-    </marker>
-  </defs>
   <g class="chart-annotations" pointer-events="none">
     <template v-for="(item, i) in items" :key="i">
       <line
@@ -308,11 +318,21 @@ function buildPointerPath(
         :d="item.pointerPath"
         fill="none"
         :stroke="item.lineColor"
-        :style="{ color: item.lineColor }"
         :stroke-width="item.lineWidth"
         :stroke-dasharray="item.lineDash"
         stroke-linecap="round"
-        :marker-start="item.arrow ? 'url(#chart-annotation-arrow)' : undefined"
+      />
+      <!--
+        Inline arrow head. Drawn as an explicit triangle (not via
+        `<marker>`) because Safari does not implement `context-stroke` on
+        marker fills, so a shared marker rendered as black instead of the
+        line color.
+      -->
+      <polygon
+        v-if="item.arrowTip"
+        points="0,0 -6,-3 -6,3"
+        :fill="item.lineColor"
+        :transform="`translate(${item.arrowTip.x} ${item.arrowTip.y}) rotate(${item.arrowTip.angle})`"
       />
       <text
         :x="item.textX"
