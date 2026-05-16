@@ -395,6 +395,109 @@ Highlight a range of a series line by filling the area between the line and the 
   </template>
 </ComponentDemo>
 
+### Annotations
+
+Pin callouts to data points with `annotations`. Each annotation anchors at
+`(x, y)` in data coordinates (the same x-space as the chart axis, so it
+respects `xMin` and explicit `x` values), with a pixel
+`offset: { x, y }` for the label position. Text supports `\n` for line
+breaks. A curved
+pointer line connects the anchor to the label, and the label gets a halo
+stroke matching the background so it stays legible over series lines.
+
+<ComponentDemo>
+  <LineChart
+    :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
+    :annotations="[
+      { x: 5, y: 30, offset: { x: 24, y: -28 }, text: 'Peak\nDay 5' },
+      { x: 0, y: 0, offset: { x: 28, y: -22 }, text: 'Onset' },
+    ]"
+    :chart-padding="{ top: 40, right: 24 }"
+    :height="240"
+    x-label="Days"
+    y-label="Cases"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
+  :annotations="[
+    { x: 5, y: 30, offset: { x: 24, y: -28 }, text: 'Peak\nDay 5' },
+    { x: 0, y: 0, offset: { x: 28, y: -22 }, text: 'Onset' },
+  ]"
+  :chart-padding="{ top: 40, right: 24 }"
+  :height="240"
+  x-label="Days"
+  y-label="Cases"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+Use `chart-padding` to reserve room outside the plot so annotations (or
+any other overlay) don't clip the data area. It accepts a number (same on
+all sides) or an object with `top`, `right`, `bottom`, `left`.
+
+Annotation text supports a small set of inline markers:
+
+- `**bold**` — bold
+- `_italic_` — italic
+- `\n` — line break
+
+Markers compose (`**_bold italic_**`).
+
+<ComponentDemo>
+  <LineChart
+    :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
+    :annotations="[
+      { x: 5, y: 30, offset: { x: 24, y: -28 }, text: '**Peak**\n_Day 5_' },
+    ]"
+    :chart-padding="{ top: 40, right: 24 }"
+    :height="240"
+    x-label="Days"
+    y-label="Cases"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
+  :annotations="[
+    { x: 5, y: 30, offset: { x: 24, y: -28 }, text: '**Peak**\n_Day 5_' },
+  ]"
+  :chart-padding="{ top: 40, right: 24 }"
+  :height="240"
+  x-label="Days"
+  y-label="Cases"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+```ts
+interface ChartAnnotation {
+  x: number; // anchor in data coords (x-axis)
+  y: number; // anchor in data coords (y-axis)
+  text: string; // label text; \n produces line breaks
+  offset: { x: number; y: number }; // pixel offset from anchor to label
+  color?: string; // text / pointer color (default: currentColor)
+  fontSize?: number; // default: 13 (matches axis labels)
+  fontWeight?: string | number; // default: "normal"
+  haloColor?: string; // background-matched halo (default: var(--color-bg-0, #fff))
+  haloWidth?: number; // default: 3
+  textAnchor?: "start" | "middle" | "end"; // default: derived from offset[0] sign
+  lineColor?: string; // pointer-line color override (default: color)
+  lineWidth?: number; // default: 1
+  pointer?: "curved" | "straight"; // default: "curved"
+  arrow?: boolean; // triangle marker at the anchor end (default: true)
+}
+```
+
 ### Custom CSV download
 
 By default, the Download CSV menu item exports the chart series as CSV. Use

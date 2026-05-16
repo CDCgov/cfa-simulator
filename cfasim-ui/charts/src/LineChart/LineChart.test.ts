@@ -1172,4 +1172,360 @@ describe("LineChart", () => {
       expect(paths.length).toBe(1); // just the series line
     });
   });
+
+  describe("annotations", () => {
+    it("does not render the annotations group when no annotations are provided", () => {
+      const wrapper = mount(LineChart, {
+        props: { data: [0, 10, 20], height: 200, width: 400, menu: false },
+      });
+      expect(wrapper.find("g.chart-annotations").exists()).toBe(false);
+    });
+
+    it("renders an annotation with a pointer path and halo text", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            { x: 1, y: 10, offset: { x: 30, y: -20 }, text: "Peak" },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const group = wrapper.find("g.chart-annotations");
+      expect(group.exists()).toBe(true);
+      const pointer = group.find("path");
+      expect(pointer.exists()).toBe(true);
+      expect(pointer.attributes("d")).toMatch(/^M[\d.,-]+ Q[\d.,-]+ [\d.,-]+$/);
+      const text = group.find("text");
+      expect(text.attributes("paint-order")).toBe("stroke fill");
+      expect(text.attributes("stroke-width")).toBe("3");
+      expect(text.text()).toContain("Peak");
+    });
+
+    it("uses a straight line when offset is only horizontal", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            { x: 1, y: 10, offset: { x: 30, y: 0 }, text: "right" },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const d = wrapper.find("g.chart-annotations path").attributes("d");
+      // Straight line: starts with M, has L (not Q).
+      expect(d).toMatch(/^M[\d.,-]+ L[\d.,-]+$/);
+    });
+
+    it("uses a straight line when offset is only vertical", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [{ x: 1, y: 10, offset: { x: 0, y: -30 }, text: "up" }],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const d = wrapper.find("g.chart-annotations path").attributes("d");
+      expect(d).toMatch(/^M[\d.,-]+ L[\d.,-]+$/);
+    });
+
+    it("quarter-arc control X matches start X, end Y matches control Y", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            { x: 1, y: 10, offset: { x: 30, y: -20 }, text: "up-right" },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      // Pointer path: `M sx,sy Q cx,cy ex,ey`. The curve emerges from the
+      // start (nudged in the offset direction so it doesn't sit on the
+      // axis) tangent vertically (cx === sx) and lands on the label
+      // horizontally (ey === cy).
+      const d = wrapper.find("g.chart-annotations path").attributes("d")!;
+      const startMatch = d.match(/^M([\d.-]+),([\d.-]+) /)!;
+      const qMatch = d.match(/Q([\d.-]+),([\d.-]+) ([\d.-]+),([\d.-]+)$/)!;
+      const sx = Number(startMatch[1]);
+      const cx = Number(qMatch[1]);
+      const cy = Number(qMatch[2]);
+      const ey = Number(qMatch[4]);
+      // Control X equals start X → curve emerges from start vertically.
+      expect(cx).toBeCloseTo(sx, 1);
+      // End Y matches control Y → curve approaches label horizontally.
+      expect(ey).toBeCloseTo(cy, 1);
+    });
+
+    it('omits the pointer path when pointer is "none"', () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 20, y: -10 },
+              text: "no pointer",
+              pointer: "none" as const,
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      // Annotations group exists, but contains no <path> (pointer omitted).
+      const group = wrapper.find("g.chart-annotations");
+      expect(group.exists()).toBe(true);
+      expect(group.find("path").exists()).toBe(false);
+      // Text label still renders.
+      expect(group.find("text").text()).toContain("no pointer");
+    });
+
+    it("nudges the start away from the anchor in the offset direction", () => {
+      // Anchor sits on x=0 (and y=0): without the nudge the curve start
+      // would coincide with the axis line.
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 5, 10],
+          annotations: [
+            { x: 0, y: 0, offset: { x: 30, y: -20 }, text: "anchor on axis" },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const d = wrapper.find("g.chart-annotations path").attributes("d")!;
+      const startMatch = d.match(/^M([\d.-]+),([\d.-]+) /)!;
+      const sx = Number(startMatch[1]);
+      // padding.left=50 with no yLabel → anchor X is 50. Nudged right by 3.
+      expect(sx).toBeCloseTo(53, 0);
+    });
+
+    it("supports multi-line text via \\n", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            { x: 1, y: 10, offset: { x: 20, y: 0 }, text: "Line A\nLine B" },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const lineTspans = wrapper.findAll("g.chart-annotations text > tspan");
+      expect(lineTspans.length).toBe(2);
+      expect(lineTspans[0].text()).toBe("Line A");
+      expect(lineTspans[1].text()).toBe("Line B");
+      // First tspan has dy=0, subsequent tspans advance by ~font-size * 1.2.
+      expect(lineTspans[0].attributes("dy")).toBe("0");
+      // dy = font-size (13) * line-height (1.2) = 15.6.
+      expect(Number(lineTspans[1].attributes("dy"))).toBeCloseTo(15.6, 1);
+    });
+
+    it("renders **bold** runs at weight 800", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 20, y: 0 },
+              text: "Peak: **Day 5**",
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const runs = wrapper.findAll("g.chart-annotations text > tspan > tspan");
+      expect(runs.length).toBe(2);
+      expect(runs[0].text().trim()).toBe("Peak:");
+      expect(runs[0].attributes("font-weight")).toBeFalsy();
+      expect(runs[1].text()).toBe("Day 5");
+      expect(runs[1].attributes("font-weight")).toBe("700");
+    });
+
+    it("renders _italic_ runs with font-style: italic", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 20, y: 0 },
+              text: "say _hello_ world",
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const runs = wrapper.findAll("g.chart-annotations text > tspan > tspan");
+      const italic = runs.find((r) => r.text() === "hello");
+      expect(italic).toBeTruthy();
+      expect(italic!.attributes("font-style")).toBe("italic");
+    });
+
+    it("composes **_bold italic_**", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            { x: 1, y: 10, offset: { x: 20, y: 0 }, text: "**_both_**" },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const runs = wrapper.findAll("g.chart-annotations text > tspan > tspan");
+      const both = runs.find((r) => r.text() === "both");
+      expect(both).toBeTruthy();
+      expect(both!.attributes("font-weight")).toBe("700");
+      expect(both!.attributes("font-style")).toBe("italic");
+    });
+
+    it("derives text-anchor from offsetX sign", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            { x: 0, y: 0, offset: { x: 30, y: 0 }, text: "right" },
+            { x: 1, y: 10, offset: { x: -30, y: 0 }, text: "left" },
+            { x: 2, y: 20, offset: { x: 0, y: -20 }, text: "above" },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const texts = wrapper.findAll("g.chart-annotations text");
+      expect(texts.length).toBe(3);
+      expect(texts[0].attributes("text-anchor")).toBe("start");
+      expect(texts[1].attributes("text-anchor")).toBe("end");
+      expect(texts[2].attributes("text-anchor")).toBe("middle");
+    });
+
+    it("respects xMin so annotation x lines up with axis labels", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 5, 10, 15, 20],
+          xMin: 100,
+          annotations: [
+            { x: 102, y: 10, offset: { x: 0, y: 0 }, text: "marker" },
+          ],
+          height: 200,
+          width: 410,
+          menu: false,
+        },
+      });
+      // padding.left=50, innerW=410-50-10=350. Internal x = 102 - 100 = 2, range 0..4
+      // → pixel = 50 + (2/4)*350 = 225.
+      const text = wrapper.find("g.chart-annotations text");
+      const x = Number(text.attributes("x"));
+      expect(x).toBeCloseTo(225, 0);
+    });
+
+    it("renders multiple annotations", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            { x: 0, y: 0, offset: { x: 10, y: -10 }, text: "A" },
+            { x: 1, y: 10, offset: { x: 10, y: -10 }, text: "B" },
+            { x: 2, y: 20, offset: { x: 10, y: -10 }, text: "C" },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const texts = wrapper.findAll("g.chart-annotations text");
+      expect(texts.map((t) => t.text().trim())).toEqual(["A", "B", "C"]);
+    });
+
+    it("shrinks the inner plot when chartPadding adds top space", () => {
+      // y-tick for the max value sits at the top of the plot. Adding top
+      // padding shifts that tick down by exactly the padding amount.
+      const baseline = mount(LineChart, {
+        props: { data: [0, 10, 20], height: 200, width: 400, menu: false },
+      });
+      const padded = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          chartPadding: { top: 40 },
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const baselineTopTick = Number(
+        baseline.findAll('[data-testid="y-tick"]').at(-1)!.attributes("y"),
+      );
+      const paddedTopTick = Number(
+        padded.findAll('[data-testid="y-tick"]').at(-1)!.attributes("y"),
+      );
+      expect(paddedTopTick - baselineTopTick).toBeCloseTo(40, 0);
+    });
+
+    it("accepts chartPadding as a number (uniform on all sides)", () => {
+      const baseline = mount(LineChart, {
+        props: { data: [0, 10, 20], height: 200, width: 400, menu: false },
+      });
+      const padded = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          chartPadding: 20,
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const baselineTopTick = Number(
+        baseline.findAll('[data-testid="y-tick"]').at(-1)!.attributes("y"),
+      );
+      const paddedTopTick = Number(
+        padded.findAll('[data-testid="y-tick"]').at(-1)!.attributes("y"),
+      );
+      expect(paddedTopTick - baselineTopTick).toBeCloseTo(20, 0);
+    });
+
+    it("places annotations after the tooltip overlay (top layer)", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          tooltipTrigger: "hover" as const,
+          annotations: [
+            { x: 1, y: 10, offset: { x: 10, y: -10 }, text: "top" },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const svg = wrapper.find("svg").element;
+      const overlay = svg.querySelector('rect[fill="transparent"]');
+      const annotations = svg.querySelector("g.chart-annotations");
+      expect(overlay).toBeTruthy();
+      expect(annotations).toBeTruthy();
+      const overlayPos = Array.from(svg.children).indexOf(overlay!);
+      const annotationsPos = Array.from(svg.children).indexOf(annotations!);
+      expect(annotationsPos).toBeGreaterThan(overlayPos);
+    });
+  });
 });

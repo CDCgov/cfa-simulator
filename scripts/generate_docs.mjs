@@ -7,7 +7,8 @@
  * Handles these patterns:
  *   defineProps<{ ... }>()
  *   withDefaults(defineProps<{ ... }>(), { ... })
- *   defineProps<InterfaceName>()  (resolves interface in same script block)
+ *   defineProps<InterfaceName>()  (resolves interface in same script block,
+ *     including `extends` chains and types imported from sibling files)
  *   defineModel<Type>()
  *   defineEmits<{ event: [...] }>()
  *
@@ -17,12 +18,13 @@
 
 import {
   cpSync,
+  existsSync,
   readFileSync,
   rmSync,
   writeFileSync,
   mkdirSync,
 } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
 
@@ -188,17 +190,132 @@ function parsePropsFromTypeBody(body) {
   return props;
 }
 
-function resolveInterface(script, name) {
-  const re = new RegExp(`interface\\s+${name}(?:\\s+extends\\s+\\w+)?\\s*\\{`);
+/** Resolve a `.js`-suffixed (TS-style) module path to its on-disk source. */
+function resolveModulePath(modulePath, fromDir) {
+  let target = modulePath;
+  if (target.endsWith(".js")) target = target.slice(0, -3) + ".ts";
+  const abs = resolve(fromDir, target);
+  if (existsSync(abs)) return abs;
+  if (existsSync(abs + ".ts")) return abs + ".ts";
+  const asIndex = resolve(abs, "index.ts");
+  if (existsSync(asIndex)) return asIndex;
+  return null;
+}
+
+/**
+ * Walks a module looking for `interface ${name}` directly, or follows
+ * `export ... from "..."` re-exports (typical of barrel `index.ts`
+ * files) until it finds the interface. Returns `{ file, source }` or
+ * `null`.
+ */
+function locateInterfaceInModule(file, name, visited) {
+  if (visited.has(file)) return null;
+  visited.add(file);
+  const source = readFileSync(file, "utf8");
+  const re = new RegExp(
+    `interface\\s+${name}(?:\\s+extends\\s+[\\w,\\s]+)?\\s*\\{`,
+  );
+  if (re.test(source)) return { file, source };
+  const reExportRe =
+    /export\s+(?:type\s+)?\{([^}]+)\}\s+from\s+["']([^"']+)["']/g;
+  let m;
+  while ((m = reExportRe.exec(source)) !== null) {
+    const names = m[1]
+      .split(",")
+      .map((s) =>
+        s
+          .trim()
+          .replace(/^type\s+/, "")
+          .replace(/\s+as\s+\w+$/, ""),
+      )
+      .filter(Boolean);
+    if (!names.includes(name)) continue;
+    const target = resolveModulePath(m[2], dirname(file));
+    if (!target) continue;
+    const found = locateInterfaceInModule(target, name, visited);
+    if (found) return found;
+  }
+  const starRe = /export\s+\*\s+from\s+["']([^"']+)["']/g;
+  while ((m = starRe.exec(source)) !== null) {
+    const target = resolveModulePath(m[1], dirname(file));
+    if (!target) continue;
+    const found = locateInterfaceInModule(target, name, visited);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * Find the file that declares `interface ${name}` by walking
+ * `import { ... } from "..."` statements (and re-exports inside them).
+ */
+function findImportedInterface(script, scriptDir, name) {
+  const importRe =
+    /import\s+(?:type\s+)?\{([^}]+)\}\s+from\s+["']([^"']+)["']/g;
+  let m;
+  while ((m = importRe.exec(script)) !== null) {
+    const names = m[1]
+      .split(",")
+      .map((s) => s.trim().replace(/^type\s+/, ""))
+      .filter(Boolean);
+    if (!names.includes(name)) continue;
+    const resolved = resolveModulePath(m[2], scriptDir);
+    if (!resolved) continue;
+    const found = locateInterfaceInModule(resolved, name, new Set());
+    if (found) return found;
+  }
+  return null;
+}
+
+function resolveInterface(script, name, scriptDir) {
+  const re = new RegExp(
+    `interface\\s+${name}(?:\\s+extends\\s+([\\w,\\s]+))?\\s*\\{`,
+  );
   const match = re.exec(script);
-  if (!match) return null;
+  if (!match) {
+    if (!scriptDir) return null;
+    const found = findImportedInterface(script, scriptDir, name);
+    if (!found) return null;
+    return resolveInterface(found.source, name, dirname(found.file));
+  }
+  const parents = match[1]
+    ? match[1]
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
   const braceStart = match.index + match[0].length - 1;
   const braceEnd = findMatchingBrace(script, braceStart);
   if (braceEnd === -1) return null;
-  return parsePropsFromTypeBody(script.slice(braceStart + 1, braceEnd));
+  const ownProps = parsePropsFromTypeBody(
+    script.slice(braceStart + 1, braceEnd),
+  );
+  if (parents.length === 0) return ownProps;
+  // Parent props come first so child entries override on duplicate names.
+  const merged = [];
+  const seen = new Set();
+  for (const parent of parents) {
+    const parentProps = resolveInterface(script, parent, scriptDir) ?? [];
+    for (const p of parentProps) {
+      if (seen.has(p.name)) continue;
+      seen.add(p.name);
+      merged.push(p);
+    }
+  }
+  for (const p of ownProps) {
+    if (seen.has(p.name)) {
+      // Replace earlier (parent) entry with the override.
+      const idx = merged.findIndex((m) => m.name === p.name);
+      if (idx >= 0) merged[idx] = p;
+    } else {
+      seen.add(p.name);
+      merged.push(p);
+    }
+  }
+  return merged;
 }
 
-function extractDefineProps(script) {
+function extractDefineProps(script, scriptDir) {
   const inlineRe = /defineProps<\{/;
   const match = inlineRe.exec(script);
   if (match) {
@@ -211,7 +328,7 @@ function extractDefineProps(script) {
   const namedRe = /defineProps<(\w+)>\s*\(\)/;
   const namedMatch = namedRe.exec(script);
   if (namedMatch) {
-    return resolveInterface(script, namedMatch[1]) ?? [];
+    return resolveInterface(script, namedMatch[1], scriptDir) ?? [];
   }
   return [];
 }
@@ -269,7 +386,7 @@ function extractEmits(script) {
 function analyzeComponent(filePath) {
   const source = readFileSync(filePath, "utf-8");
   const script = extractScriptBlock(source);
-  const props = extractDefineProps(script);
+  const props = extractDefineProps(script, dirname(filePath));
   const defaults = extractDefaults(script);
   const models = extractModels(script);
   const emits = extractEmits(script);

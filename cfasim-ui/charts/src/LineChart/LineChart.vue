@@ -1,17 +1,19 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import {
   snap,
   formatTick,
   computeTickValues,
   seriesToCsv,
-  useChartSize,
-  useChartTooltip,
-  useChartMenu,
-  useChartPadding,
+  useChartFoundation,
+  makeTooltipValueFormatter,
+  ChartAnnotations,
   INLINE_LEGEND_HEIGHT,
   type ChartData,
+  type ChartCommonProps,
+  type ChartHoverPayload,
+  type ChartTooltipBaseProps,
 } from "../_shared/index.js";
 
 /**
@@ -83,117 +85,68 @@ export interface AreaSection {
   legend?: "inline" | "below" | false;
 }
 
-const props = withDefaults(
-  defineProps<{
-    /** Y-values. Equivalent to `data`. If both are set, `y` wins. */
-    y?: LineChartData;
-    /** Y-values (alternative name for `y`). */
-    data?: LineChartData;
-    /**
-     * Optional x-values paired with `y`/`data`. When provided, points
-     * are plotted at the given x positions instead of at their indices.
-     * Ignored when `series` is used — set `x` on each `Series` instead.
-     */
-    x?: LineChartData;
-    series?: Series[];
-    areas?: Area[];
-    areaSections?: AreaSection[];
-    width?: number;
-    height?: number;
-    lineOpacity?: number;
-    title?: string;
-    xLabel?: string;
-    yLabel?: string;
-    yMin?: number;
-    /**
-     * Offset applied to index-based x values (e.g. `xMin: 10` starts the
-     * x axis at 10 instead of 0). Ignored when any series or area has
-     * explicit `x` values.
-     */
-    xMin?: number;
-    /**
-     * Tick placement on the x-axis. Number = interval in data units
-     * (respecting `xMin`, e.g. `7` ticks every 7 days). Array = explicit tick
-     * values in data space; values outside the data range are dropped.
-     * When omitted, ticks are chosen automatically.
-     */
-    xTicks?: number | number[];
-    /**
-     * Tick placement on the y-axis. Number = interval in data units. Array =
-     * explicit tick values; values outside the data range are dropped. When
-     * omitted, ticks are chosen automatically.
-     */
-    yTicks?: number | number[];
-    /** Formatter for x-axis tick labels. Receives the raw numeric value. */
-    xTickFormat?: (value: number, index: number) => string;
-    /** Formatter for y-axis tick labels. Receives the raw numeric value. */
-    yTickFormat?: (value: number) => string;
-    /**
-     * Formatter for numeric values shown in the default tooltip. Receives
-     * the raw value. Defaults to the same tick formatter used for axes.
-     */
-    tooltipValueFormat?: (value: number) => string;
-    /**
-     * @deprecated Use `xTickFormat` (e.g. `(_, i) => labels[i]`) together
-     * with `xTicks` for explicit control. Still honored for tooltip x-labels
-     * and as a default x-tick formatter when `xTickFormat` is not provided.
-     */
-    xLabels?: string[];
-    debounce?: number;
-    menu?: boolean | string;
-    xGrid?: boolean;
-    yGrid?: boolean;
-    /**
-     * Custom per-index data passed to the tooltip slot. Accepts a plain
-     * array or any `ArrayLike` (e.g. a typed array column from a
-     * `ModelOutput`).
-     */
-    tooltipData?: ArrayLike<unknown>;
-    /** Tooltip activation mode. Default: 'hover' */
-    tooltipTrigger?: "hover" | "click";
-    /**
-     * Boundary for tooltip flip/clamp. `"none"` always places to the right of
-     * the pointer with no clamping. `"chart"` (default) uses the chart
-     * container's bounding box. `"window"` uses the viewport.
-     */
-    tooltipClamp?: "none" | "chart" | "window";
-    /**
-     * Custom CSV content for the Download CSV menu item. Can be a raw CSV
-     * string or a function returning one. When omitted, CSV is generated
-     * from the chart series.
-     */
-    csv?: string | (() => string);
-    /** Filename (without extension) for downloaded SVG, PNG and CSV files. */
-    filename?: string;
-    /**
-     * Show a plain text link below the chart to download the CSV data.
-     * Pass `true` for the default label ("Download data (CSV)") or a string
-     * to customize the link text.
-     */
-    downloadLink?: boolean | string;
-  }>(),
-  { lineOpacity: 1, menu: true, tooltipClamp: "chart" },
-);
+interface LineChartProps extends ChartCommonProps {
+  /** Y-values. Equivalent to `data`. If both are set, `y` wins. */
+  y?: LineChartData;
+  /** Y-values (alternative name for `y`). */
+  data?: LineChartData;
+  /**
+   * Optional x-values paired with `y`/`data`. When provided, points
+   * are plotted at the given x positions instead of at their indices.
+   * Ignored when `series` is used — set `x` on each `Series` instead.
+   */
+  x?: LineChartData;
+  series?: Series[];
+  areas?: Area[];
+  areaSections?: AreaSection[];
+  lineOpacity?: number;
+  yMin?: number;
+  /**
+   * Offset applied to index-based x values (e.g. `xMin: 10` starts the
+   * x axis at 10 instead of 0). Ignored when any series or area has
+   * explicit `x` values.
+   */
+  xMin?: number;
+  /**
+   * Tick placement on the x-axis. Number = interval in data units
+   * (respecting `xMin`, e.g. `7` ticks every 7 days). Array = explicit tick
+   * values in data space; values outside the data range are dropped.
+   * When omitted, ticks are chosen automatically.
+   */
+  xTicks?: number | number[];
+  /**
+   * Tick placement on the y-axis. Number = interval in data units. Array =
+   * explicit tick values; values outside the data range are dropped. When
+   * omitted, ticks are chosen automatically.
+   */
+  yTicks?: number | number[];
+  /** Formatter for x-axis tick labels. Receives the raw numeric value. */
+  xTickFormat?: (value: number, index: number) => string;
+  /** Formatter for y-axis tick labels. Receives the raw numeric value. */
+  yTickFormat?: (value: number) => string;
+  /**
+   * @deprecated Use `xTickFormat` (e.g. `(_, i) => labels[i]`) together
+   * with `xTicks` for explicit control. Still honored for tooltip x-labels
+   * and as a default x-tick formatter when `xTickFormat` is not provided.
+   */
+  xLabels?: string[];
+  xGrid?: boolean;
+  yGrid?: boolean;
+}
+
+const props = withDefaults(defineProps<LineChartProps>(), {
+  lineOpacity: 1,
+  menu: true,
+  tooltipClamp: "chart",
+});
 
 const emit = defineEmits<{
-  (e: "hover", payload: { index: number } | null): void;
+  (e: "hover", payload: ChartHoverPayload): void;
 }>();
 
 defineSlots<{
-  tooltip?(props: {
-    index: number;
-    xLabel?: string;
-    values: { value: number; color: string; seriesIndex: number }[];
-    data: unknown;
-  }): unknown;
+  tooltip?(props: ChartTooltipBaseProps & { xLabel?: string }): unknown;
 }>();
-
-const { containerRef, measuredWidth } = useChartSize({
-  debounce: () => props.debounce,
-});
-
-const width = computed(() => props.width ?? (measuredWidth.value || 400));
-const height = computed(() => props.height ?? 200);
 
 const hasInlineLegend = computed(
   () =>
@@ -203,15 +156,6 @@ const hasInlineLegend = computed(
     ) ||
     false,
 );
-
-const { padding, innerW, innerH } = useChartPadding({
-  title: () => props.title,
-  xLabel: () => props.xLabel,
-  yLabel: () => props.yLabel,
-  hasInlineLegend: () => hasInlineLegend.value,
-  width: () => width.value,
-  height: () => height.value,
-});
 
 /**
  * Internal series shape where `data` (y-values) is always resolved.
@@ -225,11 +169,10 @@ function resolveSeries(s: Series): ResolvedSeries {
   return { ...s, data: s.y ?? s.data ?? EMPTY_DATA };
 }
 
-function formatTooltipValue(v: number): string {
-  if (props.tooltipValueFormat) return props.tooltipValueFormat(v);
-  if (props.yTickFormat) return props.yTickFormat(v);
-  return formatTick(v);
-}
+const formatTooltipValue = makeTooltipValueFormatter(
+  () => props.tooltipValueFormat,
+  () => props.yTickFormat,
+);
 
 const allSeries = computed<ResolvedSeries[]>(() => {
   if (props.series && props.series.length > 0)
@@ -758,6 +701,18 @@ const hoverSlotProps = computed(() => {
   };
 });
 
+function projectAnnotation(
+  x: number,
+  y: number,
+): { x: number; y: number } | null {
+  if (!isFinite(x) || !isFinite(y)) return null;
+  const internalX = x - xDisplayOffset.value;
+  const { min, range } = extent.value;
+  const py =
+    padding.value.top + innerH.value - (y - min) * (innerH.value / range);
+  return { x: xPixel(internalX), y: py };
+}
+
 function indexFromPointer(clientX: number): number | null {
   const rect = containerRef.value?.getBoundingClientRect();
   if (!rect) return null;
@@ -771,30 +726,39 @@ function indexFromPointer(clientX: number): number | null {
 }
 
 const {
+  containerRef,
+  svgRef,
+  width,
+  height,
+  padding,
+  innerW,
+  innerH,
   hoverIndex,
   tooltipRef,
   tooltipPos,
-  handlers: tooltipHandlers,
-} = useChartTooltip({
-  enabled: () => hasTooltipSlot.value,
-  trigger: () => props.tooltipTrigger,
-  clamp: () => props.tooltipClamp,
-  pointerToIndex: indexFromPointer,
-  containerRef,
-  onHover: (payload) => emit("hover", payload),
-});
-
-const {
-  svgRef,
-  items: menuItems,
+  tooltipHandlers,
+  menuItems,
   downloadLinkText,
   csvHref,
-  resolvedFilename: menuFilename,
-} = useChartMenu({
+  menuFilename,
+} = useChartFoundation({
+  width: () => props.width,
+  height: () => props.height,
+  title: () => props.title,
+  xLabel: () => props.xLabel,
+  yLabel: () => props.yLabel,
+  debounce: () => props.debounce,
+  menu: () => props.menu,
+  tooltipTrigger: () => props.tooltipTrigger,
+  tooltipClamp: () => props.tooltipClamp,
   filename: () => props.filename,
-  legacyMenuLabel: () => props.menu,
-  getCsv: toCsv,
   downloadLink: () => props.downloadLink,
+  chartPadding: () => props.chartPadding,
+  hasInlineLegend: () => hasInlineLegend.value,
+  hasTooltipSlot: () => hasTooltipSlot.value,
+  getCsv: toCsv,
+  pointerToIndex: indexFromPointer,
+  onHover: (payload) => emit("hover", payload),
 });
 </script>
 
@@ -1073,6 +1037,12 @@ const {
         fill="transparent"
         style="cursor: crosshair; touch-action: none"
         v-on="tooltipHandlers"
+      />
+      <!-- annotations (top layer) -->
+      <ChartAnnotations
+        v-if="annotations && annotations.length > 0"
+        :annotations="annotations"
+        :project="projectAnnotation"
       />
       <!-- area section labels -->
       <g v-for="(item, i) in sectionLabels.labels" :key="'seclab' + i">

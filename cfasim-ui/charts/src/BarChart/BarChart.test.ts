@@ -840,4 +840,61 @@ describe("BarChart", () => {
       expect(x1 - (x0 + w0)).toBeCloseTo(10, 1);
     });
   });
+
+  describe("annotations", () => {
+    it("renders an annotation at the category center for vertical bars", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20, 30],
+          categories: ["A", "B", "C"],
+          annotations: [
+            { x: 1, y: 20, offset: { x: 0, y: -10 }, text: "B is up" },
+          ],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const text = wrapper.find("g.chart-annotations text");
+      expect(text.exists()).toBe(true);
+      expect(text.text()).toContain("B is up");
+      const x = Number(text.attributes("x"));
+      const expectedCenter =
+        Number(bars(wrapper)[1].attributes("x")) +
+        Number(bars(wrapper)[1].attributes("width")) / 2;
+      // Annotation centers on category index 1 (middle bar's center).
+      expect(x).toBeCloseTo(expectedCenter, 0);
+    });
+
+    it("renders an annotation on horizontal bars with axes swapped", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20, 30],
+          categories: ["A", "B", "C"],
+          orientation: "horizontal" as const,
+          annotations: [{ x: 0, y: 10, offset: { x: 20, y: 0 }, text: "A" }],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const group = wrapper.find("g.chart-annotations");
+      expect(group.exists()).toBe(true);
+      // On horizontal bars, category axis runs vertically — the
+      // annotation's offsetX still maps to text-anchor "start".
+      expect(group.find("text").attributes("text-anchor")).toBe("start");
+    });
+
+    it("does not render annotations group when none are provided", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20, 30],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      expect(wrapper.find("g.chart-annotations").exists()).toBe(false);
+    });
+  });
 });
