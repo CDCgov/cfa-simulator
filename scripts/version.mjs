@@ -48,6 +48,7 @@ const TRACKED_FILES = [
   ...EMBEDDED_COPIES.map(([, dst]) => dst),
   "Cargo.lock",
   "models/src/reed-frost/model/Cargo.lock",
+  "models/src/ixa-example/model/Cargo.lock",
   "CHANGELOG.md",
 ];
 
@@ -110,6 +111,10 @@ function bumpAll(type) {
   execSync("cargo check --workspace", { stdio: "inherit" });
   execSync(
     "cargo check --manifest-path models/src/reed-frost/model/Cargo.toml",
+    { stdio: "inherit" },
+  );
+  execSync(
+    "cargo check --manifest-path models/src/ixa-example/model/Cargo.toml",
     { stdio: "inherit" },
   );
 
