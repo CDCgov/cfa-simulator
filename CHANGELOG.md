@@ -1,6 +1,14 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.4.7] - 2026-05-16
+
+### Bug Fixes
+
+- **release:** Refresh ixa-example Cargo.lock on version bump
+- **charts:** Inline color/font and resolve var() in SVG/PNG export
+- **charts:** Render annotation arrow inline; drop curve start nudge
+
 ## [0.4.6] - 2026-05-16
 
 ### Bug Fixes
