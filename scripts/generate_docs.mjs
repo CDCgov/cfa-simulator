@@ -96,6 +96,12 @@ export const components = [
     "cfasim-ui/components/src/NumberInput/NumberInput.md",
   ],
   [
+    "param-editor",
+    "components",
+    "cfasim-ui/components/src/ParamEditor/ParamEditor.vue",
+    "cfasim-ui/components/src/ParamEditor/ParamEditor.md",
+  ],
+  [
     "select-box",
     "components",
     "cfasim-ui/components/src/SelectBox/SelectBox.vue",

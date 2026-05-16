@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { reactive, computed, ref, watch, onScopeDispose } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import { NumberInput, Button } from "@cfasim-ui/components";
+import {
+  NumberInput,
+  Button,
+  Toggle,
+  ParamEditor,
+} from "@cfasim-ui/components";
+import type { ParamEditorValue } from "@cfasim-ui/components";
 import { LineChart, DataTable } from "@cfasim-ui/charts";
 import { runWasm, cancelWasm } from "@cfasim-ui/wasm";
 import { useUrlParams, ModelOutput } from "@cfasim-ui/shared";
@@ -21,6 +27,25 @@ const { reset } = useUrlParams(params, defaults, {
   router: useRouter(),
   route: useRoute(),
 });
+
+// When `useEditor` is on, the sidebar shows a JSON/TOML/YAML editor
+// instead of the per-field NumberInput form. Both views share the same
+// underlying `params` so users can flip back and forth.
+const useEditor = ref(false);
+
+function applyParamUpdate(next: ParamEditorValue) {
+  // Only assign keys we know about, coercing each one to its default's
+  // type so a string "0.5" from a hand-typed JSON value still flows
+  // through to the wasm model as a number.
+  for (const key of Object.keys(defaults) as (keyof typeof defaults)[]) {
+    if (!(key in next)) continue;
+    const raw = next[key];
+    const coerced = typeof defaults[key] === "number" ? Number(raw) : raw;
+    if (typeof coerced === "number" && Number.isFinite(coerced)) {
+      (params as Record<string, unknown>)[key] = coerced;
+    }
+  }
+}
 // Workload threshold above which slider inputs commit on blur instead of
 // firing on every drag tick (consumed by NumberInput's `:live`).
 const LARGE_WORKLOAD = 20_000;
@@ -356,45 +381,61 @@ const summary = computed(() => {
 
 <template>
   <Teleport to="#model-sidebar">
-    <Button variant="secondary" @click="reset">Reset</Button>
-    <h2>Parameters</h2>
-    <NumberInput
-      v-model="params.infectionRate"
-      label="Infection rate"
-      slider
-      :live="live"
-      :min="0.05"
-      :max="2"
-      :step="0.05"
+    <div class="sidebar-header">
+      <h2>Parameters</h2>
+      <div class="sidebar-controls">
+        <Toggle v-model="useEditor" label="Edit as code" />
+        <Button variant="secondary" @click="reset">Reset</Button>
+      </div>
+    </div>
+    <!-- Snapshot params so the editor sees a fresh object reference each
+         re-render and its internal "external update" watcher fires when
+         the parent applies a save (or a Reset). -->
+    <ParamEditor
+      v-if="useEditor"
+      :value="{ ...params }"
+      format="json"
+      @apply="applyParamUpdate"
     />
-    <NumberInput
-      v-model="params.infectiousPeriod"
-      label="Infectious period"
-      slider
-      :live="live"
-      :min="1"
-      :max="14"
-      :step="0.5"
-    />
-    <NumberInput
-      v-model="params.population"
-      label="Population"
-      :min="10"
-      :max="100000"
-    />
-    <NumberInput
-      v-model="params.initialInfections"
-      label="Initial infections"
-      :min="1"
-    />
-    <NumberInput v-model="params.seed" label="Seed" :min="0" />
-    <NumberInput v-model="params.maxTime" label="Max time" :min="1" />
-    <NumberInput
-      v-model="params.nSimulations"
-      label="Number of simulations"
-      :min="1"
-      :max="100"
-    />
+    <template v-else>
+      <NumberInput
+        v-model="params.infectionRate"
+        label="Infection rate"
+        slider
+        :live="live"
+        :min="0.05"
+        :max="2"
+        :step="0.05"
+      />
+      <NumberInput
+        v-model="params.infectiousPeriod"
+        label="Infectious period"
+        slider
+        :live="live"
+        :min="1"
+        :max="14"
+        :step="0.5"
+      />
+      <NumberInput
+        v-model="params.population"
+        label="Population"
+        :min="10"
+        :max="100000"
+      />
+      <NumberInput
+        v-model="params.initialInfections"
+        label="Initial infections"
+        :min="1"
+      />
+      <NumberInput v-model="params.seed" label="Seed" :min="0" />
+      <NumberInput v-model="params.maxTime" label="Max time" :min="1" />
+      <NumberInput
+        v-model="params.nSimulations"
+        label="Number of simulations"
+        :min="1"
+        :max="100"
+      />
+    </template>
   </Teleport>
   <h1>Ixa Example</h1>
   <p>
@@ -446,6 +487,20 @@ const summary = computed(() => {
 </template>
 
 <style scoped>
+.sidebar-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+.sidebar-header h2 {
+  margin: 0;
+}
+.sidebar-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5em;
+}
 .error {
   color: red;
 }

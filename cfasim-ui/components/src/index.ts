@@ -11,6 +11,11 @@ export { default as Icon } from "./Icon/Icon.vue";
 export { default as LightDarkToggle } from "./LightDarkToggle/LightDarkToggle.vue";
 export { default as NumberInput } from "./NumberInput/NumberInput.vue";
 export type { NumberRange } from "./NumberInput/NumberInput.vue";
+export { default as ParamEditor } from "./ParamEditor/ParamEditor.vue";
+export type {
+  ParamEditorFormat,
+  ParamEditorValue,
+} from "./ParamEditor/ParamEditor.vue";
 export { default as SelectBox } from "./SelectBox/SelectBox.vue";
 export type { SelectOption } from "./SelectBox/SelectBox.vue";
 export { default as SidebarLayout } from "./SidebarLayout/SidebarLayout.vue";
