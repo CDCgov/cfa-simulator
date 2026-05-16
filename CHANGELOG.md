@@ -1,6 +1,33 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.4.6] - 2026-05-16
+
+### Bug Fixes
+
+- **SidebarLayout:** Sync active tab from route on initial load
+
+### Chores
+
+- **cfasim:** Refresh embedded workspace-Cargo.toml
+
+### Features
+
+- Add ixa template and ixa model example
+- **ixa:** Progressive batching with cancellation
+- **ParamEditor:** Add lazy JSON/TOML/YAML editor and ixa-example toggle (#59)
+- **charts:** Annotations and shared common props/composable
+- **charts:** Pin inline legend to top, annotate peak in ixa-example
+- **charts:** Add rule pointers to annotations
+
+### Refactor
+
+- **ixa:** Pass simulate args as a JSON struct
+
+### Tests
+
+- **cfasim:** Pre-build wasm in init.spec to avoid dev-server timeout
+
 ## [0.4.5] - 2026-05-14
 
 ### Features
