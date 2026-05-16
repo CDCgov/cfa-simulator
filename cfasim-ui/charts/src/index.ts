@@ -31,3 +31,4 @@ export {
   type ColumnConfig,
   type ColumnWidth,
 } from "./DataTable/DataTable.vue";
+export type { ChartAnnotation } from "./_shared/annotations.js";

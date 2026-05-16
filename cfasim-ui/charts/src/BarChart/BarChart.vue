@@ -6,12 +6,14 @@ import {
   formatTick,
   computeTickValues,
   categoricalToCsv,
-  useChartSize,
-  useChartTooltip,
-  useChartMenu,
-  useChartPadding,
+  useChartFoundation,
+  makeTooltipValueFormatter,
+  ChartAnnotations,
   INLINE_LEGEND_HEIGHT,
   type ChartData,
+  type ChartCommonProps,
+  type ChartHoverPayload,
+  type ChartTooltipBaseProps,
 } from "../_shared/index.js";
 
 export type BarChartData = ChartData;
@@ -26,116 +28,66 @@ export interface BarSeries {
   legend?: string;
 }
 
-const props = withDefaults(
-  defineProps<{
-    /** Single-series values. Equivalent to `y`. */
-    data?: BarChartData;
-    /** Single-series values (alias for `data`). */
-    y?: BarChartData;
-    /** Multi-series mode. Each series has its own values. */
-    series?: BarSeries[];
-    /**
-     * Category labels for the categorical axis. Length should match the
-     * longest series. When omitted, indices (0, 1, 2, ...) are used.
-     */
-    categories?: readonly string[];
-    /** "vertical" (default, aka column) draws upright bars; "horizontal" draws sideways. */
-    orientation?: "vertical" | "horizontal";
-    /** "grouped" (default) places series side-by-side; "stacked" stacks them. */
-    layout?: "grouped" | "stacked";
-    width?: number;
-    height?: number;
-    title?: string;
-    xLabel?: string;
-    yLabel?: string;
-    /** Force the value axis to start at this value or lower (default 0). */
-    valueMin?: number;
-    /**
-     * Tick placement on the value axis (numeric). Number = interval,
-     * array = explicit values. When omitted, ticks are chosen automatically.
-     */
-    valueTicks?: number | number[];
-    /** Formatter for value-axis tick labels. */
-    valueTickFormat?: (value: number) => string;
-    /**
-     * Formatter for numeric values shown in the default tooltip. Receives
-     * the raw value. Defaults to the same tick formatter used for axes.
-     */
-    tooltipValueFormat?: (value: number) => string;
-    /** Formatter for category-axis labels. Receives the resolved category string. */
-    categoryFormat?: (label: string, index: number) => string;
-    /**
-     * Fraction of each category slot reserved as gap between groups (0..1).
-     * Default 0.2 — i.e. bars/groups fill 80% of their slot.
-     */
-    barPadding?: number;
-    /**
-     * Pixel gap between bars within a single category group in `grouped` layout.
-     * Default 1.
-     */
-    groupGap?: number;
-    debounce?: number;
-    menu?: boolean | string;
-    valueGrid?: boolean;
-    /**
-     * Custom per-index data passed to the tooltip slot. Accepts a plain
-     * array or any `ArrayLike` (e.g. a typed array column from a
-     * `ModelOutput`).
-     */
-    tooltipData?: ArrayLike<unknown>;
-    /** Tooltip activation mode. */
-    tooltipTrigger?: "hover" | "click";
-    /** Boundary for tooltip flip/clamp. Default "chart". */
-    tooltipClamp?: "none" | "chart" | "window";
-    /** Custom CSV content (string or function). When omitted, generated from the bars. */
-    csv?: string | (() => string);
-    /** Filename (without extension) for downloaded SVG, PNG, CSV. */
-    filename?: string;
-    /** Show a plain text link below the chart to download the CSV. */
-    downloadLink?: boolean | string;
-  }>(),
-  {
-    orientation: "vertical",
-    layout: "grouped",
-    valueMin: 0,
-    barPadding: 0.2,
-    groupGap: 1,
-    menu: true,
-    tooltipClamp: "chart",
-    valueGrid: true,
-  },
-);
+interface BarChartProps extends ChartCommonProps {
+  /** Single-series values. Equivalent to `y`. */
+  data?: BarChartData;
+  /** Single-series values (alias for `data`). */
+  y?: BarChartData;
+  /** Multi-series mode. Each series has its own values. */
+  series?: BarSeries[];
+  /**
+   * Category labels for the categorical axis. Length should match the
+   * longest series. When omitted, indices (0, 1, 2, ...) are used.
+   */
+  categories?: readonly string[];
+  /** "vertical" (default, aka column) draws upright bars; "horizontal" draws sideways. */
+  orientation?: "vertical" | "horizontal";
+  /** "grouped" (default) places series side-by-side; "stacked" stacks them. */
+  layout?: "grouped" | "stacked";
+  /** Force the value axis to start at this value or lower (default 0). */
+  valueMin?: number;
+  /**
+   * Tick placement on the value axis (numeric). Number = interval,
+   * array = explicit values. When omitted, ticks are chosen automatically.
+   */
+  valueTicks?: number | number[];
+  /** Formatter for value-axis tick labels. */
+  valueTickFormat?: (value: number) => string;
+  /** Formatter for category-axis labels. Receives the resolved category string. */
+  categoryFormat?: (label: string, index: number) => string;
+  /**
+   * Fraction of each category slot reserved as gap between groups (0..1).
+   * Default 0.2 — i.e. bars/groups fill 80% of their slot.
+   */
+  barPadding?: number;
+  /**
+   * Pixel gap between bars within a single category group in `grouped` layout.
+   * Default 1.
+   */
+  groupGap?: number;
+  valueGrid?: boolean;
+}
+
+const props = withDefaults(defineProps<BarChartProps>(), {
+  orientation: "vertical",
+  layout: "grouped",
+  valueMin: 0,
+  barPadding: 0.2,
+  groupGap: 1,
+  menu: true,
+  tooltipClamp: "chart",
+  valueGrid: true,
+});
 
 const emit = defineEmits<{
-  (e: "hover", payload: { index: number } | null): void;
+  (e: "hover", payload: ChartHoverPayload): void;
 }>();
 
 defineSlots<{
-  tooltip?(props: {
-    index: number;
-    category: string;
-    values: { value: number; color: string; seriesIndex: number }[];
-    data: unknown;
-  }): unknown;
+  tooltip?(props: ChartTooltipBaseProps & { category: string }): unknown;
 }>();
 
-const { containerRef, measuredWidth } = useChartSize({
-  debounce: () => props.debounce,
-});
-
-const width = computed(() => props.width ?? (measuredWidth.value || 400));
-const height = computed(() => props.height ?? 200);
-
 const hasInlineLegend = computed(() => allSeries.value.some((s) => s.legend));
-
-const { padding, innerW, innerH } = useChartPadding({
-  title: () => props.title,
-  xLabel: () => props.xLabel,
-  yLabel: () => props.yLabel,
-  hasInlineLegend: () => hasInlineLegend.value,
-  width: () => width.value,
-  height: () => height.value,
-});
 
 const EMPTY_DATA: readonly number[] = [];
 
@@ -408,11 +360,10 @@ function defaultColor(i: number): string {
   return DEFAULT_COLORS[i % DEFAULT_COLORS.length];
 }
 
-function formatTooltipValue(v: number): string {
-  if (props.tooltipValueFormat) return props.tooltipValueFormat(v);
-  if (props.valueTickFormat) return props.valueTickFormat(v);
-  return formatTick(v);
-}
+const formatTooltipValue = makeTooltipValueFormatter(
+  () => props.tooltipValueFormat,
+  () => props.valueTickFormat,
+);
 
 const valueTickItems = computed(() => {
   const { min, max } = valueExtent.value;
@@ -489,6 +440,20 @@ const hasTooltipSlot = computed(
   () => !!props.tooltipData || !!props.tooltipTrigger,
 );
 
+function projectAnnotation(
+  x: number,
+  y: number,
+): { x: number; y: number } | null {
+  if (!isFinite(x) || !isFinite(y)) return null;
+  if (slotSize.value === 0) return null;
+  const base = isVertical.value ? padding.value.left : padding.value.top;
+  const categoricalPx = base + (x + 0.5) * slotSize.value;
+  const valuePx = valuePixel(y);
+  return isVertical.value
+    ? { x: categoricalPx, y: valuePx }
+    : { x: valuePx, y: categoricalPx };
+}
+
 function pointerToIndex(clientX: number, clientY: number): number | null {
   const rect = containerRef.value?.getBoundingClientRect();
   if (!rect) return null;
@@ -501,30 +466,39 @@ function pointerToIndex(clientX: number, clientY: number): number | null {
 }
 
 const {
+  containerRef,
+  svgRef,
+  width,
+  height,
+  padding,
+  innerW,
+  innerH,
   hoverIndex,
   tooltipRef,
   tooltipPos,
-  handlers: tooltipHandlers,
-} = useChartTooltip({
-  enabled: () => hasTooltipSlot.value,
-  trigger: () => props.tooltipTrigger,
-  clamp: () => props.tooltipClamp,
-  pointerToIndex,
-  containerRef,
-  onHover: (payload) => emit("hover", payload),
-});
-
-const {
-  svgRef,
-  items: menuItems,
+  tooltipHandlers,
+  menuItems,
   downloadLinkText,
   csvHref,
-  resolvedFilename: menuFilename,
-} = useChartMenu({
+  menuFilename,
+} = useChartFoundation({
+  width: () => props.width,
+  height: () => props.height,
+  title: () => props.title,
+  xLabel: () => props.xLabel,
+  yLabel: () => props.yLabel,
+  debounce: () => props.debounce,
+  menu: () => props.menu,
+  tooltipTrigger: () => props.tooltipTrigger,
+  tooltipClamp: () => props.tooltipClamp,
   filename: () => props.filename,
-  legacyMenuLabel: () => props.menu,
-  getCsv: toCsv,
   downloadLink: () => props.downloadLink,
+  chartPadding: () => props.chartPadding,
+  hasInlineLegend: () => hasInlineLegend.value,
+  hasTooltipSlot: () => hasTooltipSlot.value,
+  getCsv: toCsv,
+  pointerToIndex,
+  onHover: (payload) => emit("hover", payload),
 });
 
 const hoveredCategoryLabel = computed(() => {
@@ -758,6 +732,12 @@ const hoverBand = computed(() => {
         fill="transparent"
         style="cursor: crosshair; touch-action: none"
         v-on="tooltipHandlers"
+      />
+      <!-- annotations (top layer) -->
+      <ChartAnnotations
+        v-if="annotations && annotations.length > 0"
+        :annotations="annotations"
+        :project="projectAnnotation"
       />
     </svg>
     <!-- Tooltip floating content -->
