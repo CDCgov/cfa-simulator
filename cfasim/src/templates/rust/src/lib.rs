@@ -20,6 +20,14 @@ fn compute(steps: u32, rate: f64) -> (Vec<f64>, Vec<f64>) {
     (time, values)
 }
 
+// Routes Rust panics through `console.error` with a readable JS stack trace.
+// Without this, a panic in the model surfaces in the browser as an opaque
+// `RuntimeError: unreachable` from the WASM trap, with no Rust location.
+#[wasm_bindgen(start)]
+pub fn init() {
+    console_error_panic_hook::set_once();
+}
+
 #[wasm_bindgen]
 pub fn simulate(steps: u32, rate: f64) -> JsValue {
     let (time, values) = compute(steps, rate);
