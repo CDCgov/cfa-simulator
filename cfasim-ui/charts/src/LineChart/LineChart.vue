@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import {
   snap,
@@ -129,10 +130,18 @@ interface LineChartProps extends ChartCommonProps {
    * omitted, ticks are chosen automatically.
    */
   yTicks?: number | number[];
-  /** Formatter for x-axis tick labels. Receives the raw numeric value. */
-  xTickFormat?: (value: number, index: number) => string;
-  /** Formatter for y-axis tick labels. Receives the raw numeric value. */
-  yTickFormat?: (value: number) => string;
+  /**
+   * Formatter for x-axis tick labels. Accepts a preset name, a printf-style
+   * format string, or a function. The two-arg function form `(value, index)`
+   * is also supported for index-based labels. See `formatNumber` in
+   * `@cfasim-ui/shared`.
+   */
+  xTickFormat?: NumberFormat | ((value: number, index: number) => string);
+  /**
+   * Formatter for y-axis tick labels. Accepts a preset name, a printf-style
+   * format string, or a function. See `formatNumber` in `@cfasim-ui/shared`.
+   */
+  yTickFormat?: NumberFormat;
   /**
    * @deprecated Use `xTickFormat` (e.g. `(_, i) => labels[i]`) together
    * with `xTicks` for explicit control. Still honored for tooltip x-labels
@@ -539,7 +548,9 @@ const sectionLabelBaseY = computed(
 const yTickItems = computed(() => {
   const { min, max } = extent.value;
   const fmt = (v: number) =>
-    props.yTickFormat ? props.yTickFormat(v) : formatTick(v);
+    props.yTickFormat !== undefined
+      ? formatNumber(v, props.yTickFormat)
+      : formatTick(v);
 
   if (min === max) {
     return [{ value: fmt(min), y: snap(padding.value.top + innerH.value / 2) }];
@@ -566,7 +577,12 @@ const xTickItems = computed(() => {
   // Tick values are in data-space; display labels add `xDisplayOffset`.
   const fmt = (v: number, i: number) => {
     const display = v + offset;
-    if (props.xTickFormat) return props.xTickFormat(display, i);
+    const xf = props.xTickFormat;
+    if (xf !== undefined) {
+      return typeof xf === "function"
+        ? xf(display, i)
+        : formatNumber(display, xf);
+    }
     if (
       !hasExplicitX.value &&
       props.xLabels &&
@@ -679,8 +695,10 @@ const hoverSlotProps = computed(() => {
   const offset = xDisplayOffset.value;
   const displayX = targetX + offset;
   let xLabel: string | undefined;
-  if (props.xTickFormat) {
-    xLabel = props.xTickFormat(displayX, idx);
+  const xf = props.xTickFormat;
+  if (xf !== undefined) {
+    xLabel =
+      typeof xf === "function" ? xf(displayX, idx) : formatNumber(displayX, xf);
   } else if (!hasExplicitX.value) {
     xLabel = props.xLabels?.[idx];
   } else {

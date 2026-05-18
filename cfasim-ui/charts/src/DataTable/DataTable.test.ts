@@ -225,6 +225,143 @@ describe("Table", () => {
     });
   });
 
+  it("applies a NumberFormat preset to numeric cells", () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        data: { day: [0, 1], rate: [0.1234, 0.5] },
+        columnConfig: { rate: { format: "percent:1" } },
+      },
+    });
+    const rows = wrapper.findAll("tbody tr");
+    expect(rows[0].findAll("td").map((td) => td.text())).toEqual([
+      "0",
+      "12.3%",
+    ]);
+    expect(rows[1].findAll("td").map((td) => td.text())).toEqual([
+      "1",
+      "50.0%",
+    ]);
+  });
+
+  it("applies a sprintf-style format to numeric cells", () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        data: { cases: [1, 21] },
+        columnConfig: { cases: { format: "%05d" } },
+      },
+    });
+    const cells = wrapper.findAll("tbody td");
+    expect(cells.map((c) => c.text())).toEqual(["00001", "00021"]);
+  });
+
+  it("falls back to default rendering when a string preset is applied to non-numeric cells", () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        data: { label: ["A", "B", "C"] },
+        columnConfig: { label: { format: "percent" } },
+      },
+    });
+    const cells = wrapper.findAll("tbody td");
+    expect(cells.map((c) => c.text())).toEqual(["A", "B", "C"]);
+  });
+
+  it("uses columnConfig format to render cell values", () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        data: { day: [0, 1], rate: [0.123, 0.456] },
+        columnConfig: {
+          rate: { format: (v: number) => `${(v * 100).toFixed(1)}%` },
+        },
+      },
+    });
+    const rows = wrapper.findAll("tbody tr");
+    expect(rows[0].findAll("td").map((td) => td.text())).toEqual([
+      "0",
+      "12.3%",
+    ]);
+    expect(rows[1].findAll("td").map((td) => td.text())).toEqual([
+      "1",
+      "45.6%",
+    ]);
+  });
+
+  it("passes the row index to a column formatter", () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        data: { x: [10, 20, 30] },
+        columnConfig: {
+          x: {
+            format: (v: number | string | boolean, r: number) => `${r}:${v}`,
+          },
+        },
+      },
+    });
+    const cells = wrapper.findAll("tbody td");
+    expect(cells.map((c) => c.text())).toEqual(["0:10", "1:20", "2:30"]);
+  });
+
+  it("does not call format for null/undefined values", () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        data: { x: [1, undefined as unknown as number, 3] },
+        columnConfig: {
+          x: { format: (v: number) => `v=${v}` },
+        },
+      },
+    });
+    const cells = wrapper.findAll("tbody td");
+    expect(cells.map((c) => c.text())).toEqual(["v=1", "", "v=3"]);
+  });
+
+  it("format overrides enum labels from ModelOutput", () => {
+    const output = new ModelOutput(
+      2,
+      [{ name: "status", type: "enum", enumLabels: ["S", "I", "R"] }],
+      [new Uint32Array([0, 2])],
+    );
+    const wrapper = mount(DataTable, {
+      props: {
+        data: output,
+        columnConfig: { status: { format: (v: number) => `#${v}` } },
+      },
+    });
+    const cells = wrapper.findAll("tbody td");
+    expect(cells.map((c) => c.text())).toEqual(["#0", "#2"]);
+  });
+
+  it("uses formatted values in CSV download", () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        data: { day: [0, 1], rate: [0.123, 0.456] },
+        columnConfig: {
+          rate: { format: (v: number) => `${(v * 100).toFixed(1)}%` },
+        },
+      },
+    });
+    const menu = wrapper.findComponent({ name: "ChartMenu" });
+    const items = menu.props("items") as {
+      label: string;
+      action: () => void;
+    }[];
+    let downloaded = "";
+    const orig = URL.createObjectURL;
+    URL.createObjectURL = (blob: Blob) => {
+      void (blob as Blob).text().then((t) => {
+        downloaded = t;
+      });
+      return "blob:mock";
+    };
+    try {
+      items[0].action();
+    } finally {
+      URL.createObjectURL = orig;
+    }
+    return Promise.resolve().then(() => {
+      expect(downloaded).toContain("12.3%");
+      expect(downloaded).toContain("45.6%");
+    });
+  });
+
   it("applies cellClass to td elements", () => {
     const wrapper = mount(DataTable, {
       props: {
