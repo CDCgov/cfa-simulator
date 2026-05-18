@@ -56,6 +56,43 @@ A table for displaying columnar data. Accepts a plain record of arrays or a `Mod
   </template>
 </ComponentDemo>
 
+### Formatting cell values
+
+Use `format` on a column to override the default rendering. Accepts a
+{@link NumberFormat} value — a preset name (optionally with `:N` digits,
+e.g. `"percent:1"`), a printf-style format string, or a function
+`(value, row) => string`. Formatted values are also used in CSV exports.
+
+<ComponentDemo>
+  <DataTable
+    :data="{ day: [0, 1, 2, 3, 4], rate: [0.012, 0.234, 0.467, 0.512, 0.601], cases: [1, 21, 56, 101, 141] }"
+    :column-config="{
+      day: { label: 'Day', width: 'small' },
+      rate: { label: 'Attack rate', format: 'percent:1' },
+      cases: { label: 'Cases', format: '%05d' },
+    }"
+  />
+
+<template #code>
+
+```vue
+<DataTable
+  :data="{
+    day: [0, 1, 2, 3, 4],
+    rate: [0.012, 0.234, 0.467, 0.512, 0.601],
+    cases: [1, 21, 56, 101, 141],
+  }"
+  :column-config="{
+    day: { label: 'Day', width: 'small' },
+    rate: { label: 'Attack rate', format: 'percent:1' },
+    cases: { label: 'Cases', format: '%05d' },
+  }"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Cell class and max rows
 
 <ComponentDemo>
@@ -157,5 +194,16 @@ interface ColumnConfig {
   width?: "small" | "medium" | "large" | number;
   align?: "left" | "center" | "right";
   cellClass?: string;
+  format?: NumberFormat | ((value: CellValue, row: number) => string);
 }
+
+type CellValue = number | string | boolean;
+
+type NumberFormat =
+  | NumberFormatPreset // "plain" | "localized" | "percent" | "compact" | "scientific" | "engineering" (optionally with ":N" digits, e.g. "percent:1")
+  | string // printf-style format, e.g. "%.2f", "%05d"
+  | ((value: number) => string);
 ```
+
+See `formatNumber` in `@cfasim-ui/shared` for the underlying utility — you
+can also call it directly in your own code.

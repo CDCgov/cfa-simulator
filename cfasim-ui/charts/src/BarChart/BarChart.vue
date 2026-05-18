@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import {
   snap,
@@ -50,8 +51,12 @@ interface BarChartProps extends ChartCommonProps {
    * array = explicit values. When omitted, ticks are chosen automatically.
    */
   valueTicks?: number | number[];
-  /** Formatter for value-axis tick labels. */
-  valueTickFormat?: (value: number) => string;
+  /**
+   * Formatter for value-axis tick labels. Accepts a preset name, a
+   * printf-style format string, or a function. See `formatNumber` in
+   * `@cfasim-ui/shared`.
+   */
+  valueTickFormat?: NumberFormat;
   /** Formatter for category-axis labels. Receives the resolved category string. */
   categoryFormat?: (label: string, index: number) => string;
   /**
@@ -367,7 +372,9 @@ const formatTooltipValue = makeTooltipValueFormatter(
 const valueTickItems = computed(() => {
   const { min, max } = valueExtent.value;
   const fmt = (v: number) =>
-    props.valueTickFormat ? props.valueTickFormat(v) : formatTick(v);
+    props.valueTickFormat !== undefined
+      ? formatNumber(v, props.valueTickFormat)
+      : formatTick(v);
   if (min === max) {
     return [
       {
