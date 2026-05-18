@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { CSSProperties } from "vue";
-import type { ModelOutput } from "@cfasim-ui/shared";
+import {
+  formatNumber,
+  type ModelOutput,
+  type NumberFormat,
+} from "@cfasim-ui/shared";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
 import { downloadCsv } from "../ChartMenu/download.js";
@@ -10,12 +14,23 @@ export type TableRecord = Record<string, ArrayLike<number | string | boolean>>;
 export type TableData = TableRecord | ModelOutput;
 export type ColumnWidth = "small" | "medium" | "large";
 export type ColumnAlign = "left" | "center" | "right";
+export type CellValue = number | string | boolean;
+export type ColumnFormatter = (value: CellValue, row: number) => string;
 
 export interface ColumnConfig {
   label?: string;
   width?: ColumnWidth | number;
   align?: ColumnAlign;
   cellClass?: string;
+  /**
+   * Custom formatter for cell values in this column. Accepts a
+   * {@link NumberFormat} (preset name, printf-style string, or
+   * `(value) => string` function — see `formatNumber` in
+   * `@cfasim-ui/shared`) or a `(value, row) => string` function for full
+   * control. Number presets/sprintf only apply to numeric cells; other
+   * types fall back to default rendering. Used in CSV exports.
+   */
+  format?: NumberFormat | ColumnFormatter;
 }
 
 const COLUMN_WIDTHS: Record<ColumnWidth, string> = {
@@ -102,6 +117,18 @@ const rowCount = computed(() => {
 function cellValue(col: Column, row: number): string {
   const v = col.values[row];
   if (v === undefined || v === null) return "";
+  const format = props.columnConfig?.[col.name]?.format;
+  if (format !== undefined) {
+    // Function variant — either `(value: number) => string` (NumberFormat
+    // function) or `(value, row) => string` (ColumnFormatter). Both call
+    // sites are compatible; the narrower variant ignores `row`.
+    if (typeof format === "function") {
+      return (format as ColumnFormatter)(v, row);
+    }
+    // String preset/sprintf — only applies to numeric cells; other types
+    // fall through to default rendering.
+    if (typeof v === "number") return formatNumber(v, format);
+  }
   if (col.enumLabels && typeof v === "number")
     return col.enumLabels[v] ?? String(v);
   if (typeof v === "number") {

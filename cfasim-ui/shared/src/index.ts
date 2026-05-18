@@ -14,6 +14,8 @@ export type {
   ModelOutputsWire,
 } from "./ModelOutput.js";
 export { modelOutputToCSV } from "./csv.js";
+export { formatNumber, isNumberFormat } from "./formatNumber.js";
+export type { NumberFormat, NumberFormatPreset } from "./formatNumber.js";
 export {
   useUrlParams,
   serialize,

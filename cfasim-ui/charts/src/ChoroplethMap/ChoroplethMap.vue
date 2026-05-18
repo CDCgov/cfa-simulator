@@ -16,6 +16,7 @@ import { select } from "d3-selection";
 import "d3-transition";
 import { feature, mesh, merge } from "topojson-client";
 import type { Topology, GeometryCollection } from "topojson-specification";
+import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import { fipsToHsa, hsaNames } from "./hsaMapping.js";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
@@ -129,11 +130,12 @@ const props = withDefaults(
       value?: number | string;
     }) => string;
     /**
-     * Formatter for numeric values shown in the default tooltip. Receives
-     * the raw value. Ignored when `tooltipFormat` is provided (the caller
-     * controls the entire tooltip in that case).
+     * Formatter for numeric values shown in the default tooltip. Accepts a
+     * preset name, a printf-style format string, or a function. Ignored when
+     * `tooltipFormat` is provided (the caller controls the entire tooltip in
+     * that case). See `formatNumber` in `@cfasim-ui/shared`.
      */
-    tooltipValueFormat?: (value: number) => string;
+    tooltipValueFormat?: NumberFormat;
     /**
      * Boundary for tooltip flip/clamp. `"none"` always places to the right of
      * the pointer with no clamping. `"chart"` (default) uses the map
@@ -889,8 +891,8 @@ const featureName = (
 
 function formatTooltipValue(value: number | string | undefined): string {
   if (value == null) return "";
-  if (typeof value === "number" && props.tooltipValueFormat) {
-    return props.tooltipValueFormat(value);
+  if (typeof value === "number" && props.tooltipValueFormat !== undefined) {
+    return formatNumber(value, props.tooltipValueFormat);
   }
   return String(value);
 }

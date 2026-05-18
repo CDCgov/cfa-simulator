@@ -1,4 +1,5 @@
 import { computed } from "vue";
+import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import { formatTick } from "./axes.js";
 import { useChartSize } from "./useChartSize.js";
 import { useChartPadding, type ChartPadding } from "./useChartPadding.js";
@@ -111,14 +112,14 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
  * `formatTick`. Both chart components use the same precedence order.
  */
 export function makeTooltipValueFormatter(
-  tooltipFormat: () => ((v: number) => string) | undefined,
-  axisFormat: () => ((v: number) => string) | undefined,
+  tooltipFormat: () => NumberFormat | undefined,
+  axisFormat: () => NumberFormat | undefined,
 ): (v: number) => string {
   return (v: number) => {
     const tf = tooltipFormat();
-    if (tf) return tf(v);
+    if (tf !== undefined) return formatNumber(v, tf);
     const af = axisFormat();
-    if (af) return af(v);
+    if (af !== undefined) return formatNumber(v, af);
     return formatTick(v);
   };
 }

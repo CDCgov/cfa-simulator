@@ -4,6 +4,7 @@
  * intersection (e.g. `defineProps<ChartCommonProps & MyExtraProps>()`).
  */
 
+import type { NumberFormat } from "@cfasim-ui/shared";
 import type { ChartAnnotation } from "./annotations.js";
 import type { ChartPadding } from "./useChartPadding.js";
 
@@ -30,11 +31,12 @@ export interface ChartCommonProps {
   /** Boundary for tooltip flip/clamp. Default: `"chart"`. */
   tooltipClamp?: "none" | "chart" | "window";
   /**
-   * Formatter for numeric values shown in the default tooltip. Receives
-   * the raw value. When omitted, the chart falls back to its value-axis
-   * tick formatter, then `formatTick`.
+   * Formatter for numeric values shown in the default tooltip. Accepts a
+   * preset name, a printf-style format string, or a function. When
+   * omitted, the chart falls back to its value-axis tick formatter, then
+   * `formatTick`. See `formatNumber` in `@cfasim-ui/shared`.
    */
-  tooltipValueFormat?: (value: number) => string;
+  tooltipValueFormat?: NumberFormat;
   /**
    * Custom CSV content (string or function) for the Download CSV menu
    * item. When omitted, CSV is generated from the chart's series.
