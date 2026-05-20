@@ -123,6 +123,9 @@ importers:
 
   cfasim-ui/components:
     dependencies:
+      '@cfasim-ui/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@codemirror/lang-json':
         specifier: ^6.0.2
         version: 6.0.2
