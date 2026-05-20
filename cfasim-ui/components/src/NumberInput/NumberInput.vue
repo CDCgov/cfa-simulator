@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted, getCurrentInstance } from "vue";
 import { SliderRoot, SliderTrack, SliderRange, SliderThumb } from "reka-ui";
+import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import Hint from "../Hint/Hint.vue";
 
 export type NumberRange = [number, number];
@@ -29,10 +30,15 @@ const props = defineProps<{
   numberType?: "integer" | "float";
   required?: boolean;
   decimals?: number;
-  // Custom formatter for slider thumb labels and min/max labels. Overrides
-  // the default percent/decimal formatting when provided. Only consulted in
-  // slider/range mode — the text input keeps its own number-shaped formatting.
-  sliderDisplay?: (value: number) => string;
+  // Custom formatter for the displayed value. Accepts a NumberFormat
+  // (preset name, printf string, or function) — see `formatNumber` in
+  // `@cfasim-ui/shared`. When set, overrides the default percent/decimal
+  // formatting for both the text input value and slider thumb/min/max
+  // labels. The model stays a raw number; only the display changes. Note
+  // that formats which add suffixes or scale the value (e.g.
+  // `"percent:1"`) may not round-trip through the text input — use
+  // `percent: true` for value scaling and `format` for display shaping.
+  format?: NumberFormat;
 }>();
 
 function isRangeValue(v: unknown): v is NumberRange {
@@ -113,7 +119,7 @@ function roundToDecimals(v: number, d: number): number {
 
 function formatSliderValue(v: number | undefined) {
   if (v == null) return "";
-  if (props.sliderDisplay) return props.sliderDisplay(v);
+  if (props.format !== undefined) return formatNumber(v, props.format);
   const d = displayDecimals.value;
   if (props.percent) return (v * 100).toFixed(d) + "%";
   return v.toLocaleString("en-US", {
@@ -149,6 +155,7 @@ function formatWithCommas(v: number | undefined): string {
 
 function formatForDisplay(v: number | undefined): string {
   if (v == null) return "";
+  if (props.format !== undefined) return formatNumber(v, props.format);
   const d = displayDecimals.value;
   if (d > 0) {
     return v.toLocaleString("en-US", {

@@ -33,6 +33,15 @@ describe("formatNumber", () => {
       expect(formatNumber(0.1234, "percent")).toBe("12.34%");
     });
 
+    it("presets preserve raw precision when no :N is given", () => {
+      // Without a digit suffix, these used to round at Intl defaults (~3
+      // significant digits). Now they preserve the raw value.
+      expect(formatNumber(1234.5678, "localized")).toMatch(/1.234[.,]5678$/);
+      expect(formatNumber(0.123456, "percent")).toBe("12.3456%");
+      expect(formatNumber(12345, "scientific")).toBe("1.2345E4");
+      expect(formatNumber(12345, "engineering")).toBe("12.345E3");
+    });
+
     it("compact uses short forms", () => {
       expect(formatNumber(1500, "compact")).toBe("1.5K");
       expect(formatNumber(2_500_000, "compact")).toBe("2.5M");

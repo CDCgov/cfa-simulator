@@ -232,12 +232,20 @@ Range mode works with `percent` and `live` as well:
   </template>
 </ComponentDemo>
 
-### Custom slider display
+### Custom display format
 
-Pass `slider-display` (a `(value: number) => string` function) to format the
-thumb labels and the min/max labels however you like. The internal model is
-still a number — only the displayed text changes. This applies to single
-sliders and ranges; the regular text input is unaffected.
+Pass `format` to control how the value is displayed in the text input and
+in slider thumb/min/max labels. Accepts a
+[`NumberFormat`](../charts/data-table.md#columnconfig) — a preset name
+(optionally with a `:N` digits suffix, e.g. `"percent:1"`), a printf-style
+format string (`"%.2f"`), or a `(value: number) => string` function. The
+internal model stays a number — only the displayed text changes.
+
+When unset, the default formatting follows the `percent` and `decimals`
+props. When set, `format` overrides both. Formats that add suffixes or
+scale the value (e.g. `"percent:1"` → `"12.3%"`) may not round-trip
+through the text input — pair them with `percent: true` for value scaling
+and use `format` for display shaping.
 
 <ComponentDemo>
   <div style="width: 300px">
@@ -247,7 +255,7 @@ sliders and ranges; the regular text input is unaffected.
       :min="dateStart"
       :max="dateEnd"
       :step="dayMs"
-      :slider-display="formatDate"
+      :format="formatDate"
     />
   </div>
 
@@ -270,7 +278,7 @@ const formatDate = (ms) =>
   :min="dateStart"
   :max="dateEnd"
   :step="dayMs"
-  :slider-display="formatDate"
+  :format="formatDate"
 />
 ```
 
