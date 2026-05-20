@@ -801,14 +801,14 @@ describe("NumberInput", () => {
     expect((input.element as HTMLInputElement).value).toBe("2.500");
   });
 
-  it("applies sliderDisplay to single-slider thumb and labels", () => {
+  it("applies format function to single-slider thumb and labels", () => {
     const wrapper = mount(NumberInput, {
       props: {
         modelValue: 50,
         slider: true,
         min: 0,
         max: 100,
-        sliderDisplay: (v: number) => `${v} days`,
+        format: (v: number) => `${v} days`,
       },
     });
     expect(wrapper.find(".slider-current").text()).toBe("50 days");
@@ -817,15 +817,43 @@ describe("NumberInput", () => {
     expect(labels[1].text()).toBe("100 days");
   });
 
-  it("ignores sliderDisplay for regular (non-slider) inputs", () => {
+  it("applies a NumberFormat preset to slider labels", () => {
     const wrapper = mount(NumberInput, {
       props: {
-        modelValue: 50,
-        sliderDisplay: (v: number) => `${v} days`,
+        modelValue: 0.25,
+        slider: true,
+        min: 0,
+        max: 1,
+        step: 0.01,
+        format: "percent:0",
+      },
+    });
+    expect(wrapper.find(".slider-current").text()).toBe("25%");
+    const labels = wrapper.findAll(".slider-labels span");
+    expect(labels[0].text()).toBe("0%");
+    expect(labels[1].text()).toBe("100%");
+  });
+
+  it("applies format to text-input display value", () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 3.14159,
+        format: "%.2f",
       },
     });
     const input = wrapper.find("input");
-    expect((input.element as HTMLInputElement).value).toBe("50");
+    expect((input.element as HTMLInputElement).value).toBe("3.14");
+  });
+
+  it("applies a function format to text-input display value", () => {
+    const wrapper = mount(NumberInput, {
+      props: {
+        modelValue: 50,
+        format: (v: number) => `${v} days`,
+      },
+    });
+    const input = wrapper.find("input");
+    expect((input.element as HTMLInputElement).value).toBe("50 days");
   });
 
   it("syncs local value when model changes externally", async () => {
@@ -973,7 +1001,7 @@ describe("NumberInput", () => {
       expect(slider.props("modelValue")).toEqual([10, 90]);
     });
 
-    it("uses sliderDisplay to format thumb labels and min/max labels", () => {
+    it("uses format to format thumb labels and min/max labels", () => {
       const fmt = (v: number) => new Date(v).toISOString().slice(0, 10);
       const start = Date.UTC(2024, 0, 1);
       const mid = Date.UTC(2024, 5, 1);
@@ -983,7 +1011,7 @@ describe("NumberInput", () => {
           range: [mid, end] as NumberRange,
           min: start,
           max: end,
-          sliderDisplay: fmt,
+          format: fmt,
         },
       });
       const thumbs = wrapper.findAll(".slider-thumb");

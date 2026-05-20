@@ -9,6 +9,7 @@ import { sprintf } from "sprintf-js";
  * - `scientific` — scientific notation (`1.23E4`)
  * - `engineering` — engineering notation (powers of 1000)
  *
+ * Presets preserve the raw value's precision by default (no rounding).
  * Append `:N` (a digit) to fix the number of fractional digits, e.g.
  * `"percent:1"` → `"12.3%"`, `"localized:2"` → `"1,234.50"`.
  */
@@ -70,6 +71,11 @@ function parsePreset(
   return { preset: name, digits };
 }
 
+// Covers JS double-precision (≤17 significant digits). When the caller
+// hasn't asked for a specific digit count, we use this to preserve the
+// raw value rather than letting Intl round to its default precision.
+const RAW_PRECISION_DIGITS = 20;
+
 function formatPreset(
   value: number,
   preset: NumberFormatPreset,
@@ -78,7 +84,7 @@ function formatPreset(
   const fractionOpts: Intl.NumberFormatOptions =
     digits !== undefined
       ? { minimumFractionDigits: digits, maximumFractionDigits: digits }
-      : {};
+      : { maximumFractionDigits: RAW_PRECISION_DIGITS };
   switch (preset) {
     case "plain":
       return digits !== undefined ? value.toFixed(digits) : String(value);
@@ -87,10 +93,7 @@ function formatPreset(
     case "percent":
       return new Intl.NumberFormat(undefined, {
         style: "percent",
-        // Default to 2 fractional digits max when none is specified.
-        ...(digits !== undefined
-          ? { minimumFractionDigits: digits, maximumFractionDigits: digits }
-          : { maximumFractionDigits: 2 }),
+        ...fractionOpts,
       }).format(value);
     case "compact":
       return new Intl.NumberFormat(undefined, {
