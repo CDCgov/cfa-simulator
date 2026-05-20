@@ -10,19 +10,23 @@
     "directory": "cfasim-ui/charts"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./style.css": "./dist/index.css"
+    }
   },
   "files": [
     "dist"
   ],
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./style.css": "./dist/index.css"
+    ".": "./src/index.ts",
+    "./style.css": "./src/empty-styles.css"
   },
   "sideEffects": [
     "*.css"

@@ -53,30 +53,6 @@ export default defineConfig({
   title: "CFA Simulator Docs",
   base: "/cfa-simulator/docs/",
   vite: {
-    resolve: {
-      alias: [
-        // Map the built CSS subpaths to an empty stub — in dev, scoped
-        // styles inject via @vitejs/plugin-vue from the aliased src/.
-        {
-          find: "@cfasim-ui/components/style.css",
-          replacement: resolve(import.meta.dirname, "empty.css"),
-        },
-        {
-          find: "@cfasim-ui/charts/style.css",
-          replacement: resolve(import.meta.dirname, "empty.css"),
-        },
-        // Resolve package imports to source so Vue SFC edits hot-reload
-        // without needing `plz build` first.
-        {
-          find: "@cfasim-ui/components",
-          replacement: resolve(ROOT, "cfasim-ui/components/src/index.ts"),
-        },
-        {
-          find: "@cfasim-ui/charts",
-          replacement: resolve(ROOT, "cfasim-ui/charts/src/index.ts"),
-        },
-      ],
-    },
     plugins: [watchComponentSources()],
   },
   themeConfig: {

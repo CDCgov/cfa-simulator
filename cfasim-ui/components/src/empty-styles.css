@@ -1,0 +1,4 @@
+/* Empty stub for the "@cfasim-ui/components/style.css" subpath in dev.
+   Scoped styles inject via @vitejs/plugin-vue when consumers import from
+   the source entry. At publish time, package.json's `publishConfig`
+   overrides this subpath to point at the built `dist/index.css`. */
