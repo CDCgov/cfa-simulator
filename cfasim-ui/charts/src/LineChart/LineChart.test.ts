@@ -1824,4 +1824,77 @@ describe("LineChart", () => {
       expect(annotationsPos).toBeGreaterThan(overlayPos);
     });
   });
+
+  describe("yScaleType: log", () => {
+    it("renders powers-of-10 ticks by default", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1, 10, 100, 1000],
+          yScaleType: "log",
+          width: 400,
+          height: 240,
+          menu: false,
+        },
+      });
+      const tickLabels = wrapper
+        .findAll('[data-testid="y-tick"]')
+        .map((t) => t.text());
+      // formatTick adds thousands separators at >= 1000.
+      expect(tickLabels).toEqual(["1", "10", "100", "1,000"]);
+    });
+
+    it("maps a midpoint value to the geometric midpoint of the axis", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1, 10, 100],
+          yScaleType: "log",
+          width: 400,
+          height: 240,
+          menu: false,
+        },
+      });
+      const ticks = wrapper.findAll('[data-testid="y-tick"]');
+      const tickYs = ticks.map((t) => Number(t.attributes("y")));
+      // 1, 10, 100 → 0, 0.5, 1 of the axis range. Verify the middle tick
+      // sits halfway between the outer ticks.
+      const [yTop, yMid, yBot] = [tickYs[2], tickYs[1], tickYs[0]];
+      const midpoint = (yTop + yBot) / 2;
+      expect(yMid).toBeCloseTo(midpoint, 0);
+    });
+
+    it("ignores yMin <= 0 in log mode", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1, 10, 100],
+          yMin: 0,
+          yScaleType: "log",
+          width: 400,
+          height: 240,
+          menu: false,
+        },
+      });
+      // No NaN/Infinity in the path d attribute.
+      const paths = wrapper.findAll("path");
+      const d = paths[paths.length - 1].attributes("d") ?? "";
+      expect(d).toBeTruthy();
+      expect(d).not.toMatch(/NaN|Infinity/);
+    });
+
+    it("honors explicit yTicks array in log mode", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1, 10, 100],
+          yScaleType: "log",
+          yTicks: [2, 5, 50],
+          width: 400,
+          height: 240,
+          menu: false,
+        },
+      });
+      const tickLabels = wrapper
+        .findAll('[data-testid="y-tick"]')
+        .map((t) => t.text());
+      expect(tickLabels).toEqual(["2", "5", "50"]);
+    });
+  });
 });

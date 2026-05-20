@@ -165,6 +165,40 @@ Use `value-tick-format` to format the value-axis labels. `tooltip-value-format` 
   </template>
 </ComponentDemo>
 
+### Logarithmic value axis
+
+Set `value-scale-type="log"` to switch the value axis to base-10 log
+scaling. Non-positive values collapse to the axis floor, and
+`valueMin <= 0` is ignored. With `layout="stacked"`, individual segment
+sizes are no longer proportional to their raw values, but the cumulative
+top still represents the sum.
+
+<ComponentDemo>
+  <BarChart
+    :data="[3, 24, 180, 1450, 9800]"
+    :categories="['Wk1', 'Wk2', 'Wk3', 'Wk4', 'Wk5']"
+    value-scale-type="log"
+    :height="220"
+    x-label="Week"
+    y-label="Cases"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :data="[3, 24, 180, 1450, 9800]"
+  :categories="['Wk1', 'Wk2', 'Wk3', 'Wk4', 'Wk5']"
+  value-scale-type="log"
+  :height="220"
+  x-label="Week"
+  y-label="Cases"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Annotations
 
 Pin callouts to specific bars with `annotations`. `x` is the category

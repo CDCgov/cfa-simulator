@@ -897,4 +897,67 @@ describe("BarChart", () => {
       expect(wrapper.find("g.chart-annotations").exists()).toBe(false);
     });
   });
+
+  describe("valueScaleType: log", () => {
+    it("renders powers-of-10 ticks by default", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [1, 10, 100, 1000],
+          categories: ["a", "b", "c", "d"],
+          valueScaleType: "log",
+          width: 400,
+          height: 240,
+          menu: false,
+        },
+      });
+      const tickLabels = wrapper
+        .findAll('[data-testid="value-tick"]')
+        .map((t) => t.text());
+      expect(tickLabels).toEqual(["1", "10", "100", "1,000"]);
+    });
+
+    it("places bars between the axis floor and the value's log position", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [1, 10, 100],
+          categories: ["a", "b", "c"],
+          valueScaleType: "log",
+          width: 400,
+          height: 240,
+          menu: false,
+        },
+      });
+      const bars = wrapper.findAll('[data-testid="bar"]');
+      // Bar heights should grow geometrically: bar2 ≈ 0.5 of inner, bar3 ≈ 1.0.
+      const heights = bars.map((b) => Number(b.attributes("height")));
+      expect(heights[0]).toBe(0); // value === min → zero height
+      expect(heights[1]).toBeGreaterThan(0);
+      expect(heights[2]).toBeGreaterThan(heights[1]);
+      // The 10-bar should be roughly half the height of the 100-bar.
+      expect(heights[1] / heights[2]).toBeCloseTo(0.5, 1);
+    });
+
+    it("ignores valueMin <= 0 in log mode", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [1, 10, 100],
+          categories: ["a", "b", "c"],
+          valueScaleType: "log",
+          valueMin: 0,
+          width: 400,
+          height: 240,
+          menu: false,
+        },
+      });
+      const bars = wrapper.findAll('[data-testid="bar"]');
+      // Geometry still produces finite, non-NaN positions.
+      for (const b of bars) {
+        const y = Number(b.attributes("y"));
+        const h = Number(b.attributes("height"));
+        expect(Number.isFinite(y)).toBe(true);
+        expect(Number.isFinite(h)).toBe(true);
+        expect(h).toBeGreaterThanOrEqual(0);
+      }
+    });
+  });
 });
