@@ -5,6 +5,9 @@ import {
   snap,
   formatTick,
   computeTickValues,
+  computeLogTickValues,
+  scaleFraction,
+  clampExtentForScale,
   categoricalToCsv,
   useChartFoundation,
   makeTooltipValueFormatter,
@@ -46,6 +49,15 @@ interface BarChartProps extends ChartCommonProps {
   /** Force the value axis to start at this value or lower (default 0). */
   valueMin?: number;
   /**
+   * Scale type for the value axis. `"linear"` (default) maps values
+   * directly to pixels; `"log"` uses a base-10 log mapping. On a log
+   * axis, non-positive values collapse to the visible minimum, and
+   * `valueMin <= 0` is ignored. Stacked layout + log produces a
+   * cumulative axis but individual segment sizes are no longer
+   * proportional to their values.
+   */
+  valueScaleType?: "linear" | "log";
+  /**
    * Tick placement on the value axis (numeric). Number = interval,
    * array = explicit values. When omitted, ticks are chosen automatically.
    */
@@ -76,6 +88,7 @@ const props = withDefaults(defineProps<BarChartProps>(), {
   menu: true,
   tooltipClamp: "chart",
   valueGrid: true,
+  valueScaleType: "linear",
 });
 
 const emit = defineEmits<{
@@ -137,6 +150,10 @@ const isVertical = computed(() => props.orientation === "vertical");
 const valueExtent = computed(() => {
   let min = Infinity;
   let max = -Infinity;
+  let smallestPositive = Infinity;
+  const visitPositive = (v: number) => {
+    if (v > 0 && v < smallestPositive) smallestPositive = v;
+  };
   if (props.layout === "stacked") {
     const n = categoryCount.value;
     for (let i = 0; i < n; i++) {
@@ -146,6 +163,7 @@ const valueExtent = computed(() => {
         if (i >= s.data.length) continue;
         const v = Number(s.data[i]);
         if (!isFinite(v)) continue;
+        visitPositive(v);
         if (v >= 0) pos += v;
         else neg += v;
       }
@@ -157,6 +175,7 @@ const valueExtent = computed(() => {
       for (const v of s.data) {
         const n = Number(v);
         if (!isFinite(n)) continue;
+        visitPositive(n);
         if (n < min) min = n;
         if (n > max) max = n;
       }
@@ -165,11 +184,25 @@ const valueExtent = computed(() => {
   if (!isFinite(min)) min = 0;
   if (!isFinite(max)) max = 0;
   // Extend the value axis down to valueMin (default 0) when data sits
-  // above it, so bars share a common baseline.
+  // above it, so bars share a common baseline. On log scales, only
+  // positive valueMin values are honored.
   const floor = props.valueMin ?? 0;
-  if (floor < min) min = floor;
-  const range = max - min || 1;
-  return { min, max, range };
+  if (props.valueScaleType === "log") {
+    if (floor > 0 && floor < min) min = floor;
+  } else if (floor < min) {
+    min = floor;
+  }
+  const clamped = clampExtentForScale(
+    min,
+    max,
+    props.valueScaleType,
+    smallestPositive,
+  );
+  return {
+    min: clamped.min,
+    max: clamped.max,
+    range: clamped.max - clamped.min || 1,
+  };
 });
 
 /** Size (in pixels) of the categorical axis. */
@@ -218,12 +251,12 @@ const groupedBaselinePixel = computed(() => {
 
 /** Convert a data value to its pixel position along the value axis. */
 function valuePixel(v: number): number {
-  const { min, range } = valueExtent.value;
-  const scale = valueSize.value / range;
+  const { min, max } = valueExtent.value;
+  const frac = scaleFraction(v, min, max, props.valueScaleType);
   if (isVertical.value) {
-    return padding.value.top + innerH.value - (v - min) * scale;
+    return padding.value.top + innerH.value - frac * innerH.value;
   }
-  return padding.value.left + (v - min) * scale;
+  return padding.value.left + frac * innerW.value;
 }
 
 interface BarRect {
@@ -377,12 +410,15 @@ const valueTickItems = computed(() => {
     ];
   }
   const targetTickPixels = isVertical.value ? 50 : 80;
-  const values = computeTickValues({
-    min,
-    max,
-    ticks: props.valueTicks,
-    targetTickCount: valueSize.value / targetTickPixels,
-  });
+  const values =
+    props.valueScaleType === "log"
+      ? computeLogTickValues({ min, max, ticks: props.valueTicks })
+      : computeTickValues({
+          min,
+          max,
+          ticks: props.valueTicks,
+          targetTickCount: valueSize.value / targetTickPixels,
+        });
   return values.map((v) => ({
     value: fmt(v),
     pos: snap(valuePixel(v)),

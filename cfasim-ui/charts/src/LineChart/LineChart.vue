@@ -5,6 +5,9 @@ import {
   snap,
   formatTick,
   computeTickValues,
+  computeLogTickValues,
+  scaleFraction,
+  clampExtentForScale,
   seriesToCsv,
   useChartFoundation,
   makeTooltipValueFormatter,
@@ -101,6 +104,13 @@ interface LineChartProps extends ChartCommonProps {
   lineOpacity?: number;
   yMin?: number;
   /**
+   * Scale type for the y axis. `"linear"` (default) maps values directly
+   * to pixels; `"log"` uses a base-10 log mapping. On a log axis,
+   * non-positive values collapse to the visible minimum, and `yMin <= 0`
+   * is ignored.
+   */
+  yScaleType?: "linear" | "log";
+  /**
    * Offset applied to index-based x values (e.g. `xMin: 10` starts the
    * x axis at 10 instead of 0). Ignored when any series or area has
    * explicit `x` values.
@@ -137,6 +147,7 @@ const props = withDefaults(defineProps<LineChartProps>(), {
   lineOpacity: 1,
   menu: true,
   tooltipClamp: "chart",
+  yScaleType: "linear",
 });
 
 const emit = defineEmits<{
@@ -254,36 +265,42 @@ function xPixel(v: number): number {
 const extent = computed(() => {
   let min = Infinity;
   let max = -Infinity;
-  for (const s of allSeries.value) {
-    for (const v of s.data) {
-      if (!isFinite(v)) continue;
-      if (v < min) min = v;
-      if (v > max) max = v;
-    }
-  }
+  let smallestPositive = Infinity;
+  const visit = (v: number) => {
+    if (!isFinite(v)) return;
+    if (v < min) min = v;
+    if (v > max) max = v;
+    if (v > 0 && v < smallestPositive) smallestPositive = v;
+  };
+  for (const s of allSeries.value) for (const v of s.data) visit(v);
   for (const a of allAreas.value) {
-    for (const v of a.upper) {
-      if (!isFinite(v)) continue;
-      if (v < min) min = v;
-      if (v > max) max = v;
-    }
-    for (const v of a.lower) {
-      if (!isFinite(v)) continue;
-      if (v < min) min = v;
-      if (v > max) max = v;
-    }
+    for (const v of a.upper) visit(v);
+    for (const v of a.lower) visit(v);
   }
   if (!isFinite(min)) return { min: 0, max: 0, range: 1 };
   if (props.yMin != null && props.yMin < min) min = props.yMin;
-  return { min, max, range: max - min || 1 };
+  const clamped = clampExtentForScale(
+    min,
+    max,
+    props.yScaleType,
+    smallestPositive,
+  );
+  return {
+    min: clamped.min,
+    max: clamped.max,
+    range: clamped.max - clamped.min || 1,
+  };
 });
+
+function yPixel(v: number): number {
+  const { min, max } = extent.value;
+  const py = padding.value.top + innerH.value;
+  return py - scaleFraction(v, min, max, props.yScaleType) * innerH.value;
+}
 
 function toPath(s: ResolvedSeries): string {
   const data = s.data;
   if (data.length === 0) return "";
-  const { min, range } = extent.value;
-  const yScale = innerH.value / range;
-  const py = padding.value.top + innerH.value;
   let d = "";
   let inSegment = false;
   for (let i = 0; i < data.length; i++) {
@@ -293,7 +310,7 @@ function toPath(s: ResolvedSeries): string {
       continue;
     }
     const x = xPixel(xv);
-    const y = py - (data[i] - min) * yScale;
+    const y = yPixel(data[i]);
     d += inSegment ? `L${x},${y}` : `M${x},${y}`;
     inSegment = true;
   }
@@ -302,14 +319,11 @@ function toPath(s: ResolvedSeries): string {
 
 function toPoints(s: ResolvedSeries): { x: number; y: number }[] {
   const data = s.data;
-  const { min, range } = extent.value;
-  const yScale = innerH.value / range;
-  const py = padding.value.top + innerH.value;
   const pts: { x: number; y: number }[] = [];
   for (let i = 0; i < data.length; i++) {
     const xv = seriesXAt(s, i);
     if (!isFinite(data[i]) || !isFinite(xv)) continue;
-    pts.push({ x: xPixel(xv), y: py - (data[i] - min) * yScale });
+    pts.push({ x: xPixel(xv), y: yPixel(data[i]) });
   }
   return pts;
 }
@@ -317,10 +331,6 @@ function toPoints(s: ResolvedSeries): { x: number; y: number }[] {
 function toAreaPath(a: Area): string {
   const len = Math.min(a.upper.length, a.lower.length);
   if (len === 0) return "";
-  const { min, range } = extent.value;
-  const yScale = innerH.value / range;
-  const py = padding.value.top + innerH.value;
-  const y = (v: number) => py - (v - min) * yScale;
   // Collect contiguous segments where both upper/lower and x are finite
   const segments: number[][] = [];
   let seg: number[] = [];
@@ -339,11 +349,11 @@ function toAreaPath(a: Area): string {
   if (seg.length) segments.push(seg);
   let d = "";
   for (const s of segments) {
-    d += `M${xPixel(areaXAt(a, s[0]))},${y(a.upper[s[0]])}`;
+    d += `M${xPixel(areaXAt(a, s[0]))},${yPixel(a.upper[s[0]])}`;
     for (let j = 1; j < s.length; j++)
-      d += `L${xPixel(areaXAt(a, s[j]))},${y(a.upper[s[j]])}`;
+      d += `L${xPixel(areaXAt(a, s[j]))},${yPixel(a.upper[s[j]])}`;
     for (let j = s.length - 1; j >= 0; j--)
-      d += `L${xPixel(areaXAt(a, s[j]))},${y(a.lower[s[j]])}`;
+      d += `L${xPixel(areaXAt(a, s[j]))},${yPixel(a.lower[s[j]])}`;
     d += "Z";
   }
   return d;
@@ -376,18 +386,15 @@ function toSectionPath(section: AreaSection, closed = true): string {
 
   const s = allSeries.value[section.seriesIndex];
   if (!s) return "";
-  const { min, range } = extent.value;
-  const yScale = innerH.value / range;
-  const y = (v: number) => py - (v - min) * yScale;
 
   const start = Math.max(0, section.startIndex);
   const end = Math.min(s.data.length - 1, section.endIndex);
   if (start > end) return "";
 
-  let d = `M${xPixel(seriesXAt(s, start))},${y(s.data[start])}`;
+  let d = `M${xPixel(seriesXAt(s, start))},${yPixel(s.data[start])}`;
   for (let i = start + 1; i <= end; i++) {
     if (!isFinite(s.data[i])) continue;
-    d += `L${xPixel(seriesXAt(s, i))},${y(s.data[i])}`;
+    d += `L${xPixel(seriesXAt(s, i))},${yPixel(s.data[i])}`;
   }
   if (closed) {
     d += `L${xPixel(seriesXAt(s, end))},${py}`;
@@ -531,12 +538,6 @@ const sectionLabelBaseY = computed(
 
 const yTickItems = computed(() => {
   const { min, max } = extent.value;
-  const toY = (v: number) =>
-    snap(
-      padding.value.top +
-        innerH.value -
-        ((v - min) / extent.value.range) * innerH.value,
-    );
   const fmt = (v: number) =>
     props.yTickFormat ? props.yTickFormat(v) : formatTick(v);
 
@@ -544,13 +545,16 @@ const yTickItems = computed(() => {
     return [{ value: fmt(min), y: snap(padding.value.top + innerH.value / 2) }];
   }
 
-  const values = computeTickValues({
-    min,
-    max,
-    ticks: props.yTicks,
-    targetTickCount: innerH.value / 50,
-  });
-  return values.map((v) => ({ value: fmt(v), y: toY(v) }));
+  const values =
+    props.yScaleType === "log"
+      ? computeLogTickValues({ min, max, ticks: props.yTicks })
+      : computeTickValues({
+          min,
+          max,
+          ticks: props.yTicks,
+          targetTickCount: innerH.value / 50,
+        });
+  return values.map((v) => ({ value: fmt(v), y: snap(yPixel(v)) }));
 });
 
 const xTickItems = computed(() => {
@@ -653,9 +657,6 @@ function nearestIndex(s: ResolvedSeries, targetX: number): number | null {
 const hoverDots = computed(() => {
   const targetX = hoverDataX.value;
   if (targetX === null) return [];
-  const { min, range } = extent.value;
-  const yScale = innerH.value / range;
-  const py = padding.value.top + innerH.value;
   const dots: { x: number; y: number; color: string }[] = [];
   for (const s of allSeries.value) {
     const nIdx = nearestIndex(s, targetX);
@@ -664,7 +665,7 @@ const hoverDots = computed(() => {
     if (!isFinite(yv)) continue;
     dots.push({
       x: xPixel(seriesXAt(s, nIdx)),
-      y: py - (yv - min) * yScale,
+      y: yPixel(yv),
       color: s.color ?? "currentColor",
     });
   }
@@ -706,10 +707,7 @@ function projectAnnotation(
 ): { x: number; y: number } | null {
   if (!isFinite(x) || !isFinite(y)) return null;
   const internalX = x - xDisplayOffset.value;
-  const { min, range } = extent.value;
-  const py =
-    padding.value.top + innerH.value - (y - min) * (innerH.value / range);
-  return { x: xPixel(internalX), y: py };
+  return { x: xPixel(internalX), y: yPixel(y) };
 }
 
 function indexFromPointer(clientX: number): number | null {

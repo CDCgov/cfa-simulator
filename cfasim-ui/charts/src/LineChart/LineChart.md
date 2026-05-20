@@ -184,6 +184,39 @@ Control tick placement with `x-ticks` and `y-ticks`. Pass a **number** for a fix
   </template>
 </ComponentDemo>
 
+### Logarithmic y-axis
+
+Set `y-scale-type="log"` to switch the y axis to base-10 log scaling. Useful
+when data spans several orders of magnitude (e.g. epidemic case counts in
+early exponential growth). Non-positive values collapse to the axis
+floor, and `yMin <= 0` is ignored.
+
+<ComponentDemo>
+  <LineChart
+    :data="[1, 3, 8, 22, 60, 165, 450, 1230, 3350]"
+    y-scale-type="log"
+    :height="220"
+    x-label="Day"
+    y-label="Cases"
+    y-grid
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :data="[1, 3, 8, 22, 60, 165, 450, 1230, 3350]"
+  y-scale-type="log"
+  :height="220"
+  x-label="Day"
+  y-label="Cases"
+  y-grid
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Dashed baseline
 
 <ComponentDemo>

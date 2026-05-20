@@ -6,6 +6,13 @@ export {
   type ChartData,
 } from "./axes.js";
 export { computeTickValues, type TickValueOptions } from "./computeTicks.js";
+export {
+  scaleFraction,
+  clampExtentForScale,
+  computeLogTickValues,
+  LOG_FLOOR,
+  type ScaleType,
+} from "./scale.js";
 export { useChartSize, type ChartSizeOptions } from "./useChartSize.js";
 export {
   useChartPadding,
