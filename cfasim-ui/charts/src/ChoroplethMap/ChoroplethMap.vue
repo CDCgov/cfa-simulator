@@ -21,6 +21,7 @@ import { fipsToHsa, hsaNames } from "./hsaMapping.js";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
 import { saveSvg, savePng } from "../ChartMenu/download.js";
+import { useChartFullscreen } from "../_shared/index.js";
 import { placeTooltip } from "../tooltip-position.js";
 import ChoroplethTooltip from "./ChoroplethTooltip.vue";
 
@@ -1298,9 +1299,12 @@ const gradientCss = computed(() => {
   return `linear-gradient(to right, ${stops})`;
 });
 
+const fullscreen = useChartFullscreen();
+
 const menuItems = computed<ChartMenuItem[]>(() => {
   const fname = menuFilename();
   return [
+    fullscreen.menuItem.value,
     {
       label: "Save as SVG",
       action: () => {
@@ -1360,8 +1364,17 @@ watch(
 </script>
 
 <template>
-  <div ref="containerRef" :class="['choropleth-wrapper', { pannable: pan }]">
+  <div
+    ref="containerRef"
+    :class="[
+      'choropleth-wrapper',
+      { pannable: pan, 'is-fullscreen': fullscreen.isFullscreen.value },
+    ]"
+  >
     <ChartMenu v-if="menu" :items="menuItems" />
+    <div class="chart-sr-only" aria-live="polite">
+      {{ fullscreen.isFullscreen.value ? "Map expanded to fill window" : "" }}
+    </div>
     <!--
       Title + legend live as an HTML overlay on top of the SVG so they keep
       their intrinsic px sizes regardless of how the browser scales the
@@ -1474,10 +1487,6 @@ watch(
 
 .choropleth-wrapper.pannable svg:active {
   cursor: grabbing;
-}
-
-.choropleth-wrapper:hover :deep(.chart-menu-button) {
-  opacity: 1;
 }
 
 .state-path {

@@ -758,6 +758,7 @@ const {
   downloadLinkText,
   csvHref,
   menuFilename,
+  isFullscreen,
 } = useChartFoundation({
   width: () => props.width,
   height: () => props.height,
@@ -776,12 +777,20 @@ const {
   getCsv: toCsv,
   pointerToIndex: indexFromPointer,
   onHover: (payload) => emit("hover", payload),
+  extraBelowHeight: () => sectionLabels.value.extraHeight,
 });
 </script>
 
 <template>
-  <div ref="containerRef" class="line-chart-wrapper">
+  <div
+    ref="containerRef"
+    class="line-chart-wrapper"
+    :class="{ 'is-fullscreen': isFullscreen }"
+  >
     <ChartMenu v-if="menu" :items="menuItems" />
+    <div class="chart-sr-only" aria-live="polite">
+      {{ isFullscreen ? "Chart expanded to fill window" : "" }}
+    </div>
     <svg ref="svgRef" :width="width" :height="totalHeight">
       <!-- title -->
       <text
@@ -1145,10 +1154,6 @@ const {
 .line-chart-wrapper {
   position: relative;
   width: 100%;
-}
-
-.line-chart-wrapper:hover :deep(.chart-menu-button) {
-  opacity: 1;
 }
 
 .line-chart-tooltip-label {

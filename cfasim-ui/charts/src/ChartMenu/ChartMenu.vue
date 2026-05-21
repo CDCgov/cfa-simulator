@@ -10,6 +10,8 @@ import {
 export interface ChartMenuItem {
   label: string;
   action: () => void;
+  /** Sets aria-pressed on the menu item — use for toggle-style items. */
+  ariaPressed?: boolean;
 }
 
 const props = withDefaults(
@@ -72,6 +74,7 @@ const useDropdown = () => props.forceDropdown || props.items.length > 1;
             v-for="item in items"
             :key="item.label"
             class="chart-menu-item"
+            :aria-pressed="item.ariaPressed"
             @select="item.action"
           >
             {{ item.label }}

@@ -15,23 +15,27 @@ export interface ChartSizeOptions {
 export function useChartSize(opts: ChartSizeOptions = {}) {
   const containerRef = ref<HTMLElement | null>(null);
   const measuredWidth = ref(0);
+  const measuredHeight = ref(0);
   let observer: ResizeObserver | null = null;
   let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
 
   onMounted(() => {
     if (!containerRef.value) return;
     measuredWidth.value = containerRef.value.clientWidth;
+    measuredHeight.value = containerRef.value.clientHeight;
     observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
+      const apply = () => {
+        measuredWidth.value = entry.contentRect.width;
+        measuredHeight.value = entry.contentRect.height;
+      };
       const debounce = opts.debounce?.();
       if (debounce) {
         if (resizeTimeout) clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(() => {
-          measuredWidth.value = entry.contentRect.width;
-        }, debounce);
+        resizeTimeout = setTimeout(apply, debounce);
       } else {
-        measuredWidth.value = entry.contentRect.width;
+        apply();
       }
     });
     observer.observe(containerRef.value);
@@ -45,5 +49,10 @@ export function useChartSize(opts: ChartSizeOptions = {}) {
   return {
     containerRef,
     measuredWidth,
-  } as { containerRef: Ref<HTMLElement | null>; measuredWidth: Ref<number> };
+    measuredHeight,
+  } as {
+    containerRef: Ref<HTMLElement | null>;
+    measuredWidth: Ref<number>;
+    measuredHeight: Ref<number>;
+  };
 }

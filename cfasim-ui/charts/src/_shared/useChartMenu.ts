@@ -1,6 +1,7 @@
 import { computed, ref, type Ref } from "vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
 import { saveSvg, savePng, downloadCsv } from "../ChartMenu/download.js";
+import { useChartFullscreen } from "./useChartFullscreen.js";
 
 export interface ChartMenuOptions {
   filename: () => string | undefined;
@@ -10,11 +11,18 @@ export interface ChartMenuOptions {
   getCsv: () => string;
   /** Whether a separate download link is rendered (and the CSV menu item should be hidden). */
   downloadLink: () => boolean | string | undefined;
+  /**
+   * When true, prepends an Expand/Collapse menu item that toggles the
+   * chart into a full-window view. The consumer is responsible for
+   * binding the returned `isFullscreen` ref to a CSS class on its
+   * wrapper.
+   */
+  fullscreen?: boolean;
 }
 
 /**
- * Computes the standard chart menu items (SVG / PNG / CSV) plus the
- * CSV-download-link state shared by every chart.
+ * Computes the standard chart menu items (Expand / SVG / PNG / CSV) plus
+ * the CSV-download-link state shared by every chart.
  */
 export function useChartMenu(opts: ChartMenuOptions) {
   const svgRef = ref<SVGSVGElement | null>(null);
@@ -26,9 +34,15 @@ export function useChartMenu(opts: ChartMenuOptions) {
     return typeof menu === "string" ? menu : "chart";
   }
 
+  const fullscreen = opts.fullscreen ? useChartFullscreen() : null;
+
   const items = computed<ChartMenuItem[]>(() => {
     const fname = resolvedFilename();
-    const out: ChartMenuItem[] = [
+    const out: ChartMenuItem[] = [];
+    if (fullscreen) {
+      out.push(fullscreen.menuItem.value);
+    }
+    out.push(
       {
         label: "Save as SVG",
         action: () => {
@@ -41,7 +55,7 @@ export function useChartMenu(opts: ChartMenuOptions) {
           if (svgRef.value) savePng(svgRef.value, fname);
         },
       },
-    ];
+    );
     if (!opts.downloadLink()) {
       out.push({
         label: "Download CSV",
@@ -68,5 +82,6 @@ export function useChartMenu(opts: ChartMenuOptions) {
     downloadLinkText,
     csvHref,
     resolvedFilename,
+    isFullscreen: fullscreen?.isFullscreen ?? ref(false),
   };
 }
