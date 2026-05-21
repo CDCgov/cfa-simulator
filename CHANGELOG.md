@@ -1,6 +1,23 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.4.8] - 2026-05-21
+
+### Chores
+
+- **deps:** Bump brace-expansion from 2.0.2 to 5.0.5
+
+### Features
+
+- **charts:** Add log scale to LineChart and BarChart
+- **rust template:** Wire up console_error_panic_hook
+- **charts:** Add NumberFormat utility and broaden formatter props
+- **NumberInput:** Add NumberFormat-based format prop, deprecate sliderDisplay
+
+### Tests
+
+- **models:** Wait for editor content before Ctrl+S
+
 ## [0.4.7] - 2026-05-16
 
 ### Bug Fixes
