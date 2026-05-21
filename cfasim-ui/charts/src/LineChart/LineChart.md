@@ -1,5 +1,5 @@
 ---
-keywords: [line, chart, time-series, series, axis, svg]
+keywords: [line, chart, time-series, series, axis, area, confidence band, svg]
 ---
 
 # LineChart
@@ -353,6 +353,53 @@ floor, and `yMin <= 0` is ignored.
   :height="200"
   x-label="Days"
   y-label="Cases"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Confidence band
+
+Use the `areas` prop to fill a band between two y-series — useful for
+confidence intervals or min/max envelopes around a mean line. Each `Area`
+takes parallel `upper` and `lower` arrays (and an optional `x` array, just
+like `Series`).
+
+<ComponentDemo>
+  <LineChart
+    :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
+    :areas="[
+      {
+        upper: [2, 8, 14, 22, 30, 38, 36, 28, 19, 11, 7],
+        lower: [0, 1, 3, 9, 15, 22, 21, 13, 6, 1, 0],
+        color: '#0057b7',
+        opacity: 0.15,
+      },
+    ]"
+    :height="220"
+    x-label="Days"
+    y-label="Cases"
+    tooltip-trigger="hover"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :data="mean"
+  :areas="[
+    {
+      upper: ci95Hi,
+      lower: ci95Lo,
+      color: '#0057b7',
+      opacity: 0.15,
+    },
+  ]"
+  :height="220"
+  x-label="Days"
+  y-label="Cases"
+  tooltip-trigger="hover"
 />
 ```
 
@@ -713,6 +760,18 @@ interface Series {
   dotRadius?: number;
   dotFill?: string;
   dotStroke?: string;
+}
+```
+
+### Area
+
+```ts
+interface Area {
+  upper: LineChartData;
+  lower: LineChartData;
+  x?: LineChartData; // optional parallel x-values
+  color?: string;
+  opacity?: number;
 }
 ```
 
