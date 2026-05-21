@@ -1,6 +1,17 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.4.9] - 2026-05-21
+
+### Bug Fixes
+
+- **ixa-example:** Silence dead_code warning on test-only trait method
+- **shared:** Move @types/sprintf-js to dependencies
+
+### Documentation
+
+- **LineChart:** Add confidence band example for areas prop
+
 ## [0.4.8] - 2026-05-21
 
 ### Chores
