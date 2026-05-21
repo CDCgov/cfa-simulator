@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.4.10] - 2026-05-21
+
+### Bug Fixes
+
+- **workers:** Surface load failures instead of hanging silently
+- **workers:** Import postWithTransfer from /transfer subpath
+
 ## [0.4.9] - 2026-05-21
 
 ### Bug Fixes
