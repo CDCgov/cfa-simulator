@@ -59,6 +59,10 @@ test("ixa-example toggles to code editor and applies a saved param", async ({
       2,
     ),
   );
+  // Wait for CodeMirror to absorb the typed content before saving — on
+  // slow runners, Ctrl+S could otherwise fire while text is still
+  // settling and apply the pre-typed default.
+  await expect(page.locator(".cm-content")).toContainText('"population": 500');
   await page.keyboard.press("ControlOrMeta+s");
 
   // Toggle back to the form and confirm Population was applied.
