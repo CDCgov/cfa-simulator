@@ -231,12 +231,17 @@ function send(id: number, result: unknown) {
   }
 }
 
+// Silence the unhandled-rejection warning if init fails before any message
+// arrives. Each message's onmessage handler still awaits the promise inside
+// its own try/catch, so the rejection is reported back to the caller.
+pyodideReadyPromise.catch(() => {});
+
 self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
-  const pyodide = await pyodideReadyPromise;
   const msg = event.data;
   const { id } = msg;
 
   try {
+    const pyodide = await pyodideReadyPromise;
     if (msg.type === "loadModule") {
       await ensureModule(pyodide, msg.module);
       postWithTransfer(self, id, true);

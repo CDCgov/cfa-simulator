@@ -10,23 +10,62 @@ interface WorkerMessage {
 
 let lastId = 0;
 
+/**
+ * Convert a worker `ErrorEvent` into a human-readable message. Cross-origin
+ * worker failures sanitize the event so every field is null/empty (e.g.
+ * the worker's module fails to evaluate); fall back to a hint rather than
+ * an empty string.
+ */
+function describeWorkerError(e: ErrorEvent): string {
+  const msg = e.message || e.error?.message || "";
+  if (msg) {
+    if (e.filename) return `${msg} (${e.filename}:${e.lineno})`;
+    return msg;
+  }
+  return "Worker failed to load (no error details available — most often a cross-origin script load failure or a syntax error in the worker module)";
+}
+
+// Rejects keyed by request id so `cancelWasm` can fail in-flight promises
+// when we terminate the worker mid-run, and so worker-level errors can drain
+// every pending call at once.
+const pendingRejects = new Map<number, (reason: Error) => void>();
+
+// Set once the worker fires an `error` / `messageerror` event. Subsequent
+// `runWasm` calls short-circuit with this error so the caller sees a real
+// rejection instead of waiting forever on a worker that will never reply.
+let workerDeadError: Error | null = null;
+
 function newWorker(): Worker {
-  return new Worker(new URL("./wasm.worker.ts", import.meta.url), {
+  const w = new Worker(new URL("./wasm.worker.ts", import.meta.url), {
     type: "module",
   });
+  function failAll(message: string) {
+    workerDeadError = new Error(message);
+    const rejects = Array.from(pendingRejects.values());
+    pendingRejects.clear();
+    for (const reject of rejects) reject(workerDeadError);
+  }
+  w.addEventListener("error", (e: ErrorEvent) => {
+    failAll(describeWorkerError(e));
+  });
+  w.addEventListener("messageerror", () => {
+    failAll(
+      "Worker received a message it could not deserialize (messageerror)",
+    );
+  });
+  return w;
 }
 
 let worker = newWorker();
-
-// Rejects keyed by request id so `cancelWasm` can fail in-flight promises
-// when we terminate the worker mid-run.
-const pendingRejects = new Map<number, (reason: Error) => void>();
 
 export function runWasm(
   model: string,
   fn: string,
   ...args: string[]
 ): Promise<unknown> {
+  if (workerDeadError) {
+    return Promise.reject(workerDeadError);
+  }
   return new Promise((resolve, reject) => {
     const id = ++lastId;
     // Capture the current worker so a later `cancelWasm` that swaps the
@@ -63,6 +102,7 @@ export function cancelWasm(): void {
   worker.terminate();
   const rejects = Array.from(pendingRejects.values());
   pendingRejects.clear();
+  workerDeadError = null;
   worker = newWorker();
   for (const reject of rejects) {
     reject(new Error("cancelled"));
