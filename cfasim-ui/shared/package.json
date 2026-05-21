@@ -16,7 +16,8 @@
     "src"
   ],
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./transfer": "./src/transferUtils.ts"
   },
   "peerDependencies": {
     "vue": "^3.5.0"

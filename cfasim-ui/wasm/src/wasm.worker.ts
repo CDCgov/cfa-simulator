@@ -2,7 +2,7 @@ import {
   postWithTransfer,
   postModelOutputsWithTransfer,
   postErrorWithTransfer,
-} from "@cfasim-ui/shared";
+} from "@cfasim-ui/shared/transfer";
 
 interface WorkerMessage {
   id: number;
