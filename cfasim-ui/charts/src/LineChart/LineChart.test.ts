@@ -456,6 +456,116 @@ describe("LineChart", () => {
       getMenuItem(wrapper, "Save as SVG").action();
       expect(spy).toHaveBeenCalledWith(expect.anything(), "my-chart");
     });
+
+    describe("expand", () => {
+      it("places the Expand item at the top of the menu", () => {
+        const wrapper = mount(LineChart, {
+          props: { data: [1, 2, 3], height: 100 },
+        });
+        const items = wrapper.findComponent(ChartMenu).props("items");
+        expect(items[0].label).toBe("Expand");
+        expect(items[0].ariaPressed).toBe(false);
+      });
+
+      it("toggles between Expand and Collapse labels", async () => {
+        const wrapper = mount(LineChart, {
+          props: { data: [1, 2, 3], height: 100 },
+          attachTo: document.body,
+        });
+        const expand = wrapper
+          .findComponent(ChartMenu)
+          .props("items")
+          .find((i) => i.label === "Expand");
+        expect(expand).toBeTruthy();
+        expand!.action();
+        await wrapper.vm.$nextTick();
+        const collapse = wrapper
+          .findComponent(ChartMenu)
+          .props("items")
+          .find((i) => i.label === "Collapse");
+        expect(collapse).toBeTruthy();
+        expect(collapse!.ariaPressed).toBe(true);
+        expect(wrapper.find(".line-chart-wrapper.is-fullscreen").exists()).toBe(
+          true,
+        );
+        wrapper.unmount();
+      });
+
+      it("exits expanded view on Escape", async () => {
+        const wrapper = mount(LineChart, {
+          props: { data: [1, 2, 3], height: 100 },
+          attachTo: document.body,
+        });
+        const expand = wrapper
+          .findComponent(ChartMenu)
+          .props("items")
+          .find((i) => i.label === "Expand");
+        expand!.action();
+        await wrapper.vm.$nextTick();
+        expect(wrapper.find(".line-chart-wrapper.is-fullscreen").exists()).toBe(
+          true,
+        );
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+        await wrapper.vm.$nextTick();
+        expect(wrapper.find(".line-chart-wrapper.is-fullscreen").exists()).toBe(
+          false,
+        );
+        wrapper.unmount();
+      });
+
+      it("ignores Escape when the event originates inside an open menu", async () => {
+        const wrapper = mount(LineChart, {
+          props: { data: [1, 2, 3], height: 100 },
+          attachTo: document.body,
+        });
+        const expand = wrapper
+          .findComponent(ChartMenu)
+          .props("items")
+          .find((i) => i.label === "Expand");
+        expand!.action();
+        await wrapper.vm.$nextTick();
+        // Simulate Reka's portal'd dropdown content: an element with
+        // role="menu" appended to document.body that holds keyboard focus.
+        const menu = document.createElement("div");
+        menu.setAttribute("role", "menu");
+        const item = document.createElement("button");
+        menu.appendChild(item);
+        document.body.appendChild(menu);
+        item.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+        );
+        await wrapper.vm.$nextTick();
+        expect(wrapper.find(".line-chart-wrapper.is-fullscreen").exists()).toBe(
+          true,
+        );
+        document.body.removeChild(menu);
+        wrapper.unmount();
+      });
+
+      it("locks and restores document.body overflow while expanded", async () => {
+        document.body.style.overflow = "auto";
+        const wrapper = mount(LineChart, {
+          props: { data: [1, 2, 3], height: 100 },
+          attachTo: document.body,
+        });
+        const expand = wrapper
+          .findComponent(ChartMenu)
+          .props("items")
+          .find((i) => i.label === "Expand");
+        expand!.action();
+        await wrapper.vm.$nextTick();
+        expect(document.body.style.overflow).toBe("hidden");
+        const collapse = wrapper
+          .findComponent(ChartMenu)
+          .props("items")
+          .find((i) => i.label === "Collapse");
+        collapse!.action();
+        await wrapper.vm.$nextTick();
+        expect(document.body.style.overflow).toBe("auto");
+        wrapper.unmount();
+        document.body.style.overflow = "";
+      });
+    });
   });
 
   it("emits hover null on mouseleave", async () => {

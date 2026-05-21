@@ -525,6 +525,7 @@ const {
   downloadLinkText,
   csvHref,
   menuFilename,
+  isFullscreen,
 } = useChartFoundation({
   width: () => props.width,
   height: () => props.height,
@@ -589,8 +590,15 @@ const hoverBand = computed(() => {
 </script>
 
 <template>
-  <div ref="containerRef" class="bar-chart-wrapper">
+  <div
+    ref="containerRef"
+    class="bar-chart-wrapper"
+    :class="{ 'is-fullscreen': isFullscreen }"
+  >
     <ChartMenu v-if="menu" :items="menuItems" />
+    <div class="chart-sr-only" aria-live="polite">
+      {{ isFullscreen ? "Chart expanded to fill window" : "" }}
+    </div>
     <svg ref="svgRef" :width="width" :height="height">
       <!-- title -->
       <text
@@ -835,10 +843,6 @@ const hoverBand = computed(() => {
 .bar-chart-wrapper {
   position: relative;
   width: 100%;
-}
-
-.bar-chart-wrapper:hover :deep(.chart-menu-button) {
-  opacity: 1;
 }
 
 .bar-chart-tooltip-label {

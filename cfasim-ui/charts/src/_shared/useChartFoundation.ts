@@ -30,6 +30,12 @@ export interface ChartFoundationOptions {
   getCsv: () => string;
   pointerToIndex: (clientX: number, clientY: number) => number | null;
   onHover: (payload: { index: number } | null) => void;
+  /**
+   * Extra height (in px) the chart adds *below* the SVG plot area
+   * (e.g. LineChart's area-section labels). Used to keep the SVG total
+   * height matched to the container when fullscreen.
+   */
+  extraBelowHeight?: () => number;
 }
 
 /**
@@ -39,14 +45,39 @@ export interface ChartFoundationOptions {
  * consumes.
  */
 export function useChartFoundation(opts: ChartFoundationOptions) {
-  const { containerRef, measuredWidth } = useChartSize({
+  const { containerRef, measuredWidth, measuredHeight } = useChartSize({
     debounce: opts.debounce,
   });
 
-  const width = computed(
-    () => opts.width() ?? (measuredWidth.value || DEFAULT_WIDTH_FALLBACK),
-  );
-  const height = computed(() => opts.height() ?? DEFAULT_HEIGHT);
+  const {
+    svgRef,
+    items: menuItems,
+    downloadLinkText,
+    csvHref,
+    resolvedFilename: menuFilename,
+    isFullscreen,
+  } = useChartMenu({
+    filename: opts.filename,
+    legacyMenuLabel: opts.menu,
+    getCsv: opts.getCsv,
+    downloadLink: opts.downloadLink,
+    fullscreen: true,
+  });
+
+  const width = computed(() => {
+    if (isFullscreen.value && measuredWidth.value > 0) {
+      return measuredWidth.value;
+    }
+    return opts.width() ?? (measuredWidth.value || DEFAULT_WIDTH_FALLBACK);
+  });
+
+  const height = computed(() => {
+    if (isFullscreen.value && measuredHeight.value > 0) {
+      const extra = opts.extraBelowHeight?.() ?? 0;
+      return measuredHeight.value - extra;
+    }
+    return opts.height() ?? DEFAULT_HEIGHT;
+  });
 
   const { padding, legendY, innerW, innerH, bounds } = useChartPadding({
     title: opts.title,
@@ -72,19 +103,6 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     onHover: opts.onHover,
   });
 
-  const {
-    svgRef,
-    items: menuItems,
-    downloadLinkText,
-    csvHref,
-    resolvedFilename: menuFilename,
-  } = useChartMenu({
-    filename: opts.filename,
-    legacyMenuLabel: opts.menu,
-    getCsv: opts.getCsv,
-    downloadLink: opts.downloadLink,
-  });
-
   return {
     containerRef,
     svgRef,
@@ -103,6 +121,8 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     downloadLinkText,
     csvHref,
     menuFilename,
+    isFullscreen,
+    measuredHeight,
   };
 }
 
