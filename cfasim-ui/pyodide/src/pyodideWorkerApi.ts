@@ -30,24 +30,22 @@ type OutgoingMessage =
   | Omit<CallMessage, "id">
   | Omit<LoadModuleMessage, "id">;
 
-function requestResponse(
-  worker: Worker,
-  msg: OutgoingMessage,
-): Promise<{ result?: unknown; error?: string }> {
-  return new Promise((resolve) => {
-    const id = getId();
-    function listener(event: MessageEvent<TransferableResponse>) {
-      if (event.data?.id !== id) return;
-      worker.removeEventListener("message", listener);
-      if (event.data.error) {
-        resolve({ error: event.data.error });
-      } else {
-        resolve({ result: unwrapResponse(event.data) });
-      }
-    }
-    worker.addEventListener("message", listener);
-    worker.postMessage({ id, ...msg } as WorkerMessage);
-  });
+export type PyodideResponse = { result?: unknown; error?: string };
+
+/**
+ * Convert a worker `ErrorEvent` into a human-readable message. Cross-origin
+ * worker failures sanitize the event so every field is null/empty (e.g. a
+ * dynamic `import("https://cdn…")` that fails at module evaluation): in
+ * that case we fall back to a hint about likely causes instead of an
+ * empty string, which would otherwise surface as a blank error.
+ */
+function describeWorkerError(e: ErrorEvent): string {
+  const msg = e.message || e.error?.message || "";
+  if (msg) {
+    if (e.filename) return `${msg} (${e.filename}:${e.lineno})`;
+    return msg;
+  }
+  return "Worker failed to load (no error details available — most often a cross-origin script load failure or a syntax error in the worker module)";
 }
 
 /**
@@ -61,7 +59,11 @@ const DEFAULT_WORKER = "default";
 
 interface WorkerEntry {
   worker: Worker;
-  modules: Map<string, Promise<{ result?: unknown; error?: string }>>;
+  modules: Map<string, Promise<PyodideResponse>>;
+  /** Pending request id → resolver, so a worker-level crash can drain them all. */
+  pending: Map<number, (r: PyodideResponse) => void>;
+  /** Set once the worker has fired an error event — any further call short-circuits to this error. */
+  deadError: string | null;
 }
 
 const workers = new Map<string, WorkerEntry>();
@@ -74,7 +76,31 @@ function getWorker(name: string): WorkerEntry {
     const worker = new Worker(new URL("./pyodide.worker.ts", import.meta.url), {
       type: "module",
     });
-    entry = { worker, modules: new Map() };
+    const newEntry: WorkerEntry = {
+      worker,
+      modules: new Map(),
+      pending: new Map(),
+      deadError: null,
+    };
+    function failAll(message: string) {
+      if (newEntry.deadError) return;
+      newEntry.deadError = message;
+      // Drop cached module promises so a future loadModule on a respawned
+      // worker (if the caller chooses to retry) re-installs.
+      newEntry.modules.clear();
+      const pending = Array.from(newEntry.pending.values());
+      newEntry.pending.clear();
+      for (const resolve of pending) resolve({ error: message });
+    }
+    worker.addEventListener("error", (e: ErrorEvent) => {
+      failAll(describeWorkerError(e));
+    });
+    worker.addEventListener("messageerror", () => {
+      failAll(
+        "Worker received a message it could not deserialize (messageerror)",
+      );
+    });
+    entry = newEntry;
     workers.set(name, entry);
     for (const mod of sharedModules) {
       ensureModuleOn(entry, mod);
@@ -83,13 +109,38 @@ function getWorker(name: string): WorkerEntry {
   return entry;
 }
 
+function requestResponse(
+  entry: WorkerEntry,
+  msg: OutgoingMessage,
+): Promise<PyodideResponse> {
+  if (entry.deadError) {
+    return Promise.resolve({ error: entry.deadError });
+  }
+  return new Promise((resolve) => {
+    const id = getId();
+    entry.pending.set(id, resolve);
+    function listener(event: MessageEvent<TransferableResponse>) {
+      if (event.data?.id !== id) return;
+      entry.worker.removeEventListener("message", listener);
+      entry.pending.delete(id);
+      if (event.data.error) {
+        resolve({ error: event.data.error });
+      } else {
+        resolve({ result: unwrapResponse(event.data) });
+      }
+    }
+    entry.worker.addEventListener("message", listener);
+    entry.worker.postMessage({ id, ...msg } as WorkerMessage);
+  });
+}
+
 function ensureModuleOn(
   entry: WorkerEntry,
   moduleName: string,
-): Promise<{ result?: unknown; error?: string }> {
+): Promise<PyodideResponse> {
   let p = entry.modules.get(moduleName);
   if (!p) {
-    p = requestResponse(entry.worker, {
+    p = requestResponse(entry, {
       type: "loadModule",
       module: moduleName,
     });
@@ -106,9 +157,7 @@ function ensureModuleOn(
  * worker, and on any future worker the moment it spawns. Returns once the
  * default worker has finished installing.
  */
-export async function loadModule(
-  moduleName: string,
-): Promise<{ result?: unknown; error?: string }> {
+export async function loadModule(moduleName: string): Promise<PyodideResponse> {
   sharedModules.add(moduleName);
   // Always install on the default worker — that's what callers expect when
   // the function name has no "OnWorker" suffix.
@@ -129,7 +178,7 @@ export async function loadModule(
 export async function loadModuleOnWorker(
   moduleName: string,
   worker: WorkerName,
-): Promise<{ result?: unknown; error?: string }> {
+): Promise<PyodideResponse> {
   return ensureModuleOn(getWorker(worker), moduleName);
 }
 
@@ -142,8 +191,8 @@ export async function asyncRunPython(
   script: string,
   context?: Record<string, unknown>,
   worker: WorkerName = DEFAULT_WORKER,
-): Promise<{ result?: unknown; error?: string }> {
-  return requestResponse(getWorker(worker).worker, {
+): Promise<PyodideResponse> {
+  return requestResponse(getWorker(worker), {
     type: "run",
     python: script,
     context,
@@ -160,11 +209,11 @@ export async function callPython(
   fn: string,
   kwargs?: Record<string, unknown>,
   worker: WorkerName = DEFAULT_WORKER,
-): Promise<{ result?: unknown; error?: string }> {
+): Promise<PyodideResponse> {
   const entry = getWorker(worker);
   const installResult = await ensureModuleOn(entry, module);
   if (installResult.error) return installResult;
-  return requestResponse(entry.worker, {
+  return requestResponse(entry, {
     type: "call",
     module,
     fn,
