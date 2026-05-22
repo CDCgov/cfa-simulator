@@ -292,6 +292,46 @@ floor, and `yMin <= 0` is ignored.
   </template>
 </ComponentDemo>
 
+### Outline
+
+Set `outline: true` on a series to draw a page-colored stroke behind the
+line. This is useful when lines overlap, cross dense areas, or sit on a
+busy background — the outline keeps each series visually distinct.
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      { data: [0, 10, 25, 45, 60, 55, 40, 20, 8], color: '#fb7e38', strokeWidth: 3, outline: true },
+      { data: [0, 12, 22, 40, 58, 58, 42, 22, 10], color: '#0057b7', strokeWidth: 3, outline: true },
+    ]"
+    :height="200"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    {
+      data: [0, 10, 25, 45, 60, 55, 40, 20, 8],
+      color: '#fb7e38',
+      strokeWidth: 3,
+      outline: true,
+    },
+    {
+      data: [0, 12, 22, 40, 58, 58, 42, 22, 10],
+      color: '#0057b7',
+      strokeWidth: 3,
+      outline: true,
+    },
+  ]"
+  :height="200"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Many trajectories with low opacity
 
 <ComponentDemo>
@@ -803,6 +843,7 @@ interface Series {
   strokeWidth?: number;
   opacity?: number;
   line?: boolean;
+  outline?: boolean; // page-colored stroke drawn behind the line
   dots?: boolean;
   dotRadius?: number;
   dotFill?: string;

@@ -76,6 +76,49 @@ describe("LineChart", () => {
     expect(paths.length).toBeGreaterThanOrEqual(2);
   });
 
+  it("does not render an outline path by default", () => {
+    const wrapper = mount(LineChart, {
+      props: { data: [0, 10, 20], height: 100, menu: false },
+    });
+    expect(wrapper.find('[data-testid="line-outline"]').exists()).toBe(false);
+  });
+
+  it("renders a page-colored outline behind the line when outline is true", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        series: [{ data: [0, 10, 20], outline: true, strokeWidth: 2 }],
+        height: 100,
+        menu: false,
+      },
+    });
+    const outline = wrapper.find('[data-testid="line-outline"]');
+    expect(outline.exists()).toBe(true);
+    expect(outline.attributes("stroke")).toBe("var(--color-bg-0, #fff)");
+    // outline stroke = strokeWidth + 4 (2px each side)
+    expect(outline.attributes("stroke-width")).toBe("6");
+    // outline is rendered before the data line (so it sits behind)
+    const paths = wrapper.findAll("path");
+    const outlineIdx = paths.findIndex(
+      (p) => p.attributes("data-testid") === "line-outline",
+    );
+    const dataIdx = paths.findIndex(
+      (p) => p.attributes("stroke") !== "var(--color-bg-0, #fff)",
+    );
+    expect(outlineIdx).toBeGreaterThanOrEqual(0);
+    expect(outlineIdx).toBeLessThan(dataIdx);
+  });
+
+  it("does not render an outline when line is false", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        series: [{ data: [0, 10, 20], outline: true, line: false, dots: true }],
+        height: 100,
+        menu: false,
+      },
+    });
+    expect(wrapper.find('[data-testid="line-outline"]').exists()).toBe(false);
+  });
+
   it("does not render dots by default", () => {
     const wrapper = mount(LineChart, {
       props: { data: [0, 10, 20], height: 100, menu: false },
