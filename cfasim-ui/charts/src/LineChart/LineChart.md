@@ -63,6 +63,39 @@ charts, set `x` and `y` (or `data`) on each `Series`.
 
 When `x` is omitted, `y`/`data` values are plotted at indices 0, 1, 2, etc.
 
+### Title
+
+The `title` prop accepts `\n` to break across lines. Use `titleStyle`
+to override `fontSize`, `lineHeight`, `color`, `fontWeight`, and
+`align` (`"left" | "center" | "right"`, default `"left"`). Top padding
+grows automatically for additional lines.
+
+<ComponentDemo>
+  <LineChart
+    :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
+    :height="220"
+    :title="'Daily ED visits\nInfluenza-like illness, last 11 days'"
+    :title-style="{ fontSize: 16, lineHeight: 20, color: '#0057b7' }"
+    x-label="Days"
+    y-label="Cases"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
+  :height="220"
+  :title="'Daily ED visits\nInfluenza-like illness, last 11 days'"
+  :title-style="{ fontSize: 16, lineHeight: 20, color: '#0057b7' }"
+  x-label="Days"
+  y-label="Cases"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Multiple series
 
 <ComponentDemo>

@@ -21,7 +21,13 @@ import { fipsToHsa, hsaNames } from "./hsaMapping.js";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
 import { saveSvg, savePng } from "../ChartMenu/download.js";
-import { useChartFullscreen } from "../_shared/index.js";
+import {
+  useChartFullscreen,
+  TITLE_FONT_SIZE,
+  TITLE_LINE_HEIGHT,
+  TITLE_FONT_WEIGHT,
+  type TitleStyle,
+} from "../_shared/index.js";
 import { placeTooltip } from "../tooltip-position.js";
 import ChoroplethTooltip from "./ChoroplethTooltip.vue";
 
@@ -104,7 +110,13 @@ const props = withDefaults(
     width?: number;
     height?: number;
     colorScale?: ChoroplethColorScale | ThresholdStop[] | CategoricalStop[];
+    /**
+     * Map title. `\n` in the string creates additional lines, each
+     * adding `titleStyle.lineHeight` (default 18px) of vertical space.
+     */
     title?: string;
+    /** Styling for the map title. See `TitleStyle`. */
+    titleStyle?: TitleStyle;
     noDataColor?: string;
     strokeColor?: string;
     strokeWidth?: number;
@@ -231,6 +243,20 @@ const slots = useSlots();
 const hasInteractiveTooltip = computed(
   () => !!props.tooltipTrigger || !!props.tooltipFormat || !!slots.tooltip,
 );
+
+/** Inline style for the title element, applying TitleStyle overrides. */
+const titleInlineStyle = computed(() => {
+  const s = props.titleStyle;
+  const style: Record<string, string> = {
+    "font-size": `${s?.fontSize ?? TITLE_FONT_SIZE}px`,
+    "line-height": `${s?.lineHeight ?? TITLE_LINE_HEIGHT}px`,
+    "font-weight": String(s?.fontWeight ?? TITLE_FONT_WEIGHT),
+    "text-align": s?.align ?? "left",
+    width: "100%",
+  };
+  if (s?.color) style.color = s.color;
+  return style;
+});
 // Imperative path bookkeeping. Plain Maps rather than refs — Vue never reads
 // these from a render scope, so mutating them does not trigger re-renders.
 const pathsByFeatureId = new Map<string, SVGPathElement>();
@@ -1381,7 +1407,9 @@ watch(
       viewBox to fit the container.
     -->
     <div v-if="title || showLegend" class="choropleth-header">
-      <div v-if="title" class="choropleth-title">{{ title }}</div>
+      <div v-if="title" class="choropleth-title" :style="titleInlineStyle">
+        {{ title }}
+      </div>
       <div v-if="showLegend" class="choropleth-legend">
         <span v-if="legendTitle" class="choropleth-legend-title">
           {{ legendTitle }}
@@ -1539,6 +1567,7 @@ watch(
   font-size: 14px;
   font-weight: 600;
   line-height: 1.2;
+  white-space: pre-line;
 }
 
 .choropleth-legend {

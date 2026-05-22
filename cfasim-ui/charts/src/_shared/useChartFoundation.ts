@@ -6,6 +6,7 @@ import { useChartPadding, type ChartPadding } from "./useChartPadding.js";
 import { useChartTooltip } from "./useChartTooltip.js";
 import type { TooltipClamp } from "../tooltip-position.js";
 import { useChartMenu } from "./useChartMenu.js";
+import type { TitleStyle } from "./chartProps.js";
 
 const DEFAULT_WIDTH_FALLBACK = 400;
 const DEFAULT_HEIGHT = 200;
@@ -15,6 +16,7 @@ export interface ChartFoundationOptions {
   width: () => number | undefined;
   height: () => number | undefined;
   title: () => string | undefined;
+  titleStyle: () => TitleStyle | undefined;
   xLabel: () => string | undefined;
   yLabel: () => string | undefined;
   debounce: () => number | undefined;
@@ -87,6 +89,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
   const { padding, legendY, inlineLegendLayout, innerW, innerH, bounds } =
     useChartPadding({
       title: opts.title,
+      titleStyle: opts.titleStyle,
       xLabel: opts.xLabel,
       yLabel: opts.yLabel,
       inlineLegendLabels: opts.inlineLegendLabels,
