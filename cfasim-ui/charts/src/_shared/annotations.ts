@@ -37,13 +37,17 @@ export interface ChartAnnotation {
    */
   fontWeight?: string | number;
   /**
-   * Halo (stroke) color drawn behind the text so the label stays legible
-   * against busy chart elements. Defaults to `var(--color-bg-0, #fff)` so
-   * it matches the page background out of the box.
+   * Color of the legibility outline drawn behind the text, pointer/rule
+   * line, and arrow tip. Defaults to `var(--color-bg-0, #fff)` so it
+   * matches the page background out of the box.
    */
-  haloColor?: string;
-  /** Halo stroke width in pixels. Default: 3. */
-  haloWidth?: number;
+  outlineColor?: string;
+  /**
+   * Outline stroke width in pixels. Applied to the text (via paint-order
+   * stroke), and added to `lineWidth` for the pointer/rule line and
+   * arrow tip outline pass. Set to `0` to disable the outline. Default: 3.
+   */
+  outlineWidth?: number;
   /**
    * Horizontal alignment of the label relative to its anchor position.
    * When omitted, derived from the sign of `offset.x`: positive →
