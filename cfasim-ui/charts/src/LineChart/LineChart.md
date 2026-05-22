@@ -102,6 +102,46 @@ When `x` is omitted, `y`/`data` values are plotted at indices 0, 1, 2, etc.
   </template>
 </ComponentDemo>
 
+### Legend
+
+Set `legend` on a series to add an entry to the inline legend strip above the plot. When the items don't all fit on one row at the chart's current width, the legend wraps to additional rows and the plot area shrinks to keep the legend clear of the data. Use `showInLegend: false` to keep a series off the legend (e.g. when its `legend` string is reused as a CSV column header) and `showInTooltip: false` to omit it from the hover tooltip.
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      { data: [0, 12, 28, 45, 60, 55, 40, 25, 12], color: '#0057b7', legend: 'No interventions' },
+      { data: [0, 10, 22, 38, 50, 45, 32, 18, 8], color: '#fb7e38', legend: 'School closures' },
+      { data: [0, 8, 18, 30, 40, 35, 25, 14, 6], color: '#ef4444', legend: 'Masking + distancing' },
+      { data: [0, 6, 14, 24, 32, 28, 20, 10, 4], color: '#10b981', legend: 'Vaccination only' },
+      { data: [0, 4, 10, 16, 22, 19, 13, 7, 3], color: '#6366f1', legend: 'Vaccination + masking' },
+      { data: [0, 3, 7, 11, 15, 13, 9, 5, 2], color: '#a855f7', legend: 'All interventions combined' },
+    ]"
+    :height="240"
+    x-label="Weeks"
+    y-label="Incidence"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    { data: scenarioA, color: '#0057b7', legend: 'No interventions' },
+    { data: scenarioB, color: '#fb7e38', legend: 'School closures' },
+    { data: scenarioC, color: '#ef4444', legend: 'Masking + distancing' },
+    { data: scenarioD, color: '#10b981', legend: 'Vaccination only' },
+    { data: scenarioE, color: '#6366f1', legend: 'Vaccination + masking' },
+    { data: scenarioF, color: '#a855f7', legend: 'All interventions combined' },
+  ]"
+  :height="240"
+  x-label="Weeks"
+  y-label="Incidence"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Tooltip
 
 Hover over the chart to see a tooltip with values at each data point. Set `tooltip-trigger="hover"` to enable the built-in tooltip with crosshair and highlight dots. Use the `#tooltip` slot for custom content. Pass `tooltip-value-format` to control how numeric values render (e.g. percentages, currency); it falls back to `y-tick-format` when omitted.
