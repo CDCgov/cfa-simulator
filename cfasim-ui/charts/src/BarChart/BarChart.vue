@@ -13,6 +13,7 @@ import {
   useChartFoundation,
   makeTooltipValueFormatter,
   ChartAnnotations,
+  INLINE_LEGEND_ROW_HEIGHT,
   type ChartData,
   type ChartCommonProps,
   type ChartHoverPayload,
@@ -114,10 +115,6 @@ const emit = defineEmits<{
 defineSlots<{
   tooltip?(props: ChartTooltipBaseProps & { category: string }): unknown;
 }>();
-
-const hasInlineLegend = computed(() =>
-  allSeries.value.some((s) => s.legend && s.showInLegend !== false),
-);
 
 const EMPTY_DATA: readonly number[] = [];
 
@@ -485,6 +482,10 @@ const inlineLegendItems = computed<InlineLegendItem[]>(() => {
   return items;
 });
 
+const inlineLegendLabels = computed(() =>
+  inlineLegendItems.value.map((item) => item.label),
+);
+
 function toCsv(): string {
   if (typeof props.csv === "function") return props.csv();
   if (typeof props.csv === "string") return props.csv;
@@ -531,6 +532,7 @@ const {
   height,
   padding,
   legendY,
+  inlineLegendLayout,
   innerW,
   innerH,
   bounds,
@@ -556,7 +558,7 @@ const {
   filename: () => props.filename,
   downloadLink: () => props.downloadLink,
   chartPadding: () => props.chartPadding,
-  hasInlineLegend: () => hasInlineLegend.value,
+  inlineLegendLabels: () => inlineLegendLabels.value,
   hasTooltipSlot: () => hasTooltipSlot.value,
   getCsv: toCsv,
   pointerToIndex,
@@ -611,6 +613,24 @@ const hoverBand = computed(() => {
     h: slotSize.value,
   };
 });
+
+/**
+ * Legend items joined with their wrapped pixel positions. `x` is the
+ * left edge of the indicator; `y` is the center of the row.
+ */
+const positionedLegendItems = computed(() => {
+  const positions = inlineLegendLayout.value.positions;
+  const pad = padding.value.left;
+  const baseY = legendY.value;
+  return inlineLegendItems.value.map((item, i) => {
+    const pos = positions[i];
+    return {
+      ...item,
+      x: pad + pos.x,
+      y: baseY + pos.row * INLINE_LEGEND_ROW_HEIGHT,
+    };
+  });
+});
 </script>
 
 <template>
@@ -637,18 +657,18 @@ const hoverBand = computed(() => {
         {{ title }}
       </text>
       <!-- inline legend -->
-      <g v-if="inlineLegendItems.length > 0">
-        <template v-for="(item, i) in inlineLegendItems" :key="'ileg' + i">
+      <g v-if="positionedLegendItems.length > 0">
+        <template v-for="(item, i) in positionedLegendItems" :key="'ileg' + i">
           <rect
-            :x="padding.left + i * 120"
-            :y="legendY - 5"
+            :x="item.x"
+            :y="item.y - 5"
             width="12"
             height="10"
             :fill="item.color"
           />
           <text
-            :x="padding.left + i * 120 + 18"
-            :y="legendY + 4"
+            :x="item.x + 18"
+            :y="item.y + 4"
             font-size="11"
             fill="currentColor"
           >

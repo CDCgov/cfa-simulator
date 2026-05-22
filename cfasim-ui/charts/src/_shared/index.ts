@@ -16,10 +16,11 @@ export {
 export { useChartSize, type ChartSizeOptions } from "./useChartSize.js";
 export {
   useChartPadding,
-  INLINE_LEGEND_HEIGHT,
+  INLINE_LEGEND_ROW_HEIGHT,
   type ChartPaddingOptions,
   type ChartPadding,
   type ChartBounds,
+  type PositionedLegendItem,
 } from "./useChartPadding.js";
 export {
   useChartTooltip,

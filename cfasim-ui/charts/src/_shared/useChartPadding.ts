@@ -1,7 +1,17 @@
 import { computed } from "vue";
 
-/** Vertical space reserved at the top of the chart for inline legend swatches. */
-export const INLINE_LEGEND_HEIGHT = 20;
+/** Vertical space reserved per row of the inline legend strip. */
+export const INLINE_LEGEND_ROW_HEIGHT = 20;
+/**
+ * Estimated character width at font-size 11 used by inline-legend
+ * measurement. Matches the value used by LineChart's area-section labels
+ * so wrapping behaves consistently across the chart's text overlays.
+ */
+const LEGEND_CHAR_WIDTH = 7;
+/** X offset of legend text from the start of its row slot. */
+const LEGEND_TEXT_INDENT = 18;
+/** Horizontal gap between adjacent legend items on the same row. */
+const LEGEND_ITEM_GAP = 16;
 
 /**
  * Extra space added around the chart's standard layout. A number applies
@@ -22,11 +32,24 @@ export interface ChartPaddingOptions {
   title: () => string | undefined;
   xLabel: () => string | undefined;
   yLabel: () => string | undefined;
-  hasInlineLegend: () => boolean;
+  /**
+   * Labels for the inline legend items, in render order. Empty array
+   * (or omitted) means no legend strip. Drives both row-count for
+   * reserving top padding and per-item wrap positions.
+   */
+  inlineLegendLabels: () => readonly string[];
   width: () => number;
   height: () => number;
   /** Extra pixels added on top of the standard axis spacing. */
   extraPadding?: () => ChartPadding | undefined;
+}
+
+/** Position of a single legend item within the legend strip. */
+export interface PositionedLegendItem {
+  /** X offset relative to `padding.left`. */
+  x: number;
+  /** Row index, 0-based. */
+  row: number;
 }
 
 function resolvePadding(p: ChartPadding | undefined) {
@@ -41,36 +64,92 @@ function resolvePadding(p: ChartPadding | undefined) {
 }
 
 /**
+ * Estimated rendered width (in px) of a single legend item — indicator,
+ * text, and surrounding spacing. Used to flow items into rows.
+ */
+function estimateLegendItemWidth(label: string): number {
+  return LEGEND_TEXT_INDENT + label.length * LEGEND_CHAR_WIDTH;
+}
+
+/**
  * Computes the standard chart padding (top/right/bottom/left) and the
  * derived inner plotting region (innerW, innerH). Shared by LineChart
  * and BarChart so the axis label spacing and inline legend strip stay
  * consistent. `extraPadding` adds extra space outside the plot — useful
  * for annotations that need to extend past the data area without
  * clipping.
+ *
+ * The inline legend wraps to multiple rows when items don't fit in the
+ * available width; `padding.top` grows by `INLINE_LEGEND_ROW_HEIGHT` per
+ * row so the plot stays clear of the legend strip.
  */
 export function useChartPadding(opts: ChartPaddingOptions) {
+  // Horizontal padding is computed first because `innerW` depends only
+  // on left/right (not on legend row count). Splitting padding this way
+  // keeps the legend layout — which depends on `innerW` — out of the
+  // reactivity cycle for left/right.
+  const horizontalPadding = computed(() => {
+    const extra = resolvePadding(opts.extraPadding?.());
+    return {
+      left: (opts.yLabel() ? 56 : 50) + extra.left,
+      right: 10 + extra.right,
+    };
+  });
+
+  const innerW = computed(
+    () =>
+      opts.width() -
+      horizontalPadding.value.left -
+      horizontalPadding.value.right,
+  );
+
+  const inlineLegendLayout = computed<{
+    positions: PositionedLegendItem[];
+    rowCount: number;
+  }>(() => {
+    const labels = opts.inlineLegendLabels();
+    if (labels.length === 0) return { positions: [], rowCount: 0 };
+    const available = Math.max(0, innerW.value);
+    const positions: PositionedLegendItem[] = [];
+    let row = 0;
+    let x = 0;
+    for (const label of labels) {
+      const w = estimateLegendItemWidth(label);
+      // Wrap to a new row when the item won't fit, except when we're
+      // already at row-start (`x === 0`): a single oversized label gets
+      // its own row instead of triggering an infinite-wrap loop.
+      if (x > 0 && x + w > available) {
+        row++;
+        x = 0;
+      }
+      positions.push({ x, row });
+      x += w + LEGEND_ITEM_GAP;
+    }
+    return { positions, rowCount: row + 1 };
+  });
+
   const padding = computed(() => {
     const extra = resolvePadding(opts.extraPadding?.());
+    const rowCount = inlineLegendLayout.value.rowCount;
     return {
       top:
         (opts.title() ? 26 : 10) +
-        (opts.hasInlineLegend() ? INLINE_LEGEND_HEIGHT : 0) +
+        rowCount * INLINE_LEGEND_ROW_HEIGHT +
         extra.top,
-      right: 10 + extra.right,
       bottom: (opts.xLabel() ? 38 : 30) + extra.bottom,
-      left: (opts.yLabel() ? 56 : 50) + extra.left,
+      left: horizontalPadding.value.left,
+      right: horizontalPadding.value.right,
     };
   });
-  // Y-center of the inline legend strip. Sits at the top of the padding
-  // band (just below any title), so any user-supplied `extraPadding.top`
-  // becomes empty room between the legend and the plot — useful for
-  // annotations that need to extend above the data area.
+
+  // Y-center of the first inline-legend row. Sits at the top of the
+  // padding band (just below any title), so any user-supplied
+  // `extraPadding.top` becomes empty room between the legend and the
+  // plot. Subsequent rows are offset by `INLINE_LEGEND_ROW_HEIGHT`.
   const legendY = computed(
-    () => (opts.title() ? 26 : 10) + INLINE_LEGEND_HEIGHT / 2,
+    () => (opts.title() ? 26 : 10) + INLINE_LEGEND_ROW_HEIGHT / 2,
   );
-  const innerW = computed(
-    () => opts.width() - padding.value.left - padding.value.right,
-  );
+
   const innerH = computed(
     () => opts.height() - padding.value.top - padding.value.bottom,
   );
@@ -88,7 +167,14 @@ export function useChartPadding(opts: ChartPaddingOptions) {
       height: innerH.value,
     };
   });
-  return { padding, legendY, innerW, innerH, bounds };
+  return {
+    padding,
+    legendY,
+    inlineLegendLayout,
+    innerW,
+    innerH,
+    bounds,
+  };
 }
 
 export type ChartBounds = {

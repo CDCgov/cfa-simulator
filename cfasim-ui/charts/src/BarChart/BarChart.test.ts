@@ -709,6 +709,31 @@ describe("BarChart", () => {
       expect(texts).toContain("Adult");
     });
 
+    it("wraps inline legend items to multiple rows when they overflow width", () => {
+      const series = Array.from({ length: 10 }, (_, i) => ({
+        data: [i + 1, i + 2],
+        legend: `Series ${i + 1} with longer label`,
+      }));
+      const wrapper = mount(BarChart, {
+        props: {
+          series,
+          categories: ["A", "B"],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      // Each legend label is rendered as one <text>. Collect their y
+      // coordinates — multi-row wrapping means more than one distinct y.
+      const labelYs = new Set(
+        wrapper
+          .findAll("text")
+          .filter((t) => /^Series /.test(t.text()))
+          .map((t) => t.attributes("y")),
+      );
+      expect(labelYs.size).toBeGreaterThan(1);
+    });
+
     it("hides a series legend entry when showInLegend is false", () => {
       const wrapper = mount(BarChart, {
         props: {
