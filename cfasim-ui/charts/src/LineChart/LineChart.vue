@@ -17,6 +17,7 @@ import {
   type ChartCommonProps,
   type ChartHoverPayload,
   type ChartTooltipBaseProps,
+  type ChartTooltipValue,
 } from "../_shared/index.js";
 
 /**
@@ -54,6 +55,16 @@ export interface Series {
   dotStroke?: string;
   /** Label shown in the inline legend */
   legend?: string;
+  /**
+   * Whether this series appears in the inline legend. Defaults to true.
+   * Has no effect when `legend` is unset (no legend entry to begin with).
+   */
+  showInLegend?: boolean;
+  /**
+   * Whether this series contributes a value to the tooltip and shows a
+   * hover dot. Defaults to true. The series line/dots are still drawn.
+   */
+  showInTooltip?: boolean;
 }
 
 export interface Area {
@@ -169,7 +180,7 @@ defineSlots<{
 
 const hasInlineLegend = computed(
   () =>
-    allSeries.value.some((s) => s.legend) ||
+    allSeries.value.some((s) => s.legend && s.showInLegend !== false) ||
     props.areaSections?.some(
       (s) => s.legend === "inline" && (s.label || s.description),
     ) ||
@@ -503,7 +514,7 @@ interface InlineLegendItem {
 const inlineLegendItems = computed<InlineLegendItem[]>(() => {
   const items: InlineLegendItem[] = [];
   for (const s of allSeries.value) {
-    if (!s.legend) continue;
+    if (!s.legend || s.showInLegend === false) continue;
     items.push({
       label: s.legend,
       color: s.color ?? "currentColor",
@@ -675,6 +686,7 @@ const hoverDots = computed(() => {
   if (targetX === null) return [];
   const dots: { x: number; y: number; color: string }[] = [];
   for (const s of allSeries.value) {
+    if (s.showInTooltip === false) continue;
     const nIdx = nearestIndex(s, targetX);
     if (nIdx === null) continue;
     const yv = s.data[nIdx];
@@ -704,17 +716,22 @@ const hoverSlotProps = computed(() => {
   } else {
     xLabel = formatTick(displayX);
   }
+  const series = allSeries.value;
+  const values: ChartTooltipValue[] = [];
+  for (let i = 0; i < series.length; i++) {
+    const s = series[i];
+    if (s.showInTooltip === false) continue;
+    const nIdx = nearestIndex(s, targetX);
+    values.push({
+      value: nIdx !== null ? Number(s.data[nIdx]) : NaN,
+      color: s.color ?? "currentColor",
+      seriesIndex: i,
+    });
+  }
   return {
     index: idx,
     xLabel,
-    values: allSeries.value.map((s, i) => {
-      const nIdx = nearestIndex(s, targetX);
-      return {
-        value: nIdx !== null ? Number(s.data[nIdx]) : NaN,
-        color: s.color ?? "currentColor",
-        seriesIndex: i,
-      };
-    }),
+    values,
     data: props.tooltipData?.[idx] ?? null,
   };
 });
