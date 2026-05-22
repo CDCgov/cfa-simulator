@@ -29,8 +29,8 @@ const props = withDefaults(
 const DEFAULT_FONT_SIZE = 13;
 const DEFAULT_FONT_WEIGHT = "normal";
 const BOLD_FONT_WEIGHT = 700;
-const DEFAULT_HALO_COLOR = "var(--color-bg-0, #fff)";
-const DEFAULT_HALO_WIDTH = 3;
+const DEFAULT_OUTLINE_COLOR = "var(--color-bg-0, #fff)";
+const DEFAULT_OUTLINE_WIDTH = 3;
 const DEFAULT_LINE_WIDTH = 1;
 const ANCHOR_GAP_PX = 4;
 const LABEL_GAP_PX = 6;
@@ -55,8 +55,8 @@ interface RenderedAnnotation {
   fontSize: number;
   fontWeight: string | number;
   color: string;
-  haloColor: string;
-  haloWidth: number;
+  outlineColor: string;
+  outlineWidth: number;
   pointerPath: string;
   lineColor: string;
   lineWidth: number;
@@ -66,6 +66,7 @@ interface RenderedAnnotation {
   // renders correctly in Safari (which doesn't support `context-stroke` on
   // SVG markers). Present only when an arrow should be drawn.
   arrowTip?: { x: number; y: number; angle: number };
+  arrowTransform: string;
   rule?: { x1: number; y1: number; x2: number; y2: number };
 }
 
@@ -128,8 +129,8 @@ const items = computed<RenderedAnnotation[]>(() => {
     const color = a.color ?? "currentColor";
     const fontSize = a.fontSize ?? DEFAULT_FONT_SIZE;
     const fontWeight = a.fontWeight ?? DEFAULT_FONT_WEIGHT;
-    const haloColor = a.haloColor ?? DEFAULT_HALO_COLOR;
-    const haloWidth = a.haloWidth ?? DEFAULT_HALO_WIDTH;
+    const outlineColor = a.outlineColor ?? DEFAULT_OUTLINE_COLOR;
+    const outlineWidth = a.outlineWidth ?? DEFAULT_OUTLINE_WIDTH;
     const lineColor = a.lineColor ?? color;
     const lineWidth = a.lineWidth ?? DEFAULT_LINE_WIDTH;
     const lineDash = resolveDash(a.lineDash);
@@ -166,14 +167,17 @@ const items = computed<RenderedAnnotation[]>(() => {
       fontSize,
       fontWeight,
       color,
-      haloColor,
-      haloWidth,
+      outlineColor,
+      outlineWidth,
       pointerPath,
       lineColor,
       lineWidth,
       lineDash,
       arrow: wantArrow,
       arrowTip,
+      arrowTransform: arrowTip
+        ? `translate(${arrowTip.x} ${arrowTip.y}) rotate(${arrowTip.angle})`
+        : "",
       rule,
     });
   }
@@ -304,12 +308,45 @@ function buildPointerPath(
 <template>
   <g class="chart-annotations" pointer-events="none">
     <template v-for="(item, i) in items" :key="i">
+      <!--
+        Outline pass. Each shape is rendered first in `outlineColor` at a
+        wider stroke so the rule line, pointer, and arrow tip stay legible
+        over busy series. Outline elements carry `class="annotation-outline"`
+        so consumers (and tests) can target the "real" shape directly.
+        Outlines deliberately drop `stroke-dasharray` — a dashed outline
+        would expose gaps where legibility matters most.
+      -->
+      <line
+        v-if="item.rule && item.outlineWidth > 0"
+        v-bind="item.rule"
+        class="annotation-outline"
+        :stroke="item.outlineColor"
+        :stroke-width="item.lineWidth + item.outlineWidth"
+        stroke-linecap="round"
+      />
+      <path
+        v-if="item.pointerPath && item.outlineWidth > 0"
+        :d="item.pointerPath"
+        class="annotation-outline"
+        fill="none"
+        :stroke="item.outlineColor"
+        :stroke-width="item.lineWidth + item.outlineWidth"
+        stroke-linecap="round"
+      />
+      <polygon
+        v-if="item.arrowTip && item.outlineWidth > 0"
+        points="0,0 -6,-3 -6,3"
+        class="annotation-outline"
+        :fill="item.outlineColor"
+        :stroke="item.outlineColor"
+        :stroke-width="item.outlineWidth"
+        stroke-linejoin="round"
+        :transform="item.arrowTransform"
+      />
+      <!-- Actual shapes. -->
       <line
         v-if="item.rule"
-        :x1="item.rule.x1"
-        :y1="item.rule.y1"
-        :x2="item.rule.x2"
-        :y2="item.rule.y2"
+        v-bind="item.rule"
         :stroke="item.lineColor"
         :stroke-width="item.lineWidth"
         :stroke-dasharray="item.lineDash"
@@ -334,7 +371,7 @@ function buildPointerPath(
         v-if="item.arrowTip"
         points="0,0 -6,-3 -6,3"
         :fill="item.lineColor"
-        :transform="`translate(${item.arrowTip.x} ${item.arrowTip.y}) rotate(${item.arrowTip.angle})`"
+        :transform="item.arrowTransform"
       />
       <text
         :x="item.textX"
@@ -343,8 +380,8 @@ function buildPointerPath(
         :font-size="item.fontSize"
         :font-weight="item.fontWeight"
         :fill="item.color"
-        :stroke="item.haloColor"
-        :stroke-width="item.haloWidth"
+        :stroke="item.outlineColor"
+        :stroke-width="item.outlineWidth"
         stroke-linejoin="round"
         paint-order="stroke fill"
       >

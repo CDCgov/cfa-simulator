@@ -1396,7 +1396,62 @@ describe("LineChart", () => {
       expect(wrapper.find("g.chart-annotations").exists()).toBe(false);
     });
 
-    it("renders an annotation with a pointer path and halo text", () => {
+    it("renders outline passes for the pointer line and arrow by default", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 30, y: -20 },
+              text: "Peak",
+              lineWidth: 2,
+              outlineWidth: 4,
+              outlineColor: "#fff",
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const group = wrapper.find("g.chart-annotations");
+      const outlinePath = group.find("path.annotation-outline");
+      expect(outlinePath.exists()).toBe(true);
+      expect(outlinePath.attributes("stroke")).toBe("#fff");
+      // Outline stroke = lineWidth + outlineWidth.
+      expect(outlinePath.attributes("stroke-width")).toBe("6");
+      // Outlines drop stroke-dasharray so the halo stays solid.
+      expect(outlinePath.attributes("stroke-dasharray")).toBeUndefined();
+      const outlineArrow = group.find("polygon.annotation-outline");
+      expect(outlineArrow.exists()).toBe(true);
+    });
+
+    it("suppresses the outline passes when outlineWidth is 0", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 30, y: -20 },
+              text: "Peak",
+              outlineWidth: 0,
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      expect(
+        wrapper.find("g.chart-annotations .annotation-outline").exists(),
+      ).toBe(false);
+    });
+
+    it("renders an annotation with a pointer path and outline text", () => {
       const wrapper = mount(LineChart, {
         props: {
           data: [0, 10, 20],
@@ -1529,13 +1584,13 @@ describe("LineChart", () => {
       const group = wrapper.find("g.chart-annotations");
       // No <marker> / <defs> for annotations — color would break in Safari.
       expect(group.find("marker").exists()).toBe(false);
-      const polygon = group.find("polygon");
+      const polygon = group.find("polygon:not(.annotation-outline)");
       expect(polygon.exists()).toBe(true);
       expect(polygon.attributes("fill")).toBe("#ff0000");
       // Triangle pointing along local +x, tip at origin, base 6 back, 6 tall.
       expect(polygon.attributes("points")).toBe("0,0 -6,-3 -6,3");
       // Path is not driving the arrow via marker-start anymore.
-      const path = group.find("path");
+      const path = group.find("path:not(.annotation-outline)");
       expect(path.attributes("marker-start")).toBeUndefined();
     });
 
@@ -1796,7 +1851,9 @@ describe("LineChart", () => {
           menu: false,
         },
       });
-      const line = wrapper.find("g.chart-annotations line");
+      const line = wrapper.find(
+        "g.chart-annotations line:not(.annotation-outline)",
+      );
       expect(line.attributes("stroke")).toBe("#f00");
       expect(line.attributes("stroke-width")).toBe("2");
       expect(line.attributes("stroke-dasharray")).toBe("4 2");
@@ -1948,7 +2005,9 @@ describe("LineChart", () => {
         },
       });
       expect(
-        wrapper.find("g.chart-annotations line").attributes("stroke-dasharray"),
+        wrapper
+          .find("g.chart-annotations line:not(.annotation-outline)")
+          .attributes("stroke-dasharray"),
       ).toBe("3 3");
     });
 

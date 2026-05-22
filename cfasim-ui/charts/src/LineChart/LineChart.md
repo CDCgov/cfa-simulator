@@ -595,8 +595,9 @@ Pin callouts to data points with `annotations`. Each annotation anchors at
 respects `xMin` and explicit `x` values), with a pixel
 `offset: { x, y }` for the label position. Text supports `\n` for line
 breaks. A curved
-pointer line connects the anchor to the label, and the label gets a halo
-stroke matching the background so it stays legible over series lines.
+pointer line connects the anchor to the label, and the label gets an
+outline stroke matching the background so it stays legible over series
+lines.
 
 <ComponentDemo>
   <LineChart
@@ -681,8 +682,8 @@ interface ChartAnnotation {
   color?: string; // text / pointer color (default: currentColor)
   fontSize?: number; // default: 13 (matches axis labels)
   fontWeight?: string | number; // default: "normal"
-  haloColor?: string; // background-matched halo (default: var(--color-bg-0, #fff))
-  haloWidth?: number; // default: 3
+  outlineColor?: string; // background-matched outline (default: var(--color-bg-0, #fff))
+  outlineWidth?: number; // default: 3
   align?: "left" | "center" | "right"; // default: derived from offset[0] sign
   lineColor?: string; // connector-line color override (default: color)
   lineWidth?: number; // default: 1
