@@ -17,6 +17,9 @@ export { useChartSize, type ChartSizeOptions } from "./useChartSize.js";
 export {
   useChartPadding,
   INLINE_LEGEND_ROW_HEIGHT,
+  TITLE_LINE_HEIGHT,
+  TITLE_FONT_SIZE,
+  TITLE_FONT_WEIGHT,
   type ChartPaddingOptions,
   type ChartPadding,
   type ChartBounds,
@@ -41,4 +44,5 @@ export type {
   ChartHoverPayload,
   ChartTooltipValue,
   ChartTooltipBaseProps,
+  TitleStyle,
 } from "./chartProps.js";

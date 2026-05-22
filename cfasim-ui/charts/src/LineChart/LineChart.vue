@@ -14,6 +14,9 @@ import {
   makeTooltipValueFormatter,
   ChartAnnotations,
   INLINE_LEGEND_ROW_HEIGHT,
+  TITLE_LINE_HEIGHT,
+  TITLE_FONT_SIZE,
+  TITLE_FONT_WEIGHT,
   type ChartData,
   type ChartCommonProps,
   type ChartHoverPayload,
@@ -783,6 +786,7 @@ const {
   width: () => props.width,
   height: () => props.height,
   title: () => props.title,
+  titleStyle: () => props.titleStyle,
   xLabel: () => props.xLabel,
   yLabel: () => props.yLabel,
   debounce: () => props.debounce,
@@ -798,6 +802,30 @@ const {
   pointerToIndex: indexFromPointer,
   onHover: (payload) => emit("hover", payload),
   extraBelowHeight: () => sectionLabels.value.extraHeight,
+});
+
+/** Resolved title style with defaults applied. */
+const titleResolved = computed(() => {
+  const s = props.titleStyle;
+  const align = s?.align ?? "left";
+  const b = bounds.value;
+  const x =
+    align === "left"
+      ? b.left
+      : align === "right"
+        ? b.right
+        : b.left + b.width / 2;
+  const anchor =
+    align === "left" ? "start" : align === "right" ? "end" : "middle";
+  return {
+    lines: (props.title ?? "").split("\n"),
+    fontSize: s?.fontSize ?? TITLE_FONT_SIZE,
+    lineHeight: s?.lineHeight ?? TITLE_LINE_HEIGHT,
+    fontWeight: s?.fontWeight ?? TITLE_FONT_WEIGHT,
+    color: s?.color ?? "currentColor",
+    x,
+    anchor,
+  };
 });
 
 /**
@@ -833,14 +861,21 @@ const positionedLegendItems = computed(() => {
       <!-- title -->
       <text
         v-if="title"
-        :x="width / 2"
-        :y="18"
-        text-anchor="middle"
-        font-size="14"
-        font-weight="600"
-        fill="currentColor"
+        :x="titleResolved.x"
+        :y="titleResolved.lineHeight"
+        :text-anchor="titleResolved.anchor"
+        :font-size="titleResolved.fontSize"
+        :font-weight="titleResolved.fontWeight"
+        :fill="titleResolved.color"
       >
-        {{ title }}
+        <tspan
+          v-for="(line, i) in titleResolved.lines"
+          :key="i"
+          :x="titleResolved.x"
+          :dy="i === 0 ? 0 : titleResolved.lineHeight"
+        >
+          {{ line }}
+        </tspan>
       </text>
       <!-- inline legend -->
       <g v-if="positionedLegendItems.length > 0">

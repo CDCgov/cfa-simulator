@@ -9,6 +9,21 @@ import type { ChartAnnotation } from "./annotations.js";
 import type { ChartPadding } from "./useChartPadding.js";
 
 /**
+ * Visual styling for the chart title. All fields optional; unspecified
+ * fields fall back to the chart's defaults (font-size 14, line-height 18,
+ * font-weight 600, currentColor, align "left"). `lineHeight` is in pixels
+ * and controls spacing between lines when the title contains `\n`.
+ */
+export interface TitleStyle {
+  fontSize?: number;
+  lineHeight?: number;
+  color?: string;
+  fontWeight?: number | string;
+  /** Horizontal alignment of the title. Default: `"left"`. */
+  align?: "left" | "center" | "right";
+}
+
+/**
  * Props common to every cartesian chart component. Anything specific to
  * the chart type (series shape, layout, value-axis details) lives on the
  * component itself.
@@ -16,7 +31,13 @@ import type { ChartPadding } from "./useChartPadding.js";
 export interface ChartCommonProps {
   width?: number;
   height?: number;
+  /**
+   * Chart title. `\n` in the string creates additional lines, each
+   * adding `titleStyle.lineHeight` (default 18px) of vertical space.
+   */
   title?: string;
+  /** Styling for the chart title. See `TitleStyle`. */
+  titleStyle?: TitleStyle;
   xLabel?: string;
   yLabel?: string;
   debounce?: number;

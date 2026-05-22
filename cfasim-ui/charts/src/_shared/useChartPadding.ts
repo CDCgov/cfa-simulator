@@ -1,7 +1,16 @@
 import { computed } from "vue";
+import type { TitleStyle } from "./chartProps.js";
 
 /** Vertical space reserved per row of the inline legend strip. */
 export const INLINE_LEGEND_ROW_HEIGHT = 20;
+/** Default line height (px) for the chart title; overridable per chart. */
+export const TITLE_LINE_HEIGHT = 18;
+/** Default font size (px) for the chart title; overridable per chart. */
+export const TITLE_FONT_SIZE = 14;
+/** Default font weight for the chart title; overridable per chart. */
+export const TITLE_FONT_WEIGHT: number | string = 600;
+/** Vertical space below the title's last baseline before the next element. */
+const TITLE_BOTTOM_GAP = 8;
 /**
  * Estimated character width at font-size 11 used by inline-legend
  * measurement. Matches the value used by LineChart's area-section labels
@@ -30,6 +39,7 @@ export type ChartPadding =
 
 export interface ChartPaddingOptions {
   title: () => string | undefined;
+  titleStyle?: () => TitleStyle | undefined;
   xLabel: () => string | undefined;
   yLabel: () => string | undefined;
   /**
@@ -128,14 +138,22 @@ export function useChartPadding(opts: ChartPaddingOptions) {
     return { positions, rowCount: row + 1 };
   });
 
+  // Title height in px. `\n` in the title creates additional lines, each
+  // adding `titleStyle.lineHeight` (default 18). When there is no title,
+  // reserve a small top margin so the plot doesn't hug the top edge.
+  const titleHeight = computed(() => {
+    const t = opts.title();
+    if (!t) return 10;
+    const lineHeight = opts.titleStyle?.()?.lineHeight ?? TITLE_LINE_HEIGHT;
+    const lineCount = t.split("\n").length;
+    return lineCount * lineHeight + TITLE_BOTTOM_GAP;
+  });
+
   const padding = computed(() => {
     const extra = resolvePadding(opts.extraPadding?.());
     const rowCount = inlineLegendLayout.value.rowCount;
     return {
-      top:
-        (opts.title() ? 26 : 10) +
-        rowCount * INLINE_LEGEND_ROW_HEIGHT +
-        extra.top,
+      top: titleHeight.value + rowCount * INLINE_LEGEND_ROW_HEIGHT + extra.top,
       bottom: (opts.xLabel() ? 38 : 30) + extra.bottom,
       left: horizontalPadding.value.left,
       right: horizontalPadding.value.right,
@@ -147,7 +165,7 @@ export function useChartPadding(opts: ChartPaddingOptions) {
   // `extraPadding.top` becomes empty room between the legend and the
   // plot. Subsequent rows are offset by `INLINE_LEGEND_ROW_HEIGHT`.
   const legendY = computed(
-    () => (opts.title() ? 26 : 10) + INLINE_LEGEND_ROW_HEIGHT / 2,
+    () => titleHeight.value + INLINE_LEGEND_ROW_HEIGHT / 2,
   );
 
   const innerH = computed(
