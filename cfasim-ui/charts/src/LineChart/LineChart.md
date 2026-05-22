@@ -683,7 +683,7 @@ interface ChartAnnotation {
   fontWeight?: string | number; // default: "normal"
   haloColor?: string; // background-matched halo (default: var(--color-bg-0, #fff))
   haloWidth?: number; // default: 3
-  textAnchor?: "start" | "middle" | "end"; // default: derived from offset[0] sign
+  align?: "left" | "center" | "right"; // default: derived from offset[0] sign
   lineColor?: string; // connector-line color override (default: color)
   lineWidth?: number; // default: 1
   lineDash?: string | number | readonly number[]; // SVG stroke-dasharray
@@ -736,7 +736,7 @@ positioned from the anchor as usual via `offset`.
         y: 30,
         offset: { x: -8, y: -6 },
         text: 'Max',
-        textAnchor: 'end',
+        align: 'right',
         pointer: 'ruleFromLeft',
         lineDash: '4 3',
       },
@@ -766,7 +766,7 @@ positioned from the anchor as usual via `offset`.
       y: 30,
       offset: { x: -8, y: -6 },
       text: 'Max',
-      textAnchor: 'end',
+      align: 'right',
       pointer: 'ruleFromLeft',
       lineDash: '4 3',
     },

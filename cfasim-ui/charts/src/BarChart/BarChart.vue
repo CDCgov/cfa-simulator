@@ -17,6 +17,11 @@ import {
   TITLE_LINE_HEIGHT,
   TITLE_FONT_SIZE,
   TITLE_FONT_WEIGHT,
+  AXIS_LABEL_FONT_SIZE,
+  TICK_LABEL_FONT_SIZE,
+  TICK_LABEL_OPACITY,
+  LEGEND_FONT_SIZE,
+  resolveLabelStyle,
   type ChartData,
   type ChartCommonProps,
   type ChartHoverPayload,
@@ -569,6 +574,22 @@ const {
   onHover: (payload) => emit("hover", payload),
 });
 
+/** Resolved style for the x/y axis labels. */
+const axisLabelResolved = computed(() =>
+  resolveLabelStyle(props.axisLabelStyle, { fontSize: AXIS_LABEL_FONT_SIZE }),
+);
+/** Resolved style for the axis tick labels. */
+const tickLabelResolved = computed(() =>
+  resolveLabelStyle(props.tickLabelStyle, {
+    fontSize: TICK_LABEL_FONT_SIZE,
+    fillOpacity: TICK_LABEL_OPACITY,
+  }),
+);
+/** Resolved style for inline legend item labels. */
+const legendResolved = computed(() =>
+  resolveLabelStyle(props.legendStyle, { fontSize: LEGEND_FONT_SIZE }),
+);
+
 /** Resolved title style with defaults applied. */
 const titleResolved = computed(() => {
   const s = props.titleStyle;
@@ -704,8 +725,9 @@ const positionedLegendItems = computed(() => {
           <text
             :x="item.x + 18"
             :y="item.y + 4"
-            font-size="11"
-            fill="currentColor"
+            :font-size="legendResolved.fontSize"
+            :fill="legendResolved.fill"
+            :font-weight="legendResolved.fontWeight"
           >
             {{ item.label }}
           </text>
@@ -762,9 +784,10 @@ const positionedLegendItems = computed(() => {
           :y="tick.pos"
           text-anchor="end"
           dominant-baseline="middle"
-          font-size="10"
-          fill="currentColor"
-          fill-opacity="0.6"
+          :font-size="tickLabelResolved.fontSize"
+          :fill="tickLabelResolved.fill"
+          :font-weight="tickLabelResolved.fontWeight"
+          :fill-opacity="tickLabelResolved.fillOpacity"
         >
           {{ tick.value }}
         </text>
@@ -777,9 +800,10 @@ const positionedLegendItems = computed(() => {
           :x="tick.pos"
           :y="padding.top + innerH + 16"
           text-anchor="middle"
-          font-size="10"
-          fill="currentColor"
-          fill-opacity="0.6"
+          :font-size="tickLabelResolved.fontSize"
+          :fill="tickLabelResolved.fill"
+          :font-weight="tickLabelResolved.fontWeight"
+          :fill-opacity="tickLabelResolved.fillOpacity"
         >
           {{ tick.value }}
         </text>
@@ -791,8 +815,9 @@ const positionedLegendItems = computed(() => {
         :y="0"
         :transform="`translate(14, ${padding.top + innerH / 2}) rotate(-90)`"
         text-anchor="middle"
-        font-size="13"
-        fill="currentColor"
+        :font-size="axisLabelResolved.fontSize"
+        :fill="axisLabelResolved.fill"
+        :font-weight="axisLabelResolved.fontWeight"
       >
         {{ yLabel }}
       </text>
@@ -805,9 +830,10 @@ const positionedLegendItems = computed(() => {
           :x="tick.pos"
           :y="padding.top + innerH + 16"
           :text-anchor="tick.anchor"
-          font-size="10"
-          fill="currentColor"
-          fill-opacity="0.6"
+          :font-size="tickLabelResolved.fontSize"
+          :fill="tickLabelResolved.fill"
+          :font-weight="tickLabelResolved.fontWeight"
+          :fill-opacity="tickLabelResolved.fillOpacity"
         >
           {{ tick.label }}
         </text>
@@ -821,9 +847,10 @@ const positionedLegendItems = computed(() => {
           :y="tick.pos"
           text-anchor="end"
           dominant-baseline="middle"
-          font-size="10"
-          fill="currentColor"
-          fill-opacity="0.6"
+          :font-size="tickLabelResolved.fontSize"
+          :fill="tickLabelResolved.fill"
+          :font-weight="tickLabelResolved.fontWeight"
+          :fill-opacity="tickLabelResolved.fillOpacity"
         >
           {{ tick.label }}
         </text>
@@ -834,8 +861,9 @@ const positionedLegendItems = computed(() => {
         :x="padding.left + innerW / 2"
         :y="height - 4"
         text-anchor="middle"
-        font-size="13"
-        fill="currentColor"
+        :font-size="axisLabelResolved.fontSize"
+        :fill="axisLabelResolved.fill"
+        :font-weight="axisLabelResolved.fontWeight"
       >
         {{ xLabel }}
       </text>

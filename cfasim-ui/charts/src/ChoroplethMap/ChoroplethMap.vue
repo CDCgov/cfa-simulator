@@ -27,6 +27,7 @@ import {
   TITLE_LINE_HEIGHT,
   TITLE_FONT_WEIGHT,
   type TitleStyle,
+  type LabelStyle,
 } from "../_shared/index.js";
 import { placeTooltip } from "../tooltip-position.js";
 import ChoroplethTooltip from "./ChoroplethTooltip.vue";
@@ -117,6 +118,8 @@ const props = withDefaults(
     title?: string;
     /** Styling for the map title. See `TitleStyle`. */
     titleStyle?: TitleStyle;
+    /** Styling for the legend (title, swatch labels, and continuous-scale ticks). */
+    legendStyle?: LabelStyle;
     noDataColor?: string;
     strokeColor?: string;
     strokeWidth?: number;
@@ -243,6 +246,19 @@ const slots = useSlots();
 const hasInteractiveTooltip = computed(
   () => !!props.tooltipTrigger || !!props.tooltipFormat || !!slots.tooltip,
 );
+
+/**
+ * Inline style for the legend container. Font properties cascade to
+ * children (legend title, swatch labels, continuous-scale ticks).
+ */
+const legendInlineStyle = computed(() => {
+  const s = props.legendStyle;
+  const style: Record<string, string> = {};
+  if (s?.fontSize != null) style["font-size"] = `${s.fontSize}px`;
+  if (s?.fontWeight != null) style["font-weight"] = String(s.fontWeight);
+  if (s?.color != null) style.color = s.color;
+  return style;
+});
 
 /** Inline style for the title element, applying TitleStyle overrides. */
 const titleInlineStyle = computed(() => {
@@ -1410,7 +1426,11 @@ watch(
       <div v-if="title" class="choropleth-title" :style="titleInlineStyle">
         {{ title }}
       </div>
-      <div v-if="showLegend" class="choropleth-legend">
+      <div
+        v-if="showLegend"
+        class="choropleth-legend"
+        :style="legendInlineStyle"
+      >
         <span v-if="legendTitle" class="choropleth-legend-title">
           {{ legendTitle }}
         </span>

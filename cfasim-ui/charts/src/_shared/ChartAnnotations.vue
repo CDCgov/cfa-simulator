@@ -133,8 +133,10 @@ const items = computed<RenderedAnnotation[]>(() => {
     const lineColor = a.lineColor ?? color;
     const lineWidth = a.lineWidth ?? DEFAULT_LINE_WIDTH;
     const lineDash = resolveDash(a.lineDash);
-    const textAnchor =
-      a.textAnchor ?? (offsetX > 0 ? "start" : offsetX < 0 ? "end" : "middle");
+    const alignMap = { left: "start", center: "middle", right: "end" } as const;
+    const align =
+      a.align ?? (offsetX > 0 ? "left" : offsetX < 0 ? "right" : "center");
+    const textAnchor = alignMap[align];
 
     let rule: RenderedAnnotation["rule"];
     let pointerPath = "";

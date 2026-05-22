@@ -24,6 +24,18 @@ export interface TitleStyle {
 }
 
 /**
+ * Visual styling for axis labels, tick labels, and legend text. Each
+ * field is optional; unspecified fields fall back to that element's
+ * default. When `color` is set, the default fill-opacity (used by tick
+ * labels) is dropped so the exact color is rendered.
+ */
+export interface LabelStyle {
+  fontSize?: number;
+  color?: string;
+  fontWeight?: number | string;
+}
+
+/**
  * Props common to every cartesian chart component. Anything specific to
  * the chart type (series shape, layout, value-axis details) lives on the
  * component itself.
@@ -38,6 +50,12 @@ export interface ChartCommonProps {
   title?: string;
   /** Styling for the chart title. See `TitleStyle`. */
   titleStyle?: TitleStyle;
+  /** Styling for axis labels (the `xLabel` / `yLabel` text). */
+  axisLabelStyle?: LabelStyle;
+  /** Styling for axis tick labels (the numbers/categories on each axis). */
+  tickLabelStyle?: LabelStyle;
+  /** Styling for the inline legend item labels. */
+  legendStyle?: LabelStyle;
   xLabel?: string;
   yLabel?: string;
   debounce?: number;
