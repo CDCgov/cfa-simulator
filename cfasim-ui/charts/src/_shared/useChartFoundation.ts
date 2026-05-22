@@ -25,7 +25,12 @@ export interface ChartFoundationOptions {
   downloadLink: () => boolean | string | undefined;
   chartPadding: () => ChartPadding | undefined;
   // Chart-specific hooks that the composable can't infer.
-  hasInlineLegend: () => boolean;
+  /**
+   * Labels for the inline legend in render order. Empty array = no
+   * legend strip. Drives wrapping into multiple rows and the resulting
+   * top-padding reservation.
+   */
+  inlineLegendLabels: () => readonly string[];
   hasTooltipSlot: () => boolean;
   getCsv: () => string;
   pointerToIndex: (clientX: number, clientY: number) => number | null;
@@ -79,15 +84,16 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     return opts.height() ?? DEFAULT_HEIGHT;
   });
 
-  const { padding, legendY, innerW, innerH, bounds } = useChartPadding({
-    title: opts.title,
-    xLabel: opts.xLabel,
-    yLabel: opts.yLabel,
-    hasInlineLegend: opts.hasInlineLegend,
-    width: () => width.value,
-    height: () => height.value,
-    extraPadding: opts.chartPadding,
-  });
+  const { padding, legendY, inlineLegendLayout, innerW, innerH, bounds } =
+    useChartPadding({
+      title: opts.title,
+      xLabel: opts.xLabel,
+      yLabel: opts.yLabel,
+      inlineLegendLabels: opts.inlineLegendLabels,
+      width: () => width.value,
+      height: () => height.value,
+      extraPadding: opts.chartPadding,
+    });
 
   const {
     hoverIndex,
@@ -110,6 +116,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     height,
     padding,
     legendY,
+    inlineLegendLayout,
     innerW,
     innerH,
     bounds,

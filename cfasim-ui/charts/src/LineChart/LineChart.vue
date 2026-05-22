@@ -13,6 +13,7 @@ import {
   useChartFoundation,
   makeTooltipValueFormatter,
   ChartAnnotations,
+  INLINE_LEGEND_ROW_HEIGHT,
   type ChartData,
   type ChartCommonProps,
   type ChartHoverPayload,
@@ -177,15 +178,6 @@ const emit = defineEmits<{
 defineSlots<{
   tooltip?(props: ChartTooltipBaseProps & { xLabel?: string }): unknown;
 }>();
-
-const hasInlineLegend = computed(
-  () =>
-    allSeries.value.some((s) => s.legend && s.showInLegend !== false) ||
-    props.areaSections?.some(
-      (s) => s.legend === "inline" && (s.label || s.description),
-    ) ||
-    false,
-);
 
 /**
  * Internal series shape where `data` (y-values) is always resolved.
@@ -544,6 +536,10 @@ const inlineLegendItems = computed<InlineLegendItem[]>(() => {
   return items;
 });
 
+const inlineLegendLabels = computed(() =>
+  inlineLegendItems.value.map((item) => item.label),
+);
+
 const totalHeight = computed(
   () => height.value + sectionLabels.value.extraHeight,
 );
@@ -764,6 +760,7 @@ const {
   height,
   padding,
   legendY,
+  inlineLegendLayout,
   innerW,
   innerH,
   bounds,
@@ -789,12 +786,30 @@ const {
   filename: () => props.filename,
   downloadLink: () => props.downloadLink,
   chartPadding: () => props.chartPadding,
-  hasInlineLegend: () => hasInlineLegend.value,
+  inlineLegendLabels: () => inlineLegendLabels.value,
   hasTooltipSlot: () => hasTooltipSlot.value,
   getCsv: toCsv,
   pointerToIndex: indexFromPointer,
   onHover: (payload) => emit("hover", payload),
   extraBelowHeight: () => sectionLabels.value.extraHeight,
+});
+
+/**
+ * Legend items joined with their wrapped pixel positions. `x` is the
+ * left edge of the indicator; `y` is the center of the row.
+ */
+const positionedLegendItems = computed(() => {
+  const positions = inlineLegendLayout.value.positions;
+  const pad = padding.value.left;
+  const baseY = legendY.value;
+  return inlineLegendItems.value.map((item, i) => {
+    const pos = positions[i];
+    return {
+      ...item,
+      x: pad + pos.x,
+      y: baseY + pos.row * INLINE_LEGEND_ROW_HEIGHT,
+    };
+  });
 });
 </script>
 
@@ -822,15 +837,15 @@ const {
         {{ title }}
       </text>
       <!-- inline legend -->
-      <g v-if="inlineLegendItems.length > 0">
-        <template v-for="(item, i) in inlineLegendItems" :key="'ileg' + i">
+      <g v-if="positionedLegendItems.length > 0">
+        <template v-for="(item, i) in positionedLegendItems" :key="'ileg' + i">
           <!-- series indicator: line -->
           <line
             v-if="item.type === 'series'"
-            :x1="padding.left + i * 120"
-            :y1="legendY"
-            :x2="padding.left + i * 120 + 12"
-            :y2="legendY"
+            :x1="item.x"
+            :y1="item.y"
+            :x2="item.x + 12"
+            :y2="item.y"
             :stroke="item.color"
             stroke-width="2"
             :stroke-dasharray="item.dashed ? '4 2' : undefined"
@@ -838,8 +853,8 @@ const {
           <!-- section indicator: filled circle -->
           <circle
             v-else
-            :cx="padding.left + i * 120 + 4"
-            :cy="legendY"
+            :cx="item.x + 4"
+            :cy="item.y"
             r="4"
             :fill="item.color"
             :fill-opacity="item.fillOpacity"
@@ -847,8 +862,8 @@ const {
             stroke-width="1.5"
           />
           <text
-            :x="padding.left + i * 120 + 18"
-            :y="legendY + 4"
+            :x="item.x + 18"
+            :y="item.y + 4"
             font-size="11"
             fill="currentColor"
           >

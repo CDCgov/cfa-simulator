@@ -838,6 +838,23 @@ describe("LineChart", () => {
       expect(texts).not.toContain("Reference");
     });
 
+    it("wraps inline legend items to multiple rows when they overflow width", () => {
+      const series = Array.from({ length: 10 }, (_, i) => ({
+        data: [i + 1, i + 2, i + 3],
+        legend: `Series ${i + 1} with longer label`,
+      }));
+      const wrapper = mount(LineChart, {
+        props: { series, width: 400, height: 200, menu: false },
+      });
+      const labelYs = new Set(
+        wrapper
+          .findAll("text")
+          .filter((t) => /^Series /.test(t.text()))
+          .map((t) => t.attributes("y")),
+      );
+      expect(labelYs.size).toBeGreaterThan(1);
+    });
+
     it("falls back to yTickFormat for tooltip values when tooltipValueFormat is not set", async () => {
       const wrapper = mount(LineChart, {
         props: {
