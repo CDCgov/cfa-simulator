@@ -527,6 +527,30 @@ describe("BarChart", () => {
       wrapper.unmount();
     });
 
+    it("omits a series from the tooltip when showInTooltip is false", async () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          series: [
+            { data: [10, 20], color: "#0057b7" },
+            { data: [5, 7], color: "#f4a261", showInTooltip: false },
+          ],
+          categories: ["A", "B"],
+          tooltipTrigger: "hover" as const,
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+        attachTo: document.body,
+      });
+      const overlay = wrapper
+        .findAll("rect")
+        .find((r) => r.attributes("fill") === "transparent")!;
+      await overlay.trigger("mousemove", { clientX: 100, clientY: 100 });
+      const rows = wrapper.findAll(".bar-chart-tooltip-row");
+      expect(rows.length).toBe(1);
+      wrapper.unmount();
+    });
+
     it("uses tooltipValueFormat for tooltip values", async () => {
       const wrapper = mount(BarChart, {
         props: {
@@ -683,6 +707,24 @@ describe("BarChart", () => {
       const texts = wrapper.findAll("text").map((t) => t.text());
       expect(texts).toContain("Pediatric");
       expect(texts).toContain("Adult");
+    });
+
+    it("hides a series legend entry when showInLegend is false", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          series: [
+            { data: [1, 2], legend: "Pediatric" },
+            { data: [3, 4], legend: "Adult", showInLegend: false },
+          ],
+          categories: ["A", "B"],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const texts = wrapper.findAll("text").map((t) => t.text());
+      expect(texts).toContain("Pediatric");
+      expect(texts).not.toContain("Adult");
     });
 
     it("renders value-axis grid lines when valueGrid is true (default)", () => {

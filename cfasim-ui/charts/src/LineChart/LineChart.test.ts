@@ -793,6 +793,51 @@ describe("LineChart", () => {
       wrapper.unmount();
     });
 
+    it("omits a series from the tooltip when showInTooltip is false", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [
+            { data: [1, 2, 3], color: "#0057b7" },
+            { data: [4, 5, 6], color: "#f4a261", showInTooltip: false },
+          ],
+          width: 400,
+          height: 200,
+          menu: false,
+          tooltipTrigger: "hover" as const,
+        },
+        attachTo: document.body,
+      });
+      const overlay = wrapper
+        .findAll("rect")
+        .find((r) => r.attributes("fill") === "transparent")!;
+      await overlay.trigger("mousemove", { clientX: 200, clientY: 50 });
+      expect(wrapper.findAll(".line-chart-tooltip-row").length).toBe(1);
+      // Hover dot is also suppressed for the hidden series. Hover dots have
+      // a white stroke; other circles (e.g. series dots) do not.
+      const hoverDots = wrapper
+        .findAll("circle")
+        .filter((c) => c.attributes("stroke-width") === "2");
+      expect(hoverDots.length).toBe(1);
+      wrapper.unmount();
+    });
+
+    it("hides a series legend entry when showInLegend is false", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [
+            { data: [1, 2, 3], legend: "Cases" },
+            { data: [4, 5, 6], legend: "Reference", showInLegend: false },
+          ],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const texts = wrapper.findAll("text").map((t) => t.text());
+      expect(texts).toContain("Cases");
+      expect(texts).not.toContain("Reference");
+    });
+
     it("falls back to yTickFormat for tooltip values when tooltipValueFormat is not set", async () => {
       const wrapper = mount(LineChart, {
         props: {

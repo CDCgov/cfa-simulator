@@ -17,6 +17,7 @@ import {
   type ChartCommonProps,
   type ChartHoverPayload,
   type ChartTooltipBaseProps,
+  type ChartTooltipValue,
 } from "../_shared/index.js";
 
 export type BarChartData = ChartData;
@@ -29,6 +30,16 @@ export interface BarSeries {
   opacity?: number;
   /** Label shown in the inline legend. */
   legend?: string;
+  /**
+   * Whether this series appears in the inline legend. Defaults to true.
+   * Has no effect when `legend` is unset (no legend entry to begin with).
+   */
+  showInLegend?: boolean;
+  /**
+   * Whether this series contributes a value to the tooltip. Defaults to
+   * true. The bars are still drawn.
+   */
+  showInTooltip?: boolean;
 }
 
 interface BarChartProps extends ChartCommonProps {
@@ -104,7 +115,9 @@ defineSlots<{
   tooltip?(props: ChartTooltipBaseProps & { category: string }): unknown;
 }>();
 
-const hasInlineLegend = computed(() => allSeries.value.some((s) => s.legend));
+const hasInlineLegend = computed(() =>
+  allSeries.value.some((s) => s.legend && s.showInLegend !== false),
+);
 
 const EMPTY_DATA: readonly number[] = [];
 
@@ -113,6 +126,8 @@ type ResolvedSeries = {
   color?: string;
   opacity?: number;
   legend?: string;
+  showInLegend?: boolean;
+  showInTooltip?: boolean;
 };
 
 function resolveSeries(s: BarSeries): ResolvedSeries {
@@ -121,6 +136,8 @@ function resolveSeries(s: BarSeries): ResolvedSeries {
     color: s.color,
     opacity: s.opacity,
     legend: s.legend,
+    showInLegend: s.showInLegend,
+    showInTooltip: s.showInTooltip,
   };
 }
 
@@ -462,7 +479,7 @@ interface InlineLegendItem {
 const inlineLegendItems = computed<InlineLegendItem[]>(() => {
   const items: InlineLegendItem[] = [];
   allSeries.value.forEach((s, i) => {
-    if (!s.legend) return;
+    if (!s.legend || s.showInLegend === false) return;
     items.push({ label: s.legend, color: s.color ?? defaultColor(i) });
   });
   return items;
@@ -555,14 +572,21 @@ const hoveredCategoryLabel = computed(() => {
 const hoverSlotProps = computed(() => {
   const idx = hoverIndex.value;
   if (idx === null) return null;
-  return {
-    index: idx,
-    category: categoryLabels.value[idx] ?? String(idx),
-    values: allSeries.value.map((s, i) => ({
+  const series = allSeries.value;
+  const values: ChartTooltipValue[] = [];
+  for (let i = 0; i < series.length; i++) {
+    const s = series[i];
+    if (s.showInTooltip === false) continue;
+    values.push({
       value: Number(s.data[idx] ?? NaN),
       color: s.color ?? defaultColor(i),
       seriesIndex: i,
-    })),
+    });
+  }
+  return {
+    index: idx,
+    category: categoryLabels.value[idx] ?? String(idx),
+    values,
     data: props.tooltipData?.[idx] ?? null,
   };
 });
