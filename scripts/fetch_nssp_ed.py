@@ -13,14 +13,28 @@ import argparse
 import csv
 import io
 import json
+import urllib.parse
 import urllib.request
+from datetime import date, timedelta
 from pathlib import Path
 
-DATA_URL = "https://data.cdc.gov/api/views/rdmq-nq56/rows.csv?accessType=DOWNLOAD"
+# SODA endpoint supports server-side filtering via $where, unlike the
+# /api/views/.../rows.csv export which always returns the full dataset (~110MB).
+DATA_HOST = "https://data.cdc.gov/resource/rdmq-nq56.csv"
+WEEKS_TO_KEEP = 13  # ~3 months — demo only
 CACHE_PATH = Path(__file__).resolve().parent.parent / ".cache" / "nssp_ed_raw.csv"
 OUT_DIR = Path(__file__).resolve().parent.parent / "models" / "public" / "data"
 
 METRICS = ["percent_visits_covid", "percent_visits_influenza"]
+
+
+def data_url() -> str:
+    cutoff = (date.today() - timedelta(weeks=WEEKS_TO_KEEP)).isoformat()
+    query = urllib.parse.urlencode({
+        "$where": f"week_end >= '{cutoff}'",
+        "$limit": "500000",
+    })
+    return f"{DATA_HOST}?{query}"
 
 
 def fetch_csv(refresh: bool) -> list[dict]:
@@ -28,14 +42,22 @@ def fetch_csv(refresh: bool) -> list[dict]:
         print(f"Using cached data from {CACHE_PATH}")
         text = CACHE_PATH.read_text()
     else:
-        print(f"Downloading {DATA_URL} ...")
-        with urllib.request.urlopen(DATA_URL) as resp:
+        url = data_url()
+        print(f"Downloading {url} ...")
+        with urllib.request.urlopen(url) as resp:
             text = resp.read().decode("utf-8")
         CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
         CACHE_PATH.write_text(text)
-        print(f"Cached raw CSV to {CACHE_PATH}")
+        print(f"Cached raw CSV to {CACHE_PATH} ({len(text) / 1024:.0f} KB)")
     reader = csv.DictReader(io.StringIO(text))
-    return list(reader)
+    rows = list(reader)
+    # SODA returns timestamps as "YYYY-MM-DDTHH:MM:SS.sss"; legacy export
+    # used bare "YYYY-MM-DD". Normalize so downstream filenames and the
+    # demo's week URLs stay in the short form.
+    for r in rows:
+        if "week_end" in r and "T" in r["week_end"]:
+            r["week_end"] = r["week_end"].split("T", 1)[0]
+    return rows
 
 
 def main():
@@ -81,7 +103,7 @@ def main():
 
     def extract_metrics(r: dict) -> dict[str, float | None]:
         return {
-            m.replace("percent_visits_", ""): float(r[m]) if r[m] else None
+            m.replace("percent_visits_", ""): round(float(r[m]), 1) if r[m] else None
             for m in METRICS
         }
 
