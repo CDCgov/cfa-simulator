@@ -50,6 +50,12 @@ export interface Series {
   lineOpacity?: number;
   dotOpacity?: number;
   line?: boolean;
+  /**
+   * Draw a page-colored stroke behind the line so it stays visually
+   * separated from overlapping series and busy backgrounds. Has no
+   * effect when `line` is `false`.
+   */
+  outline?: boolean;
   dots?: boolean;
   dotRadius?: number;
   dotFill?: string;
@@ -977,6 +983,16 @@ const positionedLegendItems = computed(() => {
       />
       <!-- data lines and dots -->
       <template v-for="(s, i) in allSeries" :key="i">
+        <path
+          v-if="s.line !== false && s.outline"
+          :d="toPath(s)"
+          fill="none"
+          stroke="var(--color-bg-0, #fff)"
+          :stroke-width="(s.strokeWidth ?? 1.5) + 4"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          data-testid="line-outline"
+        />
         <path
           v-if="s.line !== false"
           :d="toPath(s)"
