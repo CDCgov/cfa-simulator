@@ -16,10 +16,15 @@ export {
 export { useChartSize, type ChartSizeOptions } from "./useChartSize.js";
 export {
   useChartPadding,
+  resolveLabelStyle,
   INLINE_LEGEND_ROW_HEIGHT,
   TITLE_LINE_HEIGHT,
   TITLE_FONT_SIZE,
   TITLE_FONT_WEIGHT,
+  AXIS_LABEL_FONT_SIZE,
+  TICK_LABEL_FONT_SIZE,
+  TICK_LABEL_OPACITY,
+  LEGEND_FONT_SIZE,
   type ChartPaddingOptions,
   type ChartPadding,
   type ChartBounds,
@@ -45,4 +50,5 @@ export type {
   ChartTooltipValue,
   ChartTooltipBaseProps,
   TitleStyle,
+  LabelStyle,
 } from "./chartProps.js";

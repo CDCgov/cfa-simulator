@@ -45,10 +45,11 @@ export interface ChartAnnotation {
   /** Halo stroke width in pixels. Default: 3. */
   haloWidth?: number;
   /**
-   * SVG text-anchor for the label. When omitted, derived from the sign of
-   * `offset.x`: positive → `start`, negative → `end`, zero → `middle`.
+   * Horizontal alignment of the label relative to its anchor position.
+   * When omitted, derived from the sign of `offset.x`: positive →
+   * `"left"`, negative → `"right"`, zero → `"center"`.
    */
-  textAnchor?: "start" | "middle" | "end";
+  align?: "left" | "center" | "right";
   /** Pointer- or rule-line color override. Defaults to `color`. */
   lineColor?: string;
   /** Pointer- or rule-line width in pixels. Default: 1. */

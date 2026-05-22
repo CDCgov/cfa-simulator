@@ -1,5 +1,5 @@
 import { computed } from "vue";
-import type { TitleStyle } from "./chartProps.js";
+import type { LabelStyle, TitleStyle } from "./chartProps.js";
 
 /** Vertical space reserved per row of the inline legend strip. */
 export const INLINE_LEGEND_ROW_HEIGHT = 20;
@@ -9,8 +9,38 @@ export const TITLE_LINE_HEIGHT = 18;
 export const TITLE_FONT_SIZE = 14;
 /** Default font weight for the chart title; overridable per chart. */
 export const TITLE_FONT_WEIGHT: number | string = 600;
+/** Default font size (px) for axis labels (`xLabel` / `yLabel`). */
+export const AXIS_LABEL_FONT_SIZE = 13;
+/** Default font size (px) for axis tick labels (the numbers on each axis). */
+export const TICK_LABEL_FONT_SIZE = 10;
+/** Default fill-opacity for tick labels when no custom color is set. */
+export const TICK_LABEL_OPACITY = 0.6;
+/** Default font size (px) for inline legend item labels. */
+export const LEGEND_FONT_SIZE = 11;
 /** Vertical space below the title's last baseline before the next element. */
 const TITLE_BOTTOM_GAP = 8;
+
+/**
+ * Resolve a `LabelStyle` against per-element defaults. Returns the
+ * fields the chart's `<text>` element needs. When `style.color` is set,
+ * the default fill-opacity is dropped so the exact color renders.
+ */
+export function resolveLabelStyle(
+  style: LabelStyle | undefined,
+  defaults: { fontSize: number; fillOpacity?: number },
+): {
+  fontSize: number;
+  fill: string;
+  fontWeight: number | string | undefined;
+  fillOpacity: number | undefined;
+} {
+  return {
+    fontSize: style?.fontSize ?? defaults.fontSize,
+    fill: style?.color ?? "currentColor",
+    fontWeight: style?.fontWeight,
+    fillOpacity: style?.color != null ? undefined : defaults.fillOpacity,
+  };
+}
 /**
  * Estimated character width at font-size 11 used by inline-legend
  * measurement. Matches the value used by LineChart's area-section labels

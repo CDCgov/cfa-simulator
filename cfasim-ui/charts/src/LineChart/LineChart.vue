@@ -17,7 +17,13 @@ import {
   TITLE_LINE_HEIGHT,
   TITLE_FONT_SIZE,
   TITLE_FONT_WEIGHT,
+  AXIS_LABEL_FONT_SIZE,
+  TICK_LABEL_FONT_SIZE,
+  TICK_LABEL_OPACITY,
+  LEGEND_FONT_SIZE,
+  resolveLabelStyle,
   type ChartData,
+  type LabelStyle,
   type ChartCommonProps,
   type ChartHoverPayload,
   type ChartTooltipBaseProps,
@@ -107,6 +113,17 @@ export interface AreaSection {
   dashed?: boolean;
   /** Label placement: "below" (default) renders below chart, "inline" renders in legend row, false hides label */
   legend?: "inline" | "below" | false;
+  /**
+   * Style for the area section's primary label text. Defaults: font-size
+   * 11, font-weight 600, color taken from the section's `color`.
+   */
+  inlineLabelStyle?: LabelStyle;
+  /**
+   * Style for the area section's secondary description text. Defaults:
+   * font-size 11, currentColor at 0.6 opacity. Providing `color` drops
+   * the default opacity.
+   */
+  inlineDescriptionStyle?: LabelStyle;
 }
 
 interface LineChartProps extends ChartCommonProps {
@@ -438,6 +455,8 @@ interface PositionedSectionLabel {
   row: number;
   color: string;
   fillOpacity: number;
+  labelStyle: ReturnType<typeof resolveLabelStyle>;
+  descStyle: ReturnType<typeof resolveLabelStyle>;
 }
 
 const sectionLabels = computed<{
@@ -470,6 +489,16 @@ const sectionLabels = computed<{
       (sec.seriesIndex != null
         ? (allSeries.value[sec.seriesIndex]?.color ?? "currentColor")
         : "#999");
+    // Section labels default to the section's data-driven color/weight;
+    // user-supplied styles override piece-by-piece.
+    const labelStyle = resolveLabelStyle(
+      { color, fontWeight: 600, ...sec.inlineLabelStyle },
+      { fontSize: 11 },
+    );
+    const descStyle = resolveLabelStyle(sec.inlineDescriptionStyle, {
+      fontSize: 11,
+      fillOpacity: 0.6,
+    });
     items.push({
       cx,
       labelText,
@@ -478,6 +507,8 @@ const sectionLabels = computed<{
       row: 0,
       color,
       fillOpacity: sec.opacity ?? 0.15,
+      labelStyle,
+      descStyle,
     });
   }
 
@@ -804,6 +835,22 @@ const {
   extraBelowHeight: () => sectionLabels.value.extraHeight,
 });
 
+/** Resolved style for the x/y axis labels. */
+const axisLabelResolved = computed(() =>
+  resolveLabelStyle(props.axisLabelStyle, { fontSize: AXIS_LABEL_FONT_SIZE }),
+);
+/** Resolved style for the axis tick labels. */
+const tickLabelResolved = computed(() =>
+  resolveLabelStyle(props.tickLabelStyle, {
+    fontSize: TICK_LABEL_FONT_SIZE,
+    fillOpacity: TICK_LABEL_OPACITY,
+  }),
+);
+/** Resolved style for inline legend item labels. */
+const legendResolved = computed(() =>
+  resolveLabelStyle(props.legendStyle, { fontSize: LEGEND_FONT_SIZE }),
+);
+
 /** Resolved title style with defaults applied. */
 const titleResolved = computed(() => {
   const s = props.titleStyle;
@@ -905,8 +952,9 @@ const positionedLegendItems = computed(() => {
           <text
             :x="item.x + 18"
             :y="item.y + 4"
-            font-size="11"
-            fill="currentColor"
+            :font-size="legendResolved.fontSize"
+            :fill="legendResolved.fill"
+            :font-weight="legendResolved.fontWeight"
           >
             {{ item.label }}
           </text>
@@ -964,9 +1012,10 @@ const positionedLegendItems = computed(() => {
         :y="tick.y"
         text-anchor="end"
         dominant-baseline="middle"
-        font-size="10"
-        fill="currentColor"
-        fill-opacity="0.6"
+        :font-size="tickLabelResolved.fontSize"
+        :fill="tickLabelResolved.fill"
+        :font-weight="tickLabelResolved.fontWeight"
+        :fill-opacity="tickLabelResolved.fillOpacity"
       >
         {{ tick.value }}
       </text>
@@ -977,8 +1026,9 @@ const positionedLegendItems = computed(() => {
         :y="0"
         :transform="`translate(14, ${padding.top + innerH / 2}) rotate(-90)`"
         text-anchor="middle"
-        font-size="13"
-        fill="currentColor"
+        :font-size="axisLabelResolved.fontSize"
+        :fill="axisLabelResolved.fill"
+        :font-weight="axisLabelResolved.fontWeight"
       >
         {{ yLabel }}
       </text>
@@ -990,9 +1040,10 @@ const positionedLegendItems = computed(() => {
         :x="tick.x"
         :y="padding.top + innerH + 16"
         :text-anchor="tick.anchor"
-        font-size="10"
-        fill="currentColor"
-        fill-opacity="0.6"
+        :font-size="tickLabelResolved.fontSize"
+        :fill="tickLabelResolved.fill"
+        :font-weight="tickLabelResolved.fontWeight"
+        :fill-opacity="tickLabelResolved.fillOpacity"
       >
         {{ tick.value }}
       </text>
@@ -1002,8 +1053,9 @@ const positionedLegendItems = computed(() => {
         :x="padding.left + innerW / 2"
         :y="height - 4"
         text-anchor="middle"
-        font-size="13"
-        fill="currentColor"
+        :font-size="axisLabelResolved.fontSize"
+        :fill="axisLabelResolved.fill"
+        :font-weight="axisLabelResolved.fontWeight"
       >
         {{ xLabel }}
       </text>
@@ -1169,9 +1221,9 @@ const positionedLegendItems = computed(() => {
           v-if="item.labelText"
           :x="item.cx - item.textWidth / 2 + 8"
           :y="sectionLabelBaseY + item.row * SECTION_LABEL_ROW_HEIGHT + 8"
-          font-size="11"
-          font-weight="600"
-          :fill="item.color"
+          :font-size="item.labelStyle.fontSize"
+          :font-weight="item.labelStyle.fontWeight"
+          :fill="item.labelStyle.fill"
         >
           {{ item.labelText }}
         </text>
@@ -1179,9 +1231,10 @@ const positionedLegendItems = computed(() => {
           v-if="item.descText"
           :x="item.cx - item.textWidth / 2 + 8"
           :y="sectionLabelBaseY + item.row * SECTION_LABEL_ROW_HEIGHT + 22"
-          font-size="11"
-          fill="currentColor"
-          fill-opacity="0.6"
+          :font-size="item.descStyle.fontSize"
+          :font-weight="item.descStyle.fontWeight"
+          :fill="item.descStyle.fill"
+          :fill-opacity="item.descStyle.fillOpacity"
         >
           {{ item.descText }}
         </text>
