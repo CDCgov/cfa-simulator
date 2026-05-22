@@ -1,6 +1,23 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.4.11] - 2026-05-22
+
+### Chores
+
+- **fetch_nssp_ed:** Trim demo data to last ~3 months
+
+### Documentation
+
+- **charts:** Add legend-wrapping example to LineChart docs
+
+### Features
+
+- **charts:** Add Expand menu item for full-window chart view
+- **charts:** Add per-series showInTooltip and showInLegend flags
+- **charts:** Wrap inline legend across multiple rows when items overflow
+- **charts:** Add page-colored outline option to LineChart series
+
 ## [0.4.10] - 2026-05-21
 
 ### Bug Fixes
