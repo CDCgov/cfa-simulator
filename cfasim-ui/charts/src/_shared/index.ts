@@ -52,3 +52,15 @@ export type {
   TitleStyle,
   LabelStyle,
 } from "./chartProps.js";
+export {
+  parseDate,
+  isDateLike,
+  isAllDates,
+  pickDateTicks,
+  formatDate,
+  DATE_FORMAT_PRESETS,
+  type DateFormat,
+  type DateFormatPreset,
+  type DateTickUnit,
+  type DateTimezone,
+} from "./dateAxis.js";

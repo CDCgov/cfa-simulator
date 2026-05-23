@@ -1027,4 +1027,102 @@ describe("BarChart", () => {
       }
     });
   });
+
+  describe("date categories", () => {
+    it("auto-detects date categories and emits month-anchored labels", () => {
+      const cats = [
+        "2026-01-01",
+        "2026-01-08",
+        "2026-01-15",
+        "2026-01-22",
+        "2026-01-29",
+        "2026-02-05",
+        "2026-02-12",
+        "2026-02-19",
+        "2026-02-26",
+        "2026-03-05",
+        "2026-03-12",
+        "2026-03-19",
+      ];
+      const wrapper = mount(BarChart, {
+        props: {
+          data: cats.map((_, i) => i),
+          categories: cats,
+          width: 480,
+          height: 220,
+          menu: false,
+        },
+      });
+      const labels = wrapper
+        .findAll('[data-testid="category-tick"]')
+        .map((t) => t.text());
+      // Default labels for week/month-scale ticks include month names.
+      expect(labels.join(" ")).toMatch(/Jan|Feb|Mar/);
+      // Tick thinning: fewer labels than there are categories.
+      expect(labels.length).toBeLessThan(cats.length);
+    });
+
+    it("non-date categories are not thinned and emit all labels", () => {
+      const cats = ["a", "b", "c", "d", "e"];
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [1, 2, 3, 4, 5],
+          categories: cats,
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const labels = wrapper
+        .findAll('[data-testid="category-tick"]')
+        .map((t) => t.text());
+      expect(labels).toEqual(cats);
+    });
+
+    it("dateFormat overrides the default unit-aware formatter", () => {
+      const cats = ["2026-01-01", "2026-02-01", "2026-03-01", "2026-04-01"];
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [1, 2, 3, 4],
+          categories: cats,
+          dateFormat: "iso",
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const labels = wrapper
+        .findAll('[data-testid="category-tick"]')
+        .map((t) => t.text());
+      for (const l of labels) {
+        expect(l).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      }
+    });
+
+    it("accepts Date instances in the categories array", () => {
+      const cats = [
+        new Date(Date.UTC(2026, 0, 1)),
+        new Date(Date.UTC(2026, 1, 1)),
+        new Date(Date.UTC(2026, 2, 1)),
+        new Date(Date.UTC(2026, 3, 1)),
+      ];
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [1, 2, 3, 4],
+          categories: cats,
+          dateFormat: "iso",
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const labels = wrapper
+        .findAll('[data-testid="category-tick"]')
+        .map((t) => t.text());
+      expect(labels.length).toBeGreaterThan(0);
+      for (const l of labels) {
+        expect(l).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      }
+    });
+  });
 });

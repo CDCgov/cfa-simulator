@@ -2171,4 +2171,120 @@ describe("LineChart", () => {
       expect(tickLabels).toEqual(["2", "5", "50"]);
     });
   });
+
+  describe("date axis", () => {
+    it("auto-detects a date axis when every x value is a date string", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [10, 20, 30, 40],
+          x: ["2026-01-01", "2026-02-01", "2026-03-01", "2026-04-01"],
+          width: 600,
+          height: 200,
+          menu: false,
+        },
+      });
+      const labels = wrapper
+        .findAll('[data-testid="x-tick"]')
+        .map((t) => t.text());
+      // Default month-anchored formatting includes month names.
+      expect(labels.join(" ")).toMatch(/Jan|Feb|Mar|Apr/);
+      // No raw epoch-ms numbers should leak into the label text.
+      for (const l of labels) expect(l).not.toMatch(/\d{10,}/);
+    });
+
+    it("does not auto-detect on a purely numeric x array", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [10, 20, 30, 40],
+          x: [0, 1, 2, 3],
+          width: 600,
+          height: 200,
+          menu: false,
+        },
+      });
+      const labels = wrapper
+        .findAll('[data-testid="x-tick"]')
+        .map((t) => t.text());
+      // Numeric formatter would render plain integers, not month names.
+      for (const l of labels) expect(l).not.toMatch(/Jan|Feb|Mar|Apr/);
+    });
+
+    it('xTickFormat: "iso" overrides the default unit-aware formatter', () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [10, 20, 30, 40],
+          x: ["2026-01-01", "2026-02-01", "2026-03-01", "2026-04-01"],
+          xTickFormat: "iso",
+          width: 600,
+          height: 200,
+          menu: false,
+        },
+      });
+      const labels = wrapper
+        .findAll('[data-testid="x-tick"]')
+        .map((t) => t.text());
+      for (const l of labels) {
+        expect(l).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      }
+    });
+
+    it("custom xTickFormat function receives epoch-ms", () => {
+      const seen: number[] = [];
+      mount(LineChart, {
+        props: {
+          data: [10, 20, 30],
+          x: ["2026-01-01", "2026-02-01", "2026-03-01"],
+          xTickFormat: (v: number) => {
+            seen.push(v);
+            return String(v);
+          },
+          width: 600,
+          height: 200,
+          menu: false,
+        },
+      });
+      expect(seen.length).toBeGreaterThan(0);
+      // Epoch-ms for 2020+ is well over 1e12.
+      for (const v of seen) expect(v).toBeGreaterThan(1e12);
+    });
+
+    it('timezone: "local" parses bare YYYY-MM-DD against local midnight', () => {
+      const utcWrapper = mount(LineChart, {
+        props: {
+          data: [10, 20],
+          x: ["2026-01-15", "2026-02-15"],
+          xTickFormat: "iso-datetime",
+          timezone: "utc",
+          width: 600,
+          height: 200,
+          menu: false,
+          xTicks: [Date.UTC(2026, 0, 15), Date.UTC(2026, 1, 15)],
+        },
+      });
+      const localWrapper = mount(LineChart, {
+        props: {
+          data: [10, 20],
+          x: ["2026-01-15", "2026-02-15"],
+          xTickFormat: "iso-datetime",
+          timezone: "local",
+          width: 600,
+          height: 200,
+          menu: false,
+          xTicks: [
+            new Date(2026, 0, 15).getTime(),
+            new Date(2026, 1, 15).getTime(),
+          ],
+        },
+      });
+      const utcLabels = utcWrapper
+        .findAll('[data-testid="x-tick"]')
+        .map((t) => t.text());
+      const localLabels = localWrapper
+        .findAll('[data-testid="x-tick"]')
+        .map((t) => t.text());
+      // UTC renders explicit Z suffix; local renders without it.
+      expect(utcLabels.every((l) => l.endsWith("Z"))).toBe(true);
+      expect(localLabels.every((l) => !l.endsWith("Z"))).toBe(true);
+    });
+  });
 });

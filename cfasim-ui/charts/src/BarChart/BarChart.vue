@@ -22,7 +22,12 @@ import {
   TICK_LABEL_OPACITY,
   LEGEND_FONT_SIZE,
   resolveLabelStyle,
+  parseDate,
+  isAllDates,
+  pickDateTicks,
+  formatDate,
   type ChartData,
+  type DateFormat,
   type ChartCommonProps,
   type ChartHoverPayload,
   type ChartTooltipBaseProps,
@@ -61,8 +66,11 @@ interface BarChartProps extends ChartCommonProps {
   /**
    * Category labels for the categorical axis. Length should match the
    * longest series. When omitted, indices (0, 1, 2, ...) are used.
+   * Accepts date strings or `Date` objects: when every category parses
+   * as a date, label formatting switches to date mode (bar positions
+   * stay ordinal — they are not time-proportional).
    */
-  categories?: readonly string[];
+  categories?: readonly (string | Date)[];
   /** "vertical" (default, aka column) draws upright bars; "horizontal" draws sideways. */
   orientation?: "vertical" | "horizontal";
   /** "grouped" (default) places series side-by-side; "stacked" stacks them. */
@@ -91,6 +99,16 @@ interface BarChartProps extends ChartCommonProps {
   valueTickFormat?: NumberFormat;
   /** Formatter for category-axis labels. Receives the resolved category string. */
   categoryFormat?: (label: string, index: number) => string;
+  /**
+   * Date-tick formatter for date-mode category labels (auto-detected
+   * when every entry of `categories` parses as a date). Ignored unless
+   * the axis is in date mode. Accepts a `DateFormat` — preset name,
+   * `Intl.DateTimeFormatOptions`, or `(ms, unit?) => string`. When
+   * omitted, the formatter is picked from the chosen tick unit (e.g.
+   * monthly ticks → `"month-year"`). Has no effect when
+   * `categoryFormat` is also set.
+   */
+  dateFormat?: DateFormat;
   /**
    * Fraction of each category slot reserved as gap between groups (0..1).
    * Default 0.2 — i.e. bars/groups fill 80% of their slot.
@@ -166,9 +184,32 @@ const categoryLabels = computed<string[]>(() => {
   const n = categoryCount.value;
   const labels = new Array<string>(n);
   for (let i = 0; i < n; i++) {
-    labels[i] = props.categories?.[i] ?? String(i);
+    const c = props.categories?.[i];
+    if (c instanceof Date) {
+      // Stable string form for CSV / tooltip. Date axis formatting
+      // (visible labels) goes through `categoryTickItems` separately.
+      labels[i] = c.toISOString().slice(0, 10);
+    } else {
+      labels[i] = c ?? String(i);
+    }
   }
   return labels;
+});
+
+/**
+ * Parallel array of epoch-ms timestamps when every category parses as
+ * a date, otherwise `null`. Drives both date-aware tick thinning and
+ * the default tick label formatter.
+ */
+const categoryDatesMs = computed<number[] | null>(() => {
+  const cats = props.categories;
+  if (!cats || cats.length === 0) return null;
+  if (!isAllDates(cats, "utc")) return null;
+  const out = new Array<number>(cats.length);
+  for (let i = 0; i < cats.length; i++) {
+    out[i] = parseDate(cats[i], "utc") ?? NaN;
+  }
+  return out;
 });
 
 const isVertical = computed(() => props.orientation === "vertical");
@@ -461,8 +502,49 @@ interface CategoryTickItem {
 }
 
 const categoryTickItems = computed<CategoryTickItem[]>(() => {
-  const out: CategoryTickItem[] = [];
   const n = categoryCount.value;
+  const dateMs = categoryDatesMs.value;
+
+  // Date mode: thin labels to the closest category index for each
+  // tick boundary picked by `pickDateTicks`. Bar positions stay
+  // ordinal — only the labels become date-aware.
+  if (dateMs && dateMs.length > 0) {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const m of dateMs) {
+      if (!Number.isFinite(m)) continue;
+      if (m < min) min = m;
+      if (m > max) max = m;
+    }
+    if (!Number.isFinite(min) || min === max) return [];
+    const span = isVertical.value ? innerW.value : innerH.value;
+    const target = Math.max(2, Math.floor(span / 80));
+    const picked = pickDateTicks(min, max, target, "utc");
+    const unit = picked.unit;
+    const items: CategoryTickItem[] = [];
+    const seen = new Set<number>();
+    for (const tickMs of picked.values) {
+      let nearest = -1;
+      let best = Infinity;
+      for (let i = 0; i < dateMs.length; i++) {
+        const d = Math.abs(dateMs[i] - tickMs);
+        if (d < best) {
+          best = d;
+          nearest = i;
+        }
+      }
+      if (nearest < 0 || seen.has(nearest)) continue;
+      seen.add(nearest);
+      const center = slotStart(nearest) + slotSize.value / 2;
+      const label = props.categoryFormat
+        ? props.categoryFormat(categoryLabels.value[nearest], nearest)
+        : formatDate(dateMs[nearest], props.dateFormat, "utc", unit);
+      items.push({ label, pos: center, anchor: "middle" });
+    }
+    return items;
+  }
+
+  const out: CategoryTickItem[] = [];
   const fmt = (label: string, i: number) =>
     props.categoryFormat ? props.categoryFormat(label, i) : label;
   for (let i = 0; i < n; i++) {

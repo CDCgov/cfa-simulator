@@ -165,6 +165,54 @@ Use `value-tick-format` to format the value-axis labels. `tooltip-value-format` 
   </template>
 </ComponentDemo>
 
+### Date categories
+
+When every entry of `categories` parses as a date (`YYYY-MM-DD` string
+or `Date` instance), labels switch to date-aware formatting and the
+chart thins them to clean date boundaries (week / month / year
+depending on range). Bar positions stay ordinal — every category gets
+a bar — only the labels are thinned.
+
+<ComponentDemo>
+  <BarChart
+    :data="[12, 18, 24, 35, 41, 38, 29, 21, 14, 9, 7, 4]"
+    :categories="['2026-01-05','2026-01-12','2026-01-19','2026-01-26','2026-02-02','2026-02-09','2026-02-16','2026-02-23','2026-03-02','2026-03-09','2026-03-16','2026-03-23']"
+    :height="220"
+    y-label="% ED visits"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :data="[12, 18, 24, 35, 41, 38, 29, 21, 14, 9, 7, 4]"
+  :categories="[
+    '2026-01-05',
+    '2026-01-12',
+    '2026-01-19',
+    '2026-01-26',
+    '2026-02-02',
+    '2026-02-09',
+    '2026-02-16',
+    '2026-02-23',
+    '2026-03-02',
+    '2026-03-09',
+    '2026-03-16',
+    '2026-03-23',
+  ]"
+  :height="220"
+  y-label="% ED visits"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+Use `date-format` to override the auto-picked preset. Same values as
+LineChart's `x-tick-format` (e.g. `"iso"`, `"month-year"`, an
+`Intl.DateTimeFormatOptions` object, or a `(ms, unit?) => string`
+function).
+
 ### Logarithmic value axis
 
 Set `value-scale-type="log"` to switch the value axis to base-10 log

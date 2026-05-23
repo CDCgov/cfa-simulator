@@ -22,8 +22,15 @@ import {
   TICK_LABEL_OPACITY,
   LEGEND_FONT_SIZE,
   resolveLabelStyle,
+  parseDate,
+  isAllDates,
+  pickDateTicks,
+  formatDate,
   type ChartData,
   type LabelStyle,
+  type DateFormat,
+  type DateTickUnit,
+  type DateTimezone,
   type ChartCommonProps,
   type ChartHoverPayload,
   type ChartTooltipBaseProps,
@@ -38,6 +45,13 @@ import {
  */
 export type LineChartData = ChartData;
 
+/**
+ * Accepted shapes for an `x` array. Numeric arrays (typed or plain) plot
+ * as numbers; string-or-`Date` arrays trigger date-axis mode when every
+ * element parses. See the `timezone` prop and `dateAxis` module.
+ */
+export type LineChartXInput = LineChartData | readonly (string | Date)[];
+
 export interface Series {
   /**
    * Y-values. One of `y` or `data` must be supplied; `y` wins if both
@@ -49,9 +63,10 @@ export interface Series {
   /**
    * Optional x-values, parallel to `y`/`data`. When set, the chart
    * plots points at the given x positions (irregular spacing supported).
-   * When omitted, points are plotted at indices 0, 1, 2, ...
+   * When omitted, points are plotted at indices 0, 1, 2, ... Accepts
+   * date strings or `Date` objects to enable date-axis mode.
    */
-  x?: LineChartData;
+  x?: LineChartXInput;
   color?: string;
   dashed?: boolean;
   strokeWidth?: number;
@@ -87,7 +102,7 @@ export interface Area {
   upper: LineChartData;
   lower: LineChartData;
   /** Optional x-values parallel to `upper`/`lower`. See `Series.x`. */
-  x?: LineChartData;
+  x?: LineChartXInput;
   color?: string;
   opacity?: number;
 }
@@ -135,8 +150,9 @@ interface LineChartProps extends ChartCommonProps {
    * Optional x-values paired with `y`/`data`. When provided, points
    * are plotted at the given x positions instead of at their indices.
    * Ignored when `series` is used — set `x` on each `Series` instead.
+   * Accepts date strings or `Date` objects to enable date-axis mode.
    */
-  x?: LineChartData;
+  x?: LineChartXInput;
   series?: Series[];
   areas?: Area[];
   areaSections?: AreaSection[];
@@ -169,12 +185,24 @@ interface LineChartProps extends ChartCommonProps {
    */
   yTicks?: number | number[];
   /**
-   * Formatter for x-axis tick labels. Accepts a preset name, a printf-style
-   * format string, or a function. The two-arg function form `(value, index)`
-   * is also supported for index-based labels. See `formatNumber` in
-   * `@cfasim-ui/shared`.
+   * Formatter for x-axis tick labels. On a numeric axis, accepts a
+   * preset name, a printf-style format string, or a function (the
+   * two-arg `(value, index)` form is also supported for index-based
+   * labels — see `formatNumber` in `@cfasim-ui/shared`). On a date
+   * axis (auto-detected when every x value parses as a date), accepts
+   * a `DateFormat` instead — see the `dateAxis` module.
    */
-  xTickFormat?: NumberFormat | ((value: number, index: number) => string);
+  xTickFormat?:
+    | NumberFormat
+    | ((value: number, index: number) => string)
+    | DateFormat;
+  /**
+   * Timezone used when parsing offset-less ISO strings and rendering
+   * date-axis tick labels. `"utc"` (default) keeps visuals consistent
+   * across viewers; `"local"` uses the browser timezone. Ignored on a
+   * numeric axis.
+   */
+  timezone?: DateTimezone;
   /**
    * Formatter for y-axis tick labels. Accepts a preset name, a printf-style
    * format string, or a function. See `formatNumber` in `@cfasim-ui/shared`.
@@ -206,15 +234,49 @@ defineSlots<{
 }>();
 
 /**
- * Internal series shape where `data` (y-values) is always resolved.
- * `Series.y` takes precedence over `Series.data` when both are set.
+ * Internal series shape where `data` (y-values) is always resolved and
+ * `x` is narrowed to numeric (date inputs have already been parsed to
+ * epoch-ms). `Series.y` takes precedence over `Series.data`.
  */
-type ResolvedSeries = Omit<Series, "data" | "y"> & { data: LineChartData };
+type ResolvedSeries = Omit<Series, "data" | "y" | "x"> & {
+  data: LineChartData;
+  x?: LineChartData;
+};
+
+/** Same shape as `Area` but with `x` narrowed to numeric post-parse. */
+type ResolvedArea = Omit<Area, "x"> & { x?: LineChartData };
 
 const EMPTY_DATA: readonly number[] = [];
 
-function resolveSeries(s: Series): ResolvedSeries {
-  return { ...s, data: s.y ?? s.data ?? EMPTY_DATA };
+/**
+ * Yields every user-supplied `x` array on the component (top-level,
+ * per-series, per-area). Used both for date auto-detection and for the
+ * single-pass resolution that converts strings/Dates to numeric ms.
+ */
+function* xInputs(p: LineChartProps): Iterable<LineChartXInput> {
+  if (p.x && p.x.length > 0) yield p.x;
+  if (p.series) {
+    for (const s of p.series) if (s.x && s.x.length > 0) yield s.x;
+  }
+  if (p.areas) {
+    for (const a of p.areas) if (a.x && a.x.length > 0) yield a.x;
+  }
+}
+
+/** Convert an x input to numeric. Pre-parsed when `isDate` is true. */
+function toNumericX(
+  x: LineChartXInput | undefined,
+  isDate: boolean,
+  tz: DateTimezone,
+): LineChartData | undefined {
+  if (!x) return undefined;
+  if (!isDate) return x as LineChartData;
+  const out = new Float64Array(x.length);
+  for (let i = 0; i < x.length; i++) {
+    const v = parseDate(x[i], tz);
+    out[i] = v ?? NaN;
+  }
+  return out;
 }
 
 const formatTooltipValue = makeTooltipValueFormatter(
@@ -222,15 +284,58 @@ const formatTooltipValue = makeTooltipValueFormatter(
   () => props.yTickFormat,
 );
 
-const allSeries = computed<ResolvedSeries[]>(() => {
-  if (props.series && props.series.length > 0)
-    return props.series.map(resolveSeries);
-  const topY = props.y ?? props.data;
-  if (topY) return [{ data: topY, x: props.x }];
-  return [];
+const tz = computed<DateTimezone>(() => props.timezone ?? "utc");
+
+/**
+ * Single-pass resolution of x-axis mode + resolved series and areas.
+ * Date auto-detection (`isAllDates` per input array) and date→ms
+ * conversion (`toNumericX`) both call `parseDate`; this computed
+ * makes sure each user-supplied x value is parsed exactly once per
+ * render even though we have multiple consumers.
+ */
+const resolvedXAxis = computed<{
+  isDate: boolean;
+  series: ResolvedSeries[];
+  areas: ResolvedArea[];
+}>(() => {
+  const z = tz.value;
+  let isDate = false;
+  let any = false;
+  for (const x of xInputs(props)) {
+    any = true;
+    if (!isAllDates(x, z)) {
+      isDate = false;
+      break;
+    }
+    isDate = true;
+  }
+  if (!any) isDate = false;
+
+  const series: ResolvedSeries[] =
+    props.series && props.series.length > 0
+      ? props.series.map((s) => ({
+          ...s,
+          data: s.y ?? s.data ?? EMPTY_DATA,
+          x: toNumericX(s.x, isDate, z),
+        }))
+      : (() => {
+          const topY = props.y ?? props.data;
+          return topY
+            ? [{ data: topY, x: toNumericX(props.x, isDate, z) }]
+            : [];
+        })();
+
+  const areas: ResolvedArea[] = (props.areas ?? []).map((a) => ({
+    ...a,
+    x: toNumericX(a.x, isDate, z),
+  }));
+
+  return { isDate, series, areas };
 });
 
-const allAreas = computed<Area[]>(() => props.areas ?? []);
+const xIsDate = computed(() => resolvedXAxis.value.isDate);
+const allSeries = computed<ResolvedSeries[]>(() => resolvedXAxis.value.series);
+const allAreas = computed<ResolvedArea[]>(() => resolvedXAxis.value.areas);
 
 const maxLen = computed(() => {
   let m = 0;
@@ -257,7 +362,7 @@ function seriesXAt(s: { x?: LineChartData }, i: number): number {
 }
 
 /** Data-space x value for the i-th point of an area. */
-function areaXAt(a: Area, i: number): number {
+function areaXAt(a: ResolvedArea, i: number): number {
   return a.x ? Number(a.x[i]) : i;
 }
 
@@ -366,7 +471,7 @@ function toPoints(s: ResolvedSeries): { x: number; y: number }[] {
   return pts;
 }
 
-function toAreaPath(a: Area): string {
+function toAreaPath(a: ResolvedArea): string {
   const len = Math.min(a.upper.length, a.lower.length);
   if (len === 0) return "";
   // Collect contiguous segments where both upper/lower and x are finite
@@ -615,43 +720,68 @@ const yTickItems = computed(() => {
   return values.map((v) => ({ value: fmt(v), y: snap(yPixel(v)) }));
 });
 
+/**
+ * Format a single x-axis value into its display label. Used by both
+ * tick rendering and the tooltip x-label so the two stay in sync. On
+ * a date axis, `unit` (when supplied) drives the default formatter's
+ * preset choice (year-tick → "year", month-tick → "month-year", etc.);
+ * the tooltip path leaves it undefined and gets the ISO default.
+ */
+function formatXValue(v: number, i: number, unit?: DateTickUnit): string {
+  const xf = props.xTickFormat;
+  if (xIsDate.value) {
+    if (typeof xf === "function") {
+      return (xf as (v: number, i: number) => string)(v, i);
+    }
+    return formatDate(v, xf as DateFormat | undefined, tz.value, unit);
+  }
+  const display = v + xDisplayOffset.value;
+  if (xf !== undefined) {
+    return typeof xf === "function"
+      ? (xf as (v: number, i: number) => string)(display, i)
+      : formatNumber(display, xf as NumberFormat);
+  }
+  if (
+    !hasExplicitX.value &&
+    props.xLabels &&
+    Number.isInteger(v) &&
+    v >= 0 &&
+    v < props.xLabels.length
+  ) {
+    return props.xLabels[v];
+  }
+  return formatTick(display);
+}
+
 const xTickItems = computed(() => {
   const { min: xMin, max: xMax } = xExtent.value;
   if (xMin === xMax) return [];
-  const offset = xDisplayOffset.value;
+  const isDate = xIsDate.value;
+  // `xMin` (display offset) is meaningless on a date axis — every x
+  // value already lives in absolute ms.
+  const offset = isDate ? 0 : xDisplayOffset.value;
   const len = maxLen.value;
-
-  // Tick values are in data-space; display labels add `xDisplayOffset`.
-  const fmt = (v: number, i: number) => {
-    const display = v + offset;
-    const xf = props.xTickFormat;
-    if (xf !== undefined) {
-      return typeof xf === "function"
-        ? xf(display, i)
-        : formatNumber(display, xf);
-    }
-    if (
-      !hasExplicitX.value &&
-      props.xLabels &&
-      Number.isInteger(v) &&
-      v >= 0 &&
-      v < props.xLabels.length
-    ) {
-      return props.xLabels[v];
-    }
-    return formatTick(display);
-  };
+  const targetTickCount = innerW.value / 80;
 
   let values: number[];
-  if (
+  let unit: DateTickUnit | undefined;
+  if (isDate) {
+    const picked = pickDateTicks(xMin, xMax, targetTickCount, tz.value);
+    unit = picked.unit;
+    // Run through computeTickValues so the clip-to-range semantics
+    // match the numeric path. xMin is already 0, so `ticks` is used
+    // directly.
+    values = computeTickValues({ min: xMin, max: xMax, ticks: picked.values });
+  } else if (
     props.xTicks == null &&
     !hasExplicitX.value &&
     props.xLabels &&
     props.xLabels.length === len
   ) {
     // xLabels fallback: pick evenly-spaced index ticks so every label
-    // bucket gets at most one tick.
-    const targetTicks = Math.max(3, Math.floor(innerW.value / 80));
+    // bucket gets at most one tick. Date mode supersedes xLabels — if
+    // both are supplied, only the date axis is used.
+    const targetTicks = Math.max(3, Math.floor(targetTickCount));
     const step = Math.max(1, Math.round((len - 1) / targetTicks));
     values = [];
     for (let i = 0; i < len; i += step) values.push(i);
@@ -660,7 +790,7 @@ const xTickItems = computed(() => {
       min: xMin,
       max: xMax,
       ticks: props.xTicks,
-      targetTickCount: innerW.value / 80,
+      targetTickCount,
       displayOffset: offset,
     });
   }
@@ -673,7 +803,7 @@ const xTickItems = computed(() => {
     let anchor: "start" | "middle" | "end" = "middle";
     if (x - leftEdge <= edgeSnapPx) anchor = "start";
     else if (rightEdge - x <= edgeSnapPx) anchor = "end";
-    return { value: fmt(v, i), x, anchor };
+    return { value: formatXValue(v, i, unit), x, anchor };
   });
 });
 
@@ -740,18 +870,8 @@ const hoverSlotProps = computed(() => {
   const idx = hoverIndex.value;
   const targetX = hoverDataX.value;
   if (idx === null || targetX === null) return null;
-  const offset = xDisplayOffset.value;
-  const displayX = targetX + offset;
-  let xLabel: string | undefined;
-  const xf = props.xTickFormat;
-  if (xf !== undefined) {
-    xLabel =
-      typeof xf === "function" ? xf(displayX, idx) : formatNumber(displayX, xf);
-  } else if (!hasExplicitX.value) {
-    xLabel = props.xLabels?.[idx];
-  } else {
-    xLabel = formatTick(displayX);
-  }
+  // Single source of truth for label dispatch — same as the x-axis ticks.
+  const xLabel = formatXValue(targetX, idx);
   const series = allSeries.value;
   const values: ChartTooltipValue[] = [];
   for (let i = 0; i < series.length; i++) {

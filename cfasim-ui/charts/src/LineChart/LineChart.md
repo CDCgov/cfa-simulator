@@ -63,6 +63,94 @@ charts, set `x` and `y` (or `data`) on each `Series`.
 
 When `x` is omitted, `y`/`data` values are plotted at indices 0, 1, 2, etc.
 
+### Dates
+
+Pass ISO date strings (`YYYY-MM-DD`) or `Date` objects as `x` and the
+chart auto-detects a date axis: ticks anchor to year / month / week /
+day / hour boundaries depending on the visible range, and labels
+format themselves accordingly. Numeric `x` arrays keep their existing
+behavior — auto-detection is content-driven and never promotes plain
+numbers.
+
+<ComponentDemo>
+  <LineChart
+    :x="['2026-01-05', '2026-01-12', '2026-01-19', '2026-01-26', '2026-02-02', '2026-02-09', '2026-02-16', '2026-02-23', '2026-03-02', '2026-03-09']"
+    :y="[4, 9, 18, 32, 41, 38, 27, 18, 11, 6]"
+    :height="220"
+    y-label="% ED visits"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :x="[
+    '2026-01-05',
+    '2026-01-12',
+    '2026-01-19',
+    '2026-01-26',
+    '2026-02-02',
+    '2026-02-09',
+    '2026-02-16',
+    '2026-02-23',
+    '2026-03-02',
+    '2026-03-09',
+  ]"
+  :y="[4, 9, 18, 32, 41, 38, 27, 18, 11, 6]"
+  :height="220"
+  y-label="% ED visits"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+Override the format via `x-tick-format`. Presets: `"iso"`,
+`"iso-datetime"`, `"year"`, `"month-year"`, `"month-day"`, `"day"`,
+`"time"`, `"datetime"`, `"medium"`. You can also pass an
+`Intl.DateTimeFormatOptions` literal, or a function `(ms, unit?) =>
+string` for full control.
+
+<ComponentDemo>
+  <LineChart
+    :x="['2026-01-05', '2026-01-12', '2026-01-19', '2026-01-26', '2026-02-02']"
+    :y="[4, 9, 18, 32, 41]"
+    x-tick-format="iso"
+    :height="220"
+    y-label="% ED visits"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :x="['2026-01-05', '2026-01-12', '2026-01-19', '2026-01-26', '2026-02-02']"
+  :y="[4, 9, 18, 32, 41]"
+  x-tick-format="iso"
+  :height="220"
+  y-label="% ED visits"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+By default the chart parses bare `YYYY-MM-DD` (and offset-less
+`YYYY-MM-DDTHH:mm:ss`) as UTC and renders tick labels in UTC. Set
+`timezone="local"` to interpret offset-less strings in the browser's
+timezone instead. Strings that include an explicit offset (`Z` or
+`+05:00`) are always parsed exactly as written.
+
+> **Annotations on a date axis.** `ChartAnnotation.x` is always in the
+> chart's resolved coordinate space — that's **epoch-ms** when the axis
+> is in date mode. Pass `Date.UTC(2026, 0, 15)`, `new Date("2026-01-15").getTime()`,
+> or `Date.parse("2026-01-15T00:00:00Z")`. Passing a small integer like
+> `0` will place the annotation at 1970-01-01 (off-screen).
+>
+> **`xLabels` on a date axis.** When both `x: [...date strings]` and
+> `xLabels` are supplied, the date axis wins — `xLabels` is ignored.
+> Date strings carry their own labeling.
+
 ### Title
 
 The `title` prop accepts `\n` to break across lines. Use `titleStyle`
