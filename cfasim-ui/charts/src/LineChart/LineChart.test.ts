@@ -2286,5 +2286,28 @@ describe("LineChart", () => {
       expect(utcLabels.every((l) => l.endsWith("Z"))).toBe(true);
       expect(localLabels.every((l) => !l.endsWith("Z"))).toBe(true);
     });
+
+    it("tooltip label renders the hovered date on a date axis", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [10, 20, 30],
+          x: ["2026-01-01", "2026-02-01", "2026-03-01"],
+          tooltipTrigger: "hover" as const,
+          width: 600,
+          height: 200,
+          menu: false,
+        },
+        attachTo: document.body,
+      });
+      const overlay = wrapper
+        .findAll("rect")
+        .find((r) => r.attributes("fill") === "transparent")!;
+      await overlay.trigger("mousemove", { clientX: 30, clientY: 100 });
+      const tip = wrapper.find(".line-chart-tooltip-label");
+      expect(tip.exists()).toBe(true);
+      // Default ISO format ⇒ "2026-01-01".
+      expect(tip.text()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      wrapper.unmount();
+    });
   });
 });

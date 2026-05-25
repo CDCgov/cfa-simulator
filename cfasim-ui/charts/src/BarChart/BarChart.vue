@@ -699,6 +699,13 @@ const titleResolved = computed(() => {
 const hoveredCategoryLabel = computed(() => {
   const i = hoverIndex.value;
   if (i === null) return undefined;
+  // In date mode, format the tooltip label so it honors `dateFormat`
+  // (otherwise the user would see the raw ISO string while the ticks
+  // render with a nicer preset).
+  const dateMs = categoryDatesMs.value;
+  if (dateMs && Number.isFinite(dateMs[i])) {
+    return formatDate(dateMs[i], props.dateFormat, "utc");
+  }
   return categoryLabels.value[i];
 });
 

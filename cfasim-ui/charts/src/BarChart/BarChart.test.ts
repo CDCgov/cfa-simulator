@@ -1099,6 +1099,32 @@ describe("BarChart", () => {
       }
     });
 
+    it("tooltip label uses dateFormat for date categories", async () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20, 30, 40],
+          categories: ["2026-01-01", "2026-02-01", "2026-03-01", "2026-04-01"],
+          dateFormat: "month-year",
+          tooltipTrigger: "hover" as const,
+          width: 480,
+          height: 220,
+          menu: false,
+        },
+        attachTo: document.body,
+      });
+      const overlay = wrapper
+        .findAll("rect")
+        .find((r) => r.attributes("fill") === "transparent")!;
+      await overlay.trigger("mousemove", { clientX: 60, clientY: 100 });
+      const tip = wrapper.find(".bar-chart-tooltip-label");
+      expect(tip.exists()).toBe(true);
+      // Should render via "month-year" preset, not the raw ISO string.
+      expect(tip.text()).not.toBe("2026-01-01");
+      expect(tip.text()).toContain("2026");
+      expect(tip.text()).toMatch(/Jan|Feb|Mar|Apr/);
+      wrapper.unmount();
+    });
+
     it("accepts Date instances in the categories array", () => {
       const cats = [
         new Date(Date.UTC(2026, 0, 1)),
