@@ -62,6 +62,30 @@ Query strings are always strings, so deserialization is driven by the type of ea
 | `string`     | `?metric=covid` | `"covid"`              |
 | `number[]`   | `?k=10,20,30`   | `[10, 20, 30]`         |
 
+### Nested params
+
+Defaults can be nested objects (or arrays of objects). Each leaf is mapped to a dotted URL key:
+
+```ts
+const defaults = {
+  beta: 0.3,
+  groups: { adults: { size: 100 }, kids: { size: 50 } },
+  interventions: [
+    { name: "vax", coverage: 0.5 },
+    { name: "masks", coverage: 0.3 },
+  ],
+};
+```
+
+| Param change                     | URL                             |
+| -------------------------------- | ------------------------------- |
+| `groups.adults.size = 200`       | `?groups.adults.size=200`       |
+| `interventions[1].coverage = .9` | `?interventions.1.coverage=0.9` |
+
+Only changed leaves appear in the URL, so partial updates to one branch leave sibling values out. Plain non-null objects recurse as branches; arrays of primitives stay as comma-joined leaves (`?tags=1,2,3`); arrays whose elements are objects recurse with numeric indices. Key segments containing a literal `.` are percent-encoded (`%2E`) so they survive the round trip.
+
+`include` / `ignore` accept dotted strings (`"groups.adults.size"`); a parent path implicitly covers all of its descendants.
+
 ### Options
 
 | Option       | Type          | Default | Purpose                                                                |

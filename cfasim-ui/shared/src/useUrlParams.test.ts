@@ -312,6 +312,247 @@ describe("useUrlParams (composable)", () => {
     });
   });
 
+  describe("nested params", () => {
+    it("hydrates a nested leaf from a dotted query key", async () => {
+      const { router, route } = makeRouterStub({ "nested.foo": "9" });
+      const params = reactive({ a: 1, nested: { foo: 5, bar: 10 } });
+      mountWith(() =>
+        useUrlParams(
+          params,
+          { a: 1, nested: { foo: 5, bar: 10 } },
+          { router, route, debounceMs: 0 },
+        ),
+      );
+      await nextTick();
+      expect(params.a).toBe(1);
+      expect(params.nested).toEqual({ foo: 9, bar: 10 });
+    });
+
+    it("writes only changed nested leaves with dotted keys", async () => {
+      const { router, route } = makeRouterStub();
+      const params = reactive({ a: 1, nested: { foo: 5, bar: 10 } });
+      mountWith(() =>
+        useUrlParams(
+          params,
+          { a: 1, nested: { foo: 5, bar: 10 } },
+          { router, route, debounceMs: 0 },
+        ),
+      );
+      await nextTick();
+      params.nested.foo = 7;
+      await nextTick();
+      await new Promise((r) => setTimeout(r, 5));
+      expect(route.query).toEqual({ "nested.foo": "7" });
+    });
+
+    it("round-trips a deeply nested structure", async () => {
+      const { router, route } = makeRouterStub({
+        "deep.a.b.c": "42",
+        "deep.flag": "true",
+      });
+      const defaults = { deep: { a: { b: { c: 0 } }, flag: false } };
+      const params = reactive(structuredClone(defaults));
+      mountWith(() =>
+        useUrlParams(params, defaults, { router, route, debounceMs: 0 }),
+      );
+      await nextTick();
+      expect(params.deep.a.b.c).toBe(42);
+      expect(params.deep.flag).toBe(true);
+    });
+
+    it("preserves sibling leaves when an override updates one branch", async () => {
+      const { router, route } = makeRouterStub({ "nested.foo": "99" });
+      const params = reactive({ nested: { foo: 1, bar: 2, baz: 3 } });
+      mountWith(() =>
+        useUrlParams(
+          params,
+          { nested: { foo: 1, bar: 2, baz: 3 } },
+          { router, route, debounceMs: 0 },
+        ),
+      );
+      await nextTick();
+      expect(params.nested).toEqual({ foo: 99, bar: 2, baz: 3 });
+    });
+
+    it("drops dotted keys that have no matching default leaf", async () => {
+      const defaults = { nested: { foo: 1 } };
+      expect(
+        queryToParams({ "nested.unknown": "5", "nested.foo": "9" }, defaults),
+      ).toEqual({ nested: { foo: 9 } });
+    });
+
+    it("paramsToQuery emits only nested leaves that differ", () => {
+      const defaults = { a: 1, nested: { foo: 5, bar: 10 } };
+      expect(
+        paramsToQuery({ a: 1, nested: { foo: 7, bar: 10 } }, defaults),
+      ).toEqual({ "nested.foo": "7" });
+    });
+
+    it("include with a parent path covers all descendants", async () => {
+      const { router, route } = makeRouterStub();
+      const params = reactive({ a: 1, nested: { foo: 5, bar: 10 } });
+      mountWith(() =>
+        useUrlParams(
+          params,
+          { a: 1, nested: { foo: 5, bar: 10 } },
+          { router, route, debounceMs: 0, include: ["nested"] },
+        ),
+      );
+      await nextTick();
+      params.a = 99;
+      params.nested.foo = 7;
+      params.nested.bar = 11;
+      await nextTick();
+      await new Promise((r) => setTimeout(r, 5));
+      expect(route.query).toEqual({ "nested.foo": "7", "nested.bar": "11" });
+    });
+
+    it("ignore with a dotted path skips a single leaf", async () => {
+      const { router, route } = makeRouterStub();
+      const params = reactive({ nested: { foo: 5, bar: 10 } });
+      mountWith(() =>
+        useUrlParams(
+          params,
+          { nested: { foo: 5, bar: 10 } },
+          { router, route, debounceMs: 0, ignore: ["nested.bar"] },
+        ),
+      );
+      await nextTick();
+      params.nested.foo = 7;
+      params.nested.bar = 11;
+      await nextTick();
+      await new Promise((r) => setTimeout(r, 5));
+      expect(route.query).toEqual({ "nested.foo": "7" });
+    });
+
+    it("URI-encodes segments so keys containing dots round-trip", () => {
+      const defaults = { "weird.key": 1, nested: { "a.b": 2 } };
+      const params = { "weird.key": 5, nested: { "a.b": 7 } };
+      const query = paramsToQuery(params, defaults);
+      expect(query).toEqual({
+        "weird%2Ekey": "5",
+        "nested.a%2Eb": "7",
+      });
+      expect(queryToParams(query, defaults)).toEqual({
+        "weird.key": 5,
+        nested: { "a.b": 7 },
+      });
+    });
+
+    it("flattens an array of objects into indexed dotted paths", () => {
+      const defaults = {
+        items: [
+          { name: "a", value: 1 },
+          { name: "b", value: 2 },
+        ],
+      };
+      const params = {
+        items: [
+          { name: "a", value: 1 },
+          { name: "b", value: 99 },
+        ],
+      };
+      expect(paramsToQuery(params, defaults)).toEqual({
+        "items.1.value": "99",
+      });
+    });
+
+    it("rebuilds array-shaped defaults from indexed dotted keys", () => {
+      const defaults = {
+        items: [
+          { name: "a", value: 1 },
+          { name: "b", value: 2 },
+        ],
+      };
+      expect(queryToParams({ "items.0.value": "5" }, defaults)).toEqual({
+        items: [{ value: 5 }],
+      });
+    });
+
+    it("array of arrays recurses with numeric indices, inner arrays stay leaves", () => {
+      const defaults = {
+        matrix: [
+          [1, 2],
+          [3, 4],
+        ],
+      };
+      const params = {
+        matrix: [
+          [1, 2],
+          [9, 9],
+        ],
+      };
+      expect(paramsToQuery(params, defaults)).toEqual({
+        "matrix.1": "9,9",
+      });
+      expect(queryToParams({ "matrix.0": "7,8" }, defaults)).toEqual({
+        matrix: [[7, 8]],
+      });
+    });
+
+    it("URL override on a leaf array replaces it wholesale (does not merge element-wise)", async () => {
+      const { router, route } = makeRouterStub({ "matrix.0": "7" });
+      const defaults = {
+        matrix: [
+          [1, 2],
+          [3, 4],
+        ],
+      };
+      const params = reactive(structuredClone(defaults));
+      mountWith(() =>
+        useUrlParams(params, defaults, { router, route, debounceMs: 0 }),
+      );
+      await nextTick();
+      expect(params.matrix).toEqual([[7], [3, 4]]);
+    });
+
+    it("array-of-primitives still round-trips as a comma-joined leaf", () => {
+      const defaults = { tags: [1, 2, 3] };
+      expect(paramsToQuery({ tags: [4, 5, 6] }, defaults)).toEqual({
+        tags: "4,5,6",
+      });
+      expect(queryToParams({ tags: "4,5,6" }, defaults)).toEqual({
+        tags: [4, 5, 6],
+      });
+    });
+
+    it("updates one element of an array-of-objects via the URL while preserving siblings", async () => {
+      const { router, route } = makeRouterStub({ "items.1.value": "99" });
+      const defaults = {
+        items: [
+          { name: "a", value: 1 },
+          { name: "b", value: 2 },
+        ],
+      };
+      const params = reactive(structuredClone(defaults));
+      mountWith(() =>
+        useUrlParams(params, defaults, { router, route, debounceMs: 0 }),
+      );
+      await nextTick();
+      expect(params.items).toEqual([
+        { name: "a", value: 1 },
+        { name: "b", value: 99 },
+      ]);
+    });
+
+    it("reset restores nested defaults", async () => {
+      const { router, route } = makeRouterStub({ "nested.foo": "9" });
+      const params = reactive({ nested: { foo: 1, bar: 2 } });
+      const { api } = mountWith(() =>
+        useUrlParams(
+          params,
+          { nested: { foo: 1, bar: 2 } },
+          { router, route, debounceMs: 0 },
+        ),
+      );
+      await nextTick();
+      expect(params.nested.foo).toBe(9);
+      api.reset();
+      await nextTick();
+      expect(params.nested).toEqual({ foo: 1, bar: 2 });
+    });
+  });
+
   describe("defaults variants", () => {
     it("accepts a Ref as defaults", async () => {
       const { router, route } = makeRouterStub({ a: "7" });
