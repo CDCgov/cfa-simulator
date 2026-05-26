@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.4.13] - 2026-05-26
+
+### Features
+
+- **useUrlParams:** Add per-path codecs for variant-shaped fields
+
 ## [0.4.12] - 2026-05-26
 
 ### Bug Fixes

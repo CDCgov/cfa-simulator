@@ -1,6 +1,6 @@
 {
   "name": "@cfasim-ui/shared",
-  "version": "0.4.12",
+  "version": "0.4.13",
   "type": "module",
   "description": "Shared utilities for cfasim-ui",
   "license": "Apache-2.0",
