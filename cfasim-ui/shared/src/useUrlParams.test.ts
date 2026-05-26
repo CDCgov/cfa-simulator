@@ -7,6 +7,7 @@ import {
   paramsToQuery,
   queryToParams,
   useUrlParams,
+  jsonCodec,
   type UrlParamsRouter,
   type UrlParamsRoute,
 } from "./useUrlParams.js";
@@ -89,6 +90,105 @@ describe("queryToParams", () => {
     expect(
       queryToParams({ n: "5", b: "true", s: "hi", arr: "1,2" }, defaults),
     ).toEqual({ n: 5, b: true, s: "hi", arr: [1, 2] });
+  });
+});
+
+type InfectionRate =
+  | { type: "constant"; value: number; duration: number }
+  | { type: "empirical"; points: [number, number][] };
+
+describe("paramsToQuery (with codecs)", () => {
+  it("treats a codec path as a single atomic URL key", () => {
+    const defaults: { rate: InfectionRate } = {
+      rate: { type: "constant", value: 0.5, duration: 3 },
+    };
+    const params: { rate: InfectionRate } = {
+      rate: {
+        type: "empirical",
+        points: [
+          [0, 0],
+          [2, 1],
+        ],
+      },
+    };
+    expect(paramsToQuery(params, defaults, { rate: jsonCodec })).toEqual({
+      rate: JSON.stringify(params.rate),
+    });
+  });
+
+  it("omits a codec value that stringifies equal to the default", () => {
+    const defaults = { rate: { type: "constant", value: 0.5 } };
+    const params = { rate: { type: "constant", value: 0.5 } };
+    expect(paramsToQuery(params, defaults, { rate: jsonCodec })).toEqual({});
+  });
+
+  it("emits codec keys alongside ordinary leaves", () => {
+    const defaults = {
+      population: 10_000,
+      rate: { type: "constant", value: 0.5 } as { type: string; value: number },
+    };
+    const params = {
+      population: 20_000,
+      rate: { type: "constant", value: 0.5 } as { type: string; value: number },
+    };
+    expect(paramsToQuery(params, defaults, { rate: jsonCodec })).toEqual({
+      population: "20000",
+      // rate matches → omitted
+    });
+  });
+});
+
+describe("queryToParams (with codecs)", () => {
+  it("decodes a codec value through its custom deserializer", () => {
+    const defaults: { rate: InfectionRate } = {
+      rate: { type: "constant", value: 0.5, duration: 3 },
+    };
+    const variant: InfectionRate = {
+      type: "empirical",
+      points: [
+        [0, 0],
+        [2, 1],
+      ],
+    };
+    expect(
+      queryToParams({ rate: JSON.stringify(variant) }, defaults, {
+        rate: jsonCodec,
+      }),
+    ).toEqual({ rate: variant });
+  });
+
+  it("drops URL keys nested inside a codec boundary", () => {
+    const defaults: { rate: InfectionRate } = {
+      rate: { type: "constant", value: 0.5, duration: 3 },
+    };
+    // Stale leaf keys from the constant variant should not punch through
+    // the codec value.
+    expect(
+      queryToParams({ "rate.value": "0.9", "rate.duration": "7" }, defaults, {
+        rate: jsonCodec,
+      }),
+    ).toEqual({});
+  });
+
+  it("swallows malformed codec payloads instead of throwing", () => {
+    const defaults = { rate: { type: "constant", value: 0.5 } };
+    expect(
+      queryToParams({ rate: "{not-valid-json" }, defaults, { rate: jsonCodec }),
+    ).toEqual({});
+  });
+
+  it("supports a custom codec (base-N encoded number)", () => {
+    const hexCodec = {
+      serialize: (v: unknown) => Number(v).toString(16),
+      deserialize: (raw: string) => Number.parseInt(raw, 16),
+    };
+    const defaults = { n: 0 };
+    expect(queryToParams({ n: "ff" }, defaults, { n: hexCodec })).toEqual({
+      n: 255,
+    });
+    expect(paramsToQuery({ n: 255 }, defaults, { n: hexCodec })).toEqual({
+      n: "ff",
+    });
   });
 });
 
@@ -597,6 +697,120 @@ describe("useUrlParams (composable)", () => {
       await nextTick();
       expect(api.hydrate()).toBe(false);
       expect(params.a).toBe(0);
+    });
+  });
+
+  describe("codecs", () => {
+    it("round-trips a tagged-union field through a single URL key", async () => {
+      const { router, route } = makeRouterStub();
+      const defaults: { rate: InfectionRate; population: number } = {
+        rate: { type: "constant", value: 0.5, duration: 3 },
+        population: 10_000,
+      };
+      const params = reactive(structuredClone(defaults));
+      mountWith(() =>
+        useUrlParams(params, defaults, {
+          router,
+          route,
+          debounceMs: 0,
+          codecs: { rate: jsonCodec },
+        }),
+      );
+      await nextTick();
+      params.rate = {
+        type: "empirical",
+        points: [
+          [0, 0],
+          [2, 1],
+          [4, 1.2],
+        ],
+      };
+      await nextTick();
+      await new Promise((r) => setTimeout(r, 5));
+      expect(route.query).toEqual({ rate: JSON.stringify(params.rate) });
+    });
+
+    it("hydrates a codec-encoded variant from the URL", async () => {
+      const variant: InfectionRate = {
+        type: "empirical",
+        points: [
+          [0, 0],
+          [2, 1],
+        ],
+      };
+      const { router, route } = makeRouterStub({
+        rate: JSON.stringify(variant),
+      });
+      const defaults: { rate: InfectionRate } = {
+        rate: { type: "constant", value: 0.5, duration: 3 },
+      };
+      const params = reactive(structuredClone(defaults));
+      mountWith(() =>
+        useUrlParams(params, defaults, {
+          router,
+          route,
+          debounceMs: 0,
+          codecs: { rate: jsonCodec },
+        }),
+      );
+      await nextTick();
+      expect(params.rate).toEqual(variant);
+    });
+
+    it("ignores stale descendant URL keys at a codec path", async () => {
+      // Pretend an older version stored `rate.value=0.9`; with a codec at
+      // `rate` we must not punch that through into the variant.
+      const { router, route } = makeRouterStub({ "rate.value": "0.9" });
+      const defaults: { rate: InfectionRate } = {
+        rate: { type: "constant", value: 0.5, duration: 3 },
+      };
+      const params = reactive(structuredClone(defaults));
+      mountWith(() =>
+        useUrlParams(params, defaults, {
+          router,
+          route,
+          debounceMs: 0,
+          codecs: { rate: jsonCodec },
+        }),
+      );
+      await nextTick();
+      expect(params.rate).toEqual({
+        type: "constant",
+        value: 0.5,
+        duration: 3,
+      });
+    });
+
+    it("reset clears a codec value from the URL", async () => {
+      const variant: InfectionRate = {
+        type: "empirical",
+        points: [[0, 1]],
+      };
+      const { router, route } = makeRouterStub({
+        rate: JSON.stringify(variant),
+      });
+      const defaults: { rate: InfectionRate } = {
+        rate: { type: "constant", value: 0.5, duration: 3 },
+      };
+      const params = reactive(structuredClone(defaults));
+      const { api } = mountWith(() =>
+        useUrlParams(params, defaults, {
+          router,
+          route,
+          debounceMs: 0,
+          codecs: { rate: jsonCodec },
+        }),
+      );
+      await nextTick();
+      expect(params.rate).toEqual(variant);
+      api.reset();
+      await nextTick();
+      expect(params.rate).toEqual({
+        type: "constant",
+        value: 0.5,
+        duration: 3,
+      });
+      expect(route.query).toEqual({});
     });
   });
 });

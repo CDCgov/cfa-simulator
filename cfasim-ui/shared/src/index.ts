@@ -22,5 +22,10 @@ export {
   deserialize,
   paramsToQuery,
   queryToParams,
+  jsonCodec,
 } from "./useUrlParams.js";
-export type { UrlParamsOptions } from "./useUrlParams.js";
+export type {
+  UrlParamsOptions,
+  ParamCodec,
+  ParamCodecs,
+} from "./useUrlParams.js";

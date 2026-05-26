@@ -35,6 +35,43 @@ export type DefaultsInput<T> = T | Ref<T> | (() => T | undefined);
  */
 export type ParamPath<T> = keyof T | (string & {});
 
+/**
+ * Custom serializer/deserializer pair for a single path. Lets the consumer
+ * round-trip a value through one URL key as an opaque string instead of
+ * letting `useUrlParams` flatten through it. Use for tagged unions,
+ * polymorphic objects, or anything else whose shape can change at runtime —
+ * the default leaf-flattening can only enumerate fields present in
+ * `defaults`, so variants that aren't the default variant lose their
+ * fields.
+ */
+export type ParamCodec = {
+  serialize: (value: unknown) => string;
+  deserialize: (raw: string) => unknown;
+};
+
+/**
+ * Map of dotted path → codec. A path with a codec is treated as a single
+ * atomic leaf: its whole subtree round-trips through one URL key, and any
+ * descendant URL keys are ignored. Top-level keys (`"infectionRate"`) and
+ * nested paths (`"model.infectionRate"`) both work; segments in the path
+ * use `.` as the separator, matching the same convention as
+ * `include`/`ignore`.
+ */
+export type ParamCodecs = Record<string, ParamCodec>;
+
+/**
+ * Convenience codec that uses `JSON.stringify` / `JSON.parse`. Suitable
+ * for tagged unions and small object/array values. Note that comparison
+ * during URL writes is string-equality on the stringified form, so two
+ * objects with the same fields in different key orders will look distinct;
+ * provide a custom codec with a normalized stringifier if you need
+ * order-insensitive comparison.
+ */
+export const jsonCodec: ParamCodec = {
+  serialize: (value) => JSON.stringify(value),
+  deserialize: (raw) => JSON.parse(raw),
+};
+
 export type UrlParamsOptions<T> = {
   debounceMs?: number;
   /**
@@ -55,6 +92,14 @@ export type UrlParamsOptions<T> = {
    * if `include` is provided.
    */
   ignore?: ParamPath<T>[];
+  /**
+   * Per-path codecs. A path listed here is round-tripped as one opaque
+   * string under that key (using the codec's `serialize`/`deserialize`)
+   * instead of being flattened. URL keys nested inside a codec path are
+   * ignored, so a leftover `foo.bar=1` from an earlier shape doesn't
+   * punch through the atomic value.
+   */
+  codecs?: ParamCodecs;
 };
 
 export type ResetOptions = {
@@ -109,18 +154,40 @@ function isBranch(value: unknown): boolean {
 function* flattenLeaves(
   obj: Record<string, unknown> | unknown[],
   prefix: string[] = [],
+  stopPaths?: Set<string>,
 ): Generator<[string[], unknown]> {
   const entries: Array<[string, unknown]> = Array.isArray(obj)
     ? obj.map((v, i) => [String(i), v])
     : Object.entries(obj);
   for (const [k, v] of entries) {
     const path = [...prefix, k];
-    if (isBranch(v)) {
-      yield* flattenLeaves(v as Record<string, unknown> | unknown[], path);
+    // `stopPaths` (codec paths) halt recursion: the whole subtree at that
+    // path is yielded as a single leaf value so a codec can serialize it
+    // atomically.
+    if (isBranch(v) && !stopPaths?.has(path.join("."))) {
+      yield* flattenLeaves(
+        v as Record<string, unknown> | unknown[],
+        path,
+        stopPaths,
+      );
     } else {
       yield [path, v];
     }
   }
+}
+
+// True iff some proper-prefix ancestor of `segments` is a codec path. Used
+// to drop URL keys that would punch through a codec boundary (e.g. a stale
+// `infectionRate.value=0.5` left over from before infectionRate gained a
+// codec).
+function pathIsInsideAnyCodec(
+  segments: string[],
+  codecPaths: Set<string>,
+): boolean {
+  for (let i = 1; i < segments.length; i++) {
+    if (codecPaths.has(segments.slice(0, i).join("."))) return true;
+  }
+  return false;
 }
 
 function getAtSegments(obj: unknown, segments: string[]): unknown {
@@ -184,12 +251,19 @@ function decodeKey(key: string): string[] {
 function deepMerge(
   target: Record<string, unknown> | unknown[],
   source: Record<string, unknown> | unknown[],
+  stopPaths?: Set<string>,
+  prefix: string[] = [],
 ): Record<string, unknown> | unknown[] {
   for (const [k, v] of Object.entries(source)) {
     const slot = (target as Record<string, unknown>)[k];
-    if (isContainer(v) && isContainer(slot)) {
-      deepMerge(slot, v);
+    const path = stopPaths ? [...prefix, k] : prefix;
+    const atStop = stopPaths?.has(path.join("."));
+    if (!atStop && isContainer(v) && isContainer(slot)) {
+      deepMerge(slot, v, stopPaths, path);
     } else {
+      // Codec paths are atomic: overwrite the target subtree with source's
+      // value instead of merging the two variants field-by-field (which
+      // would produce a malformed hybrid for tagged unions).
       (target as Record<string, unknown>)[k] = v;
     }
   }
@@ -199,15 +273,21 @@ function deepMerge(
 export function paramsToQuery<T extends object>(
   params: T,
   defaults: T,
+  codecs?: ParamCodecs,
 ): Record<string, string> {
   const query: Record<string, string> = {};
+  const stopPaths = codecs ? new Set(Object.keys(codecs)) : undefined;
   for (const [segments, defaultLeaf] of flattenLeaves(
     defaults as Record<string, unknown>,
+    [],
+    stopPaths,
   )) {
     const paramLeaf = getAtSegments(params, segments);
     if (paramLeaf === undefined) continue;
-    const serialized = serialize(paramLeaf);
-    const defaultSerialized = serialize(defaultLeaf);
+    const codec = codecs?.[segments.join(".")];
+    const serializeFn = codec ? codec.serialize : serialize;
+    const serialized = serializeFn(paramLeaf);
+    const defaultSerialized = serializeFn(defaultLeaf);
     if (serialized !== defaultSerialized) {
       query[encodeKey(segments)] = serialized;
     }
@@ -218,11 +298,25 @@ export function paramsToQuery<T extends object>(
 export function queryToParams<T extends object>(
   query: Record<string, unknown>,
   defaults: T,
+  codecs?: ParamCodecs,
 ): Partial<T> {
   const result: Record<string, unknown> = {};
+  const codecPaths = codecs ? new Set(Object.keys(codecs)) : undefined;
   for (const [key, raw] of Object.entries(query)) {
     if (typeof raw !== "string") continue;
     const segments = decodeKey(key);
+    const pathStr = segments.join(".");
+    const codec = codecs?.[pathStr];
+    if (codec) {
+      try {
+        setAtSegments(result, segments, codec.deserialize(raw), defaults);
+      } catch {
+        // Malformed codec value — skip rather than corrupt the params.
+      }
+      continue;
+    }
+    // Drop descendants of a codec path; the codec owns the whole subtree.
+    if (codecPaths && pathIsInsideAnyCodec(segments, codecPaths)) continue;
     const defaultLeaf = getAtSegments(defaults, segments);
     // Drop unknown dotted keys: matches the flat behavior and keeps the
     // params shape stable.
@@ -282,10 +376,15 @@ function filterDefaults<T extends object>(
   obj: T,
   include?: string[][],
   ignore?: string[][],
+  stopPaths?: Set<string>,
 ): T {
   if (!include && !ignore) return obj;
   const out: Record<string, unknown> = {};
-  for (const [path, leaf] of flattenLeaves(obj as Record<string, unknown>)) {
+  for (const [path, leaf] of flattenLeaves(
+    obj as Record<string, unknown>,
+    [],
+    stopPaths,
+  )) {
     if (pathInScope(path, include, ignore)) {
       setAtSegments(out, path, leaf, obj);
     }
@@ -317,15 +416,16 @@ export function useUrlParams<T extends object>(
   options: UrlParamsOptions<T> = {},
 ) {
   const debounceMs = options.debounceMs ?? 300;
-  const { router, route, include, ignore } = options;
+  const { router, route, include, ignore, codecs } = options;
   const includeSegments = include?.map((e) => String(e).split("."));
   const ignoreSegments = ignore?.map((e) => String(e).split("."));
+  const codecPaths = codecs ? new Set(Object.keys(codecs)) : undefined;
   const getDefaults = toGetter<T>(defaults);
   const scopedDefaults = (): T | undefined => {
     const d = getDefaults();
     return d === undefined
       ? undefined
-      : filterDefaults(d, includeSegments, ignoreSegments);
+      : filterDefaults(d, includeSegments, ignoreSegments, codecPaths);
   };
 
   function readQuery(): Record<string, unknown> {
@@ -354,7 +454,11 @@ export function useUrlParams<T extends object>(
     // precision so a leaf array like `tags=1,2` replaces the whole leaf
     // instead of merging element-wise with the default array.
     const current = structuredClone(toRaw(read())) as Record<string, unknown>;
-    deepMerge(current, structuredClone(toRaw(d)) as Record<string, unknown>);
+    deepMerge(
+      current,
+      structuredClone(toRaw(d)) as Record<string, unknown>,
+      codecPaths,
+    );
     for (const [segments, value] of overrides) {
       setAtSegments(current, segments, value, d);
     }
@@ -371,6 +475,17 @@ export function useUrlParams<T extends object>(
     for (const [key, raw] of Object.entries(readQuery())) {
       if (typeof raw !== "string") continue;
       const segments = decodeKey(key);
+      const pathStr = segments.join(".");
+      const codec = codecs?.[pathStr];
+      if (codec) {
+        try {
+          out.push([segments, codec.deserialize(raw)]);
+        } catch {
+          // skip malformed codec values
+        }
+        continue;
+      }
+      if (codecPaths && pathIsInsideAnyCodec(segments, codecPaths)) continue;
       const defaultLeaf = getAtSegments(d, segments);
       if (defaultLeaf === undefined) continue;
       out.push([segments, deserialize(raw, defaultLeaf)]);
@@ -413,7 +528,7 @@ export function useUrlParams<T extends object>(
       debounceTimer = setTimeout(() => {
         const d = scopedDefaults();
         if (d === undefined) return;
-        writeQuery(paramsToQuery(read(), d));
+        writeQuery(paramsToQuery(read(), d, codecs));
       }, debounceMs);
     },
     { deep: true },
