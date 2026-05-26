@@ -12,9 +12,12 @@ export default defineConfig({
   ],
   build: {
     lib: {
-      entry: "src/index.ts",
+      entry: {
+        index: "src/index.ts",
+        "hsa-mapping": "src/hsa-mapping.ts",
+      },
       formats: ["es"],
-      fileName: "index",
+      cssFileName: "index",
     },
     rollupOptions: {
       external: [

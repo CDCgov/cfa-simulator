@@ -17,7 +17,6 @@ import "d3-transition";
 import { feature, mesh, merge } from "topojson-client";
 import type { Topology, GeometryCollection } from "topojson-specification";
 import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
-import { fipsToHsa, hsaNames } from "./hsaMapping.js";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
 import { saveSvg, savePng } from "../ChartMenu/download.js";
@@ -654,7 +653,39 @@ type CountiesTopo = Topology<{
   states: NamedGeometry;
 }>;
 
+// HSA mapping is loaded lazily — it's ~25KB gzipped and only needed when
+// geoType or dataGeoType is "hsas". Keeps the main bundle small for users
+// who only need states/counties maps.
+type HsaModule = typeof import("./hsaMapping.js");
+const hsaModule = ref<HsaModule | null>(null);
+let hsaModulePromise: Promise<HsaModule> | null = null;
+function loadHsaModule() {
+  if (!hsaModulePromise) {
+    hsaModulePromise = import("./hsaMapping.js").then((m) => {
+      hsaModule.value = m;
+      return m;
+    });
+  }
+  return hsaModulePromise;
+}
+watch(
+  () => {
+    if (props.geoType === "hsas" || props.dataGeoType === "hsas") return true;
+    const focus = props.focus;
+    if (!focus) return false;
+    const items = Array.isArray(focus) ? focus : [focus];
+    return items.some((f) => typeof f !== "string" && f.geoType === "hsas");
+  },
+  (needsHsa) => {
+    if (needsHsa) loadHsaModule();
+  },
+  { immediate: true },
+);
+
 const hsaFeaturesGeo = computed(() => {
+  const mod = hsaModule.value;
+  if (!mod) return { type: "FeatureCollection" as const, features: [] };
+  const { fipsToHsa, hsaNames } = mod;
   const topo = toRaw(props.topology) as unknown as CountiesTopo;
   const countyGeometries = topo.objects.counties.geometries;
   const groups = new Map<string, typeof countyGeometries>();
@@ -738,7 +769,7 @@ function baseToDataId(baseId: string): string | undefined {
   const dataGt = props.dataGeoType;
   if (!dataGt || dataGt === props.geoType) return baseId;
   if (props.geoType === "counties" && dataGt === "hsas") {
-    return fipsToHsa[baseId];
+    return hsaModule.value?.fipsToHsa[baseId];
   }
   if (props.geoType === "counties" && dataGt === "states") {
     return baseId.slice(0, 2);
@@ -1397,9 +1428,11 @@ watch(
 // `flush: "post"` so any pending path rebuild from the watcher above has
 // already run; we still use the GeoJSON pathGenerator directly so the SVG
 // path tree isn't actually required, but keeping the order avoids stacking
-// two zoom transforms in the same tick.
+// two zoom transforms in the same tick. `hsaModule` is included so a
+// cross-geoType focus on an hsa item re-applies once the lazy module
+// resolves (the base pathGenerator doesn't depend on hsa data).
 watch(
-  () => [normalizedFocus.value, pathGenerator.value],
+  () => [normalizedFocus.value, pathGenerator.value, hsaModule.value],
   () => applyFocus(),
   { flush: "post" },
 );

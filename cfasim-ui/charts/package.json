@@ -22,6 +22,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./hsa-mapping": {
+      "types": "./dist/hsa-mapping.d.ts",
+      "import": "./dist/hsa-mapping.js"
+    },
     "./style.css": "./dist/index.css"
   },
   "sideEffects": [

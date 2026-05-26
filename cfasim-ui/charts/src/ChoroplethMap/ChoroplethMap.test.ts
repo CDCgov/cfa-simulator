@@ -1,5 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
+
+// HSA mapping is dynamic-imported inside ChoroplethMap to keep the main
+// bundle small. Tests that exercise hsas geoType or cross-geoType focus
+// must await both the dynamic import and the Vue render that follows.
+async function flushDynamicImports() {
+  await vi.dynamicImportSettled();
+  await flushPromises();
+}
 import ChoroplethMap from "./ChoroplethMap.vue";
 import usStates from "us-atlas/states-10m.json";
 import usCounties from "us-atlas/counties-10m.json";
@@ -467,7 +475,7 @@ describe("ChoroplethMap", () => {
     expect(borderPath).toBeUndefined();
   });
 
-  it("renders HSA paths when geoType is hsas", () => {
+  it("renders HSA paths when geoType is hsas", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         topology: countiesTopo,
@@ -476,13 +484,14 @@ describe("ChoroplethMap", () => {
         geoType: "hsas",
       },
     });
+    await flushDynamicImports();
     const paths = wrapper.findAll(".state-path");
     // 949 unique HSAs
     expect(paths.length).toBeGreaterThanOrEqual(900);
     expect(paths.length).toBeLessThan(1000);
   });
 
-  it("colors HSAs by HSA code", () => {
+  it("colors HSAs by HSA code", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         topology: countiesTopo,
@@ -495,6 +504,7 @@ describe("ChoroplethMap", () => {
         ],
       },
     });
+    await flushDynamicImports();
     const butler = wrapper
       .findAll(".state-path")
       .find((p) => p.find("title").text().includes("Butler, AL"));
@@ -834,7 +844,7 @@ describe("ChoroplethMap", () => {
         focus: { id: "060737", geoType: "hsas", stroke: "#666" },
       },
     });
-    await flushPromises();
+    await flushDynamicImports();
     const overlay = wrapper.find(".focus-overlay");
     expect(overlay.exists()).toBe(true);
     expect(overlay.attributes("stroke")).toBe("#666");
@@ -968,7 +978,7 @@ describe("ChoroplethMap", () => {
         focus: { id: "060737", geoType: "hsas", style: "dotted" },
       },
     });
-    await flushPromises();
+    await flushDynamicImports();
     const overlay = wrapper.find(".focus-overlay");
     expect(overlay.exists()).toBe(true);
     expect(overlay.attributes("stroke-dasharray")).toBe("0 5");

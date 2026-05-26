@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import countiesTopoForPerf from "us-atlas/counties-10m.json";
-import { fipsToHsa } from "@cfasim-ui/charts";
+import { fipsToHsa } from "@cfasim-ui/charts/hsa-mapping";
 
 // Build one row per county (~3,143) with a deterministic-ish value so the
 // perf example can render every region with a custom tooltip.
@@ -478,6 +478,10 @@ feature (e.g. an HSA from a county via `fipsToHsa`). Pass both as a
 parent HSA renders on top as a dashed overlay (`stroke: "#666"` here —
 default is white).
 
+`fipsToHsa` and `hsaNames` ship from the `@cfasim-ui/charts/hsa-mapping`
+subpath so consumers that don't need HSA lookups don't pay for the
+~25 KB of mapping data.
+
 <ComponentDemo>
   <ChoroplethMap
     :topology="countiesTopo"
@@ -512,7 +516,7 @@ default is white).
 ```vue
 <script setup>
 import { ref, computed } from "vue";
-import { fipsToHsa } from "@cfasim-ui/charts";
+import { fipsToHsa } from "@cfasim-ui/charts/hsa-mapping";
 
 const focusedCounty = ref(null);
 const focus = computed(() => {
