@@ -20,6 +20,7 @@ import {
   cpSync,
   existsSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
   mkdirSync,
@@ -494,10 +495,39 @@ export function findComponentForSource(filePath) {
 }
 
 /**
+ * Delete any `.md` files in the generated outDirs (and their `_api/`
+ * subdirs) that don't correspond to a current `components` entry. Without
+ * this, removing/renaming a component leaves a stale page that VitePress
+ * still tries to build, and SSR can fail in confusing ways.
+ */
+function pruneOrphanedDocs() {
+  const expectedByOutDir = new Map();
+  for (const [slug, outDir] of components) {
+    if (!expectedByOutDir.has(outDir)) expectedByOutDir.set(outDir, new Set());
+    expectedByOutDir.get(outDir).add(`${slug}.md`);
+  }
+  for (const [outDir, expected] of expectedByOutDir) {
+    for (const dir of [
+      resolve(DOCS_ROOT, outDir),
+      resolve(DOCS_ROOT, outDir, "_api"),
+    ]) {
+      if (!existsSync(dir)) continue;
+      for (const name of readdirSync(dir)) {
+        if (!name.endsWith(".md") || expected.has(name)) continue;
+        rmSync(resolve(dir, name));
+        console.log(`  pruned orphan ${outDir}/${name}`);
+      }
+    }
+  }
+}
+
+/**
  * Full rebuild: refresh the @cfasim-ui/docs package src trees + regenerate
  * every component's docs and write the package index.json.
  */
 export function generateAll() {
+  pruneOrphanedDocs();
+
   const packageVersion = JSON.parse(
     readFileSync(resolve(PACKAGE_ROOT, "package.json"), "utf-8"),
   ).version;

@@ -65,6 +65,12 @@ export default defineConfig({
           find: "@cfasim-ui/charts/style.css",
           replacement: resolve(import.meta.dirname, "empty.css"),
         },
+        // Subpath exports must be resolved before the bare-name alias,
+        // otherwise it rewrites them to `src/index.ts/<subpath>`.
+        {
+          find: "@cfasim-ui/charts/hsa-mapping",
+          replacement: resolve(ROOT, "cfasim-ui/charts/src/hsa-mapping.ts"),
+        },
         // Resolve package imports to source so Vue SFC edits hot-reload
         // without needing `plz build` first.
         {
