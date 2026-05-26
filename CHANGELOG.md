@@ -1,6 +1,26 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.4.12] - 2026-05-26
+
+### Bug Fixes
+
+- **charts:** BarChart tooltip honors dateFormat for date categories
+- **docs:** Preserve subpath aliases, prune orphan generated pages
+
+### Features
+
+- **charts:** Multi-line titles with titleStyle (align, size, color, weight)
+- **charts:** Style props for axis labels, ticks, legend, area sections, annotations
+- **charts:** Date axis for LineChart and BarChart
+- **useUrlParams:** Encode nested params as dotted URL keys
+
+### Refactor
+
+- **annotations:** Rename halo to outline, extend to pointer/rule/arrow
+- **ixa-example:** Rename random_person to next_contact, trim comments
+- **charts:** Lazy-load HSA mapping to shrink bundle
+
 ## [0.4.11] - 2026-05-22
 
 ### Chores
