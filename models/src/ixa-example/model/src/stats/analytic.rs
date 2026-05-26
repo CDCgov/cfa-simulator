@@ -67,7 +67,7 @@ mod tests {
         assert!((expected_r0(0.5, 3.0) - 1.5).abs() < 1e-12);
     }
 
-#[test]
+    #[test]
     fn expected_cumulative_incidence_shape_and_final_size() {
         let pop = 10_000usize;
         let i0 = 5usize;

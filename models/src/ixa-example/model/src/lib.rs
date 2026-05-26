@@ -164,8 +164,7 @@ pub fn simulate(args: &str) -> JsValue {
 /// are NOT computed here — the caller does that across all batches.
 #[wasm_bindgen]
 pub fn simulate_batch(args: &str) -> JsValue {
-    let args: SimulateBatchArgs =
-        serde_json::from_str(args).expect("invalid simulate_batch args");
+    let args: SimulateBatchArgs = serde_json::from_str(args).expect("invalid simulate_batch args");
     let base_params = Parameters {
         infection_rate: args.infection_rate,
         infectious_period: args.infectious_period,

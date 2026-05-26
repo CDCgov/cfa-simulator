@@ -222,11 +222,20 @@ mod tests {
     #[test]
     fn pointwise_median_picks_middle_or_averages_pair() {
         // Odd N at each time bin: pick the middle.
-        let trajectories = vec![vec![0.0, 1.0, 5.0], vec![0.0, 3.0, 2.0], vec![0.0, 2.0, 4.0]];
+        let trajectories = vec![
+            vec![0.0, 1.0, 5.0],
+            vec![0.0, 3.0, 2.0],
+            vec![0.0, 2.0, 4.0],
+        ];
         assert_eq!(pointwise_median(&trajectories), vec![0.0, 2.0, 4.0]);
 
         // Even N: average the two middles.
-        let trajectories = vec![vec![1.0, 10.0], vec![3.0, 20.0], vec![5.0, 30.0], vec![7.0, 40.0]];
+        let trajectories = vec![
+            vec![1.0, 10.0],
+            vec![3.0, 20.0],
+            vec![5.0, 30.0],
+            vec![7.0, 40.0],
+        ];
         assert_eq!(pointwise_median(&trajectories), vec![4.0, 25.0]);
 
         // Empty input: empty output.
