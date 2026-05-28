@@ -21,7 +21,22 @@ export interface ColumnConfig {
   label?: string;
   width?: ColumnWidth | number;
   align?: ColumnAlign;
+  /** Class applied to every body `<td>` in this column. */
   cellClass?: string;
+  /**
+   * Class applied to both the header `<th>` and every body `<td>` in
+   * this column. Use for styling that should span the whole column
+   * (borders, backgrounds, fonts). For body-only styling, use
+   * `cellClass`.
+   */
+  columnClass?: string;
+  /**
+   * Allow cell contents to wrap to multiple lines when wider than the
+   * column. Default `false` — cells stay on one line and truncate with
+   * an ellipsis. Set to `true` for text-heavy columns where the full
+   * value should remain visible.
+   */
+  wrap?: boolean;
   /**
    * Custom formatter for cell values in this column. Accepts a
    * {@link NumberFormat} (preset name, printf-style string, or
@@ -102,6 +117,20 @@ function columnAlignStyle(name: string): CSSProperties | undefined {
   const align = props.columnConfig?.[name]?.align;
   if (!align) return undefined;
   return { textAlign: align };
+}
+
+/** Classes shared by `<th>` and `<td>` for a column: `columnClass` + wrap flag. */
+function columnSharedClass(name: string): (string | undefined)[] {
+  const cfg = props.columnConfig?.[name];
+  return [cfg?.columnClass, cfg?.wrap ? "cell-wrap" : undefined];
+}
+
+function headerCellClass(name: string): (string | undefined)[] {
+  return columnSharedClass(name);
+}
+
+function bodyCellClass(name: string): (string | undefined)[] {
+  return [...columnSharedClass(name), props.columnConfig?.[name]?.cellClass];
 }
 
 function isModelOutput(d: TableData): d is ModelOutput {
@@ -231,6 +260,7 @@ const showMenu = computed(
             <th
               v-for="col in columns"
               :key="col.name"
+              :class="headerCellClass(col.name)"
               :style="columnAlignStyle(col.name)"
             >
               {{ columnLabel(col.name) }}
@@ -242,7 +272,7 @@ const showMenu = computed(
             <td
               v-for="col in columns"
               :key="col.name"
-              :class="columnConfig?.[col.name]?.cellClass"
+              :class="bodyCellClass(col.name)"
               :style="columnAlignStyle(col.name)"
             >
               {{ cellValue(col, row - 1) }}
@@ -309,7 +339,16 @@ const showMenu = computed(
 .Table td {
   padding: 0.75em 1.25em;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-align: left;
+}
+
+.Table th.cell-wrap,
+.Table td.cell-wrap {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .Table th {

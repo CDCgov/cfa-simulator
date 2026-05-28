@@ -176,6 +176,56 @@ describe("Table", () => {
     expect(cells[1].attributes("style")).toContain("text-align: left");
   });
 
+  it("applies columnClass to both th and td of a column", () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        data: { day: [0, 1], infected: [10, 20] },
+        columnConfig: {
+          infected: { columnClass: "totals" },
+        },
+      },
+    });
+    const headers = wrapper.findAll("th");
+    expect(headers[0].classes()).not.toContain("totals");
+    expect(headers[1].classes()).toContain("totals");
+    const infectedCells = wrapper
+      .findAll("tbody td")
+      .filter((_, i) => i % 2 === 1);
+    for (const cell of infectedCells) {
+      expect(cell.classes()).toContain("totals");
+    }
+  });
+
+  it("keeps cellClass body-only (does not apply to th)", () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        data: { day: [0], infected: [10] },
+        columnConfig: {
+          infected: { cellClass: "highlight" },
+        },
+      },
+    });
+    expect(wrapper.findAll("th")[1].classes()).not.toContain("highlight");
+    expect(wrapper.findAll("tbody td")[1].classes()).toContain("highlight");
+  });
+
+  it("adds cell-wrap class to th and td when wrap is true", () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        data: { name: ["alpha"], note: ["a long note"] },
+        columnConfig: {
+          note: { wrap: true },
+        },
+      },
+    });
+    const headers = wrapper.findAll("th");
+    expect(headers[0].classes()).not.toContain("cell-wrap");
+    expect(headers[1].classes()).toContain("cell-wrap");
+    const cells = wrapper.findAll("tbody td");
+    expect(cells[0].classes()).not.toContain("cell-wrap");
+    expect(cells[1].classes()).toContain("cell-wrap");
+  });
+
   it("uses default alignment when no align configured", () => {
     const wrapper = mount(DataTable, {
       props: {

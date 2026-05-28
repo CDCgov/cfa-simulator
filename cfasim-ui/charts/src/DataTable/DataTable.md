@@ -124,6 +124,56 @@ e.g. `"percent:1"`), a printf-style format string, or a function
   </template>
 </ComponentDemo>
 
+### Wrapping long content
+
+By default, cell content stays on one line and truncates with an ellipsis
+when it's wider than the column — so a long string in one column can't
+spill into the next. Set `wrap: true` on a column to let it grow
+vertically instead.
+
+<ComponentDemo>
+  <DataTable
+    :data="{
+      drug: ['Compound A', 'Compound B', 'Compound C'],
+      note: [
+        'Well tolerated at all tested doses; no adverse events reported.',
+        'Mild GI symptoms in 4% of participants; resolved without intervention.',
+        'Discontinued at week 6 after liver-enzyme elevation in two participants.',
+      ],
+    }"
+    :column-config="{
+      drug: { width: 'small' },
+      note: { wrap: true, width: 'large' },
+    }"
+  />
+
+<template #code>
+
+```vue
+<DataTable
+  :data="{
+    drug: ['Compound A', 'Compound B', 'Compound C'],
+    note: [
+      'Well tolerated at all tested doses; no adverse events reported.',
+      'Mild GI symptoms in 4% of participants; resolved without intervention.',
+      'Discontinued at week 6 after liver-enzyme elevation in two participants.',
+    ],
+  }"
+  :column-config="{
+    drug: { width: 'small' },
+    note: { wrap: true, width: 'large' },
+  }"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+Use `columnClass` to attach a class to both the header and every body
+cell in a column — handy when whole-column styling (background, border,
+font weight) should match across the header and data. `cellClass` keeps
+its meaning (body cells only).
+
 ### Full width
 
 By default the table sizes to its content (columns default to a fixed
@@ -301,7 +351,12 @@ interface ColumnConfig {
   label?: string;
   width?: "small" | "medium" | "large" | number;
   align?: "left" | "center" | "right";
+  /** Class applied to body `<td>` cells only. */
   cellClass?: string;
+  /** Class applied to both the header `<th>` and body `<td>` cells. */
+  columnClass?: string;
+  /** Allow cell contents to wrap. Default `false` (nowrap + ellipsis). */
+  wrap?: boolean;
   format?: NumberFormat | ((value: CellValue, row: number) => string);
 }
 
