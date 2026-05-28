@@ -1,6 +1,16 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.4.16] - 2026-05-28
+
+### Documentation
+
+- **DataTable:** Add Custom CSV download example
+
+### Features
+
+- **charts:** Add downloadButton + DataTable downloadLink
+
 ## [0.4.15] - 2026-05-28
 
 ### Features
