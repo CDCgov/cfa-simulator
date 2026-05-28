@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.4.15] - 2026-05-28
+
+### Features
+
+- **charts:** Add BarChart overlay layout and per-series blendMode
+- **BarChart:** Add summaryLines overlay with own value extent
+
 ## [0.4.14] - 2026-05-28
 
 ### Features
