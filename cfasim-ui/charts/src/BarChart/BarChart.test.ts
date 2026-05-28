@@ -1062,7 +1062,7 @@ describe("BarChart", () => {
       expect(labels.length).toBeLessThan(cats.length);
     });
 
-    it("non-date categories are not thinned and emit all labels", () => {
+    it("non-date short labels emit all when they fit", () => {
       const cats = ["a", "b", "c", "d", "e"];
       const wrapper = mount(BarChart, {
         props: {
@@ -1077,6 +1077,29 @@ describe("BarChart", () => {
         .findAll('[data-testid="category-tick"]')
         .map((t) => t.text());
       expect(labels).toEqual(cats);
+    });
+
+    it("thins crowded non-date categorical labels", () => {
+      const cats = Array.from({ length: 14 }, (_, i) =>
+        (2 + i * 0.22).toFixed(2),
+      );
+      const wrapper = mount(BarChart, {
+        props: {
+          data: cats.map((_, i) => i),
+          categories: cats,
+          width: 320,
+          height: 200,
+          menu: false,
+        },
+      });
+      const labels = wrapper
+        .findAll('[data-testid="category-tick"]')
+        .map((t) => t.text());
+      expect(labels.length).toBeLessThan(cats.length);
+      // Kept labels must be a strided subset of the inputs, never reformatted.
+      for (const l of labels) {
+        expect(cats).toContain(l);
+      }
     });
 
     it("dateFormat overrides the default unit-aware formatter", () => {

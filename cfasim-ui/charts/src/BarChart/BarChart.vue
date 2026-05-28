@@ -547,10 +547,29 @@ const categoryTickItems = computed<CategoryTickItem[]>(() => {
   const out: CategoryTickItem[] = [];
   const fmt = (label: string, i: number) =>
     props.categoryFormat ? props.categoryFormat(label, i) : label;
+  const formatted = new Array<string>(n);
+  let maxLen = 0;
   for (let i = 0; i < n; i++) {
+    formatted[i] = fmt(categoryLabels.value[i], i);
+    if (formatted[i].length > maxLen) maxLen = formatted[i].length;
+  }
+  // Skip labels when slots are too narrow (or short) to fit them
+  // without overlap. Vertical orientation measures horizontal label
+  // width (≈ chars × fontSize × 0.6); horizontal orientation just
+  // measures stacked line height (≈ fontSize × 1.2).
+  const fontSize = props.tickLabelStyle?.fontSize ?? TICK_LABEL_FONT_SIZE;
+  const minGap = 8;
+  const needPerLabel = isVertical.value
+    ? maxLen * fontSize * 0.6 + minGap
+    : fontSize * 1.2 + minGap;
+  const stride =
+    slotSize.value > 0
+      ? Math.max(1, Math.ceil(needPerLabel / slotSize.value))
+      : 1;
+  for (let i = 0; i < n; i += stride) {
     const center = slotStart(i) + slotSize.value / 2;
     out.push({
-      label: fmt(categoryLabels.value[i], i),
+      label: formatted[i],
       pos: center,
       anchor: "middle",
     });

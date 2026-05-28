@@ -213,6 +213,54 @@ LineChart's `x-tick-format` (e.g. `"iso"`, `"month-year"`, an
 `Intl.DateTimeFormatOptions` object, or a `(ms, unit?) => string`
 function).
 
+### Crowded categorical labels
+
+Non-date categorical labels are also thinned when they don't all fit:
+the chart estimates label width from character count and font size,
+then strides through the categories so adjacent labels never overlap.
+Every bar still renders — only the tick labels are skipped.
+
+<ComponentDemo>
+  <BarChart
+    data-testid="thinned-bar-chart"
+    :data="[3, 5, 8, 12, 18, 24, 31, 27, 22, 16, 11, 7, 4, 2]"
+    :categories="['2.11', '2.33', '2.56', '2.78', '3.00', '3.22', '3.44', '3.67', '3.89', '4.11', '4.33', '4.56', '4.78', '5.00']"
+    :width="380"
+    :height="220"
+    x-label="R₀"
+    y-label="Frequency"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :data="[3, 5, 8, 12, 18, 24, 31, 27, 22, 16, 11, 7, 4, 2]"
+  :categories="[
+    '2.11',
+    '2.33',
+    '2.56',
+    '2.78',
+    '3.00',
+    '3.22',
+    '3.44',
+    '3.67',
+    '3.89',
+    '4.11',
+    '4.33',
+    '4.56',
+    '4.78',
+    '5.00',
+  ]"
+  :height="220"
+  x-label="R₀"
+  y-label="Frequency"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Logarithmic value axis
 
 Set `value-scale-type="log"` to switch the value axis to base-10 log
