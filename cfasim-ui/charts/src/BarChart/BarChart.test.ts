@@ -376,6 +376,69 @@ describe("BarChart", () => {
       expect(items.find((i) => i.label === "Save as SVG")).toBeTruthy();
     });
 
+    it("renders a download button with default text when downloadButton=true", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [1, 2],
+          categories: ["A", "B"],
+          width: 400,
+          height: 200,
+          downloadButton: true,
+        },
+      });
+      const button = wrapper.find("button.bar-chart-download-button");
+      expect(button.exists()).toBe(true);
+      expect(button.text()).toBe("Download data (CSV)");
+    });
+
+    it("renders a download button with custom text when downloadButton is a string", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [1, 2],
+          categories: ["A", "B"],
+          width: 400,
+          height: 200,
+          downloadButton: "Get the data",
+        },
+      });
+      const button = wrapper.find("button.bar-chart-download-button");
+      expect(button.text()).toBe("Get the data");
+    });
+
+    it("hides Download CSV menu item and link when downloadButton is set", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [1, 2],
+          categories: ["A", "B"],
+          width: 400,
+          height: 200,
+          downloadButton: true,
+          downloadLink: true,
+        },
+      });
+      const items = wrapper.findComponent(ChartMenu).props("items");
+      expect(items.find((i) => i.label === "Download CSV")).toBeUndefined();
+      expect(wrapper.find("a.bar-chart-download-link").exists()).toBe(false);
+    });
+
+    it("downloads CSV when the download button is clicked", () => {
+      const spy = vi
+        .spyOn(download, "downloadCsv")
+        .mockImplementation(() => {});
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [1, 2],
+          categories: ["A", "B"],
+          width: 400,
+          height: 200,
+          downloadButton: true,
+          filename: "my-data",
+        },
+      });
+      wrapper.find("button.bar-chart-download-button").trigger("click");
+      expect(spy).toHaveBeenCalledWith(expect.any(String), "my-data");
+    });
+
     it("uses filename prop for SVG downloads", () => {
       const spy = vi.spyOn(download, "saveSvg").mockImplementation(() => {});
       const wrapper = mount(BarChart, {

@@ -879,6 +879,8 @@ const {
   menuItems,
   downloadLinkText,
   csvHref,
+  downloadButtonText,
+  triggerCsvDownload,
   menuFilename,
   isFullscreen,
 } = useChartFoundation({
@@ -894,6 +896,7 @@ const {
   tooltipClamp: () => props.tooltipClamp,
   filename: () => props.filename,
   downloadLink: () => props.downloadLink,
+  downloadButton: () => props.downloadButton,
   chartPadding: () => props.chartPadding,
   inlineLegendLabels: () => inlineLegendLabels.value,
   hasTooltipSlot: () => hasTooltipSlot.value,
@@ -1320,6 +1323,14 @@ const positionedLegendItems = computed(() => {
     >
       {{ downloadLinkText }}
     </a>
+    <button
+      v-if="downloadButtonText"
+      type="button"
+      class="bar-chart-download-button"
+      @click="triggerCsvDownload"
+    >
+      {{ downloadButtonText }}
+    </button>
   </div>
 </template>
 
@@ -1353,5 +1364,29 @@ const positionedLegendItems = computed(() => {
   height: 0.625em;
   border-radius: 50%;
   flex-shrink: 0;
+}
+</style>
+
+<style>
+.bar-chart-download-button {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.5em;
+  padding: 0.5em 1em;
+  border: 1px solid var(--color-border);
+  border-radius: 0.25em;
+  background: var(--color-bg-0, #fff);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.bar-chart-download-button:hover {
+  background: var(--color-bg-1, rgba(0, 0, 0, 0.05));
+}
+
+.bar-chart-download-button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 </style>

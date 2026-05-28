@@ -11,6 +11,8 @@ export interface ChartMenuOptions {
   getCsv: () => string;
   /** Whether a separate download link is rendered (and the CSV menu item should be hidden). */
   downloadLink: () => boolean | string | undefined;
+  /** Whether a separate download button is rendered (and the CSV menu item should be hidden). */
+  downloadButton?: () => boolean | string | undefined;
   /**
    * When true, prepends an Expand/Collapse menu item that toggles the
    * chart into a full-window view. The consumer is responsible for
@@ -56,7 +58,8 @@ export function useChartMenu(opts: ChartMenuOptions) {
         },
       },
     );
-    if (!opts.downloadLink()) {
+    const buttonOn = opts.downloadButton?.();
+    if (!opts.downloadLink() && !buttonOn) {
       out.push({
         label: "Download CSV",
         action: () => downloadCsv(opts.getCsv(), fname),
@@ -66,21 +69,35 @@ export function useChartMenu(opts: ChartMenuOptions) {
   });
 
   const downloadLinkText = computed<string | null>(() => {
+    if (opts.downloadButton?.()) return null;
     const v = opts.downloadLink();
     if (!v) return null;
     return typeof v === "string" ? v : "Download data (CSV)";
   });
 
   const csvHref = computed<string | null>(() => {
+    if (opts.downloadButton?.()) return null;
     if (!opts.downloadLink()) return null;
     return `data:text/csv;charset=utf-8,${encodeURIComponent(opts.getCsv())}`;
   });
+
+  const downloadButtonText = computed<string | null>(() => {
+    const v = opts.downloadButton?.();
+    if (!v) return null;
+    return typeof v === "string" ? v : "Download data (CSV)";
+  });
+
+  function triggerCsvDownload() {
+    downloadCsv(opts.getCsv(), resolvedFilename());
+  }
 
   return {
     svgRef: svgRef as Ref<SVGSVGElement | null>,
     items,
     downloadLinkText,
     csvHref,
+    downloadButtonText,
+    triggerCsvDownload,
     resolvedFilename,
     isFullscreen: fullscreen?.isFullscreen ?? ref(false),
   };

@@ -945,7 +945,10 @@ dates, categorical labels, or extra columns that aren't plotted). Use
 `filename` to control the download filename (shared by SVG, PNG and CSV).
 
 Pass `download-link` to also render a plain text link below the chart — set
-it to `true` for the default label, or pass a string to customize it.
+it to `true` for the default label, or pass a string to customize it. Use
+`download-button` instead to render a styled `<button>` (with the class
+`line-chart-download-button`, available for custom CSS) in place of the
+link.
 
 <ComponentDemo>
   <LineChart

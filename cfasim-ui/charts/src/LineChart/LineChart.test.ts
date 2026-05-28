@@ -521,6 +521,57 @@ describe("LineChart", () => {
       );
     });
 
+    it("renders a download button with default text when downloadButton=true", () => {
+      const wrapper = mount(LineChart, {
+        props: { data: [1, 2, 3], height: 100, downloadButton: true },
+      });
+      const button = wrapper.find("button.line-chart-download-button");
+      expect(button.exists()).toBe(true);
+      expect(button.text()).toBe("Download data (CSV)");
+    });
+
+    it("renders a download button with custom text when downloadButton is a string", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1, 2, 3],
+          height: 100,
+          downloadButton: "Get the data",
+        },
+      });
+      const button = wrapper.find("button.line-chart-download-button");
+      expect(button.text()).toBe("Get the data");
+    });
+
+    it("hides Download CSV menu item and link when downloadButton is set", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1, 2, 3],
+          height: 100,
+          downloadButton: true,
+          downloadLink: true,
+        },
+      });
+      const items = wrapper.findComponent(ChartMenu).props("items");
+      expect(items.find((i) => i.label === "Download CSV")).toBeUndefined();
+      expect(wrapper.find("a.line-chart-download-link").exists()).toBe(false);
+    });
+
+    it("downloads CSV when the download button is clicked", () => {
+      const spy = vi
+        .spyOn(download, "downloadCsv")
+        .mockImplementation(() => {});
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1, 2, 3],
+          height: 100,
+          downloadButton: true,
+          filename: "my-data",
+        },
+      });
+      wrapper.find("button.line-chart-download-button").trigger("click");
+      expect(spy).toHaveBeenCalledWith(expect.any(String), "my-data");
+    });
+
     it("uses filename prop for SVG downloads", () => {
       const spy = vi.spyOn(download, "saveSvg").mockImplementation(() => {});
       const wrapper = mount(LineChart, {

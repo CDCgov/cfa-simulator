@@ -219,6 +219,79 @@ function returning one (called lazily on click).
   </template>
 </ComponentDemo>
 
+### Download button
+
+Pass `download-button` to render a visible, labeled button beneath the
+table instead of exposing the download only via the top-right menu. The
+button uses `download-menu-link` as its label, and the menu's Download
+item is suppressed so the action isn't duplicated. The button has the
+class `data-table-download-button` and its styles are unscoped, so it
+can be targeted directly from custom CSS without specificity battles.
+
+<ComponentDemo>
+  <DataTable
+    :data="{ day: [0, 1, 2, 3, 4], cases: [1, 21, 56, 101, 141] }"
+    filename="sir-cases"
+    download-menu-link="Download CSV"
+    download-button
+    :csv="'date,day,cases\n2024-01-01,0,1\n2024-01-02,1,21\n2024-01-03,2,56\n2024-01-04,3,101\n2024-01-05,4,141'"
+  />
+
+<template #code>
+
+```vue
+<DataTable
+  :data="{
+    day: [0, 1, 2, 3, 4],
+    cases: [1, 21, 56, 101, 141],
+  }"
+  filename="sir-cases"
+  download-menu-link="Download CSV"
+  download-button
+  :csv="`date,day,cases
+2024-01-01,0,1
+2024-01-02,1,21
+2024-01-03,2,56
+2024-01-04,3,101
+2024-01-05,4,141`"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Download link
+
+Pass `download-link` to render a plain text link beneath the table
+instead of (or alongside) the menu. It's a real `<a href download>` —
+right-click → Save As works. Pass `true` for the default "Download data
+(CSV)" label, or a string to customize. The menu's Download item is
+suppressed when this is set. If both `download-link` and
+`download-button` are set, the button wins.
+
+<ComponentDemo>
+  <DataTable
+    :data="{ day: [0, 1, 2, 3, 4], cases: [1, 21, 56, 101, 141] }"
+    filename="sir-cases"
+    download-link
+  />
+
+<template #code>
+
+```vue
+<DataTable
+  :data="{
+    day: [0, 1, 2, 3, 4],
+    cases: [1, 21, 56, 101, 141],
+  }"
+  filename="sir-cases"
+  download-link
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 <!--@include: ./_api/data-table.md-->
 
 ### ColumnConfig

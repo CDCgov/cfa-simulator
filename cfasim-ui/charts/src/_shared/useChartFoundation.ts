@@ -25,6 +25,7 @@ export interface ChartFoundationOptions {
   tooltipClamp: () => TooltipClamp | undefined;
   filename: () => string | undefined;
   downloadLink: () => boolean | string | undefined;
+  downloadButton: () => boolean | string | undefined;
   chartPadding: () => ChartPadding | undefined;
   // Chart-specific hooks that the composable can't infer.
   /**
@@ -61,6 +62,8 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     items: menuItems,
     downloadLinkText,
     csvHref,
+    downloadButtonText,
+    triggerCsvDownload,
     resolvedFilename: menuFilename,
     isFullscreen,
   } = useChartMenu({
@@ -68,6 +71,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     legacyMenuLabel: opts.menu,
     getCsv: opts.getCsv,
     downloadLink: opts.downloadLink,
+    downloadButton: opts.downloadButton,
     fullscreen: true,
   });
 
@@ -130,6 +134,8 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     menuItems,
     downloadLinkText,
     csvHref,
+    downloadButtonText,
+    triggerCsvDownload,
     menuFilename,
     isFullscreen,
     measuredHeight,

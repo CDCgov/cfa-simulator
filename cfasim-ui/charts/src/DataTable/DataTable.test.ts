@@ -223,6 +223,111 @@ describe("Table", () => {
       });
       expect(wrapper.find("a.data-table-download-link").exists()).toBe(false);
     });
+
+    it("renders a visible download button when downloadButton is true", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { day: [0], value: [10] },
+          downloadButton: true,
+          downloadMenuLink: "Download CSV",
+        },
+      });
+      const button = wrapper.find("button.data-table-download-button");
+      expect(button.exists()).toBe(true);
+      expect(button.text()).toBe("Download CSV");
+    });
+
+    it("suppresses the menu Download item when downloadButton is true", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { day: [0], value: [10] },
+          downloadButton: true,
+        },
+      });
+      expect(wrapper.findComponent({ name: "ChartMenu" }).exists()).toBe(false);
+    });
+
+    it("renders a download link with default label when downloadLink is true", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { day: [0], value: [10] },
+          downloadLink: true,
+          filename: "cases",
+        },
+      });
+      const link = wrapper.find("a.data-table-download-link");
+      expect(link.exists()).toBe(true);
+      expect(link.text()).toBe("Download data (CSV)");
+      expect(link.attributes("download")).toBe("cases.csv");
+      const href = link.attributes("href") ?? "";
+      expect(href.startsWith("data:text/csv;")).toBe(true);
+      const csv = decodeURIComponent(href.split(",").slice(1).join(","));
+      expect(csv).toContain("day,value");
+      expect(csv).toContain("0,10");
+    });
+
+    it("uses a custom label when downloadLink is a string", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { day: [0], value: [10] },
+          downloadLink: "Grab the data",
+        },
+      });
+      expect(wrapper.find("a.data-table-download-link").text()).toBe(
+        "Grab the data",
+      );
+    });
+
+    it("suppresses the menu Download item when downloadLink is set", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { day: [0], value: [10] },
+          downloadLink: true,
+        },
+      });
+      expect(wrapper.findComponent({ name: "ChartMenu" }).exists()).toBe(false);
+    });
+
+    it("downloadButton wins when both downloadButton and downloadLink are set", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { day: [0], value: [10] },
+          downloadButton: true,
+          downloadLink: true,
+        },
+      });
+      expect(wrapper.find("button.data-table-download-button").exists()).toBe(
+        true,
+      );
+      expect(wrapper.find("a.data-table-download-link").exists()).toBe(false);
+    });
+
+    it("downloads CSV when the button is clicked", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { day: [0, 1], value: [10, 20] },
+          downloadButton: true,
+        },
+      });
+      let downloaded = "";
+      const orig = URL.createObjectURL;
+      URL.createObjectURL = (blob: Blob) => {
+        void (blob as Blob).text().then((t) => {
+          downloaded = t;
+        });
+        return "blob:mock";
+      };
+      try {
+        wrapper.find("button.data-table-download-button").trigger("click");
+      } finally {
+        URL.createObjectURL = orig;
+      }
+      return Promise.resolve().then(() => {
+        expect(downloaded).toContain("day,value");
+        expect(downloaded).toContain("0,10");
+        expect(downloaded).toContain("1,20");
+      });
+    });
   });
 
   it("applies a NumberFormat preset to numeric cells", () => {

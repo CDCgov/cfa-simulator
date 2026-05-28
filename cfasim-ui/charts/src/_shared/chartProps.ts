@@ -141,6 +141,13 @@ export interface ChartCommonProps {
    * for the default label or a string to customize.
    */
   downloadLink?: boolean | string;
+  /**
+   * Show a `<button>` below the chart to download CSV. Pass `true` for
+   * the default label or a string to customize. When set, the CSV menu
+   * item is suppressed. Mutually exclusive with `downloadLink`; if both
+   * are set, `downloadButton` wins.
+   */
+  downloadButton?: boolean | string;
   /** Annotations rendered as the top layer of the chart. */
   annotations?: readonly ChartAnnotation[];
   /**

@@ -54,14 +54,34 @@ const props = withDefaults(
     /** Filename (without extension) for downloaded CSV files. */
     filename?: string;
     /**
-     * Label for the Download item in the table's top-right menu.
-     * Defaults to "Download".
+     * Label for the Download item in the table's top-right menu, and for
+     * the button rendered when `downloadButton` is true. Defaults to
+     * "Download".
      */
     downloadMenuLink?: string;
+    /**
+     * Render a visible "Download" button beneath the table instead of
+     * exposing the action only via the top-right menu. When enabled, the
+     * menu's Download item is suppressed to avoid duplicate controls.
+     */
+    downloadButton?: boolean;
+    /**
+     * Render a plain text link beneath the table for downloading CSV.
+     * Pass `true` for the default "Download data (CSV)" label, or a
+     * string to customize. When set, the menu's Download item is
+     * suppressed. Mutually exclusive with `downloadButton`; if both are
+     * set, `downloadButton` wins.
+     */
+    downloadLink?: boolean | string;
     /** Stretch the table to fill its container's width. */
     fullWidth?: boolean;
   }>(),
-  { menu: true, fullWidth: false, downloadMenuLink: "Download" },
+  {
+    menu: true,
+    fullWidth: false,
+    downloadMenuLink: "Download",
+    downloadButton: false,
+  },
 );
 
 function columnLabel(name: string): string {
@@ -165,14 +185,30 @@ function toCsv(): string {
   return lines.join("\n");
 }
 
-const menuItems = computed<ChartMenuItem[]>(() => [
-  {
-    label: props.downloadMenuLink,
-    action: () => downloadCsv(toCsv(), menuFilename()),
-  },
-]);
+function triggerDownload() {
+  downloadCsv(toCsv(), menuFilename());
+}
 
-const showMenu = computed(() => Boolean(props.menu));
+const menuItems = computed<ChartMenuItem[]>(() => {
+  if (props.downloadButton || props.downloadLink) return [];
+  return [{ label: props.downloadMenuLink, action: triggerDownload }];
+});
+
+const downloadLinkText = computed<string | null>(() => {
+  if (props.downloadButton) return null;
+  const v = props.downloadLink;
+  if (!v) return null;
+  return typeof v === "string" ? v : "Download data (CSV)";
+});
+
+const csvHref = computed<string | null>(() => {
+  if (!downloadLinkText.value) return null;
+  return `data:text/csv;charset=utf-8,${encodeURIComponent(toCsv())}`;
+});
+
+const showMenu = computed(
+  () => Boolean(props.menu) && menuItems.value.length > 0,
+);
 </script>
 
 <template>
@@ -215,6 +251,22 @@ const showMenu = computed(() => Boolean(props.menu));
         </tbody>
       </table>
     </div>
+    <button
+      v-if="downloadButton"
+      type="button"
+      class="data-table-download-button"
+      @click="triggerDownload"
+    >
+      {{ downloadMenuLink }}
+    </button>
+    <a
+      v-else-if="downloadLinkText"
+      class="data-table-download-link"
+      :href="csvHref!"
+      :download="`${menuFilename()}.csv`"
+    >
+      {{ downloadLinkText }}
+    </a>
   </div>
 </template>
 
@@ -286,5 +338,36 @@ const showMenu = computed(() => Boolean(props.menu));
 
 .TableOuter.has-menu .Table thead th:last-child {
   padding-right: 2.5em;
+}
+</style>
+
+<style>
+.data-table-download-button {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.75em;
+  padding: 0.5em 1em;
+  border: 1px solid var(--color-border);
+  border-radius: 0.25em;
+  background: var(--color-bg-0, #fff);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.data-table-download-button:hover {
+  background: var(--color-bg-1, rgba(0, 0, 0, 0.05));
+}
+
+.data-table-download-button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.data-table-download-link {
+  display: block;
+  text-align: right;
+  font-size: var(--font-size-sm);
+  margin-top: 0.25em;
 }
 </style>
