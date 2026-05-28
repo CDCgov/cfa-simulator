@@ -157,9 +157,8 @@ the available space equally.
 
 A `⋯` menu appears in the top-right corner of every table with a
 **Download** item that exports the data as CSV. Use `download-menu-link`
-to customize the menu item label, `filename` to control the downloaded
-filename, and `csv` to supply custom CSV content. Pass `:menu="false"`
-to hide the menu entirely.
+to customize the menu item label and `filename` to control the
+downloaded filename. Pass `:menu="false"` to hide the menu entirely.
 
 <ComponentDemo>
   <DataTable
@@ -178,6 +177,42 @@ to hide the menu entirely.
   }"
   filename="sir-cases"
   download-menu-link="Download cases (CSV)"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Custom CSV download
+
+By default, the Download menu item exports the displayed table as CSV.
+Use the `csv` prop to supply your own content — for example, to include
+ISO dates, extra columns that aren't in the table, or values formatted
+differently from the on-screen rendering. Accepts a raw string or a
+function returning one (called lazily on click).
+
+<ComponentDemo>
+  <DataTable
+    :data="{ day: [0, 1, 2, 3, 4], cases: [1, 21, 56, 101, 141] }"
+    filename="sir-cases"
+    :csv="'date,day,cases\n2024-01-01,0,1\n2024-01-02,1,21\n2024-01-03,2,56\n2024-01-04,3,101\n2024-01-05,4,141'"
+  />
+
+<template #code>
+
+```vue
+<DataTable
+  :data="{
+    day: [0, 1, 2, 3, 4],
+    cases: [1, 21, 56, 101, 141],
+  }"
+  filename="sir-cases"
+  :csv="`date,day,cases
+2024-01-01,0,1
+2024-01-02,1,21
+2024-01-03,2,56
+2024-01-04,3,101
+2024-01-05,4,141`"
 />
 ```
 
