@@ -401,6 +401,80 @@ top still represents the sum.
   </template>
 </ComponentDemo>
 
+### Summary line overlay
+
+Layer a curve (KDE, rolling mean, target) on top of the bars with
+`summary-lines`. Each line scales to **its own value extent** —
+independent of the bar axis — so a probability-density curve in
+`[0, 0.02]` and a histogram in `[0, 500]` can share the same chart.
+
+<ComponentDemo>
+  <BarChart
+    :data="[3, 5, 8, 12, 18, 24, 31, 27, 22, 16, 11, 7, 4, 2]"
+    :categories="['2.11', '2.33', '2.56', '2.78', '3.00', '3.22', '3.44', '3.67', '3.89', '4.11', '4.33', '4.56', '4.78', '5.00']"
+    :summary-lines="[
+      {
+        data: [0.05, 0.10, 0.20, 0.40, 0.75, 1.10, 1.32, 1.20, 0.92, 0.60, 0.32, 0.16, 0.07, 0.03],
+        color: '#ef4444',
+        strokeWidth: 2,
+        legend: 'KDE',
+      },
+    ]"
+    :width="380"
+    :height="240"
+    x-label="R₀"
+    y-label="Frequency"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :data="[3, 5, 8, 12, 18, 24, 31, 27, 22, 16, 11, 7, 4, 2]"
+  :categories="[
+    '2.11',
+    '2.33',
+    '2.56',
+    '2.78',
+    '3.00',
+    '3.22',
+    '3.44',
+    '3.67',
+    '3.89',
+    '4.11',
+    '4.33',
+    '4.56',
+    '4.78',
+    '5.00',
+  ]"
+  :summary-lines="[
+    {
+      data: [
+        0.05, 0.1, 0.2, 0.4, 0.75, 1.1, 1.32, 1.2, 0.92, 0.6, 0.32, 0.16, 0.07,
+        0.03,
+      ],
+      color: '#ef4444',
+      strokeWidth: 2,
+      legend: 'KDE',
+    },
+  ]"
+  :height="240"
+  x-label="R₀"
+  y-label="Frequency"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+Each line accepts `color`, `strokeWidth`, `dashed`, `opacity`,
+`blendMode`, `dots`, and `dotRadius` for styling — same vocabulary as
+`LineChart` series (both extend `LineMarkStyle`). Override the line's
+extent with `valueMin` / `valueMax`. Pass `x: number[]` (in
+category-index space — `0` is the first category center, fractional
+values land between) to plot at custom positions; useful when the
+summary samples are denser or sparser than the histogram bins.
+
 ### Annotations
 
 Pin callouts to specific bars with `annotations`. `x` is the category

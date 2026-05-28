@@ -60,6 +60,35 @@ export type BlendMode =
   | "luminosity";
 
 /**
+ * Visual styling shared by anything drawn as "a stroked line with
+ * optional dots" — used by `LineChart`'s `Series` and `BarChart`'s
+ * `BarSummaryLine`. Chart-specific data (y/x arrays, scaling overrides,
+ * tooltip/outline behavior) lives on the extending type.
+ */
+export interface LineMarkStyle {
+  color?: string;
+  strokeWidth?: number;
+  dashed?: boolean;
+  opacity?: number;
+  /**
+   * CSS `mix-blend-mode` applied to the line and dots. Lets overlapping
+   * marks combine their colors instead of one obscuring the other.
+   */
+  blendMode?: BlendMode;
+  /** Draw a dot at each sample point. Default false. */
+  dots?: boolean;
+  /** Radius of each dot in pixels. */
+  dotRadius?: number;
+  /** Label shown in the inline legend. */
+  legend?: string;
+  /**
+   * Whether this mark appears in the inline legend. Defaults to true.
+   * Has no effect when `legend` is unset.
+   */
+  showInLegend?: boolean;
+}
+
+/**
  * Props common to every cartesian chart component. Anything specific to
  * the chart type (series shape, layout, value-axis details) lives on the
  * component itself.

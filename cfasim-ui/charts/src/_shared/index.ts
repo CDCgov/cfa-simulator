@@ -52,6 +52,7 @@ export type {
   TitleStyle,
   LabelStyle,
   BlendMode,
+  LineMarkStyle,
 } from "./chartProps.js";
 export {
   parseDate,

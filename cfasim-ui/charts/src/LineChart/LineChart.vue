@@ -36,6 +36,7 @@ import {
   type ChartTooltipBaseProps,
   type ChartTooltipValue,
   type BlendMode,
+  type LineMarkStyle,
 } from "../_shared/index.js";
 
 /**
@@ -53,7 +54,13 @@ export type LineChartData = ChartData;
  */
 export type LineChartXInput = LineChartData | readonly (string | Date)[];
 
-export interface Series {
+/**
+ * A single line/dot series. Inherits visual styling
+ * (`color`, `strokeWidth`, `dashed`, `opacity`, `blendMode`, `dots`,
+ * `dotRadius`, `legend`, `showInLegend`) from `LineMarkStyle`, shared
+ * with `BarChart`'s `BarSummaryLine`.
+ */
+export interface Series extends LineMarkStyle {
   /**
    * Y-values. One of `y` or `data` must be supplied; `y` wins if both
    * are set.
@@ -68,19 +75,11 @@ export interface Series {
    * date strings or `Date` objects to enable date-axis mode.
    */
   x?: LineChartXInput;
-  color?: string;
-  dashed?: boolean;
-  strokeWidth?: number;
-  opacity?: number;
+  /** Overrides `opacity` for the line stroke only. */
   lineOpacity?: number;
+  /** Overrides `opacity` for the dots only. */
   dotOpacity?: number;
-  /**
-   * CSS `mix-blend-mode` applied to the line and dots. Lets overlapping
-   * series combine their colors instead of one obscuring the other.
-   * Has no effect on the white `outline` (which exists to opaquely
-   * separate the line from its background).
-   */
-  blendMode?: BlendMode;
+  /** Draw the line. Default true. */
   line?: boolean;
   /**
    * Draw a page-colored stroke behind the line so it stays visually
@@ -88,17 +87,8 @@ export interface Series {
    * effect when `line` is `false`.
    */
   outline?: boolean;
-  dots?: boolean;
-  dotRadius?: number;
   dotFill?: string;
   dotStroke?: string;
-  /** Label shown in the inline legend */
-  legend?: string;
-  /**
-   * Whether this series appears in the inline legend. Defaults to true.
-   * Has no effect when `legend` is unset (no legend entry to begin with).
-   */
-  showInLegend?: boolean;
   /**
    * Whether this series contributes a value to the tooltip and shows a
    * hover dot. Defaults to true. The series line/dots are still drawn.

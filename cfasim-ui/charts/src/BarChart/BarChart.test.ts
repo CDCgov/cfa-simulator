@@ -1262,4 +1262,202 @@ describe("BarChart", () => {
       }
     });
   });
+
+  describe("summary lines", () => {
+    function lineEl(wrapper: ReturnType<typeof mount>) {
+      return wrapper.find('[data-testid="summary-line"]');
+    }
+    function parsePathPoints(
+      d: string,
+    ): { cmd: "M" | "L"; x: number; y: number }[] {
+      const out: { cmd: "M" | "L"; x: number; y: number }[] = [];
+      const re = /([ML])([-\d.]+),([-\d.]+)/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(d))) {
+        out.push({
+          cmd: m[1] as "M" | "L",
+          x: parseFloat(m[2]),
+          y: parseFloat(m[3]),
+        });
+      }
+      return out;
+    }
+
+    it("renders a path with one point per data entry by default", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20, 30, 40],
+          categories: ["A", "B", "C", "D"],
+          summaryLines: [{ data: [1, 2, 3, 4] }],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const path = lineEl(wrapper);
+      expect(path.exists()).toBe(true);
+      const pts = parsePathPoints(path.attributes("d") ?? "");
+      expect(pts.length).toBe(4);
+      expect(pts[0].cmd).toBe("M");
+      expect(pts.slice(1).every((p) => p.cmd === "L")).toBe(true);
+    });
+
+    it("scales to its own extent independent of the bars", () => {
+      // Bars in 0..500, line in 0..0.02. Line max should pin to top of plot.
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [100, 200, 500, 200, 100],
+          categories: ["a", "b", "c", "d", "e"],
+          summaryLines: [{ data: [0.005, 0.01, 0.02, 0.01, 0.005] }],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const pts = parsePathPoints(lineEl(wrapper).attributes("d") ?? "");
+      // The line's own max (0.02) is at index 2 — its y should be the
+      // minimum (topmost) of all points.
+      const ys = pts.map((p) => p.y);
+      expect(Math.min(...ys)).toBeCloseTo(ys[2], 2);
+      // And the line's min (0.005) at indices 0 and 4 should be the
+      // bottom of the line — but well above the plot bottom (where a
+      // bar of value 100 against a 500 max sits).
+      expect(ys[0]).toBeLessThan(180); // above plot bottom (y=180-ish)
+      expect(ys[0]).toBeGreaterThan(ys[2]);
+    });
+
+    it("respects valueMin/valueMax overrides", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20, 30],
+          categories: ["a", "b", "c"],
+          summaryLines: [{ data: [0.5, 0.6, 0.7], valueMin: 0, valueMax: 1 }],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const pts = parsePathPoints(lineEl(wrapper).attributes("d") ?? "");
+      // y=0.5 with [0,1] extent should sit at the vertical midpoint of
+      // the inner plot. With height=200 and standard padding, inner h is
+      // close to 160 — midpoint y ≈ 100.
+      expect(pts[0].y).toBeGreaterThan(80);
+      expect(pts[0].y).toBeLessThan(140);
+    });
+
+    it("places points at custom x positions in category-index space", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20, 30, 40],
+          categories: ["a", "b", "c", "d"],
+          summaryLines: [
+            { data: [0, 1], x: [0, 3] }, // first and last category centers
+          ],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const pts = parsePathPoints(lineEl(wrapper).attributes("d") ?? "");
+      expect(pts.length).toBe(2);
+      // Two points should be far apart horizontally (spanning the chart).
+      expect(Math.abs(pts[1].x - pts[0].x)).toBeGreaterThan(200);
+    });
+
+    it("applies color, strokeWidth, and dashed", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20, 30],
+          categories: ["a", "b", "c"],
+          summaryLines: [
+            { data: [1, 2, 3], color: "#ff0000", strokeWidth: 4, dashed: true },
+          ],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const path = lineEl(wrapper);
+      expect(path.attributes("stroke")).toBe("#ff0000");
+      expect(path.attributes("stroke-width")).toBe("4");
+      expect(path.attributes("stroke-dasharray")).toBe("6 3");
+    });
+
+    it("draws dots when dots is true", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20, 30],
+          categories: ["a", "b", "c"],
+          summaryLines: [{ data: [1, 2, 3], dots: true }],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      // 3 dots from the summary line (BarChart itself draws no other circles)
+      expect(wrapper.findAll("circle").length).toBe(3);
+    });
+
+    it("skips non-finite points without breaking the path", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20, 30, 40],
+          categories: ["a", "b", "c", "d"],
+          summaryLines: [{ data: [1, NaN, 3, 4] }],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const d = lineEl(wrapper).attributes("d") ?? "";
+      const pts = parsePathPoints(d);
+      // 3 finite points; second segment restarts with M after the gap.
+      expect(pts.length).toBe(3);
+      expect(pts[0].cmd).toBe("M");
+      expect(pts[1].cmd).toBe("M");
+      expect(pts[2].cmd).toBe("L");
+    });
+
+    it("adds a line entry to the inline legend", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20, 30],
+          categories: ["a", "b", "c"],
+          series: [{ data: [10, 20, 30], legend: "Bars", color: "#0057b7" }],
+          summaryLines: [{ data: [1, 2, 3], legend: "KDE", color: "#ef4444" }],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      // The legend renders a <line> element for line items and a <rect>
+      // for bar items. Confirm both are present with matching colors.
+      const legendLines = wrapper
+        .findAll("line")
+        .filter((l) => l.attributes("stroke") === "#ef4444");
+      expect(legendLines.length).toBeGreaterThan(0);
+    });
+
+    it("renders in horizontal orientation along the value axis", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20, 30, 40],
+          categories: ["a", "b", "c", "d"],
+          orientation: "horizontal",
+          summaryLines: [{ data: [1, 2, 3, 4] }],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const pts = parsePathPoints(lineEl(wrapper).attributes("d") ?? "");
+      expect(pts.length).toBe(4);
+      // In horizontal mode, the line should advance along the *y* axis
+      // (category axis) and grow along the *x* axis (value axis).
+      const ys = pts.map((p) => p.y);
+      for (let i = 1; i < ys.length; i++) {
+        expect(ys[i]).toBeGreaterThan(ys[i - 1]);
+      }
+    });
+  });
 });

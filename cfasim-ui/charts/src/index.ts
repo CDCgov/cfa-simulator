@@ -11,6 +11,7 @@ export {
   default as BarChart,
   type BarChartData,
   type BarSeries,
+  type BarSummaryLine,
 } from "./BarChart/BarChart.vue";
 export {
   default as ChoroplethMap,
@@ -33,4 +34,4 @@ export {
   type ColumnWidth,
 } from "./DataTable/DataTable.vue";
 export type { ChartAnnotation } from "./_shared/annotations.js";
-export type { BlendMode } from "./_shared/chartProps.js";
+export type { BlendMode, LineMarkStyle } from "./_shared/chartProps.js";

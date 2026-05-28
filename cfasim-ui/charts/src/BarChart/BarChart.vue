@@ -33,6 +33,7 @@ import {
   type ChartTooltipBaseProps,
   type ChartTooltipValue,
   type BlendMode,
+  type LineMarkStyle,
 } from "../_shared/index.js";
 
 export type BarChartData = ChartData;
@@ -63,6 +64,38 @@ export interface BarSeries {
   showInTooltip?: boolean;
 }
 
+/**
+ * A line overlay drawn on top of the bars — e.g. a KDE over a histogram,
+ * a rolling mean, or any other summary curve. Each line scales to its
+ * own value extent (independent of the bars), so a probability-density
+ * curve in `[0, 0.02]` and a count histogram in `[0, 500]` can coexist.
+ *
+ * Sample the curve densely on the input side — `summaryLines` connects
+ * points with straight segments (matching matplotlib / seaborn `kde=True`).
+ *
+ * Shares visual styling (`color`, `strokeWidth`, `dashed`, `opacity`,
+ * `blendMode`, `dots`, `dotRadius`, `legend`, `showInLegend`) with
+ * `LineChart`'s `Series` via `LineMarkStyle`.
+ */
+export interface BarSummaryLine extends LineMarkStyle {
+  /** Y values along the line. */
+  data: BarChartData;
+  /**
+   * X positions in category-index space (0 = first category center,
+   * `categories.length - 1` = last). Fractional values land between
+   * category centers. When omitted, points plot at successive category
+   * centers — one point per `data` entry.
+   */
+  x?: BarChartData;
+  /**
+   * Override the line's value-axis floor. When unset, defaults to the
+   * line's own min (clamped to 0 when all data is non-negative).
+   */
+  valueMin?: number;
+  /** Override the line's value-axis ceiling. Defaults to the line's own max. */
+  valueMax?: number;
+}
+
 interface BarChartProps extends ChartCommonProps {
   /** Single-series values. Equivalent to `y`. */
   data?: BarChartData;
@@ -70,6 +103,12 @@ interface BarChartProps extends ChartCommonProps {
   y?: BarChartData;
   /** Multi-series mode. Each series has its own values. */
   series?: BarSeries[];
+  /**
+   * Line overlays drawn on top of the bars (e.g. a KDE, a rolling mean,
+   * or any summary curve). Each line scales to its own value extent —
+   * unrelated to the bar value axis. See `BarSummaryLine`.
+   */
+  summaryLines?: BarSummaryLine[];
   /**
    * Category labels for the categorical axis. Length should match the
    * longest series. When omitted, indices (0, 1, 2, ...) are used.
@@ -488,6 +527,138 @@ const bars = computed<BarRect[]>(() => {
   return out;
 });
 
+/**
+ * Per-line styling, resolved with defaults but without pixel work. Kept
+ * separate from `ResolvedSummaryLine` so the inline legend can depend on
+ * it without pulling in the chart's pixel layout (which depends on the
+ * legend row count — a circular reference otherwise).
+ */
+type StyledSummaryLine = {
+  data: BarChartData;
+  x?: BarChartData;
+  color: string;
+  strokeWidth: number;
+  dashed: boolean;
+  opacity: number;
+  blendMode?: BlendMode;
+  dots: boolean;
+  dotRadius: number;
+  extent: { min: number; max: number };
+  legend?: string;
+  showInLegend: boolean;
+};
+
+type ResolvedSummaryLine = StyledSummaryLine & {
+  pathD: string;
+  points: { x: number; y: number }[];
+};
+
+/** Compute the line's own value extent. */
+function computeLineExtent(line: BarSummaryLine): { min: number; max: number } {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const v of line.data) {
+    const n = Number(v);
+    if (!isFinite(n)) continue;
+    if (n < min) min = n;
+    if (n > max) max = n;
+  }
+  if (!isFinite(min)) {
+    min = 0;
+    max = 1;
+  }
+  if (line.valueMin !== undefined) {
+    min = line.valueMin;
+  } else if (min > 0) {
+    // Default to a 0 floor for all-positive data so the line shape
+    // reads as "rises from zero" rather than filling the full plot.
+    min = 0;
+  }
+  if (line.valueMax !== undefined) max = line.valueMax;
+  if (min === max) max = min + 1;
+  return { min, max };
+}
+
+/**
+ * Project a single line point (x in category-index space, y in the
+ * line's own value space) to pixels. Orientation flips which axis is
+ * categorical vs value.
+ */
+function projectLinePoint(
+  x: number,
+  y: number,
+  extent: { min: number; max: number },
+): { x: number; y: number } {
+  const base = isVertical.value ? padding.value.left : padding.value.top;
+  const categoricalPx = base + (x + 0.5) * slotSize.value;
+  const span = extent.max - extent.min || 1;
+  const frac = (y - extent.min) / span;
+  if (isVertical.value) {
+    return {
+      x: categoricalPx,
+      y: padding.value.top + innerH.value - frac * innerH.value,
+    };
+  }
+  return {
+    x: padding.value.left + frac * innerW.value,
+    y: categoricalPx,
+  };
+}
+
+const summaryLinesStyled = computed<StyledSummaryLine[]>(() => {
+  const lines = props.summaryLines;
+  if (!lines || lines.length === 0) return [];
+  return lines.map((line, i): StyledSummaryLine => {
+    return {
+      data: line.data ?? EMPTY_DATA,
+      x: line.x,
+      color: line.color ?? defaultLineColor(i),
+      strokeWidth: line.strokeWidth ?? 2,
+      dashed: line.dashed ?? false,
+      opacity: line.opacity ?? 1,
+      blendMode: line.blendMode,
+      dots: line.dots ?? false,
+      dotRadius: line.dotRadius ?? (line.strokeWidth ?? 2) + 1,
+      extent: computeLineExtent(line),
+      legend: line.legend,
+      showInLegend: line.showInLegend !== false,
+    };
+  });
+});
+
+const summaryLinesResolved = computed<ResolvedSummaryLine[]>(() => {
+  if (slotSize.value === 0) return [];
+  return summaryLinesStyled.value.map((line): ResolvedSummaryLine => {
+    const points: { x: number; y: number }[] = [];
+    let d = "";
+    let inSeg = false;
+    for (let j = 0; j < line.data.length; j++) {
+      const yv = Number(line.data[j]);
+      const xv = line.x ? Number(line.x[j]) : j;
+      if (!isFinite(yv) || !isFinite(xv)) {
+        inSeg = false;
+        continue;
+      }
+      const p = projectLinePoint(xv, yv, line.extent);
+      points.push(p);
+      d += inSeg ? `L${p.x},${p.y}` : `M${p.x},${p.y}`;
+      inSeg = true;
+    }
+    return { ...line, pathD: d, points };
+  });
+});
+
+const DEFAULT_LINE_COLORS = [
+  "var(--color-fg-1, #111)",
+  "var(--color-danger, #ef4444)",
+  "var(--color-success, #10b981)",
+  "var(--color-info, #6366f1)",
+];
+
+function defaultLineColor(i: number): string {
+  return DEFAULT_LINE_COLORS[i % DEFAULT_LINE_COLORS.length];
+}
+
 const DEFAULT_COLORS = [
   "var(--color-primary, #3b82f6)",
   "var(--color-accent, #f59e0b)",
@@ -621,13 +792,28 @@ const categoryTickItems = computed<CategoryTickItem[]>(() => {
 interface InlineLegendItem {
   label: string;
   color: string;
+  kind: "bar" | "line";
+  dashed?: boolean;
 }
 
 const inlineLegendItems = computed<InlineLegendItem[]>(() => {
   const items: InlineLegendItem[] = [];
   allSeries.value.forEach((s, i) => {
     if (!s.legend || s.showInLegend === false) return;
-    items.push({ label: s.legend, color: s.color ?? defaultColor(i) });
+    items.push({
+      label: s.legend,
+      color: s.color ?? defaultColor(i),
+      kind: "bar",
+    });
+  });
+  summaryLinesStyled.value.forEach((line) => {
+    if (!line.legend || !line.showInLegend) return;
+    items.push({
+      label: line.legend,
+      color: line.color,
+      kind: "line",
+      dashed: line.dashed,
+    });
   });
   return items;
 });
@@ -865,11 +1051,22 @@ const positionedLegendItems = computed(() => {
       <g v-if="positionedLegendItems.length > 0">
         <template v-for="(item, i) in positionedLegendItems" :key="'ileg' + i">
           <rect
+            v-if="item.kind === 'bar'"
             :x="item.x"
             :y="item.y - 5"
             width="12"
             height="10"
             :fill="item.color"
+          />
+          <line
+            v-else
+            :x1="item.x"
+            :y1="item.y"
+            :x2="item.x + 12"
+            :y2="item.y"
+            :stroke="item.color"
+            stroke-width="2"
+            :stroke-dasharray="item.dashed ? '4 2' : undefined"
           />
           <text
             :x="item.x + 18"
@@ -1031,6 +1228,36 @@ const positionedLegendItems = computed(() => {
         :fill-opacity="bar.opacity"
         :style="bar.blendMode ? { mixBlendMode: bar.blendMode } : undefined"
       />
+      <!-- summary lines (drawn above bars, below annotations) -->
+      <template v-for="(line, i) in summaryLinesResolved" :key="'sl' + i">
+        <path
+          v-if="line.pathD"
+          data-testid="summary-line"
+          :d="line.pathD"
+          fill="none"
+          :stroke="line.color"
+          :stroke-width="line.strokeWidth"
+          :stroke-opacity="line.opacity"
+          :stroke-dasharray="line.dashed ? '6 3' : undefined"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          :style="line.blendMode ? { mixBlendMode: line.blendMode } : undefined"
+        />
+        <template v-if="line.dots">
+          <circle
+            v-for="(pt, j) in line.points"
+            :key="'sld' + i + '-' + j"
+            :cx="pt.x"
+            :cy="pt.y"
+            :r="line.dotRadius"
+            :fill="line.color"
+            :fill-opacity="line.opacity"
+            :style="
+              line.blendMode ? { mixBlendMode: line.blendMode } : undefined
+            "
+          />
+        </template>
+      </template>
       <!-- Tooltip: interaction overlay -->
       <rect
         v-if="hasTooltipSlot"
