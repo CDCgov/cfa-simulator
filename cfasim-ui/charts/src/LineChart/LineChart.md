@@ -482,6 +482,66 @@ busy background — the outline keeps each series visually distinct.
   </template>
 </ComponentDemo>
 
+### Blend mode
+
+Set `blendMode` on a `Series` to apply a CSS `mix-blend-mode` to that
+series' line (and dots, if enabled). Useful when two thick or
+high-contrast lines overlap — `"multiply"` darkens the crossing point
+on light backgrounds, `"screen"` lightens on dark, `"difference"`
+inverts. The white `outline`, if any, is unaffected.
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      {
+        data: Array.from({ length: 30 }, (_, t) => 20 + 15 * Math.sin(t / 4)),
+        color: '#ef4444',
+        strokeWidth: 3,
+        blendMode: 'multiply',
+        legend: 'Strain A',
+      },
+      {
+        data: Array.from({ length: 30 }, (_, t) => 20 + 15 * Math.cos(t / 4)),
+        color: '#3b82f6',
+        strokeWidth: 3,
+        blendMode: 'multiply',
+        legend: 'Strain B',
+      },
+    ]"
+    :height="240"
+    x-label="Day"
+    y-label="Incidence"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    {
+      data: strainA,
+      color: '#ef4444',
+      strokeWidth: 3,
+      blendMode: 'multiply',
+      legend: 'Strain A',
+    },
+    {
+      data: strainB,
+      color: '#3b82f6',
+      strokeWidth: 3,
+      blendMode: 'multiply',
+      legend: 'Strain B',
+    },
+  ]"
+  :height="240"
+  x-label="Day"
+  y-label="Incidence"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Grid lines
 
 <ComponentDemo>

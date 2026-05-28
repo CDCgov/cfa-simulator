@@ -33,3 +33,4 @@ export {
   type ColumnWidth,
 } from "./DataTable/DataTable.vue";
 export type { ChartAnnotation } from "./_shared/annotations.js";
+export type { BlendMode } from "./_shared/chartProps.js";

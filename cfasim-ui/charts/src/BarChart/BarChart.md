@@ -1,13 +1,24 @@
 ---
 keywords:
-  [bar, column, chart, categorical, grouped, stacked, vertical, horizontal, svg]
+  [
+    bar,
+    column,
+    chart,
+    categorical,
+    grouped,
+    stacked,
+    overlay,
+    vertical,
+    horizontal,
+    svg,
+  ]
 ---
 
 # BarChart
 
-A responsive SVG bar chart supporting single, grouped, and stacked series in
-either vertical (column) or horizontal orientation. Shares axis, tooltip,
-menu, and CSV export wiring with [`LineChart`](./line-chart).
+A responsive SVG bar chart supporting single, grouped, stacked, and overlay
+series in either vertical (column) or horizontal orientation. Shares axis,
+tooltip, menu, and CSV export wiring with [`LineChart`](./line-chart).
 
 ## Examples
 
@@ -98,6 +109,101 @@ menu, and CSV export wiring with [`LineChart`](./line-chart).
   layout="stacked"
   :height="220"
   y-label="Doses (thousands)"
+  tooltip-trigger="hover"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Overlay series
+
+`layout="overlay"` draws each series at full group width from the shared
+baseline, painting later series on top of earlier ones. Use it to compare
+a backdrop value (e.g. target, capacity, prior period) against a shorter
+foreground value sharing the same axis.
+
+Series render in the order they appear in `series`, so put the taller
+backdrop first and the shorter foreground after. Use `opacity`, a
+distinct color, or a per-series `blendMode` (see below) if bars might
+overlap fully.
+
+<ComponentDemo>
+  <BarChart
+    :series="[
+      { data: [40, 40, 40, 40], legend: 'Target', color: '#d4d4d8' },
+      { data: [22, 35, 28, 38], legend: 'Actual', color: '#0057b7' },
+    ]"
+    :categories="['Q1', 'Q2', 'Q3', 'Q4']"
+    layout="overlay"
+    :height="220"
+    y-label="Doses (thousands)"
+    tooltip-trigger="hover"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :series="[
+    { data: [40, 40, 40, 40], legend: 'Target', color: '#d4d4d8' },
+    { data: [22, 35, 28, 38], legend: 'Actual', color: '#0057b7' },
+  ]"
+  :categories="['Q1', 'Q2', 'Q3', 'Q4']"
+  layout="overlay"
+  :height="220"
+  y-label="Doses (thousands)"
+  tooltip-trigger="hover"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Blend mode
+
+Set `blendMode` on a series to apply a CSS `mix-blend-mode` to every
+bar in that series. Useful with `layout="overlay"` (or just two
+overlapping grouped bars) to combine colors instead of one obscuring
+the other. Common picks: `"multiply"` (darkens light fills where bars
+overlap), `"screen"` (lightens dark fills), `"difference"` (high
+contrast).
+
+<ComponentDemo>
+  <BarChart
+    :series="[
+      { data: [22, 35, 28, 38], legend: 'Treatment A', color: '#ef4444', blendMode: 'multiply' },
+      { data: [30, 24, 36, 32], legend: 'Treatment B', color: '#3b82f6', blendMode: 'multiply' },
+    ]"
+    :categories="['Q1', 'Q2', 'Q3', 'Q4']"
+    layout="overlay"
+    :height="220"
+    y-label="Cases avoided"
+    tooltip-trigger="hover"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :series="[
+    {
+      data: [22, 35, 28, 38],
+      legend: 'Treatment A',
+      color: '#ef4444',
+      blendMode: 'multiply',
+    },
+    {
+      data: [30, 24, 36, 32],
+      legend: 'Treatment B',
+      color: '#3b82f6',
+      blendMode: 'multiply',
+    },
+  ]"
+  :categories="['Q1', 'Q2', 'Q3', 'Q4']"
+  layout="overlay"
+  :height="220"
+  y-label="Cases avoided"
   tooltip-trigger="hover"
 />
 ```

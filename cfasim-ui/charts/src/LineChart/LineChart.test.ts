@@ -281,6 +281,36 @@ describe("LineChart", () => {
     expect(circle.attributes("fill-opacity")).toBe("0.4");
   });
 
+  it("applies blendMode as mix-blend-mode style on line and dots", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        series: [
+          {
+            data: [0, 10, 20],
+            dots: true,
+            blendMode: "multiply" as const,
+          },
+          { data: [5, 15, 25], dots: true },
+        ],
+        height: 100,
+        menu: false,
+      },
+    });
+    // The first (blended) line path's style includes mix-blend-mode.
+    const paths = wrapper.findAll("path").filter((p) => p.attributes("d"));
+    const blendedPath = paths[0];
+    expect(blendedPath.attributes("style")).toContain(
+      "mix-blend-mode: multiply",
+    );
+    // Plain second series has no blend-mode style.
+    expect(paths[1].attributes("style") ?? "").not.toContain("mix-blend-mode");
+    // Dots on the blended series also pick up the blend mode.
+    const circles = wrapper.findAll("circle");
+    expect(circles[0].attributes("style")).toContain(
+      "mix-blend-mode: multiply",
+    );
+  });
+
   it("renders tooltip overlay when tooltipTrigger is set", () => {
     const wrapper = mount(LineChart, {
       props: {

@@ -35,6 +35,7 @@ import {
   type ChartHoverPayload,
   type ChartTooltipBaseProps,
   type ChartTooltipValue,
+  type BlendMode,
 } from "../_shared/index.js";
 
 /**
@@ -73,6 +74,13 @@ export interface Series {
   opacity?: number;
   lineOpacity?: number;
   dotOpacity?: number;
+  /**
+   * CSS `mix-blend-mode` applied to the line and dots. Lets overlapping
+   * series combine their colors instead of one obscuring the other.
+   * Has no effect on the white `outline` (which exists to opaquely
+   * separate the line from its background).
+   */
+  blendMode?: BlendMode;
   line?: boolean;
   /**
    * Draw a page-colored stroke behind the line so it stays visually
@@ -1208,6 +1216,7 @@ const positionedLegendItems = computed(() => {
           :stroke-width="s.strokeWidth ?? 1.5"
           :stroke-opacity="s.lineOpacity ?? s.opacity ?? lineOpacity"
           :stroke-dasharray="s.dashed ? '6 3' : undefined"
+          :style="s.blendMode ? { mixBlendMode: s.blendMode } : undefined"
         />
         <template v-if="s.dots">
           <circle
@@ -1219,6 +1228,7 @@ const positionedLegendItems = computed(() => {
             :fill="s.dotFill ?? s.color ?? 'currentColor'"
             :fill-opacity="s.dotOpacity ?? s.opacity ?? lineOpacity"
             :stroke="s.dotStroke ?? 'none'"
+            :style="s.blendMode ? { mixBlendMode: s.blendMode } : undefined"
           />
         </template>
       </template>

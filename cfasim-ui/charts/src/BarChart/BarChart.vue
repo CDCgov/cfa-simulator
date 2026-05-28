@@ -32,6 +32,7 @@ import {
   type ChartHoverPayload,
   type ChartTooltipBaseProps,
   type ChartTooltipValue,
+  type BlendMode,
 } from "../_shared/index.js";
 
 export type BarChartData = ChartData;
@@ -42,6 +43,12 @@ export interface BarSeries {
   data?: BarChartData;
   color?: string;
   opacity?: number;
+  /**
+   * CSS `mix-blend-mode` applied to each bar in this series. Lets
+   * overlapping bars (e.g. `layout="overlay"`) combine their colors
+   * instead of one obscuring the other.
+   */
+  blendMode?: BlendMode;
   /** Label shown in the inline legend. */
   legend?: string;
   /**
@@ -73,8 +80,14 @@ interface BarChartProps extends ChartCommonProps {
   categories?: readonly (string | Date)[];
   /** "vertical" (default, aka column) draws upright bars; "horizontal" draws sideways. */
   orientation?: "vertical" | "horizontal";
-  /** "grouped" (default) places series side-by-side; "stacked" stacks them. */
-  layout?: "grouped" | "stacked";
+  /**
+   * "grouped" (default) places series side-by-side; "stacked" stacks
+   * them; "overlay" draws each series at full group width from the
+   * shared baseline, painting later series on top of earlier ones.
+   * In overlay mode set `opacity` per series, or order series so the
+   * tallest renders first, so bars behind remain visible.
+   */
+  layout?: "grouped" | "stacked" | "overlay";
   /** Force the value axis to start at this value or lower (default 0). */
   valueMin?: number;
   /**
@@ -148,6 +161,7 @@ type ResolvedSeries = {
   data: BarChartData;
   color?: string;
   opacity?: number;
+  blendMode?: BlendMode;
   legend?: string;
   showInLegend?: boolean;
   showInTooltip?: boolean;
@@ -158,6 +172,7 @@ function resolveSeries(s: BarSeries): ResolvedSeries {
     data: s.y ?? s.data ?? EMPTY_DATA,
     color: s.color,
     opacity: s.opacity,
+    blendMode: s.blendMode,
     legend: s.legend,
     showInLegend: s.showInLegend,
     showInTooltip: s.showInTooltip,
@@ -334,6 +349,7 @@ interface BarRect {
   h: number;
   color: string;
   opacity: number;
+  blendMode?: BlendMode;
   value: number;
   categoryIndex: number;
   seriesIndex: number;
@@ -351,6 +367,7 @@ function makeBar(
   span: number,
   color: string,
   opacity: number,
+  blendMode: BlendMode | undefined,
   value: number,
   categoryIndex: number,
   seriesIndex: number,
@@ -365,6 +382,7 @@ function makeBar(
       h: size,
       color,
       opacity,
+      blendMode,
       value,
       categoryIndex,
       seriesIndex,
@@ -377,6 +395,7 @@ function makeBar(
     h: span,
     color,
     opacity,
+    blendMode,
     value,
     categoryIndex,
     seriesIndex,
@@ -414,6 +433,7 @@ const bars = computed<BarRect[]>(() => {
             group,
             series.color ?? defaultColor(s),
             series.opacity ?? 1,
+            series.blendMode,
             raw,
             i,
             s,
@@ -421,6 +441,26 @@ const bars = computed<BarRect[]>(() => {
         );
         if (raw >= 0) posCursor = top;
         else negCursor = top;
+      }
+    } else if (props.layout === "overlay") {
+      for (let s = 0; s < k; s++) {
+        const series = seriesList[s];
+        const raw = Number(series.data[i] ?? NaN);
+        if (!isFinite(raw)) continue;
+        out.push(
+          makeBar(
+            baseline,
+            valuePixel(raw),
+            groupStart,
+            group,
+            series.color ?? defaultColor(s),
+            series.opacity ?? 1,
+            series.blendMode,
+            raw,
+            i,
+            s,
+          ),
+        );
       }
     } else {
       for (let s = 0; s < k; s++) {
@@ -436,6 +476,7 @@ const bars = computed<BarRect[]>(() => {
             bw,
             series.color ?? defaultColor(s),
             series.opacity ?? 1,
+            series.blendMode,
             raw,
             i,
             s,
@@ -988,6 +1029,7 @@ const positionedLegendItems = computed(() => {
         :height="bar.h"
         :fill="bar.color"
         :fill-opacity="bar.opacity"
+        :style="bar.blendMode ? { mixBlendMode: bar.blendMode } : undefined"
       />
       <!-- Tooltip: interaction overlay -->
       <rect

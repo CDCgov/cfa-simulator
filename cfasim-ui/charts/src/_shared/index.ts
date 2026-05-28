@@ -51,6 +51,7 @@ export type {
   ChartTooltipBaseProps,
   TitleStyle,
   LabelStyle,
+  BlendMode,
 } from "./chartProps.js";
 export {
   parseDate,

@@ -36,6 +36,30 @@ export interface LabelStyle {
 }
 
 /**
+ * CSS `mix-blend-mode` values usable on chart series. Drives how a
+ * series' pixels combine with what's painted behind them. Useful for
+ * overlapping series (e.g. `"multiply"` darkens light fills where bars
+ * overlap; `"screen"` lightens dark fills).
+ */
+export type BlendMode =
+  | "normal"
+  | "multiply"
+  | "screen"
+  | "overlay"
+  | "darken"
+  | "lighten"
+  | "color-dodge"
+  | "color-burn"
+  | "hard-light"
+  | "soft-light"
+  | "difference"
+  | "exclusion"
+  | "hue"
+  | "saturation"
+  | "color"
+  | "luminosity";
+
+/**
  * Props common to every cartesian chart component. Anything specific to
  * the chart type (series shape, layout, value-axis details) lives on the
  * component itself.

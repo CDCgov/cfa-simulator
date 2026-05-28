@@ -76,6 +76,70 @@ describe("BarChart", () => {
     expect(catA[0].attributes("width")).toBe(catA[1].attributes("width"));
   });
 
+  it("overlays bars at full group width when layout is overlay", () => {
+    const wrapper = mount(BarChart, {
+      props: {
+        series: [{ data: [10, 20] }, { data: [5, 15] }],
+        categories: ["A", "B"],
+        layout: "overlay" as const,
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    const found = bars(wrapper);
+    expect(found.length).toBe(4);
+    // In overlay, both series in a category share the same x and width
+    // (full group width), like stacked — but each bar starts from the
+    // shared baseline rather than stacking.
+    const catA = found.filter((b) => b.attributes("data-category") === "0");
+    expect(catA[0].attributes("x")).toBe(catA[1].attributes("x"));
+    expect(catA[0].attributes("width")).toBe(catA[1].attributes("width"));
+    // Both bars in category A rest on the same baseline (same y+height).
+    const baselineA0 =
+      Number(catA[0].attributes("y")) + Number(catA[0].attributes("height"));
+    const baselineA1 =
+      Number(catA[1].attributes("y")) + Number(catA[1].attributes("height"));
+    expect(baselineA0).toBeCloseTo(baselineA1, 1);
+    // Taller series (data 10 vs 5 in category A) has greater height.
+    expect(Number(catA[0].attributes("height"))).toBeGreaterThan(
+      Number(catA[1].attributes("height")),
+    );
+  });
+
+  it("scales overlay value axis to per-series max, not the sum", () => {
+    const overlay = mount(BarChart, {
+      props: {
+        series: [{ data: [10] }, { data: [20] }],
+        categories: ["A"],
+        layout: "overlay" as const,
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    const stacked = mount(BarChart, {
+      props: {
+        series: [{ data: [10] }, { data: [20] }],
+        categories: ["A"],
+        layout: "stacked" as const,
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    // Overlay's tallest bar (value 20) fills the same axis as a 20-max,
+    // whereas stacked treats the cumulative 30 as max — so the 20-bar
+    // is taller in overlay than in stacked.
+    const overlayTop = Math.max(
+      ...bars(overlay).map((b) => Number(b.attributes("height"))),
+    );
+    const stackedTop = Math.max(
+      ...bars(stacked).map((b) => Number(b.attributes("height"))),
+    );
+    expect(overlayTop).toBeGreaterThan(stackedTop);
+  });
+
   it("renders horizontal bars when orientation is horizontal", () => {
     const wrapper = mount(BarChart, {
       props: {
@@ -791,6 +855,30 @@ describe("BarChart", () => {
       const found = bars(wrapper);
       expect(found[0].attributes("fill")).toBe("#ff0000");
       expect(found[1].attributes("fill")).toBe("#ff0000");
+    });
+
+    it("applies blendMode as mix-blend-mode style on each bar", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          series: [
+            { data: [10, 20], blendMode: "multiply" as const },
+            { data: [5, 15] },
+          ],
+          categories: ["A", "B"],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const found = bars(wrapper);
+      const blended = found.filter((b) => b.attributes("data-series") === "0");
+      const plain = found.filter((b) => b.attributes("data-series") === "1");
+      for (const b of blended) {
+        expect(b.attributes("style")).toContain("mix-blend-mode: multiply");
+      }
+      for (const b of plain) {
+        expect(b.attributes("style") ?? "").not.toContain("mix-blend-mode");
+      }
     });
 
     it("applies a per-series opacity", () => {
