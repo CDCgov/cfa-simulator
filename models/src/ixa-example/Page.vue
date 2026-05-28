@@ -425,12 +425,9 @@ const summary = computed(() => {
         <Button variant="secondary" @click="reset">Reset</Button>
       </div>
     </div>
-    <!-- Snapshot params so the editor sees a fresh object reference each
-         re-render and its internal "external update" watcher fires when
-         the parent applies a save (or a Reset). -->
     <ParamEditor
       v-if="useEditor"
-      :value="{ ...params }"
+      :value="params"
       format="json"
       @apply="applyParamUpdate"
     />

@@ -74,15 +74,18 @@ const isMac =
   /Mac|iPhone|iPad/.test(navigator.platform);
 const applyShortcut = isMac ? "⌘S" : "Ctrl+S";
 
-// External value updates (e.g., parent Reset) re-seed the editor. The
-// inequality check keeps the post-apply re-render a no-op: when the
-// parent absorbs the user's apply, `props.value` re-serializes back
-// to the same string the user just typed, so we leave `text` untouched.
+// External value updates (e.g., parent Reset) re-seed the editor. We
+// compare against the last value we sourced from the parent — not
+// against the live editor text — so a parent re-render that hands us a
+// fresh object ref with the same contents doesn't clobber whatever the
+// user is currently typing.
+let lastSeeded = text.value;
 watch(
   () => props.value,
   (v) => {
     const next = serialize(v, format.value);
-    if (next === text.value) return;
+    if (next === lastSeeded) return;
+    lastSeeded = next;
     text.value = next;
     error.value = "";
   },
