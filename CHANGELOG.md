@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.4.14] - 2026-05-28
+
+### Features
+
+- **BarChart:** Thin crowded non-date categorical labels
+
 ## [0.4.13] - 2026-05-26
 
 ### Features
