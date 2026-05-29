@@ -1,5 +1,6 @@
 import { defineConfig } from "vitepress";
 import { resolve } from "node:path";
+import svgLoader from "vite-svg-loader";
 import {
   components,
   findComponentForSource,
@@ -83,7 +84,21 @@ export default defineConfig({
         },
       ],
     },
-    plugins: [watchComponentSources()],
+    plugins: [
+      // Resolve @cfasim-ui/components' `*.svg?component` icon imports from src.
+      svgLoader({
+        svgoConfig: {
+          plugins: [
+            {
+              name: "preset-default",
+              params: { overrides: { removeViewBox: false } },
+            },
+            "removeDimensions",
+          ],
+        },
+      }),
+      watchComponentSources(),
+    ],
   },
   themeConfig: {
     outline: [2, 3],
