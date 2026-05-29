@@ -3,6 +3,12 @@ packages:
   - "docs"
   - "models"
 
-neverBuiltDependencies: []
+# Build-script policy. pnpm 10 uses ignoredBuiltDependencies; pnpm 11 replaced
+# it with allowBuilds + strictDepBuilds. Both are listed so either version
+# installs cleanly without prompting or erroring.
+strictDepBuilds: false
+allowBuilds:
+  esbuild: false
+  vue-demi: false
 ignoredBuiltDependencies:
   - vue-demi
