@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import type { CSSProperties } from "vue";
 import { computed } from "vue";
+import { getIconComponent, warnMissingIcon } from "./registry";
+import { registerDefaultIcons } from "./defaultIcons";
+
+// Driven from setup (a retained code path) so the base set survives
+// tree-shaking; idempotent, so the per-instance call is effectively free.
+registerDefaultIcons();
 
 export type IconSize = "sm" | "md" | "lg" | "xl";
 
@@ -8,7 +14,9 @@ interface Props {
   icon: string;
   size?: IconSize | number;
   fill?: boolean;
+  /** @deprecated No effect — SVG icons ship at weight 400. */
   weight?: number;
+  /** @deprecated No effect — SVG icons ship at grade 0. */
   grade?: number;
   decorative?: boolean;
   ariaLabel?: string;
@@ -25,23 +33,17 @@ const props = withDefaults(defineProps<Props>(), {
 const sizePreset = computed(() =>
   typeof props.size === "string" ? props.size : undefined,
 );
-const numericSize = computed(() =>
-  typeof props.size === "number" ? props.size : undefined,
+
+const inlineStyle = computed<CSSProperties>(() =>
+  typeof props.size === "number"
+    ? { width: `${props.size}px`, height: `${props.size}px` }
+    : {},
 );
 
-const inlineStyle = computed<CSSProperties>(() => {
-  const style: CSSProperties = {};
-  if (numericSize.value !== undefined) {
-    style.fontSize = `${numericSize.value}px`;
-    (style as Record<string, unknown>)["--icon-opsz"] = numericSize.value;
-  }
-  if (props.weight !== undefined) {
-    (style as Record<string, unknown>)["--icon-weight"] = props.weight;
-  }
-  if (props.grade !== undefined) {
-    (style as Record<string, unknown>)["--icon-grade"] = props.grade;
-  }
-  return style;
+const svg = computed(() => {
+  const component = getIconComponent(props.icon, props.fill);
+  if (!component) warnMissingIcon(props.icon);
+  return component;
 });
 </script>
 
@@ -49,64 +51,54 @@ const inlineStyle = computed<CSSProperties>(() => {
   <span
     class="Icon"
     :data-size="sizePreset"
-    :data-fill="fill ? 'true' : undefined"
     :data-inline="inline ? 'true' : undefined"
     :style="inlineStyle"
     :aria-hidden="decorative ? true : undefined"
     :aria-label="decorative ? undefined : ariaLabel"
     :role="decorative ? undefined : 'img'"
-    >{{ icon }}</span
   >
+    <component :is="svg" v-if="svg" />
+  </span>
 </template>
 
 <style>
 .Icon {
-  font-family: "Material Symbols Outlined", sans-serif;
-  font-weight: normal;
-  font-style: normal;
-  font-size: 24px;
-  line-height: 1;
-  letter-spacing: normal;
-  text-transform: none;
-  display: inline-block;
-  white-space: nowrap;
-  word-wrap: normal;
-  direction: ltr;
-  font-feature-settings: "liga";
-  -webkit-font-smoothing: antialiased;
-  font-variation-settings:
-    "FILL" var(--icon-fill, 0),
-    "wght" var(--icon-weight, 400),
-    "GRAD" var(--icon-grade, 0),
-    "opsz" var(--icon-opsz, 24);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
   color: inherit;
 }
 
-.Icon[data-size="sm"] {
-  font-size: 20px;
-  --icon-opsz: 20;
-}
-.Icon[data-size="md"] {
-  font-size: 24px;
-  --icon-opsz: 24;
-}
-.Icon[data-size="lg"] {
-  font-size: 28px;
-  --icon-opsz: 28;
-}
-.Icon[data-size="xl"] {
-  font-size: 32px;
-  --icon-opsz: 32;
+.Icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
 }
 
-.Icon[data-fill="true"] {
-  --icon-fill: 1;
+.Icon[data-size="sm"] {
+  width: 20px;
+  height: 20px;
+}
+.Icon[data-size="md"] {
+  width: 24px;
+  height: 24px;
+}
+.Icon[data-size="lg"] {
+  width: 28px;
+  height: 28px;
+}
+.Icon[data-size="xl"] {
+  width: 32px;
+  height: 32px;
 }
 
 .Icon[data-inline="true"] {
-  font-size: inherit;
-  vertical-align: middle;
-  transform: scale(1.2) translateY(-0.05em);
-  transform-origin: 50% 50%;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
 }
 </style>

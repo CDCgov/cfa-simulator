@@ -173,10 +173,6 @@ Add a minimal `tsconfig.json` at the project root:
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>My Sim</title>
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined"
-    />
   </head>
   <body>
     <div id="app"></div>

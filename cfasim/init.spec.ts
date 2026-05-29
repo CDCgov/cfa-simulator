@@ -172,5 +172,27 @@ test.describe("cfasim init", () => {
         timeout: 30_000,
       });
     });
+
+    test(`${p.template} project loads no icon webfont`, async ({ page }) => {
+      // Icons are inline SVGs now, so a scaffolded app must never fetch the
+      // Material Symbols webfont (the template dropped its <link>).
+      const fontRequests: string[] = [];
+      page.on("request", (req) => {
+        const url = req.url();
+        if (
+          /fonts\.(googleapis|gstatic)\.com/.test(url) ||
+          /Material[+ ]?Symbols/i.test(url)
+        ) {
+          fontRequests.push(url);
+        }
+      });
+
+      await page.goto(`http://localhost:${p.port}`);
+      await expect(page.locator("svg path").first()).toBeVisible({
+        timeout: 30_000,
+      });
+
+      expect(fontRequests).toEqual([]);
+    });
   }
 });

@@ -3,6 +3,12 @@ packages:
   - "docs"
   - "models"
 
+# Pin a single Vue version. vite-svg-loader's unconstrained `vue` peer
+# (>=3.2.13) otherwise resolves a second copy, which breaks reka-ui at runtime
+# (duplicate @vue/runtime-core).
+overrides:
+  vue: "3.5.35"
+
 # Build-script policy. pnpm 10 uses ignoredBuiltDependencies; pnpm 11 replaced
 # it with allowBuilds + strictDepBuilds. Both are listed so either version
 # installs cleanly without prompting or erroring.

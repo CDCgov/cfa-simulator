@@ -21,7 +21,7 @@ describe("Hint", () => {
 
     const icon = wrapper.find(".HintTrigger .Icon");
     expect(icon.exists()).toBe(true);
-    expect(icon.text()).toBe("help");
+    expect(icon.find("svg").exists()).toBe(true);
   });
 
   it("does not show tooltip content by default", () => {

@@ -29,6 +29,7 @@ The JSON output gives every component's `name`, `slug`, `keywords`, and absolute
 ## Conventions
 
 - Import UI components from `cfasim-ui/components`, charts from `cfasim-ui/charts`, the model hook from `cfasim-ui/wasm`, and utilities from `cfasim-ui/shared`.
+- Icons: render Material Symbols with `<Icon icon="..." />` from `cfasim-ui/components`. A base set (e.g. `help`, `dark_mode`) works out of the box; to use any other icon you must register it — see [Registering icons](https://cdcgov.github.io/cfa-simulator/docs/cfasim-ui/components/icon#registering-icons). No icon webfont is loaded.
 - Use `useUrlParams` (from `cfasim-ui/shared`) to sync reactive parameters to the URL query string.
 - `App.vue` passes params to `simulate` as a JSON string (`{ json: JSON.stringify(params) }`); the Rust side deserializes into `SimulateArgs`, whose `#[serde(rename_all = "camelCase")]` maps the JS keys (`infectionRate`, `nSimulations`, ...) to snake_case fields. When adding a param, update both the JS `defaults` object and the `SimulateArgs` struct.
 - For in-browser ixa runs, never use `context.report_options().directory(...)` — disk I/O fails in the browser. Collect data in an in-memory plugin (see `src/stats.rs` + `define_data_plugin!` in `src/sir.rs`) and serialize through `ModelOutput`.
