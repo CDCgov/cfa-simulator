@@ -5,11 +5,10 @@ SVG. Icons are resolved from a registry by name, so you reference them exactly a
 before — `<Icon icon="help" />` — but no webfont is loaded: only the SVGs you
 actually use end up in your bundle.
 
-A small base set is pre-registered and works with zero setup: `help`,
-`favorite`, `dark_mode`, `light_mode`, `keyboard_double_arrow_left`,
-`keyboard_double_arrow_right`. These SVGs are bundled inside `cfasim-ui`, so they
-need no extra install or config — just `<Icon icon="help" />`. To use any other
-icon, [register it](#registering-icons).
+A [base set](#base-set) of common icons is pre-registered and works with zero
+setup. These SVGs are bundled inside `cfasim-ui`, so they need no extra install
+or config — just `<Icon icon="help" />`. To use any other icon,
+[register it](#registering-icons).
 
 ## Examples
 
@@ -60,6 +59,50 @@ icon, [register it](#registering-icons).
 
   </template>
 </ComponentDemo>
+
+## Base set
+
+These icons are bundled with `cfasim-ui` and need no install or registration —
+just pass the name to `icon`. Anything not listed here must be
+[registered](#registering-icons).
+
+<script setup>
+const baseIcons = [
+  "help", "favorite", "dark_mode", "light_mode",
+  "chevron_left", "chevron_right", "keyboard_arrow_up", "keyboard_arrow_down",
+  "keyboard_double_arrow_left", "keyboard_double_arrow_right",
+  "arrow_upward", "arrow_downward", "arrow_back", "arrow_forward",
+  "menu", "more_vert", "more_horiz",
+  "add", "edit", "delete", "close", "check", "search", "tune", "download",
+  "github",
+];
+</script>
+
+<Grid class="base-icons" :cols="4" :colsSmall="2" gap="sm">
+  <div v-for="name in baseIcons" :key="name" class="base-icons__cell">
+    <Icon :icon="name" size="lg" :aria-label="name" />
+    <code>{{ name }}</code>
+  </div>
+</Grid>
+
+<style>
+.base-icons__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 0.5rem;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  text-align: center;
+}
+.base-icons__cell code {
+  font-size: 0.65rem;
+  word-break: break-word;
+}
+</style>
+
+`favorite` also has a filled variant via `:fill="true"`.
 
 ## Registering icons
 
