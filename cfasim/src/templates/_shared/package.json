@@ -3,14 +3,8 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24"
-  },
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": ">=10",
-      "onFail": "warn"
-    }
+    "node": ">=24",
+    "pnpm": ">=10"
   },
   "scripts": {
     "dev": "vite",
