@@ -1523,4 +1523,408 @@ describe("BarChart", () => {
       }
     });
   });
+
+  describe("value axis", () => {
+    it("renders value ticks by default", () => {
+      const wrapper = mount(BarChart, {
+        props: { data: [10, 20, 30], width: 400, height: 200, menu: false },
+      });
+      expect(
+        wrapper.findAll('[data-testid="value-tick"]').length,
+      ).toBeGreaterThan(0);
+    });
+
+    it("hides the value axis line, grid, and ticks when valueAxis is false", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20, 30],
+          width: 400,
+          height: 200,
+          menu: false,
+          valueAxis: false,
+        },
+      });
+      expect(wrapper.findAll('[data-testid="value-tick"]').length).toBe(0);
+      // Category ticks remain visible.
+      expect(
+        wrapper.findAll('[data-testid="category-tick"]').length,
+      ).toBeGreaterThan(0);
+    });
+  });
+
+  describe("barLabels", () => {
+    function labels(wrapper: ReturnType<typeof mount>) {
+      return wrapper.findAll('[data-testid="bar-label"]');
+    }
+
+    it("renders no labels by default", () => {
+      const wrapper = mount(BarChart, {
+        props: { data: [10, 20, 30], width: 400, height: 200, menu: false },
+      });
+      expect(labels(wrapper).length).toBe(0);
+    });
+
+    it("renders one label per bar when enabled", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          series: [{ data: [50, 30, 20] }, { data: [10, 40, 50] }],
+          orientation: "horizontal",
+          layout: "stacked",
+          width: 500,
+          height: 200,
+          menu: false,
+          barLabels: true,
+        },
+      });
+      expect(labels(wrapper).length).toBe(6);
+    });
+
+    it("applies a custom format function for label text", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [99.4, 0.3, 0.3],
+          categories: ["a"],
+          orientation: "horizontal",
+          layout: "stacked",
+          width: 500,
+          height: 120,
+          menu: false,
+          barLabels: {
+            format: (v: number) =>
+              v >= 99 ? ">99%" : v < 1 ? "<1%" : String(Math.round(v)),
+          },
+        },
+      });
+      const texts = labels(wrapper).map((n) => n.text());
+      expect(texts).toContain(">99%");
+      expect(texts).toContain("<1%");
+    });
+
+    it("omits a label when the formatter returns an empty string", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [50, 50],
+          categories: ["a"],
+          orientation: "horizontal",
+          layout: "stacked",
+          width: 500,
+          height: 120,
+          menu: false,
+          barLabels: { format: (v: number) => (v > 40 ? "" : String(v)) },
+        },
+      });
+      expect(labels(wrapper).length).toBe(0);
+    });
+
+    it("picks a contrasting fill for inside labels (white on dark)", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          series: [{ data: [80], color: "#2a1a4a" }],
+          categories: ["a"],
+          orientation: "horizontal",
+          layout: "stacked",
+          width: 500,
+          height: 120,
+          menu: false,
+          barLabels: true,
+        },
+      });
+      // The single wide segment fits its label inside → contrast color.
+      expect(labels(wrapper)[0].attributes("fill")).toBe("#ffffff");
+    });
+
+    it("honors a fixed label color", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [80],
+          categories: ["a"],
+          orientation: "horizontal",
+          layout: "stacked",
+          width: 500,
+          height: 120,
+          menu: false,
+          barLabels: { color: "red" },
+        },
+      });
+      expect(labels(wrapper)[0].attributes("fill")).toBe("red");
+    });
+
+    it("places a small segment's label outside (start-anchored past the edge)", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          // Tiny segment first so its outside label has room to the right.
+          series: [
+            { data: [1], color: "#9b7cc4" },
+            { data: [99], color: "#2a1a4a" },
+          ],
+          categories: ["a"],
+          orientation: "horizontal",
+          layout: "stacked",
+          width: 500,
+          height: 120,
+          menu: false,
+          barLabels: true,
+        },
+      });
+      const all = labels(wrapper);
+      // Big segment label sits inside (middle-anchored); the tiny one is
+      // forced outside (start-anchored) since its text can't fit.
+      const tiny = all.find((n) => n.text() === "1")!;
+      expect(tiny.attributes("text-anchor")).toBe("start");
+      const big = all.find((n) => n.text() === "99")!;
+      expect(big.attributes("text-anchor")).toBe("middle");
+    });
+
+    it("contrasts an overflow label against the segment it lands on", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          // Tiny dark segment first; its label overflows onto the light
+          // neighbor, so it should be dark for contrast (not currentColor).
+          series: [
+            { data: [1], color: "#2a1a4a" },
+            { data: [99], color: "#e8d9f5" },
+          ],
+          categories: ["a"],
+          orientation: "horizontal",
+          layout: "stacked",
+          width: 500,
+          height: 120,
+          menu: false,
+          barLabels: true,
+        },
+      });
+      const tiny = labels(wrapper).find((n) => n.text() === "1")!;
+      expect(tiny.attributes("text-anchor")).toBe("start");
+      expect(tiny.attributes("fill")).toBe("#1a1a1a");
+    });
+
+    it("uses the chart text color when an overflow label clears all bars", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          // Tiny last segment overflows past the right edge onto the
+          // background → currentColor.
+          series: [
+            { data: [99], color: "#2a1a4a" },
+            { data: [1], color: "#8a5fb0" },
+          ],
+          categories: ["a"],
+          orientation: "horizontal",
+          layout: "stacked",
+          width: 500,
+          height: 120,
+          menu: false,
+          chartPadding: { right: 40 },
+          barLabels: true,
+        },
+      });
+      const tiny = labels(wrapper).find((n) => n.text() === "1")!;
+      expect(tiny.attributes("fill")).toBe("currentColor");
+    });
+
+    it("left-aligns inside labels to the segment start when align is 'start'", () => {
+      const base = {
+        series: [{ data: [80] }],
+        categories: ["a"],
+        orientation: "horizontal" as const,
+        layout: "stacked" as const,
+        width: 500,
+        height: 120,
+        menu: false,
+      };
+      const start = mount(BarChart, {
+        props: { ...base, barLabels: { align: "start" } },
+      });
+      const center = mount(BarChart, { props: { ...base, barLabels: true } });
+      const sLabel = labels(start)[0];
+      const sx = Number(sLabel.attributes("x"));
+      const cx = Number(labels(center)[0].attributes("x"));
+      expect(sLabel.attributes("text-anchor")).toBe("start");
+      // Start-aligned label sits left of the centered one.
+      expect(sx).toBeLessThan(cx);
+    });
+
+    it("right-aligns inside labels to the segment end when align is 'end'", () => {
+      const base = {
+        series: [{ data: [80] }],
+        categories: ["a"],
+        orientation: "horizontal" as const,
+        layout: "stacked" as const,
+        width: 500,
+        height: 120,
+        menu: false,
+      };
+      const end = mount(BarChart, {
+        props: { ...base, barLabels: { align: "end" } },
+      });
+      const center = mount(BarChart, { props: { ...base, barLabels: true } });
+      const eLabel = labels(end)[0];
+      expect(eLabel.attributes("text-anchor")).toBe("end");
+      expect(Number(eLabel.attributes("x"))).toBeGreaterThan(
+        Number(labels(center)[0].attributes("x")),
+      );
+    });
+
+    it("hides overlapping labels when overlap is 'hide'", () => {
+      // Many tiny adjacent segments whose outside labels would collide.
+      const wrapper = mount(BarChart, {
+        props: {
+          series: Array.from({ length: 8 }, () => ({ data: [1] })),
+          categories: ["a"],
+          orientation: "horizontal",
+          layout: "stacked",
+          width: 120,
+          height: 80,
+          menu: false,
+          barLabels: { overlap: "hide" },
+        },
+      });
+      const shifted = mount(BarChart, {
+        props: {
+          series: Array.from({ length: 8 }, () => ({ data: [1] })),
+          categories: ["a"],
+          orientation: "horizontal",
+          layout: "stacked",
+          width: 120,
+          height: 80,
+          menu: false,
+          barLabels: { overlap: "shift" },
+        },
+      });
+      // "hide" drops colliding labels, so it shows no more than "shift".
+      expect(labels(wrapper).length).toBeLessThanOrEqual(
+        labels(shifted).length,
+      );
+      expect(labels(wrapper).length).toBeLessThan(8);
+    });
+  });
+
+  describe("column headers", () => {
+    it("renders no headers by default", () => {
+      const wrapper = mount(BarChart, {
+        props: { data: [10, 20], width: 400, height: 200, menu: false },
+      });
+      expect(wrapper.find('[data-testid="category-header"]').exists()).toBe(
+        false,
+      );
+      expect(wrapper.find('[data-testid="value-header"]').exists()).toBe(false);
+    });
+
+    it("renders category and value headers with their text", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20],
+          categories: ["a", "b"],
+          orientation: "horizontal",
+          width: 500,
+          height: 200,
+          menu: false,
+          categoryHeader: "Scenario",
+          valueHeader: "Proportion",
+        },
+      });
+      const ch = wrapper.find('[data-testid="category-header"]');
+      const vh = wrapper.find('[data-testid="value-header"]');
+      expect(ch.text()).toBe("Scenario");
+      expect(vh.text()).toBe("Proportion");
+      // Category header is right-aligned to match the category labels;
+      // value header starts where the bars do.
+      expect(ch.attributes("text-anchor")).toBe("end");
+      expect(vh.attributes("text-anchor")).toBe("start");
+    });
+
+    it("left-aligns category labels (and the header) when categoryAlign is 'start'", () => {
+      const props = {
+        data: [10, 20],
+        categories: ["Alpha", "Beta"],
+        orientation: "horizontal" as const,
+        width: 500,
+        height: 200,
+        menu: false,
+        categoryHeader: "Scenario",
+      };
+      const end = mount(BarChart, { props });
+      const start = mount(BarChart, {
+        props: { ...props, categoryAlign: "start" as const },
+      });
+      const endTick = end.find('[data-testid="category-tick"]');
+      const startTick = start.find('[data-testid="category-tick"]');
+      // Default right-aligns (anchor end); start switches to anchor start
+      // at the left margin, so the label x moves left.
+      expect(endTick.attributes("text-anchor")).toBe("end");
+      expect(startTick.attributes("text-anchor")).toBe("start");
+      expect(Number(startTick.attributes("x"))).toBeLessThan(
+        Number(endTick.attributes("x")),
+      );
+      // The category header follows the same alignment.
+      expect(
+        start.find('[data-testid="category-header"]').attributes("text-anchor"),
+      ).toBe("start");
+    });
+
+    it("aligns the title and legend to the category-label start when categoryAlign is 'start'", () => {
+      const base = {
+        series: [
+          { data: [10], legend: "Aye", color: "#333333" },
+          { data: [20], legend: "Bee", color: "#999999" },
+        ],
+        categories: ["Alpha"],
+        orientation: "horizontal" as const,
+        layout: "stacked" as const,
+        width: 500,
+        height: 200,
+        menu: false,
+        title: "My title",
+      };
+      const def = mount(BarChart, { props: base });
+      const start = mount(BarChart, {
+        props: { ...base, categoryAlign: "start" as const },
+      });
+      const titleX = (w: ReturnType<typeof mount>) =>
+        Number(
+          w
+            .findAll("text")
+            .find((e) => e.text().includes("My title"))!
+            .attributes("x"),
+        );
+      const legendX = (w: ReturnType<typeof mount>) =>
+        Number(
+          w
+            .findAll("text")
+            .find((e) => e.text() === "Aye")!
+            .attributes("x"),
+        );
+      // Both the title and the legend shift left to the category-label start.
+      expect(titleX(start)).toBeLessThan(titleX(def));
+      expect(legendX(start)).toBeLessThan(legendX(def));
+    });
+
+    it("reserves extra top space so headers don't overlap the plot", () => {
+      const firstBarY = (w: ReturnType<typeof mount>) =>
+        Math.min(...bars(w).map((b) => Number(b.attributes("y"))));
+      const without = mount(BarChart, {
+        props: {
+          data: [10, 20],
+          categories: ["a", "b"],
+          orientation: "horizontal",
+          width: 500,
+          height: 200,
+          menu: false,
+        },
+      });
+      const withHeaders = mount(BarChart, {
+        props: {
+          data: [10, 20],
+          categories: ["a", "b"],
+          orientation: "horizontal",
+          width: 500,
+          height: 200,
+          menu: false,
+          categoryHeader: "Scenario",
+          valueHeader: "Proportion",
+        },
+      });
+      // Reserving a header row pushes the plot (and its bars) down.
+      expect(firstBarY(withHeaders)).toBeGreaterThan(firstBarY(without));
+    });
+  });
 });

@@ -55,6 +55,13 @@ export type {
   LineMarkStyle,
 } from "./chartProps.js";
 export {
+  parseRgb,
+  relativeLuminance,
+  resolveColorToRgb,
+  pickContrastColor,
+  type Rgb,
+} from "./contrast.js";
+export {
   parseDate,
   isDateLike,
   isAllDates,
