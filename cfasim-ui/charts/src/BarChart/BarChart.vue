@@ -21,6 +21,7 @@ import {
   TICK_LABEL_FONT_SIZE,
   TICK_LABEL_OPACITY,
   LEGEND_FONT_SIZE,
+  pickContrastColor,
   resolveLabelStyle,
   parseDate,
   isAllDates,
@@ -34,6 +35,8 @@ import {
   type ChartTooltipValue,
   type BlendMode,
   type LineMarkStyle,
+  type LabelStyle,
+  type ChartPadding,
 } from "../_shared/index.js";
 
 export type BarChartData = ChartData;
@@ -96,6 +99,66 @@ export interface BarSummaryLine extends LineMarkStyle {
   valueMax?: number;
 }
 
+/** Context passed to a `barLabels.format` function. */
+export interface BarLabelContext {
+  value: number;
+  categoryIndex: number;
+  seriesIndex: number;
+  /** The resolved category label string. */
+  category: string;
+}
+
+/**
+ * Styling and behavior for value labels drawn directly on the bars (an
+ * alternative to reading values off the value axis — see `valueAxis`).
+ * Most useful with `layout="stacked"`, where each segment carries its own
+ * value. Extends `LabelStyle` (`fontSize` / `fontWeight`).
+ */
+export interface BarLabelStyle extends LabelStyle {
+  /**
+   * How to turn a bar's numeric value into label text. A `NumberFormat`
+   * (preset/printf/function), or a function receiving `(value, context)`
+   * for fully custom strings (e.g. `">99%"`). Return `""` to omit a
+   * label. When unset, falls back to `valueTickFormat`, then a default.
+   */
+  format?: NumberFormat | ((value: number, ctx: BarLabelContext) => string);
+  /**
+   * Label text color. `"auto"` (default) picks white or near-black per
+   * segment by the fill's luminance for readable contrast; outside-placed
+   * labels use the chart's text color. Any other CSS color is used as-is
+   * for every label.
+   */
+  color?: string;
+  /**
+   * Where to draw each label. `"auto"` (default) centers it inside the
+   * segment when the text fits, otherwise just past the segment's
+   * high-value edge. `"inside"` / `"outside"` force one placement.
+   */
+  placement?: "auto" | "inside" | "outside";
+  /**
+   * Alignment of an *inside* label along the value axis. `"center"`
+   * (default) centers it in its segment; `"start"` pins it to the
+   * segment's low-value edge (left edge for horizontal bars); `"end"`
+   * pins it to the high-value edge. Outside/overflow labels ignore this
+   * and always sit just past the high-value edge.
+   */
+  align?: "start" | "center" | "end";
+  /**
+   * How to handle labels that would collide along the value axis (common
+   * with many small adjacent segments). `"shift"` (default) nudges them
+   * apart toward higher values; `"hide"` drops the colliding label. Either
+   * way, a label pushed past the chart edge is hidden.
+   */
+  overlap?: "shift" | "hide";
+  /**
+   * Segments smaller than this many pixels (along the value axis) never
+   * get an *inside* label — they fall back to outside placement (or hide,
+   * per `overlap`). Use to suppress labels crammed into thin slivers.
+   * Default 0 (size alone never forces a label out; text fit still does).
+   */
+  minSize?: number;
+}
+
 interface BarChartProps extends ChartCommonProps {
   /** Single-series values. Equivalent to `y`. */
   data?: BarChartData;
@@ -152,6 +215,15 @@ interface BarChartProps extends ChartCommonProps {
   /** Formatter for category-axis labels. Receives the resolved category string. */
   categoryFormat?: (label: string, index: number) => string;
   /**
+   * Alignment of the category labels in horizontal orientation. `"end"`
+   * (default) right-aligns them against the plot's left edge; `"start"`
+   * left-aligns them at the chart's left margin; `"center"` centers them
+   * in the margin. The `categoryHeader`, if set, follows the same
+   * alignment. Ignored in vertical orientation (labels stay centered
+   * under each column).
+   */
+  categoryAlign?: "start" | "center" | "end";
+  /**
    * Date-tick formatter for date-mode category labels (auto-detected
    * when every entry of `categories` parses as a date). Ignored unless
    * the axis is in date mode. Accepts a `DateFormat` — preset name,
@@ -172,6 +244,33 @@ interface BarChartProps extends ChartCommonProps {
    */
   groupGap?: number;
   valueGrid?: boolean;
+  /**
+   * Draw the value axis (its line and tick labels). Default true. Set
+   * false for a clean "value-on-bar" look where each segment is labeled
+   * via `barLabels` and there's no axis to read against.
+   */
+  valueAxis?: boolean;
+  /**
+   * Draw the numeric value directly on each bar instead of (or alongside)
+   * reading it off the value axis. `true` uses defaults; pass a
+   * `BarLabelStyle` to customize formatting, color, placement, and
+   * overlap handling. Most useful with `layout="stacked"`.
+   */
+  barLabels?: boolean | BarLabelStyle;
+  /**
+   * Header drawn above the category labels (e.g. "Scenario"). Aligned to
+   * match the category labels — right-edge-aligned in horizontal
+   * orientation, centered under each column in vertical. Reserves a row
+   * of space above the plot.
+   */
+  categoryHeader?: string;
+  /**
+   * Header drawn above the bars / value area (e.g. "Proportion of
+   * simulations"), left-aligned to where the bars start. Pairs with
+   * `categoryHeader` to label both columns of a value-on-bar chart.
+   * Reserves a row of space above the plot.
+   */
+  valueHeader?: string;
 }
 
 const props = withDefaults(defineProps<BarChartProps>(), {
@@ -184,6 +283,7 @@ const props = withDefaults(defineProps<BarChartProps>(), {
   tooltipClamp: "chart",
   valueGrid: true,
   valueScaleType: "linear",
+  valueAxis: true,
 });
 
 const emit = defineEmits<{
@@ -861,6 +961,27 @@ function pointerToIndex(clientX: number, clientY: number): number | null {
   return Math.max(0, Math.min(n - 1, Math.floor(local / slotSize.value)));
 }
 
+/** Height reserved above the plot for the category/value column headers. */
+const HEADER_ROW_HEIGHT = 22;
+
+const hasHeaders = computed(
+  () => !!(props.categoryHeader || props.valueHeader),
+);
+
+/**
+ * `chartPadding` with extra top room reserved for the column headers when
+ * either is set, so they don't overlap the legend or the plot.
+ */
+const effectiveChartPadding = computed<ChartPadding | undefined>(() => {
+  const extraTop = hasHeaders.value ? HEADER_ROW_HEIGHT : 0;
+  const base = props.chartPadding;
+  if (!extraTop) return base;
+  if (base == null) return { top: extraTop };
+  if (typeof base === "number")
+    return { top: base + extraTop, right: base, bottom: base, left: base };
+  return { ...base, top: (base.top ?? 0) + extraTop };
+});
+
 const {
   containerRef,
   svgRef,
@@ -897,7 +1018,7 @@ const {
   filename: () => props.filename,
   downloadLink: () => props.downloadLink,
   downloadButton: () => props.downloadButton,
-  chartPadding: () => props.chartPadding,
+  chartPadding: () => effectiveChartPadding.value,
   inlineLegendLabels: () => inlineLegendLabels.value,
   hasTooltipSlot: () => hasTooltipSlot.value,
   getCsv: toCsv,
@@ -921,6 +1042,21 @@ const legendResolved = computed(() =>
   resolveLabelStyle(props.legendStyle, { fontSize: LEGEND_FONT_SIZE }),
 );
 
+/** Small inset from the chart's left edge for start-aligned category labels. */
+const CATEGORY_LABEL_INSET = 2;
+
+/**
+ * Left x-anchor for the title and inline legend. When the category labels
+ * are start-aligned (horizontal), the title/legend align to that same left
+ * edge so the whole header column lines up; otherwise they sit at the
+ * plot's left edge.
+ */
+const headerLeftX = computed(() =>
+  props.categoryAlign === "start" && !isVertical.value
+    ? CATEGORY_LABEL_INSET
+    : padding.value.left,
+);
+
 /** Resolved title style with defaults applied. */
 const titleResolved = computed(() => {
   const s = props.titleStyle;
@@ -928,7 +1064,7 @@ const titleResolved = computed(() => {
   const b = bounds.value;
   const x =
     align === "left"
-      ? b.left
+      ? headerLeftX.value
       : align === "right"
         ? b.right
         : b.left + b.width / 2;
@@ -1007,7 +1143,7 @@ const hoverBand = computed(() => {
  */
 const positionedLegendItems = computed(() => {
   const positions = inlineLegendLayout.value.positions;
-  const pad = padding.value.left;
+  const pad = headerLeftX.value;
   const baseY = legendY.value;
   return inlineLegendItems.value.map((item, i) => {
     const pos = positions[i];
@@ -1017,6 +1153,306 @@ const positionedLegendItems = computed(() => {
       y: baseY + pos.row * INLINE_LEGEND_ROW_HEIGHT,
     };
   });
+});
+
+const BAR_LABEL_FONT_SIZE = 11;
+/** Estimated glyph width as a fraction of font size (matches axis logic). */
+const BAR_LABEL_CHAR_WIDTH = 0.6;
+/** Inset of an inside label / offset of an outside label from the edge. */
+const BAR_LABEL_PAD = 4;
+/** Minimum gap between two labels when decluttering. */
+const BAR_LABEL_GAP = 4;
+
+interface ResolvedBarLabels {
+  format?: NumberFormat | ((value: number, ctx: BarLabelContext) => string);
+  color: string;
+  placement: "auto" | "inside" | "outside";
+  align: "start" | "center" | "end";
+  overlap: "shift" | "hide";
+  minSize: number;
+  fontSize: number;
+  fontWeight: number | string | undefined;
+}
+
+const barLabelOptions = computed<ResolvedBarLabels | null>(() => {
+  const b = props.barLabels;
+  if (!b) return null;
+  const o = b === true ? {} : b;
+  return {
+    format: o.format,
+    color: o.color ?? "auto",
+    placement: o.placement ?? "auto",
+    align: o.align ?? "center",
+    overlap: o.overlap ?? "shift",
+    minSize: o.minSize ?? 0,
+    fontSize: o.fontSize ?? BAR_LABEL_FONT_SIZE,
+    fontWeight: o.fontWeight,
+  };
+});
+
+function formatBarLabel(value: number, ctx: BarLabelContext): string {
+  const f = barLabelOptions.value?.format;
+  if (typeof f === "function") return f(value, ctx);
+  if (f !== undefined) return formatNumber(value, f);
+  if (props.valueTickFormat !== undefined)
+    return formatNumber(value, props.valueTickFormat);
+  return formatTick(value);
+}
+
+/**
+ * Fill color of the bar covering pixel (px, py) within category `cat`, or
+ * null when no bar sits there (the chart background). Used to choose a
+ * readable color for a label that overflows onto a neighboring segment.
+ */
+function barColorAt(cat: number, px: number, py: number): string | null {
+  // Iterate in reverse so the topmost (last-drawn) bar wins under overlap.
+  for (let i = bars.value.length - 1; i >= 0; i--) {
+    const b = bars.value[i];
+    if (b.categoryIndex !== cat) continue;
+    if (px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h)
+      return b.color;
+  }
+  return null;
+}
+
+interface BarLabelItem {
+  key: string;
+  x: number;
+  y: number;
+  text: string;
+  anchor: "start" | "middle" | "end";
+  fill: string;
+  fontSize: number;
+  fontWeight: number | string | undefined;
+}
+
+const barLabelItems = computed<BarLabelItem[]>(() => {
+  const opts = barLabelOptions.value;
+  if (!opts) return [];
+  const vertical = isVertical.value;
+  const fontSize = opts.fontSize;
+
+  // Build a draft label per bar, computing its placement (inside vs
+  // outside) and a 1D extent [lo, hi] along the value axis in a
+  // "value-increasing" coordinate `u` (rightward when horizontal, upward
+  // when vertical). Collision resolution then runs per category in `u`.
+  interface Draft {
+    bar: (typeof bars.value)[number];
+    text: string;
+    textLen: number;
+    inside: boolean;
+    cross: number; // fixed coordinate on the categorical axis
+    lo: number; // low-value edge of the text in u
+    hi: number; // high-value edge of the text in u
+    // Horizontal text-anchor for this label (vertical bars always center).
+    svgAnchor: "start" | "middle" | "end";
+    hidden: boolean;
+  }
+
+  const drafts: Draft[] = [];
+  for (const bar of bars.value) {
+    const text = formatBarLabel(bar.value, {
+      value: bar.value,
+      categoryIndex: bar.categoryIndex,
+      seriesIndex: bar.seriesIndex,
+      category:
+        categoryLabels.value[bar.categoryIndex] ?? String(bar.categoryIndex),
+    });
+    if (!text) continue;
+
+    const segSize = vertical ? bar.h : bar.w;
+    const textLen = text.length * fontSize * BAR_LABEL_CHAR_WIDTH;
+    const fits =
+      segSize >= textLen + 2 * BAR_LABEL_PAD && segSize >= opts.minSize;
+    const inside =
+      opts.placement === "inside"
+        ? true
+        : opts.placement === "outside"
+          ? false
+          : fits;
+
+    // `u` increases with value: rightward (x) for horizontal bars, upward
+    // (-y) for vertical bars. The label occupies a span of `len` in u —
+    // its text width when horizontal, its line height when vertical.
+    let lo: number;
+    let hi: number;
+    let cross: number;
+    let svgAnchor: "start" | "middle" | "end" = "middle";
+    const segHiU = vertical ? -bar.y : bar.x + bar.w; // high-value edge
+    const segLoU = vertical ? -(bar.y + bar.h) : bar.x; // low-value edge
+    const len = vertical ? fontSize : textLen;
+    cross = vertical ? bar.x + bar.w / 2 : bar.y + bar.h / 2;
+    if (!inside) {
+      // Just past the high-value edge, growing outward.
+      lo = segHiU + BAR_LABEL_PAD;
+      hi = lo + len;
+      svgAnchor = "start";
+    } else if (opts.align === "start") {
+      lo = segLoU + BAR_LABEL_PAD;
+      hi = lo + len;
+      svgAnchor = "start";
+    } else if (opts.align === "end") {
+      hi = segHiU - BAR_LABEL_PAD;
+      lo = hi - len;
+      svgAnchor = "end";
+    } else {
+      const c = (segHiU + segLoU) / 2;
+      lo = c - len / 2;
+      hi = c + len / 2;
+      svgAnchor = "middle";
+    }
+    drafts.push({
+      bar,
+      text,
+      textLen,
+      inside,
+      cross,
+      lo,
+      hi,
+      svgAnchor,
+      hidden: false,
+    });
+  }
+
+  // Declutter per category along `u`: sweep low→high, pushing or hiding
+  // labels that would overlap the previous one. Bounds keep a pushed label
+  // from sliding off the chart.
+  const uMax = vertical ? -padding.value.top : width.value - 2;
+  const byCategory = new Map<number, Draft[]>();
+  for (const d of drafts) {
+    const arr = byCategory.get(d.bar.categoryIndex);
+    if (arr) arr.push(d);
+    else byCategory.set(d.bar.categoryIndex, [d]);
+  }
+  for (const group of byCategory.values()) {
+    group.sort((a, b) => a.lo - b.lo);
+    let cursor = -Infinity;
+    for (const d of group) {
+      if (d.lo < cursor + BAR_LABEL_GAP) {
+        if (opts.overlap === "hide") {
+          d.hidden = true;
+          continue;
+        }
+        const shift = cursor + BAR_LABEL_GAP - d.lo;
+        d.lo += shift;
+        d.hi += shift;
+        d.inside = false; // a shifted label no longer sits in its segment
+        d.svgAnchor = "start";
+      }
+      if (d.hi > uMax) {
+        d.hidden = true;
+        continue;
+      }
+      cursor = d.hi;
+    }
+  }
+
+  const auto = opts.color === "auto";
+  const items: BarLabelItem[] = [];
+  for (const d of drafts) {
+    if (d.hidden) continue;
+    let x: number;
+    let y: number;
+    let anchor: "start" | "middle" | "end";
+    if (vertical) {
+      // Vertical bars center the text horizontally; align shifted the
+      // [lo, hi] band along the value (y) axis, so render at its center.
+      x = d.cross;
+      y = -((d.lo + d.hi) / 2);
+      anchor = "middle";
+    } else {
+      anchor = d.svgAnchor;
+      x =
+        anchor === "start" ? d.lo : anchor === "end" ? d.hi : (d.lo + d.hi) / 2;
+      y = d.cross;
+    }
+    // Pick contrast against whatever the label actually sits on. Inside
+    // labels are on their own segment; an outside/shifted label commonly
+    // lands on a neighboring segment of the same stack — use that
+    // segment's fill, falling back to the chart background (currentColor)
+    // only when the label clears all bars.
+    let fill: string;
+    if (!auto) {
+      fill = opts.color;
+    } else if (d.inside) {
+      fill = pickContrastColor(d.bar.color);
+    } else {
+      const cx = vertical ? d.cross : (d.lo + d.hi) / 2;
+      const cy = vertical ? -((d.lo + d.hi) / 2) : d.cross;
+      const under = barColorAt(d.bar.categoryIndex, cx, cy);
+      fill = under ? pickContrastColor(under) : "currentColor";
+    }
+    items.push({
+      key: `${d.bar.categoryIndex}-${d.bar.seriesIndex}`,
+      x,
+      y,
+      text: d.text,
+      anchor,
+      fill,
+      fontSize,
+      fontWeight: opts.fontWeight,
+    });
+  }
+  return items;
+});
+
+/**
+ * Anchor + x for the category labels (and matching `categoryHeader`) in
+ * horizontal orientation, driven by `categoryAlign`. Vertical orientation
+ * doesn't use this (labels stay centered under each column).
+ */
+const categoryLabelLayout = computed<{
+  anchor: "start" | "middle" | "end";
+  x: number;
+}>(() => {
+  const right = padding.value.left - 6;
+  switch (props.categoryAlign ?? "end") {
+    case "start":
+      return { anchor: "start", x: CATEGORY_LABEL_INSET };
+    case "center":
+      return { anchor: "middle", x: (CATEGORY_LABEL_INSET + right) / 2 };
+    default:
+      return { anchor: "end", x: right };
+  }
+});
+
+interface ColumnHeader {
+  key: string;
+  text: string;
+  x: number;
+  y: number;
+  anchor: "start" | "middle" | "end";
+}
+
+/**
+ * Positioned column headers (`categoryHeader` / `valueHeader`), drawn in
+ * the reserved row just above the plot. The category header is aligned to
+ * match the category labels; the value header starts where the bars do.
+ */
+const columnHeaders = computed<ColumnHeader[]>(() => {
+  const out: ColumnHeader[] = [];
+  const y = padding.value.top - 7;
+  if (props.valueHeader) {
+    out.push({
+      key: "vh",
+      text: props.valueHeader,
+      x: padding.value.left,
+      y,
+      anchor: "start",
+    });
+  }
+  if (props.categoryHeader) {
+    const horizontal = !isVertical.value;
+    const cat = categoryLabelLayout.value;
+    out.push({
+      key: "ch",
+      text: props.categoryHeader,
+      x: horizontal ? cat.x : padding.value.left,
+      y,
+      anchor: horizontal ? cat.anchor : "start",
+    });
+  }
+  return out;
 });
 </script>
 
@@ -1050,6 +1486,20 @@ const positionedLegendItems = computed(() => {
           {{ line }}
         </tspan>
       </text>
+      <!-- column headers (category / value), in the reserved row above the plot -->
+      <text
+        v-for="h in columnHeaders"
+        :key="h.key"
+        :data-testid="h.key === 'ch' ? 'category-header' : 'value-header'"
+        :x="h.x"
+        :y="h.y"
+        :text-anchor="h.anchor"
+        :font-size="axisLabelResolved.fontSize"
+        :fill="axisLabelResolved.fill"
+        font-weight="600"
+      >
+        {{ h.text }}
+      </text>
       <!-- inline legend -->
       <g v-if="positionedLegendItems.length > 0">
         <template v-for="(item, i) in positionedLegendItems" :key="'ileg' + i">
@@ -1082,8 +1532,9 @@ const positionedLegendItems = computed(() => {
           </text>
         </template>
       </g>
-      <!-- axes -->
+      <!-- axes (the value axis line is suppressed when valueAxis is false) -->
       <line
+        v-if="!isVertical || valueAxis"
         :x1="snap(padding.left)"
         :y1="snap(padding.top)"
         :x2="snap(padding.left)"
@@ -1092,6 +1543,7 @@ const positionedLegendItems = computed(() => {
         stroke-opacity="0.3"
       />
       <line
+        v-if="isVertical || valueAxis"
         :x1="snap(padding.left)"
         :y1="snap(padding.top + innerH)"
         :x2="snap(padding.left + innerW)"
@@ -1100,7 +1552,7 @@ const positionedLegendItems = computed(() => {
         stroke-opacity="0.3"
       />
       <!-- value grid lines -->
-      <template v-if="valueGrid">
+      <template v-if="valueGrid && valueAxis">
         <line
           v-for="(tick, i) in valueTickItems"
           :key="'vg' + i"
@@ -1124,7 +1576,7 @@ const positionedLegendItems = computed(() => {
         pointer-events="none"
       />
       <!-- value tick labels -->
-      <template v-if="isVertical">
+      <template v-if="valueAxis && isVertical">
         <text
           v-for="(tick, i) in valueTickItems"
           :key="'vt' + i"
@@ -1141,7 +1593,7 @@ const positionedLegendItems = computed(() => {
           {{ tick.value }}
         </text>
       </template>
-      <template v-else>
+      <template v-else-if="valueAxis">
         <text
           v-for="(tick, i) in valueTickItems"
           :key="'vt' + i"
@@ -1192,9 +1644,9 @@ const positionedLegendItems = computed(() => {
           v-for="(tick, i) in categoryTickItems"
           :key="'ct' + i"
           data-testid="category-tick"
-          :x="padding.left - 6"
+          :x="categoryLabelLayout.x"
           :y="tick.pos"
-          text-anchor="end"
+          :text-anchor="categoryLabelLayout.anchor"
           dominant-baseline="middle"
           :font-size="tickLabelResolved.fontSize"
           :fill="tickLabelResolved.fill"
@@ -1231,6 +1683,22 @@ const positionedLegendItems = computed(() => {
         :fill-opacity="bar.opacity"
         :style="bar.blendMode ? { mixBlendMode: bar.blendMode } : undefined"
       />
+      <!-- value-on-bar labels -->
+      <text
+        v-for="item in barLabelItems"
+        :key="'blbl' + item.key"
+        data-testid="bar-label"
+        :x="item.x"
+        :y="item.y"
+        :text-anchor="item.anchor"
+        dominant-baseline="middle"
+        :font-size="item.fontSize"
+        :font-weight="item.fontWeight"
+        :fill="item.fill"
+        pointer-events="none"
+      >
+        {{ item.text }}
+      </text>
       <!-- summary lines (drawn above bars, below annotations) -->
       <template v-for="(line, i) in summaryLinesResolved" :key="'sl' + i">
         <path

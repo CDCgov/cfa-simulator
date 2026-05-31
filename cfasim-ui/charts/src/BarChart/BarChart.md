@@ -239,6 +239,134 @@ contrast).
   </template>
 </ComponentDemo>
 
+### Value labels on bars
+
+Set `bar-labels` to write values directly on the bars (pair with
+`:value-axis="false"` for an axis-free look). Pass an options object to tune:
+
+- `format` — a `NumberFormat` or `(value, ctx) => string` (`ctx` has
+  `categoryIndex` / `seriesIndex`); return `""` to drop a label.
+- `align` — `"center"` (default), `"start"`, or `"end"` within the segment.
+- `color` — auto-contrast per segment by default, or a fixed color.
+- Small/overlapping labels overflow past the segment edge and are spread
+  apart (`overlap: "shift"`) or dropped (`overlap: "hide"`).
+
+`category-header` / `value-header` title the two columns, and
+`category-align="start"` left-aligns the category labels.
+
+<ComponentDemo>
+  <BarChart
+    :series="[
+      { data: [99, 88, 50, 1], legend: 'High', color: '#3f1f5e' },
+      { data: [0.5, 10, 30, 20], legend: 'Medium', color: '#8a5fb0' },
+      { data: [0.5, 2, 20, 79], legend: 'Low', color: '#c9aee0' },
+    ]"
+    :categories="['Alpha', 'Beta', 'Gamma', 'Delta']"
+    title="Projected outbreak size by scenario"
+    :title-style="{ fontSize: 16 }"
+    orientation="horizontal"
+    layout="stacked"
+    :value-axis="false"
+    category-header="Scenario"
+    value-header="Proportion of simulations in each category"
+    category-align="start"
+    :height="260"
+    :chart-padding="{ left: 18, right: 64 }"
+    :tick-label-style="{ fontSize: 11, color: 'currentColor' }"
+    :bar-labels="{
+      align: 'start',
+      fontWeight: 600,
+      format: (v, { categoryIndex }) =>
+        v < 1
+          ? '<1%'
+          : categoryIndex === 0
+            ? `${Math.round(v)}%`
+            : String(Math.round(v)),
+    }"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :series="[
+    { data: [99, 88, 50, 1], legend: 'High', color: '#3f1f5e' },
+    { data: [0.5, 10, 30, 20], legend: 'Medium', color: '#8a5fb0' },
+    { data: [0.5, 2, 20, 79], legend: 'Low', color: '#c9aee0' },
+  ]"
+  :categories="['Alpha', 'Beta', 'Gamma', 'Delta']"
+  title="Projected outbreak size by scenario"
+  :title-style="{ fontSize: 16 }"
+  orientation="horizontal"
+  layout="stacked"
+  :value-axis="false"
+  category-header="Scenario"
+  value-header="Proportion of simulations in each category"
+  category-align="start"
+  :height="260"
+  :chart-padding="{ left: 18, right: 64 }"
+  :tick-label-style="{ fontSize: 11, color: 'currentColor' }"
+  :bar-labels="{
+    align: 'start',
+    fontWeight: 600,
+    format: (v, { categoryIndex }) =>
+      v < 1
+        ? '<1%'
+        : categoryIndex === 0
+          ? `${Math.round(v)}%`
+          : String(Math.round(v)),
+  }"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+#### Small segments
+
+A single proportion bar with two tiny tail segments (98% / 1% / 1%). The
+dominant segment labels inside; the two slivers can't fit their text, so the
+labels overflow to the right and the overlap pass spreads them apart instead
+of letting them pile up.
+
+<ComponentDemo>
+  <BarChart
+    :series="[
+      { data: [98], legend: 'Recovered', color: '#3f1f5e' },
+      { data: [1], legend: 'Hospitalized', color: '#8a5fb0' },
+      { data: [1], legend: 'Deceased', color: '#c9aee0' },
+    ]"
+    :categories="['Outcome']"
+    orientation="horizontal"
+    layout="stacked"
+    :value-axis="false"
+    :height="120"
+    :chart-padding="{ left: 60, right: 40 }"
+    :bar-labels="{ format: (v) => `${v}%` }"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :series="[
+    { data: [98], legend: 'Recovered', color: '#3f1f5e' },
+    { data: [1], legend: 'Hospitalized', color: '#8a5fb0' },
+    { data: [1], legend: 'Deceased', color: '#c9aee0' },
+  ]"
+  :categories="['Outcome']"
+  orientation="horizontal"
+  layout="stacked"
+  :value-axis="false"
+  :height="120"
+  :chart-padding="{ left: 60, right: 40 }"
+  :bar-labels="{ format: (v) => `${v}%` }"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Custom value tick format
 
 Use `value-tick-format` to format the value-axis labels. `tooltip-value-format` controls the tooltip values independently; if omitted, the tooltip uses `value-tick-format`.
