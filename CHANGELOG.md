@@ -1,6 +1,16 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.5.1] - 2026-06-02
+
+### Bug Fixes
+
+- **cfasim-ui:** Pin rootDir so dts emits to dist root + add pre-push types check
+
+### Tests
+
+- **cfasim:** Link local cfasim-ui packages in init e2e instead of npm
+
 ## [0.5.0] - 2026-06-02
 
 ### Bug Fixes
