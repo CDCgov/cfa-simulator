@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { execSync, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { existsSync, rmSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, rmSync, mkdtempSync } from "node:fs";
 import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -22,7 +22,12 @@ function cleanProject(name: string) {
 function scaffoldProject(name: string, template: Template) {
   cleanProject(name);
   const dir = resolve(TMP_DIR, name);
-  execSync(`${CLI} init --dir ${dir} --template ${template} --local`);
+  // CFASIM_LOCAL_UI_DIR makes the scaffolded project's pnpm-workspace.yaml add
+  // `overrides` linking the local working-tree cfasim-ui packages, so these
+  // tests exercise the current source instead of whatever is on npm.
+  execSync(`${CLI} init --dir ${dir} --template ${template} --local`, {
+    env: { ...process.env, CFASIM_LOCAL_UI_DIR: ROOT },
+  });
 }
 
 function startVite(
@@ -83,33 +88,17 @@ test.describe("cfasim init", () => {
 
   const procs: ChildProcess[] = [];
 
-  // During release prep the workspace version has been bumped but not yet
-  // published to npm. Scaffolded projects would fail `pnpm install` in that
-  // window — skip the suite until every required package lands on the registry.
-  const uiVersion = JSON.parse(
-    readFileSync(resolve(ROOT, "cfasim-ui/cfasim-ui/package.json"), "utf8"),
-  ).version;
-  const requiredPackages = ["cfasim-ui", "@cfasim-ui/docs"];
-  const missing = requiredPackages.filter((pkg) => {
-    try {
-      const out = execSync(`npm view ${pkg}@${uiVersion} version`, {
-        stdio: ["ignore", "pipe", "ignore"],
-      })
-        .toString()
-        .trim();
-      return out.length === 0;
-    } catch {
-      return true;
-    }
-  });
-
   test.beforeAll(async () => {
-    test.skip(
-      missing.length > 0,
-      `Not yet published at ${uiVersion}: ${missing.join(", ")}. Skipping until release lands`,
-    );
     // Build CLI
     execSync("cargo build -p cfasim", { cwd: ROOT });
+
+    // Build the cfasim-ui packages whose `dist` is consumed via the local
+    // `file:` links injected by CFASIM_LOCAL_UI_DIR (see scaffoldProject); the
+    // rest of the packages ship their `src` directly.
+    execSync(
+      "pnpm --filter @cfasim-ui/components --filter @cfasim-ui/charts run build",
+      { cwd: ROOT, stdio: "pipe" },
+    );
 
     // Scaffold and install each project
     for (const p of projects) {

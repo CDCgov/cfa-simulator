@@ -15,3 +15,4 @@ cfasim-ui/docs/theme/
 # Template source with minijinja conditionals — prettier can't parse {% %} blocks
 cfasim/src/templates/_shared/interactive/src/env.d.ts
 cfasim/src/templates/_shared/interactive/index.html
+cfasim/src/templates/_shared/pnpm-workspace.yaml

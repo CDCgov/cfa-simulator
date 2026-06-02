@@ -9,3 +9,16 @@ allowBuilds:
   vue-demi: false
 ignoredBuiltDependencies:
   - vue-demi
+{% if local_ui_dir %}
+# e2e only: link the local working-tree cfasim-ui packages instead of the
+# published ones, so typecheck/render tests exercise the current source.
+overrides:
+  cfasim-ui: "file:{{ local_ui_dir }}/cfasim-ui/cfasim-ui"
+  "@cfasim-ui/components": "file:{{ local_ui_dir }}/cfasim-ui/components"
+  "@cfasim-ui/charts": "file:{{ local_ui_dir }}/cfasim-ui/charts"
+  "@cfasim-ui/shared": "file:{{ local_ui_dir }}/cfasim-ui/shared"
+  "@cfasim-ui/wasm": "file:{{ local_ui_dir }}/cfasim-ui/wasm"
+  "@cfasim-ui/pyodide": "file:{{ local_ui_dir }}/cfasim-ui/pyodide"
+  "@cfasim-ui/theme": "file:{{ local_ui_dir }}/cfasim-ui/theme"
+  "@cfasim-ui/docs": "file:{{ local_ui_dir }}/cfasim-ui/docs"
+{% endif %}

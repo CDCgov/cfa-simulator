@@ -169,6 +169,11 @@ fn render(
             module_name => to_module_name(name),
             cfasim_version => env!("CARGO_PKG_VERSION"),
             runtime => runtime,
+            // Set by the e2e tests to the cfa-simulator repo root so the
+            // scaffolded project links the local working-tree cfasim-ui
+            // packages (via pnpm `overrides`) instead of the published ones.
+            // Unset for normal `cfasim init`, so the block is omitted.
+            local_ui_dir => std::env::var("CFASIM_LOCAL_UI_DIR").ok(),
         },
     )
 }
