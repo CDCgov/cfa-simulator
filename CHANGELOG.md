@@ -1,6 +1,29 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.5.0] - 2026-06-02
+
+### Bug Fixes
+
+- **ParamEditor:** Don't clobber uncommitted edits on parent re-render
+- **cfasim:** Use engines.pnpm instead of devEngines range in template
+
+### Chores
+
+- Support pnpm 10 and 11, update dependencies
+
+### Features
+
+- Add wrap option for data table
+- **Icon:** Render icons as tree-shakeable inline SVGs, drop webfont
+- **Icon:** Expand default icon set, add github logo, grid docs
+- **BarChart:** Add value-on-bar labels, column headers, and category alignment
+
+### Tests
+
+- **models:** Simplify ixa-example editor toggle test, drop keyboard interaction
+- **size:** Raise components JS limit to 14 KB
+
 ## [0.4.16] - 2026-05-28
 
 ### Documentation
