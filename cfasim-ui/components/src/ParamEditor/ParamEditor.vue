@@ -9,6 +9,9 @@ defineProps<{
   value: ParamEditorValue;
   format?: ParamEditorFormat;
   height?: string;
+  /** Editor font size, as any CSS length (e.g. `"16px"`, `"1rem"`).
+   *  Defaults to `var(--font-size-sm)`. */
+  fontSize?: string;
   /** Basename for the Export download (no extension). Defaults to
    *  `params-YYYYMMDD-HHMMSS` computed at click time. */
   filename?: string;
@@ -33,6 +36,7 @@ const Impl = defineAsyncComponent({
     :value="value"
     :format="format"
     :height="height"
+    :font-size="fontSize"
     :filename="filename"
     @apply="$emit('apply', $event)"
   />
