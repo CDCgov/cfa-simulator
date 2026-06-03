@@ -223,6 +223,10 @@ const props = withDefaults(defineProps<LineChartProps>(), {
   yScaleType: "linear",
 });
 
+// The template root is a <Teleport>, so fallthrough attrs (class, style,
+// data-*, id…) can't auto-inherit — forward them onto the wrapper manually.
+defineOptions({ inheritAttrs: false });
+
 const emit = defineEmits<{
   (e: "hover", payload: ChartHoverPayload): void;
 }>();
@@ -933,6 +937,9 @@ const {
   triggerCsvDownload,
   menuFilename,
   isFullscreen,
+  fullscreenStyle,
+  teleportTarget,
+  exitFullscreen,
 } = useChartFoundation({
   width: () => props.width,
   height: () => props.height,
@@ -947,6 +954,7 @@ const {
   filename: () => props.filename,
   downloadLink: () => props.downloadLink,
   downloadButton: () => props.downloadButton,
+  fullscreenTarget: () => props.fullscreenTarget,
   chartPadding: () => props.chartPadding,
   inlineLegendLabels: () => inlineLegendLabels.value,
   hasTooltipSlot: () => hasTooltipSlot.value,
@@ -1016,54 +1024,335 @@ const positionedLegendItems = computed(() => {
 </script>
 
 <template>
-  <div
-    ref="containerRef"
-    class="line-chart-wrapper"
-    :class="{ 'is-fullscreen': isFullscreen }"
-  >
-    <ChartMenu v-if="menu" :items="menuItems" />
-    <div class="chart-sr-only" aria-live="polite">
-      {{ isFullscreen ? "Chart expanded to fill window" : "" }}
-    </div>
-    <svg ref="svgRef" :width="width" :height="totalHeight">
-      <!-- title -->
-      <text
-        v-if="title"
-        :x="titleResolved.x"
-        :y="titleResolved.lineHeight"
-        :text-anchor="titleResolved.anchor"
-        :font-size="titleResolved.fontSize"
-        :font-weight="titleResolved.fontWeight"
-        :fill="titleResolved.color"
-      >
-        <tspan
-          v-for="(line, i) in titleResolved.lines"
-          :key="i"
+  <Teleport :to="teleportTarget" :disabled="!isFullscreen">
+    <div
+      ref="containerRef"
+      v-bind="$attrs"
+      class="line-chart-wrapper"
+      :class="{ 'is-fullscreen': isFullscreen }"
+      :style="fullscreenStyle"
+    >
+      <ChartMenu
+        v-if="menu"
+        :items="menuItems"
+        :is-fullscreen="isFullscreen"
+        @close="exitFullscreen"
+      />
+      <div class="chart-sr-only" aria-live="polite">
+        {{ isFullscreen ? "Chart expanded to fill window" : "" }}
+      </div>
+      <svg ref="svgRef" :width="width" :height="totalHeight">
+        <!-- title -->
+        <text
+          v-if="title"
           :x="titleResolved.x"
-          :dy="i === 0 ? 0 : titleResolved.lineHeight"
+          :y="titleResolved.lineHeight"
+          :text-anchor="titleResolved.anchor"
+          :font-size="titleResolved.fontSize"
+          :font-weight="titleResolved.fontWeight"
+          :fill="titleResolved.color"
         >
-          {{ line }}
-        </tspan>
-      </text>
-      <!-- inline legend -->
-      <g v-if="positionedLegendItems.length > 0">
-        <template v-for="(item, i) in positionedLegendItems" :key="'ileg' + i">
-          <!-- series indicator: line -->
+          <tspan
+            v-for="(line, i) in titleResolved.lines"
+            :key="i"
+            :x="titleResolved.x"
+            :dy="i === 0 ? 0 : titleResolved.lineHeight"
+          >
+            {{ line }}
+          </tspan>
+        </text>
+        <!-- inline legend -->
+        <g v-if="positionedLegendItems.length > 0">
+          <template
+            v-for="(item, i) in positionedLegendItems"
+            :key="'ileg' + i"
+          >
+            <!-- series indicator: line -->
+            <line
+              v-if="item.type === 'series'"
+              :x1="item.x"
+              :y1="item.y"
+              :x2="item.x + 12"
+              :y2="item.y"
+              :stroke="item.color"
+              stroke-width="2"
+              :stroke-dasharray="item.dashed ? '4 2' : undefined"
+            />
+            <!-- section indicator: filled circle -->
+            <circle
+              v-else
+              :cx="item.x + 4"
+              :cy="item.y"
+              r="4"
+              :fill="item.color"
+              :fill-opacity="item.fillOpacity"
+              :stroke="item.color"
+              stroke-width="1.5"
+            />
+            <text
+              :x="item.x + 18"
+              :y="item.y + 4"
+              :font-size="legendResolved.fontSize"
+              :fill="legendResolved.fill"
+              :font-weight="legendResolved.fontWeight"
+            >
+              {{ item.label }}
+            </text>
+          </template>
+        </g>
+        <!-- axes -->
+        <line
+          :x1="snap(padding.left)"
+          :y1="snap(padding.top)"
+          :x2="snap(padding.left)"
+          :y2="snap(padding.top + innerH)"
+          stroke="currentColor"
+          stroke-opacity="0.3"
+        />
+        <line
+          :x1="snap(padding.left)"
+          :y1="snap(padding.top + innerH)"
+          :x2="snap(padding.left + innerW)"
+          :y2="snap(padding.top + innerH)"
+          stroke="currentColor"
+          stroke-opacity="0.3"
+        />
+        <!-- y grid lines -->
+        <template v-if="yGrid">
           <line
-            v-if="item.type === 'series'"
-            :x1="item.x"
-            :y1="item.y"
-            :x2="item.x + 12"
-            :y2="item.y"
-            :stroke="item.color"
-            stroke-width="2"
-            :stroke-dasharray="item.dashed ? '4 2' : undefined"
+            v-for="(tick, i) in yTickItems"
+            :key="'yg' + i"
+            :x1="padding.left"
+            :y1="tick.y"
+            :x2="padding.left + innerW"
+            :y2="tick.y"
+            stroke="currentColor"
+            stroke-opacity="0.1"
           />
-          <!-- section indicator: filled circle -->
+        </template>
+        <!-- x grid lines -->
+        <template v-if="xGrid">
+          <line
+            v-for="(tick, i) in xTickItems"
+            :key="'xg' + i"
+            :x1="tick.x"
+            :y1="padding.top"
+            :x2="tick.x"
+            :y2="padding.top + innerH"
+            stroke="currentColor"
+            stroke-opacity="0.1"
+          />
+        </template>
+        <!-- y tick labels -->
+        <text
+          v-for="(tick, i) in yTickItems"
+          :key="'y' + i"
+          data-testid="y-tick"
+          :x="padding.left - 6"
+          :y="tick.y"
+          text-anchor="end"
+          dominant-baseline="middle"
+          :font-size="tickLabelResolved.fontSize"
+          :fill="tickLabelResolved.fill"
+          :font-weight="tickLabelResolved.fontWeight"
+          :fill-opacity="tickLabelResolved.fillOpacity"
+        >
+          {{ tick.value }}
+        </text>
+        <!-- y axis label -->
+        <text
+          v-if="yLabel"
+          :x="0"
+          :y="0"
+          :transform="`translate(14, ${padding.top + innerH / 2}) rotate(-90)`"
+          text-anchor="middle"
+          :font-size="axisLabelResolved.fontSize"
+          :fill="axisLabelResolved.fill"
+          :font-weight="axisLabelResolved.fontWeight"
+        >
+          {{ yLabel }}
+        </text>
+        <!-- x tick labels -->
+        <text
+          v-for="(tick, i) in xTickItems"
+          :key="'x' + i"
+          data-testid="x-tick"
+          :x="tick.x"
+          :y="padding.top + innerH + 16"
+          :text-anchor="tick.anchor"
+          :font-size="tickLabelResolved.fontSize"
+          :fill="tickLabelResolved.fill"
+          :font-weight="tickLabelResolved.fontWeight"
+          :fill-opacity="tickLabelResolved.fillOpacity"
+        >
+          {{ tick.value }}
+        </text>
+        <!-- x axis label -->
+        <text
+          v-if="xLabel"
+          :x="padding.left + innerW / 2"
+          :y="height - 4"
+          text-anchor="middle"
+          :font-size="axisLabelResolved.fontSize"
+          :fill="axisLabelResolved.fill"
+          :font-weight="axisLabelResolved.fontWeight"
+        >
+          {{ xLabel }}
+        </text>
+        <!-- areas -->
+        <path
+          v-for="(a, i) in allAreas"
+          :key="'area' + i"
+          :d="toAreaPath(a)"
+          :fill="a.color ?? 'currentColor'"
+          :fill-opacity="a.opacity ?? 0.2"
+          stroke="none"
+        />
+        <!-- data lines and dots -->
+        <template v-for="(s, i) in allSeries" :key="i">
+          <path
+            v-if="s.line !== false && s.outline"
+            :d="toPath(s)"
+            fill="none"
+            stroke="var(--color-bg-0, #fff)"
+            :stroke-width="(s.strokeWidth ?? 1.5) + 4"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            data-testid="line-outline"
+          />
+          <path
+            v-if="s.line !== false"
+            :d="toPath(s)"
+            fill="none"
+            :stroke="s.color ?? 'currentColor'"
+            :stroke-width="s.strokeWidth ?? 1.5"
+            :stroke-opacity="s.lineOpacity ?? s.opacity ?? lineOpacity"
+            :stroke-dasharray="s.dashed ? '6 3' : undefined"
+            :style="s.blendMode ? { mixBlendMode: s.blendMode } : undefined"
+          />
+          <template v-if="s.dots">
+            <circle
+              v-for="(pt, j) in toPoints(s)"
+              :key="j"
+              :cx="pt.x"
+              :cy="pt.y"
+              :r="s.dotRadius ?? (s.strokeWidth ?? 1.5) + 1"
+              :fill="s.dotFill ?? s.color ?? 'currentColor'"
+              :fill-opacity="s.dotOpacity ?? s.opacity ?? lineOpacity"
+              :stroke="s.dotStroke ?? 'none'"
+              :style="s.blendMode ? { mixBlendMode: s.blendMode } : undefined"
+            />
+          </template>
+        </template>
+        <!-- area sections (rendered above series) -->
+        <template v-for="(sec, i) in areaSections ?? []" :key="'areasec' + i">
+          <path
+            :d="toSectionPath(sec)"
+            :fill="
+              sec.color ??
+              (sec.seriesIndex != null
+                ? (allSeries[sec.seriesIndex]?.color ?? 'currentColor')
+                : '#999')
+            "
+            :fill-opacity="sec.opacity ?? 0.15"
+            stroke="none"
+          />
+          <path
+            v-if="sec.seriesIndex != null"
+            :d="toSectionPath(sec, false)"
+            fill="none"
+            :stroke="
+              sec.color ?? allSeries[sec.seriesIndex]?.color ?? 'currentColor'
+            "
+            :stroke-width="sec.strokeWidth ?? 2"
+            :stroke-dasharray="sec.dashed ? '6 3' : undefined"
+          />
+          <!-- vertical edge lines for full-height sections -->
+          <template v-if="sec.seriesIndex == null">
+            <line
+              :x1="snap(sectionXPixel(sec, 'start'))"
+              :y1="padding.top"
+              :x2="snap(sectionXPixel(sec, 'start'))"
+              :y2="padding.top + innerH"
+              :stroke="sec.color ?? '#999'"
+              :stroke-width="sec.strokeWidth ?? 2"
+              :stroke-dasharray="sec.dashed ? '6 3' : undefined"
+            />
+            <line
+              :x1="snap(sectionXPixel(sec, 'end'))"
+              :y1="padding.top"
+              :x2="snap(sectionXPixel(sec, 'end'))"
+              :y2="padding.top + innerH"
+              :stroke="sec.color ?? '#999'"
+              :stroke-width="sec.strokeWidth ?? 2"
+              :stroke-dasharray="sec.dashed ? '6 3' : undefined"
+            />
+          </template>
+          <!-- tick marks at section boundaries -->
+          <line
+            :x1="snap(sectionXPixel(sec, 'start'))"
+            :y1="padding.top + innerH - 4"
+            :x2="snap(sectionXPixel(sec, 'start'))"
+            :y2="padding.top + innerH + 4"
+            stroke="currentColor"
+            stroke-opacity="0.4"
+          />
+          <line
+            :x1="snap(sectionXPixel(sec, 'end'))"
+            :y1="padding.top + innerH - 4"
+            :x2="snap(sectionXPixel(sec, 'end'))"
+            :y2="padding.top + innerH + 4"
+            stroke="currentColor"
+            stroke-opacity="0.4"
+          />
+        </template>
+        <!-- Tooltip: crosshair line -->
+        <line
+          v-if="hasTooltipSlot && hoverIndex !== null"
+          :x1="snap(hoverX)"
+          :y1="padding.top"
+          :x2="snap(hoverX)"
+          :y2="padding.top + innerH"
+          stroke="currentColor"
+          stroke-opacity="0.3"
+          stroke-dasharray="4 2"
+          pointer-events="none"
+        />
+        <!-- Tooltip: hover dots -->
+        <circle
+          v-for="(dot, i) in hoverDots"
+          :key="'hd' + i"
+          :cx="dot.x"
+          :cy="dot.y"
+          r="4"
+          :fill="dot.color"
+          stroke="var(--color-bg-0, #fff)"
+          stroke-width="2"
+          pointer-events="none"
+        />
+        <!-- Tooltip: interaction overlay -->
+        <rect
+          v-if="hasTooltipSlot"
+          :x="padding.left"
+          :y="padding.top"
+          :width="innerW"
+          :height="innerH"
+          fill="transparent"
+          style="cursor: crosshair; touch-action: none"
+          v-on="tooltipHandlers"
+        />
+        <!-- annotations (top layer) -->
+        <ChartAnnotations
+          v-if="annotations && annotations.length > 0"
+          :annotations="annotations"
+          :project="projectAnnotation"
+          :bounds="bounds"
+        />
+        <!-- area section labels -->
+        <g v-for="(item, i) in sectionLabels.labels" :key="'seclab' + i">
           <circle
-            v-else
-            :cx="item.x + 4"
-            :cy="item.y"
+            :cx="item.cx - item.textWidth / 2 - 2"
+            :cy="sectionLabelBaseY + item.row * SECTION_LABEL_ROW_HEIGHT + 4"
             r="4"
             :fill="item.color"
             :fill-opacity="item.fillOpacity"
@@ -1071,350 +1360,81 @@ const positionedLegendItems = computed(() => {
             stroke-width="1.5"
           />
           <text
-            :x="item.x + 18"
-            :y="item.y + 4"
-            :font-size="legendResolved.fontSize"
-            :fill="legendResolved.fill"
-            :font-weight="legendResolved.fontWeight"
+            v-if="item.labelText"
+            :x="item.cx - item.textWidth / 2 + 8"
+            :y="sectionLabelBaseY + item.row * SECTION_LABEL_ROW_HEIGHT + 8"
+            :font-size="item.labelStyle.fontSize"
+            :font-weight="item.labelStyle.fontWeight"
+            :fill="item.labelStyle.fill"
           >
-            {{ item.label }}
+            {{ item.labelText }}
           </text>
-        </template>
-      </g>
-      <!-- axes -->
-      <line
-        :x1="snap(padding.left)"
-        :y1="snap(padding.top)"
-        :x2="snap(padding.left)"
-        :y2="snap(padding.top + innerH)"
-        stroke="currentColor"
-        stroke-opacity="0.3"
-      />
-      <line
-        :x1="snap(padding.left)"
-        :y1="snap(padding.top + innerH)"
-        :x2="snap(padding.left + innerW)"
-        :y2="snap(padding.top + innerH)"
-        stroke="currentColor"
-        stroke-opacity="0.3"
-      />
-      <!-- y grid lines -->
-      <template v-if="yGrid">
-        <line
-          v-for="(tick, i) in yTickItems"
-          :key="'yg' + i"
-          :x1="padding.left"
-          :y1="tick.y"
-          :x2="padding.left + innerW"
-          :y2="tick.y"
-          stroke="currentColor"
-          stroke-opacity="0.1"
-        />
-      </template>
-      <!-- x grid lines -->
-      <template v-if="xGrid">
-        <line
-          v-for="(tick, i) in xTickItems"
-          :key="'xg' + i"
-          :x1="tick.x"
-          :y1="padding.top"
-          :x2="tick.x"
-          :y2="padding.top + innerH"
-          stroke="currentColor"
-          stroke-opacity="0.1"
-        />
-      </template>
-      <!-- y tick labels -->
-      <text
-        v-for="(tick, i) in yTickItems"
-        :key="'y' + i"
-        data-testid="y-tick"
-        :x="padding.left - 6"
-        :y="tick.y"
-        text-anchor="end"
-        dominant-baseline="middle"
-        :font-size="tickLabelResolved.fontSize"
-        :fill="tickLabelResolved.fill"
-        :font-weight="tickLabelResolved.fontWeight"
-        :fill-opacity="tickLabelResolved.fillOpacity"
-      >
-        {{ tick.value }}
-      </text>
-      <!-- y axis label -->
-      <text
-        v-if="yLabel"
-        :x="0"
-        :y="0"
-        :transform="`translate(14, ${padding.top + innerH / 2}) rotate(-90)`"
-        text-anchor="middle"
-        :font-size="axisLabelResolved.fontSize"
-        :fill="axisLabelResolved.fill"
-        :font-weight="axisLabelResolved.fontWeight"
-      >
-        {{ yLabel }}
-      </text>
-      <!-- x tick labels -->
-      <text
-        v-for="(tick, i) in xTickItems"
-        :key="'x' + i"
-        data-testid="x-tick"
-        :x="tick.x"
-        :y="padding.top + innerH + 16"
-        :text-anchor="tick.anchor"
-        :font-size="tickLabelResolved.fontSize"
-        :fill="tickLabelResolved.fill"
-        :font-weight="tickLabelResolved.fontWeight"
-        :fill-opacity="tickLabelResolved.fillOpacity"
-      >
-        {{ tick.value }}
-      </text>
-      <!-- x axis label -->
-      <text
-        v-if="xLabel"
-        :x="padding.left + innerW / 2"
-        :y="height - 4"
-        text-anchor="middle"
-        :font-size="axisLabelResolved.fontSize"
-        :fill="axisLabelResolved.fill"
-        :font-weight="axisLabelResolved.fontWeight"
-      >
-        {{ xLabel }}
-      </text>
-      <!-- areas -->
-      <path
-        v-for="(a, i) in allAreas"
-        :key="'area' + i"
-        :d="toAreaPath(a)"
-        :fill="a.color ?? 'currentColor'"
-        :fill-opacity="a.opacity ?? 0.2"
-        stroke="none"
-      />
-      <!-- data lines and dots -->
-      <template v-for="(s, i) in allSeries" :key="i">
-        <path
-          v-if="s.line !== false && s.outline"
-          :d="toPath(s)"
-          fill="none"
-          stroke="var(--color-bg-0, #fff)"
-          :stroke-width="(s.strokeWidth ?? 1.5) + 4"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          data-testid="line-outline"
-        />
-        <path
-          v-if="s.line !== false"
-          :d="toPath(s)"
-          fill="none"
-          :stroke="s.color ?? 'currentColor'"
-          :stroke-width="s.strokeWidth ?? 1.5"
-          :stroke-opacity="s.lineOpacity ?? s.opacity ?? lineOpacity"
-          :stroke-dasharray="s.dashed ? '6 3' : undefined"
-          :style="s.blendMode ? { mixBlendMode: s.blendMode } : undefined"
-        />
-        <template v-if="s.dots">
-          <circle
-            v-for="(pt, j) in toPoints(s)"
-            :key="j"
-            :cx="pt.x"
-            :cy="pt.y"
-            :r="s.dotRadius ?? (s.strokeWidth ?? 1.5) + 1"
-            :fill="s.dotFill ?? s.color ?? 'currentColor'"
-            :fill-opacity="s.dotOpacity ?? s.opacity ?? lineOpacity"
-            :stroke="s.dotStroke ?? 'none'"
-            :style="s.blendMode ? { mixBlendMode: s.blendMode } : undefined"
-          />
-        </template>
-      </template>
-      <!-- area sections (rendered above series) -->
-      <template v-for="(sec, i) in areaSections ?? []" :key="'areasec' + i">
-        <path
-          :d="toSectionPath(sec)"
-          :fill="
-            sec.color ??
-            (sec.seriesIndex != null
-              ? (allSeries[sec.seriesIndex]?.color ?? 'currentColor')
-              : '#999')
-          "
-          :fill-opacity="sec.opacity ?? 0.15"
-          stroke="none"
-        />
-        <path
-          v-if="sec.seriesIndex != null"
-          :d="toSectionPath(sec, false)"
-          fill="none"
-          :stroke="
-            sec.color ?? allSeries[sec.seriesIndex]?.color ?? 'currentColor'
-          "
-          :stroke-width="sec.strokeWidth ?? 2"
-          :stroke-dasharray="sec.dashed ? '6 3' : undefined"
-        />
-        <!-- vertical edge lines for full-height sections -->
-        <template v-if="sec.seriesIndex == null">
-          <line
-            :x1="snap(sectionXPixel(sec, 'start'))"
-            :y1="padding.top"
-            :x2="snap(sectionXPixel(sec, 'start'))"
-            :y2="padding.top + innerH"
-            :stroke="sec.color ?? '#999'"
-            :stroke-width="sec.strokeWidth ?? 2"
-            :stroke-dasharray="sec.dashed ? '6 3' : undefined"
-          />
-          <line
-            :x1="snap(sectionXPixel(sec, 'end'))"
-            :y1="padding.top"
-            :x2="snap(sectionXPixel(sec, 'end'))"
-            :y2="padding.top + innerH"
-            :stroke="sec.color ?? '#999'"
-            :stroke-width="sec.strokeWidth ?? 2"
-            :stroke-dasharray="sec.dashed ? '6 3' : undefined"
-          />
-        </template>
-        <!-- tick marks at section boundaries -->
-        <line
-          :x1="snap(sectionXPixel(sec, 'start'))"
-          :y1="padding.top + innerH - 4"
-          :x2="snap(sectionXPixel(sec, 'start'))"
-          :y2="padding.top + innerH + 4"
-          stroke="currentColor"
-          stroke-opacity="0.4"
-        />
-        <line
-          :x1="snap(sectionXPixel(sec, 'end'))"
-          :y1="padding.top + innerH - 4"
-          :x2="snap(sectionXPixel(sec, 'end'))"
-          :y2="padding.top + innerH + 4"
-          stroke="currentColor"
-          stroke-opacity="0.4"
-        />
-      </template>
-      <!-- Tooltip: crosshair line -->
-      <line
-        v-if="hasTooltipSlot && hoverIndex !== null"
-        :x1="snap(hoverX)"
-        :y1="padding.top"
-        :x2="snap(hoverX)"
-        :y2="padding.top + innerH"
-        stroke="currentColor"
-        stroke-opacity="0.3"
-        stroke-dasharray="4 2"
-        pointer-events="none"
-      />
-      <!-- Tooltip: hover dots -->
-      <circle
-        v-for="(dot, i) in hoverDots"
-        :key="'hd' + i"
-        :cx="dot.x"
-        :cy="dot.y"
-        r="4"
-        :fill="dot.color"
-        stroke="var(--color-bg-0, #fff)"
-        stroke-width="2"
-        pointer-events="none"
-      />
-      <!-- Tooltip: interaction overlay -->
-      <rect
-        v-if="hasTooltipSlot"
-        :x="padding.left"
-        :y="padding.top"
-        :width="innerW"
-        :height="innerH"
-        fill="transparent"
-        style="cursor: crosshair; touch-action: none"
-        v-on="tooltipHandlers"
-      />
-      <!-- annotations (top layer) -->
-      <ChartAnnotations
-        v-if="annotations && annotations.length > 0"
-        :annotations="annotations"
-        :project="projectAnnotation"
-        :bounds="bounds"
-      />
-      <!-- area section labels -->
-      <g v-for="(item, i) in sectionLabels.labels" :key="'seclab' + i">
-        <circle
-          :cx="item.cx - item.textWidth / 2 - 2"
-          :cy="sectionLabelBaseY + item.row * SECTION_LABEL_ROW_HEIGHT + 4"
-          r="4"
-          :fill="item.color"
-          :fill-opacity="item.fillOpacity"
-          :stroke="item.color"
-          stroke-width="1.5"
-        />
-        <text
-          v-if="item.labelText"
-          :x="item.cx - item.textWidth / 2 + 8"
-          :y="sectionLabelBaseY + item.row * SECTION_LABEL_ROW_HEIGHT + 8"
-          :font-size="item.labelStyle.fontSize"
-          :font-weight="item.labelStyle.fontWeight"
-          :fill="item.labelStyle.fill"
-        >
-          {{ item.labelText }}
-        </text>
-        <text
-          v-if="item.descText"
-          :x="item.cx - item.textWidth / 2 + 8"
-          :y="sectionLabelBaseY + item.row * SECTION_LABEL_ROW_HEIGHT + 22"
-          :font-size="item.descStyle.fontSize"
-          :font-weight="item.descStyle.fontWeight"
-          :fill="item.descStyle.fill"
-          :fill-opacity="item.descStyle.fillOpacity"
-        >
-          {{ item.descText }}
-        </text>
-      </g>
-    </svg>
-    <!-- Tooltip floating content -->
-    <div
-      v-if="hasTooltipSlot && hoverIndex !== null && hoverSlotProps"
-      ref="tooltipRef"
-      class="chart-tooltip-content"
-      :style="{
-        position: 'absolute',
-        top: '0',
-        left: '0',
-        willChange: 'transform',
-        transform: tooltipPos
-          ? `translate3d(${tooltipPos.left}px, ${tooltipPos.top}px, 0) translateY(-50%)`
-          : 'translateY(-50%)',
-        visibility: tooltipPos ? 'visible' : 'hidden',
-      }"
-    >
-      <slot name="tooltip" v-bind="hoverSlotProps">
-        <div class="line-chart-tooltip">
-          <div v-if="hoverSlotProps.xLabel" class="line-chart-tooltip-label">
-            {{ hoverSlotProps.xLabel }}
-          </div>
-          <div
-            v-for="v in hoverSlotProps.values"
-            :key="v.seriesIndex"
-            class="line-chart-tooltip-row"
+          <text
+            v-if="item.descText"
+            :x="item.cx - item.textWidth / 2 + 8"
+            :y="sectionLabelBaseY + item.row * SECTION_LABEL_ROW_HEIGHT + 22"
+            :font-size="item.descStyle.fontSize"
+            :font-weight="item.descStyle.fontWeight"
+            :fill="item.descStyle.fill"
+            :fill-opacity="item.descStyle.fillOpacity"
           >
-            <span
-              class="line-chart-tooltip-swatch"
-              :style="{ background: v.color }"
-            />
-            {{ isFinite(v.value) ? formatTooltipValue(v.value) : "—" }}
+            {{ item.descText }}
+          </text>
+        </g>
+      </svg>
+      <!-- Tooltip floating content -->
+      <div
+        v-if="hasTooltipSlot && hoverIndex !== null && hoverSlotProps"
+        ref="tooltipRef"
+        class="chart-tooltip-content"
+        :style="{
+          position: 'absolute',
+          top: '0',
+          left: '0',
+          willChange: 'transform',
+          transform: tooltipPos
+            ? `translate3d(${tooltipPos.left}px, ${tooltipPos.top}px, 0) translateY(-50%)`
+            : 'translateY(-50%)',
+          visibility: tooltipPos ? 'visible' : 'hidden',
+        }"
+      >
+        <slot name="tooltip" v-bind="hoverSlotProps">
+          <div class="line-chart-tooltip">
+            <div v-if="hoverSlotProps.xLabel" class="line-chart-tooltip-label">
+              {{ hoverSlotProps.xLabel }}
+            </div>
+            <div
+              v-for="v in hoverSlotProps.values"
+              :key="v.seriesIndex"
+              class="line-chart-tooltip-row"
+            >
+              <span
+                class="line-chart-tooltip-swatch"
+                :style="{ background: v.color }"
+              />
+              {{ isFinite(v.value) ? formatTooltipValue(v.value) : "—" }}
+            </div>
           </div>
-        </div>
-      </slot>
+        </slot>
+      </div>
+      <a
+        v-if="downloadLinkText"
+        class="line-chart-download-link"
+        :href="csvHref!"
+        :download="`${menuFilename()}.csv`"
+      >
+        {{ downloadLinkText }}
+      </a>
+      <button
+        v-if="downloadButtonText"
+        type="button"
+        class="line-chart-download-button"
+        @click="triggerCsvDownload"
+      >
+        {{ downloadButtonText }}
+      </button>
     </div>
-    <a
-      v-if="downloadLinkText"
-      class="line-chart-download-link"
-      :href="csvHref!"
-      :download="`${menuFilename()}.csv`"
-    >
-      {{ downloadLinkText }}
-    </a>
-    <button
-      v-if="downloadButtonText"
-      type="button"
-      class="line-chart-download-button"
-      @click="triggerCsvDownload"
-    >
-      {{ downloadButtonText }}
-    </button>
-  </div>
+  </Teleport>
 </template>
 
 <style scoped>

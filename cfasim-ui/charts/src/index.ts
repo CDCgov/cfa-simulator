@@ -1,5 +1,3 @@
-import "./_shared/fullscreen.css";
-
 export {
   default as LineChart,
   type LineChartData,

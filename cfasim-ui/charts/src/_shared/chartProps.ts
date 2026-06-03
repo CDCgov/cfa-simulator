@@ -148,6 +148,16 @@ export interface ChartCommonProps {
    * are set, `downloadButton` wins.
    */
   downloadButton?: boolean | string;
+  /**
+   * Where to teleport the chart while expanded (the Expand menu item). A
+   * CSS selector or element; defaults to `body`. The expanded chart is
+   * moved here so its `position: fixed` resolves against the viewport
+   * instead of being trapped by an ancestor's `transform`/`filter`/
+   * `contain`/`perspective` (which would otherwise become its containing
+   * block) or stacking context. Set this when your app doesn't mount at
+   * the document root (e.g. inside a shadow root or a dedicated overlay).
+   */
+  fullscreenTarget?: string | HTMLElement;
   /** Annotations rendered as the top layer of the chart. */
   annotations?: readonly ChartAnnotation[];
   /**

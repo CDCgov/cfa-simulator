@@ -286,6 +286,10 @@ const props = withDefaults(defineProps<BarChartProps>(), {
   valueAxis: true,
 });
 
+// The template root is a <Teleport>, so fallthrough attrs (class, style,
+// data-*, id…) can't auto-inherit — forward them onto the wrapper manually.
+defineOptions({ inheritAttrs: false });
+
 const emit = defineEmits<{
   (e: "hover", payload: ChartHoverPayload): void;
 }>();
@@ -1004,6 +1008,9 @@ const {
   triggerCsvDownload,
   menuFilename,
   isFullscreen,
+  fullscreenStyle,
+  teleportTarget,
+  exitFullscreen,
 } = useChartFoundation({
   width: () => props.width,
   height: () => props.height,
@@ -1018,6 +1025,7 @@ const {
   filename: () => props.filename,
   downloadLink: () => props.downloadLink,
   downloadButton: () => props.downloadButton,
+  fullscreenTarget: () => props.fullscreenTarget,
   chartPadding: () => effectiveChartPadding.value,
   inlineLegendLabels: () => inlineLegendLabels.value,
   hasTooltipSlot: () => hasTooltipSlot.value,
@@ -1457,349 +1465,363 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
 </script>
 
 <template>
-  <div
-    ref="containerRef"
-    class="bar-chart-wrapper"
-    :class="{ 'is-fullscreen': isFullscreen }"
-  >
-    <ChartMenu v-if="menu" :items="menuItems" />
-    <div class="chart-sr-only" aria-live="polite">
-      {{ isFullscreen ? "Chart expanded to fill window" : "" }}
-    </div>
-    <svg ref="svgRef" :width="width" :height="height">
-      <!-- title -->
-      <text
-        v-if="title"
-        :x="titleResolved.x"
-        :y="titleResolved.lineHeight"
-        :text-anchor="titleResolved.anchor"
-        :font-size="titleResolved.fontSize"
-        :font-weight="titleResolved.fontWeight"
-        :fill="titleResolved.color"
-      >
-        <tspan
-          v-for="(line, i) in titleResolved.lines"
-          :key="i"
+  <Teleport :to="teleportTarget" :disabled="!isFullscreen">
+    <div
+      ref="containerRef"
+      v-bind="$attrs"
+      class="bar-chart-wrapper"
+      :class="{ 'is-fullscreen': isFullscreen }"
+      :style="fullscreenStyle"
+    >
+      <ChartMenu
+        v-if="menu"
+        :items="menuItems"
+        :is-fullscreen="isFullscreen"
+        @close="exitFullscreen"
+      />
+      <div class="chart-sr-only" aria-live="polite">
+        {{ isFullscreen ? "Chart expanded to fill window" : "" }}
+      </div>
+      <svg ref="svgRef" :width="width" :height="height">
+        <!-- title -->
+        <text
+          v-if="title"
           :x="titleResolved.x"
-          :dy="i === 0 ? 0 : titleResolved.lineHeight"
+          :y="titleResolved.lineHeight"
+          :text-anchor="titleResolved.anchor"
+          :font-size="titleResolved.fontSize"
+          :font-weight="titleResolved.fontWeight"
+          :fill="titleResolved.color"
         >
-          {{ line }}
-        </tspan>
-      </text>
-      <!-- column headers (category / value), in the reserved row above the plot -->
-      <text
-        v-for="h in columnHeaders"
-        :key="h.key"
-        :data-testid="h.key === 'ch' ? 'category-header' : 'value-header'"
-        :x="h.x"
-        :y="h.y"
-        :text-anchor="h.anchor"
-        :font-size="axisLabelResolved.fontSize"
-        :fill="axisLabelResolved.fill"
-        font-weight="600"
-      >
-        {{ h.text }}
-      </text>
-      <!-- inline legend -->
-      <g v-if="positionedLegendItems.length > 0">
-        <template v-for="(item, i) in positionedLegendItems" :key="'ileg' + i">
-          <rect
-            v-if="item.kind === 'bar'"
-            :x="item.x"
-            :y="item.y - 5"
-            width="12"
-            height="10"
-            :fill="item.color"
-          />
-          <line
-            v-else
-            :x1="item.x"
-            :y1="item.y"
-            :x2="item.x + 12"
-            :y2="item.y"
-            :stroke="item.color"
-            stroke-width="2"
-            :stroke-dasharray="item.dashed ? '4 2' : undefined"
-          />
-          <text
-            :x="item.x + 18"
-            :y="item.y + 4"
-            :font-size="legendResolved.fontSize"
-            :fill="legendResolved.fill"
-            :font-weight="legendResolved.fontWeight"
+          <tspan
+            v-for="(line, i) in titleResolved.lines"
+            :key="i"
+            :x="titleResolved.x"
+            :dy="i === 0 ? 0 : titleResolved.lineHeight"
           >
-            {{ item.label }}
+            {{ line }}
+          </tspan>
+        </text>
+        <!-- column headers (category / value), in the reserved row above the plot -->
+        <text
+          v-for="h in columnHeaders"
+          :key="h.key"
+          :data-testid="h.key === 'ch' ? 'category-header' : 'value-header'"
+          :x="h.x"
+          :y="h.y"
+          :text-anchor="h.anchor"
+          :font-size="axisLabelResolved.fontSize"
+          :fill="axisLabelResolved.fill"
+          font-weight="600"
+        >
+          {{ h.text }}
+        </text>
+        <!-- inline legend -->
+        <g v-if="positionedLegendItems.length > 0">
+          <template
+            v-for="(item, i) in positionedLegendItems"
+            :key="'ileg' + i"
+          >
+            <rect
+              v-if="item.kind === 'bar'"
+              :x="item.x"
+              :y="item.y - 5"
+              width="12"
+              height="10"
+              :fill="item.color"
+            />
+            <line
+              v-else
+              :x1="item.x"
+              :y1="item.y"
+              :x2="item.x + 12"
+              :y2="item.y"
+              :stroke="item.color"
+              stroke-width="2"
+              :stroke-dasharray="item.dashed ? '4 2' : undefined"
+            />
+            <text
+              :x="item.x + 18"
+              :y="item.y + 4"
+              :font-size="legendResolved.fontSize"
+              :fill="legendResolved.fill"
+              :font-weight="legendResolved.fontWeight"
+            >
+              {{ item.label }}
+            </text>
+          </template>
+        </g>
+        <!-- axes (the value axis line is suppressed when valueAxis is false) -->
+        <line
+          v-if="!isVertical || valueAxis"
+          :x1="snap(padding.left)"
+          :y1="snap(padding.top)"
+          :x2="snap(padding.left)"
+          :y2="snap(padding.top + innerH)"
+          stroke="currentColor"
+          stroke-opacity="0.3"
+        />
+        <line
+          v-if="isVertical || valueAxis"
+          :x1="snap(padding.left)"
+          :y1="snap(padding.top + innerH)"
+          :x2="snap(padding.left + innerW)"
+          :y2="snap(padding.top + innerH)"
+          stroke="currentColor"
+          stroke-opacity="0.3"
+        />
+        <!-- value grid lines -->
+        <template v-if="valueGrid && valueAxis">
+          <line
+            v-for="(tick, i) in valueTickItems"
+            :key="'vg' + i"
+            :x1="isVertical ? padding.left : tick.pos"
+            :y1="isVertical ? tick.pos : padding.top"
+            :x2="isVertical ? padding.left + innerW : tick.pos"
+            :y2="isVertical ? tick.pos : padding.top + innerH"
+            stroke="currentColor"
+            stroke-opacity="0.1"
+          />
+        </template>
+        <!-- hover highlight band (rendered behind bars) -->
+        <rect
+          v-if="hoverBand && hasTooltipSlot"
+          :x="hoverBand.x"
+          :y="hoverBand.y"
+          :width="hoverBand.w"
+          :height="hoverBand.h"
+          fill="currentColor"
+          fill-opacity="0.06"
+          pointer-events="none"
+        />
+        <!-- value tick labels -->
+        <template v-if="valueAxis && isVertical">
+          <text
+            v-for="(tick, i) in valueTickItems"
+            :key="'vt' + i"
+            data-testid="value-tick"
+            :x="padding.left - 6"
+            :y="tick.pos"
+            text-anchor="end"
+            dominant-baseline="middle"
+            :font-size="tickLabelResolved.fontSize"
+            :fill="tickLabelResolved.fill"
+            :font-weight="tickLabelResolved.fontWeight"
+            :fill-opacity="tickLabelResolved.fillOpacity"
+          >
+            {{ tick.value }}
           </text>
         </template>
-      </g>
-      <!-- axes (the value axis line is suppressed when valueAxis is false) -->
-      <line
-        v-if="!isVertical || valueAxis"
-        :x1="snap(padding.left)"
-        :y1="snap(padding.top)"
-        :x2="snap(padding.left)"
-        :y2="snap(padding.top + innerH)"
-        stroke="currentColor"
-        stroke-opacity="0.3"
-      />
-      <line
-        v-if="isVertical || valueAxis"
-        :x1="snap(padding.left)"
-        :y1="snap(padding.top + innerH)"
-        :x2="snap(padding.left + innerW)"
-        :y2="snap(padding.top + innerH)"
-        stroke="currentColor"
-        stroke-opacity="0.3"
-      />
-      <!-- value grid lines -->
-      <template v-if="valueGrid && valueAxis">
-        <line
-          v-for="(tick, i) in valueTickItems"
-          :key="'vg' + i"
-          :x1="isVertical ? padding.left : tick.pos"
-          :y1="isVertical ? tick.pos : padding.top"
-          :x2="isVertical ? padding.left + innerW : tick.pos"
-          :y2="isVertical ? tick.pos : padding.top + innerH"
-          stroke="currentColor"
-          stroke-opacity="0.1"
-        />
-      </template>
-      <!-- hover highlight band (rendered behind bars) -->
-      <rect
-        v-if="hoverBand && hasTooltipSlot"
-        :x="hoverBand.x"
-        :y="hoverBand.y"
-        :width="hoverBand.w"
-        :height="hoverBand.h"
-        fill="currentColor"
-        fill-opacity="0.06"
-        pointer-events="none"
-      />
-      <!-- value tick labels -->
-      <template v-if="valueAxis && isVertical">
+        <template v-else-if="valueAxis">
+          <text
+            v-for="(tick, i) in valueTickItems"
+            :key="'vt' + i"
+            data-testid="value-tick"
+            :x="tick.pos"
+            :y="padding.top + innerH + 16"
+            text-anchor="middle"
+            :font-size="tickLabelResolved.fontSize"
+            :fill="tickLabelResolved.fill"
+            :font-weight="tickLabelResolved.fontWeight"
+            :fill-opacity="tickLabelResolved.fillOpacity"
+          >
+            {{ tick.value }}
+          </text>
+        </template>
+        <!-- y axis label -->
         <text
-          v-for="(tick, i) in valueTickItems"
-          :key="'vt' + i"
-          data-testid="value-tick"
-          :x="padding.left - 6"
-          :y="tick.pos"
-          text-anchor="end"
-          dominant-baseline="middle"
-          :font-size="tickLabelResolved.fontSize"
-          :fill="tickLabelResolved.fill"
-          :font-weight="tickLabelResolved.fontWeight"
-          :fill-opacity="tickLabelResolved.fillOpacity"
-        >
-          {{ tick.value }}
-        </text>
-      </template>
-      <template v-else-if="valueAxis">
-        <text
-          v-for="(tick, i) in valueTickItems"
-          :key="'vt' + i"
-          data-testid="value-tick"
-          :x="tick.pos"
-          :y="padding.top + innerH + 16"
+          v-if="yLabel"
+          :x="0"
+          :y="0"
+          :transform="`translate(14, ${padding.top + innerH / 2}) rotate(-90)`"
           text-anchor="middle"
-          :font-size="tickLabelResolved.fontSize"
-          :fill="tickLabelResolved.fill"
-          :font-weight="tickLabelResolved.fontWeight"
-          :fill-opacity="tickLabelResolved.fillOpacity"
+          :font-size="axisLabelResolved.fontSize"
+          :fill="axisLabelResolved.fill"
+          :font-weight="axisLabelResolved.fontWeight"
         >
-          {{ tick.value }}
+          {{ yLabel }}
         </text>
-      </template>
-      <!-- y axis label -->
-      <text
-        v-if="yLabel"
-        :x="0"
-        :y="0"
-        :transform="`translate(14, ${padding.top + innerH / 2}) rotate(-90)`"
-        text-anchor="middle"
-        :font-size="axisLabelResolved.fontSize"
-        :fill="axisLabelResolved.fill"
-        :font-weight="axisLabelResolved.fontWeight"
-      >
-        {{ yLabel }}
-      </text>
-      <!-- category tick labels -->
-      <template v-if="isVertical">
+        <!-- category tick labels -->
+        <template v-if="isVertical">
+          <text
+            v-for="(tick, i) in categoryTickItems"
+            :key="'ct' + i"
+            data-testid="category-tick"
+            :x="tick.pos"
+            :y="padding.top + innerH + 16"
+            :text-anchor="tick.anchor"
+            :font-size="tickLabelResolved.fontSize"
+            :fill="tickLabelResolved.fill"
+            :font-weight="tickLabelResolved.fontWeight"
+            :fill-opacity="tickLabelResolved.fillOpacity"
+          >
+            {{ tick.label }}
+          </text>
+        </template>
+        <template v-else>
+          <text
+            v-for="(tick, i) in categoryTickItems"
+            :key="'ct' + i"
+            data-testid="category-tick"
+            :x="categoryLabelLayout.x"
+            :y="tick.pos"
+            :text-anchor="categoryLabelLayout.anchor"
+            dominant-baseline="middle"
+            :font-size="tickLabelResolved.fontSize"
+            :fill="tickLabelResolved.fill"
+            :font-weight="tickLabelResolved.fontWeight"
+            :fill-opacity="tickLabelResolved.fillOpacity"
+          >
+            {{ tick.label }}
+          </text>
+        </template>
+        <!-- x axis label -->
         <text
-          v-for="(tick, i) in categoryTickItems"
-          :key="'ct' + i"
-          data-testid="category-tick"
-          :x="tick.pos"
-          :y="padding.top + innerH + 16"
-          :text-anchor="tick.anchor"
-          :font-size="tickLabelResolved.fontSize"
-          :fill="tickLabelResolved.fill"
-          :font-weight="tickLabelResolved.fontWeight"
-          :fill-opacity="tickLabelResolved.fillOpacity"
+          v-if="xLabel"
+          :x="padding.left + innerW / 2"
+          :y="height - 4"
+          text-anchor="middle"
+          :font-size="axisLabelResolved.fontSize"
+          :fill="axisLabelResolved.fill"
+          :font-weight="axisLabelResolved.fontWeight"
         >
-          {{ tick.label }}
+          {{ xLabel }}
         </text>
-      </template>
-      <template v-else>
-        <text
-          v-for="(tick, i) in categoryTickItems"
-          :key="'ct' + i"
-          data-testid="category-tick"
-          :x="categoryLabelLayout.x"
-          :y="tick.pos"
-          :text-anchor="categoryLabelLayout.anchor"
-          dominant-baseline="middle"
-          :font-size="tickLabelResolved.fontSize"
-          :fill="tickLabelResolved.fill"
-          :font-weight="tickLabelResolved.fontWeight"
-          :fill-opacity="tickLabelResolved.fillOpacity"
-        >
-          {{ tick.label }}
-        </text>
-      </template>
-      <!-- x axis label -->
-      <text
-        v-if="xLabel"
-        :x="padding.left + innerW / 2"
-        :y="height - 4"
-        text-anchor="middle"
-        :font-size="axisLabelResolved.fontSize"
-        :fill="axisLabelResolved.fill"
-        :font-weight="axisLabelResolved.fontWeight"
-      >
-        {{ xLabel }}
-      </text>
-      <!-- bars -->
-      <rect
-        v-for="(bar, i) in bars"
-        :key="'bar' + i"
-        data-testid="bar"
-        :data-category="bar.categoryIndex"
-        :data-series="bar.seriesIndex"
-        :x="bar.x"
-        :y="bar.y"
-        :width="bar.w"
-        :height="bar.h"
-        :fill="bar.color"
-        :fill-opacity="bar.opacity"
-        :style="bar.blendMode ? { mixBlendMode: bar.blendMode } : undefined"
-      />
-      <!-- value-on-bar labels -->
-      <text
-        v-for="item in barLabelItems"
-        :key="'blbl' + item.key"
-        data-testid="bar-label"
-        :x="item.x"
-        :y="item.y"
-        :text-anchor="item.anchor"
-        dominant-baseline="middle"
-        :font-size="item.fontSize"
-        :font-weight="item.fontWeight"
-        :fill="item.fill"
-        pointer-events="none"
-      >
-        {{ item.text }}
-      </text>
-      <!-- summary lines (drawn above bars, below annotations) -->
-      <template v-for="(line, i) in summaryLinesResolved" :key="'sl' + i">
-        <path
-          v-if="line.pathD"
-          data-testid="summary-line"
-          :d="line.pathD"
-          fill="none"
-          :stroke="line.color"
-          :stroke-width="line.strokeWidth"
-          :stroke-opacity="line.opacity"
-          :stroke-dasharray="line.dashed ? '6 3' : undefined"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          :style="line.blendMode ? { mixBlendMode: line.blendMode } : undefined"
+        <!-- bars -->
+        <rect
+          v-for="(bar, i) in bars"
+          :key="'bar' + i"
+          data-testid="bar"
+          :data-category="bar.categoryIndex"
+          :data-series="bar.seriesIndex"
+          :x="bar.x"
+          :y="bar.y"
+          :width="bar.w"
+          :height="bar.h"
+          :fill="bar.color"
+          :fill-opacity="bar.opacity"
+          :style="bar.blendMode ? { mixBlendMode: bar.blendMode } : undefined"
         />
-        <template v-if="line.dots">
-          <circle
-            v-for="(pt, j) in line.points"
-            :key="'sld' + i + '-' + j"
-            :cx="pt.x"
-            :cy="pt.y"
-            :r="line.dotRadius"
-            :fill="line.color"
-            :fill-opacity="line.opacity"
+        <!-- value-on-bar labels -->
+        <text
+          v-for="item in barLabelItems"
+          :key="'blbl' + item.key"
+          data-testid="bar-label"
+          :x="item.x"
+          :y="item.y"
+          :text-anchor="item.anchor"
+          dominant-baseline="middle"
+          :font-size="item.fontSize"
+          :font-weight="item.fontWeight"
+          :fill="item.fill"
+          pointer-events="none"
+        >
+          {{ item.text }}
+        </text>
+        <!-- summary lines (drawn above bars, below annotations) -->
+        <template v-for="(line, i) in summaryLinesResolved" :key="'sl' + i">
+          <path
+            v-if="line.pathD"
+            data-testid="summary-line"
+            :d="line.pathD"
+            fill="none"
+            :stroke="line.color"
+            :stroke-width="line.strokeWidth"
+            :stroke-opacity="line.opacity"
+            :stroke-dasharray="line.dashed ? '6 3' : undefined"
+            stroke-linecap="round"
+            stroke-linejoin="round"
             :style="
               line.blendMode ? { mixBlendMode: line.blendMode } : undefined
             "
           />
-        </template>
-      </template>
-      <!-- Tooltip: interaction overlay -->
-      <rect
-        v-if="hasTooltipSlot"
-        :x="padding.left"
-        :y="padding.top"
-        :width="innerW"
-        :height="innerH"
-        fill="transparent"
-        style="cursor: crosshair; touch-action: none"
-        v-on="tooltipHandlers"
-      />
-      <!-- annotations (top layer) -->
-      <ChartAnnotations
-        v-if="annotations && annotations.length > 0"
-        :annotations="annotations"
-        :project="projectAnnotation"
-        :bounds="bounds"
-      />
-    </svg>
-    <!-- Tooltip floating content -->
-    <div
-      v-if="hasTooltipSlot && hoverIndex !== null && hoverSlotProps"
-      ref="tooltipRef"
-      class="chart-tooltip-content"
-      :style="{
-        position: 'absolute',
-        top: '0',
-        left: '0',
-        willChange: 'transform',
-        transform: tooltipPos
-          ? `translate3d(${tooltipPos.left}px, ${tooltipPos.top}px, 0) translateY(-50%)`
-          : 'translateY(-50%)',
-        visibility: tooltipPos ? 'visible' : 'hidden',
-      }"
-    >
-      <slot name="tooltip" v-bind="hoverSlotProps">
-        <div class="bar-chart-tooltip">
-          <div v-if="hoveredCategoryLabel" class="bar-chart-tooltip-label">
-            {{ hoveredCategoryLabel }}
-          </div>
-          <div
-            v-for="v in hoverSlotProps.values"
-            :key="v.seriesIndex"
-            class="bar-chart-tooltip-row"
-          >
-            <span
-              class="bar-chart-tooltip-swatch"
-              :style="{ background: v.color }"
+          <template v-if="line.dots">
+            <circle
+              v-for="(pt, j) in line.points"
+              :key="'sld' + i + '-' + j"
+              :cx="pt.x"
+              :cy="pt.y"
+              :r="line.dotRadius"
+              :fill="line.color"
+              :fill-opacity="line.opacity"
+              :style="
+                line.blendMode ? { mixBlendMode: line.blendMode } : undefined
+              "
             />
-            {{ isFinite(v.value) ? formatTooltipValue(v.value) : "—" }}
+          </template>
+        </template>
+        <!-- Tooltip: interaction overlay -->
+        <rect
+          v-if="hasTooltipSlot"
+          :x="padding.left"
+          :y="padding.top"
+          :width="innerW"
+          :height="innerH"
+          fill="transparent"
+          style="cursor: crosshair; touch-action: none"
+          v-on="tooltipHandlers"
+        />
+        <!-- annotations (top layer) -->
+        <ChartAnnotations
+          v-if="annotations && annotations.length > 0"
+          :annotations="annotations"
+          :project="projectAnnotation"
+          :bounds="bounds"
+        />
+      </svg>
+      <!-- Tooltip floating content -->
+      <div
+        v-if="hasTooltipSlot && hoverIndex !== null && hoverSlotProps"
+        ref="tooltipRef"
+        class="chart-tooltip-content"
+        :style="{
+          position: 'absolute',
+          top: '0',
+          left: '0',
+          willChange: 'transform',
+          transform: tooltipPos
+            ? `translate3d(${tooltipPos.left}px, ${tooltipPos.top}px, 0) translateY(-50%)`
+            : 'translateY(-50%)',
+          visibility: tooltipPos ? 'visible' : 'hidden',
+        }"
+      >
+        <slot name="tooltip" v-bind="hoverSlotProps">
+          <div class="bar-chart-tooltip">
+            <div v-if="hoveredCategoryLabel" class="bar-chart-tooltip-label">
+              {{ hoveredCategoryLabel }}
+            </div>
+            <div
+              v-for="v in hoverSlotProps.values"
+              :key="v.seriesIndex"
+              class="bar-chart-tooltip-row"
+            >
+              <span
+                class="bar-chart-tooltip-swatch"
+                :style="{ background: v.color }"
+              />
+              {{ isFinite(v.value) ? formatTooltipValue(v.value) : "—" }}
+            </div>
           </div>
-        </div>
-      </slot>
+        </slot>
+      </div>
+      <a
+        v-if="downloadLinkText"
+        class="bar-chart-download-link"
+        :href="csvHref!"
+        :download="`${menuFilename()}.csv`"
+      >
+        {{ downloadLinkText }}
+      </a>
+      <button
+        v-if="downloadButtonText"
+        type="button"
+        class="bar-chart-download-button"
+        @click="triggerCsvDownload"
+      >
+        {{ downloadButtonText }}
+      </button>
     </div>
-    <a
-      v-if="downloadLinkText"
-      class="bar-chart-download-link"
-      :href="csvHref!"
-      :download="`${menuFilename()}.csv`"
-    >
-      {{ downloadLinkText }}
-    </a>
-    <button
-      v-if="downloadButtonText"
-      type="button"
-      class="bar-chart-download-button"
-      @click="triggerCsvDownload"
-    >
-      {{ downloadButtonText }}
-    </button>
-  </div>
+  </Teleport>
 </template>
 
 <style scoped>

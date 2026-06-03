@@ -932,10 +932,17 @@ positioned from the anchor as usual via `offset`.
 
 ### Chart menu
 
-The chart menu (top-right) leads with Expand / Collapse and then Save as SVG,
-Save as PNG, and Download CSV. Expand grows the chart to fill the browser
-window so the plot has more room; press <kbd>Esc</kbd> or pick "Collapse" to
-return to the inline size. Set `menu="false"` to hide the trigger entirely.
+The chart menu (top-right) leads with Fullscreen and then Save as SVG,
+Save as PNG, and Download CSV. Fullscreen grows the chart to fill the browser
+window so the plot has more room; while expanded the menu trigger is replaced
+by a close (✕) button — click it or press <kbd>Esc</kbd> to return to the
+inline size. Set `menu="false"` to hide the trigger entirely.
+
+While expanded the chart is teleported to `<body>` so it reliably covers the
+viewport even when an ancestor uses `transform`, `filter`, `contain`, or
+establishes a stacking context. If your app doesn't mount at the document root
+(e.g. inside a shadow root or a dedicated overlay container), point
+`fullscreenTarget` at a CSS selector or element to teleport there instead.
 
 ### Custom CSV download
 
