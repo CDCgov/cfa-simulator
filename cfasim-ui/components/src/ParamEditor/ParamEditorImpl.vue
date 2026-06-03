@@ -27,9 +27,10 @@ const props = withDefaults(
     value: Value;
     format?: Format;
     height?: string;
+    fontSize?: string;
     filename?: string;
   }>(),
-  { format: "json", height: "320px" },
+  { format: "json", height: "320px", fontSize: "var(--font-size-sm)" },
 );
 
 const emit = defineEmits<{ apply: [value: Value] }>();
@@ -264,7 +265,7 @@ async function onFileChange(e: Event) {
     <Codemirror
       v-model="text"
       :extensions="extensions"
-      :style="{ height }"
+      :style="{ height, fontSize }"
       :indent-with-tab="false"
       :tab-size="2"
       class="param-editor-cm"
@@ -317,7 +318,6 @@ async function onFileChange(e: Event) {
 .param-editor-cm {
   border: 1px solid var(--color-border);
   border-radius: 0.375em;
-  font-size: var(--font-size-sm);
   overflow: hidden;
 }
 

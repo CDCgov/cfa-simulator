@@ -13,6 +13,8 @@ The editor is **lazy-loaded**: the underlying CodeMirror bundle and YAML/TOML pa
 
 Users can switch formats from the dropdown; the editor round-trips the current value through the new format. Apply emits an `apply` event with the parsed value — the parent decides what to do with it (typically merge back into its own parameter state).
 
+Set the editor font size with the `fontSize` prop (any CSS length, e.g. `"16px"` or `"1rem"`); it defaults to `var(--font-size-sm)`.
+
 ## Examples
 
 <script setup>
@@ -61,6 +63,22 @@ function onApply(v) {
 
 ```vue
 <ParamEditor :value="params" format="yaml" @apply="onApply" />
+```
+
+  </template>
+</ComponentDemo>
+
+### Custom font size
+
+<ComponentDemo>
+  <div style="width: 100%">
+    <ParamEditor :value="params" font-size="16px" @apply="onApply" />
+  </div>
+
+<template #code>
+
+```vue
+<ParamEditor :value="params" font-size="16px" @apply="onApply" />
 ```
 
   </template>
