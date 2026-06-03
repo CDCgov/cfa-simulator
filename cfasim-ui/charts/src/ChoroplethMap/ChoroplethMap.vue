@@ -174,6 +174,15 @@ const props = withDefaults(
     focus?: FocusValue;
     /** Scale factor applied when `focus` is set. Default: 4 */
     focusZoomLevel?: number;
+    /**
+     * Where to teleport the map while expanded (the Expand menu item). A
+     * CSS selector or element; defaults to `body`. Moving it to the
+     * document root keeps `position: fixed` resolving against the viewport
+     * instead of being trapped by an ancestor's `transform`/`filter`/
+     * `contain`/`perspective` or stacking context. Set this when your app
+     * doesn't mount at the document root.
+     */
+    fullscreenTarget?: string | HTMLElement;
   }>(),
   {
     geoType: "states",
@@ -188,6 +197,10 @@ const props = withDefaults(
     focusZoomLevel: 4,
   },
 );
+
+// The template root is a <Teleport>, so fallthrough attrs (class, style,
+// data-*, id…) can't auto-inherit — forward them onto the wrapper manually.
+defineOptions({ inheritAttrs: false });
 
 const emit = defineEmits<{
   (
@@ -1372,7 +1385,9 @@ const gradientCss = computed(() => {
   return `linear-gradient(to right, ${stops})`;
 });
 
-const fullscreen = useChartFullscreen();
+const fullscreen = useChartFullscreen({
+  target: () => props.fullscreenTarget,
+});
 
 const menuItems = computed<ChartMenuItem[]>(() => {
   const fname = menuFilename();
@@ -1439,70 +1454,81 @@ watch(
 </script>
 
 <template>
-  <div
-    ref="containerRef"
-    :class="[
-      'choropleth-wrapper',
-      { pannable: pan, 'is-fullscreen': fullscreen.isFullscreen.value },
-    ]"
+  <Teleport
+    :to="fullscreen.teleportTarget.value"
+    :disabled="!fullscreen.isFullscreen.value"
   >
-    <ChartMenu v-if="menu" :items="menuItems" />
-    <div class="chart-sr-only" aria-live="polite">
-      {{ fullscreen.isFullscreen.value ? "Map expanded to fill window" : "" }}
-    </div>
-    <!--
+    <div
+      ref="containerRef"
+      v-bind="$attrs"
+      :class="[
+        'choropleth-wrapper',
+        { pannable: pan, 'is-fullscreen': fullscreen.isFullscreen.value },
+      ]"
+      :style="fullscreen.fullscreenStyle.value"
+    >
+      <ChartMenu
+        v-if="menu"
+        :items="menuItems"
+        :is-fullscreen="fullscreen.isFullscreen.value"
+        @close="fullscreen.exit"
+      />
+      <div class="chart-sr-only" aria-live="polite">
+        {{ fullscreen.isFullscreen.value ? "Map expanded to fill window" : "" }}
+      </div>
+      <!--
       Title + legend live as an HTML overlay on top of the SVG so they keep
       their intrinsic px sizes regardless of how the browser scales the
       viewBox to fit the container.
     -->
-    <div v-if="title || showLegend" class="choropleth-header">
-      <div v-if="title" class="choropleth-title" :style="titleInlineStyle">
-        {{ title }}
-      </div>
-      <div
-        v-if="showLegend"
-        class="choropleth-legend"
-        :style="legendInlineStyle"
-      >
-        <span v-if="legendTitle" class="choropleth-legend-title">
-          {{ legendTitle }}
-        </span>
-        <template v-if="isCategorical || isThreshold">
-          <span
-            v-for="item in discreteLegendItems"
-            :key="item.key"
-            class="choropleth-legend-item"
-          >
-            <span
-              class="choropleth-legend-swatch"
-              :style="{ background: item.color }"
-            />
-            {{ item.label }}
+      <div v-if="title || showLegend" class="choropleth-header">
+        <div v-if="title" class="choropleth-title" :style="titleInlineStyle">
+          {{ title }}
+        </div>
+        <div
+          v-if="showLegend"
+          class="choropleth-legend"
+          :style="legendInlineStyle"
+        >
+          <span v-if="legendTitle" class="choropleth-legend-title">
+            {{ legendTitle }}
           </span>
-        </template>
-        <div v-else class="choropleth-legend-continuous">
-          <div
-            class="choropleth-legend-gradient"
-            :style="{ background: gradientCss }"
-          />
-          <div class="choropleth-legend-ticks">
+          <template v-if="isCategorical || isThreshold">
             <span
-              v-for="tick in continuousTicks"
-              :key="tick.value"
-              :style="{ left: tick.pct + '%' }"
+              v-for="item in discreteLegendItems"
+              :key="item.key"
+              class="choropleth-legend-item"
             >
-              {{ tick.value }}
+              <span
+                class="choropleth-legend-swatch"
+                :style="{ background: item.color }"
+              />
+              {{ item.label }}
             </span>
+          </template>
+          <div v-else class="choropleth-legend-continuous">
+            <div
+              class="choropleth-legend-gradient"
+              :style="{ background: gradientCss }"
+            />
+            <div class="choropleth-legend-ticks">
+              <span
+                v-for="tick in continuousTicks"
+                :key="tick.value"
+                :style="{ left: tick.pct + '%' }"
+              >
+                {{ tick.value }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-    <svg
-      ref="svgRef"
-      :viewBox="`0 0 ${width} ${height}`"
-      preserveAspectRatio="xMidYMid meet"
-    >
-      <!--
+      <svg
+        ref="svgRef"
+        :viewBox="`0 0 ${width} ${height}`"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <!--
         Path elements are created imperatively in `rebuildPaths()`; Vue never
         diffs the per-feature subtree so reactive state changes don't walk
         thousands of vnodes. `mapGroupRef` carries the zoom transform;
@@ -1511,32 +1537,33 @@ watch(
         focus-overlay layer (separate group so hover-raised base paths
         can't cover an overlay).
       -->
-      <g ref="mapGroupRef">
-        <g ref="baseGroupRef" />
-        <g ref="overlayGroupRef" />
-      </g>
-    </svg>
-    <button
-      v-if="isZoomed"
-      type="button"
-      class="choropleth-reset"
-      aria-label="Reset zoom"
-      @click="resetZoom"
-    >
-      Reset
-    </button>
-    <ChoroplethTooltip v-if="hasInteractiveTooltip" ref="tooltipChildRef">
-      <template #default="raw">
-        <slot name="tooltip" v-bind="narrowSlotProps(raw)">
-          <span v-if="tooltipFormat" v-html="tooltipFormat(raw)" />
-          <template v-else-if="raw.value == null">{{ raw.name }}</template>
-          <template v-else>
-            {{ raw.name }}: {{ formatTooltipValue(raw.value) }}
-          </template>
-        </slot>
-      </template>
-    </ChoroplethTooltip>
-  </div>
+        <g ref="mapGroupRef">
+          <g ref="baseGroupRef" />
+          <g ref="overlayGroupRef" />
+        </g>
+      </svg>
+      <button
+        v-if="isZoomed"
+        type="button"
+        class="choropleth-reset"
+        aria-label="Reset zoom"
+        @click="resetZoom"
+      >
+        Reset
+      </button>
+      <ChoroplethTooltip v-if="hasInteractiveTooltip" ref="tooltipChildRef">
+        <template #default="raw">
+          <slot name="tooltip" v-bind="narrowSlotProps(raw)">
+            <span v-if="tooltipFormat" v-html="tooltipFormat(raw)" />
+            <template v-else-if="raw.value == null">{{ raw.name }}</template>
+            <template v-else>
+              {{ raw.name }}: {{ formatTooltipValue(raw.value) }}
+            </template>
+          </slot>
+        </template>
+      </ChoroplethTooltip>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -1564,6 +1591,15 @@ watch(
 
 .choropleth-wrapper.pannable svg {
   cursor: grab;
+}
+
+/* While expanded the wrapper is a flex column (inline style); the SVG keeps
+   its prop-driven size otherwise, so stretch it to fill the expanded box. */
+.choropleth-wrapper.is-fullscreen svg {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
 }
 
 .choropleth-wrapper.pannable svg:active {

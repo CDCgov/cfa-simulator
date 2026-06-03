@@ -26,6 +26,7 @@ export interface ChartFoundationOptions {
   filename: () => string | undefined;
   downloadLink: () => boolean | string | undefined;
   downloadButton: () => boolean | string | undefined;
+  fullscreenTarget: () => string | HTMLElement | undefined;
   chartPadding: () => ChartPadding | undefined;
   // Chart-specific hooks that the composable can't infer.
   /**
@@ -66,6 +67,9 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     triggerCsvDownload,
     resolvedFilename: menuFilename,
     isFullscreen,
+    fullscreenStyle,
+    teleportTarget,
+    exitFullscreen,
   } = useChartMenu({
     filename: opts.filename,
     legacyMenuLabel: opts.menu,
@@ -73,6 +77,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     downloadLink: opts.downloadLink,
     downloadButton: opts.downloadButton,
     fullscreen: true,
+    fullscreenTarget: opts.fullscreenTarget,
   });
 
   const width = computed(() => {
@@ -138,6 +143,9 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     triggerCsvDownload,
     menuFilename,
     isFullscreen,
+    fullscreenStyle,
+    teleportTarget,
+    exitFullscreen,
     measuredHeight,
   };
 }

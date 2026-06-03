@@ -19,18 +19,48 @@ const props = withDefaults(
     items: ChartMenuItem[];
     /** Force the dropdown style even when only one item is provided. */
     forceDropdown?: boolean;
+    /**
+     * When the chart is expanded, the menu trigger is replaced by a
+     * persistent close (✕) button that emits `close`.
+     */
+    isFullscreen?: boolean;
   }>(),
-  { forceDropdown: false },
+  { forceDropdown: false, isFullscreen: false },
 );
+
+const emit = defineEmits<{ (e: "close"): void }>();
 
 const useDropdown = () => props.forceDropdown || props.items.length > 1;
 </script>
 
 <template>
-  <div class="chart-menu-trigger-area">
+  <div
+    class="chart-menu-trigger-area"
+    :class="{ 'chart-menu-trigger-area--expanded': isFullscreen }"
+  >
+    <!-- Expanded: a close button replaces the menu trigger -->
+    <button
+      v-if="isFullscreen"
+      class="chart-menu-button chart-close-button"
+      aria-label="Collapse"
+      @click="emit('close')"
+    >
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.75"
+        stroke-linecap="round"
+        aria-hidden="true"
+      >
+        <path d="M4 4l8 8M12 4l-8 8" />
+      </svg>
+    </button>
     <!-- Single item: plain button -->
     <button
-      v-if="!useDropdown()"
+      v-else-if="!useDropdown()"
       class="chart-menu-button chart-menu-single"
       :aria-label="items[0].label"
       @click="items[0].action"
@@ -88,9 +118,17 @@ const useDropdown = () => props.forceDropdown || props.items.length > 1;
 <style scoped>
 .chart-menu-trigger-area {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: 0.5em;
+  right: 0.5em;
   z-index: 1;
+}
+
+/* In fullscreen the button anchors to the viewport corner (the wrapper's
+   content padding doesn't move an absolutely-positioned child), so inset it
+   further for modal-style breathing room. */
+.chart-menu-trigger-area--expanded {
+  top: 1.25em;
+  right: 1.25em;
 }
 
 .chart-menu-button {
@@ -112,6 +150,11 @@ const useDropdown = () => props.forceDropdown || props.items.length > 1;
   opacity: 1;
 }
 
+/* The close button is always visible while the chart is expanded. */
+.chart-close-button {
+  opacity: 1;
+}
+
 .chart-menu-button:hover {
   background: var(--color-bg-1, rgba(0, 0, 0, 0.05));
   color: var(--color-text);
@@ -119,6 +162,33 @@ const useDropdown = () => props.forceDropdown || props.items.length > 1;
 </style>
 
 <style>
+/* Reveal the menu button when the user hovers/focuses anywhere in the
+   chart. These reference the parent wrapper classes, so they can't be
+   scoped to ChartMenu. (In fullscreen the menu button is swapped for the
+   always-visible close button, so no rule is needed there.) */
+.line-chart-wrapper:hover .chart-menu-button,
+.bar-chart-wrapper:hover .chart-menu-button,
+.choropleth-wrapper:hover .chart-menu-button,
+.line-chart-wrapper:focus-within .chart-menu-button,
+.bar-chart-wrapper:focus-within .chart-menu-button,
+.choropleth-wrapper:focus-within .chart-menu-button {
+  opacity: 1;
+}
+
+/* Visually-hidden live region used by each chart wrapper to announce
+   expansion. Lives here so it ships once with the shared menu. */
+.chart-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .chart-menu-content {
   z-index: 100;
   background: var(--color-bg-0);

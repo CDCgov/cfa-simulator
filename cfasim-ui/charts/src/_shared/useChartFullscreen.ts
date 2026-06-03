@@ -27,15 +27,38 @@ function unlockBodyScroll() {
   }
 }
 
+export interface ChartFullscreenOptions {
+  /**
+   * Reactive getter for where to teleport the expanded chart. A CSS
+   * selector or element; resolves to `"body"` when unset. Teleporting
+   * out to the document root is what makes `position: fixed` reliable:
+   * a `transform`/`filter`/`contain`/`perspective` on any ancestor would
+   * otherwise become the containing block and trap the "fullscreen" box
+   * inside it.
+   */
+  target?: () => string | HTMLElement | undefined;
+}
+
 /**
- * Tracks whether the chart is in "expanded" mode (fills the window via
- * CSS). The browser Fullscreen API isn't used — the consumer wires a
- * `.is-fullscreen` class to its wrapper and the CSS handles positioning,
- * which avoids Fullscreen API restrictions (user-gesture requirement,
- * permission policy, iframe sandboxing) and keeps the chart inside the
- * document so the rest of the page remains keyboard-navigable.
+ * Tracks whether the chart is in "expanded" mode (fills the window). The
+ * browser Fullscreen API isn't used — avoiding its restrictions
+ * (user-gesture requirement, permission policy, iframe sandboxing) and
+ * keeping the chart inside the document so the rest of the page stays
+ * keyboard-navigable.
+ *
+ * Resilience is the whole point here, so the layout is driven two ways
+ * that don't depend on the CSS cascade:
+ *  - `fullscreenStyle` returns the critical layout as an *inline* style
+ *    object. Inline styles outrank any class rule regardless of stylesheet
+ *    source order, so they beat each chart's scoped `position: relative`
+ *    base rule (equal specificity, and the scoped rule often loads last)
+ *    and still work even if the consumer never imported the package CSS.
+ *  - `teleportTarget` moves the node to the document root so the fixed
+ *    positioning resolves against the viewport, not a transformed ancestor.
+ * The `.is-fullscreen` class remains on the wrapper only as a hook for the
+ * one rule inline styles can't express (ChoroplethMap's SVG stretch).
  */
-export function useChartFullscreen() {
+export function useChartFullscreen(opts: ChartFullscreenOptions = {}) {
   const isFullscreen = ref(false);
   let locked = false;
 
@@ -95,10 +118,44 @@ export function useChartFullscreen() {
    * that builds its menu list directly.
    */
   const menuItem = computed<ChartMenuItem>(() => ({
-    label: isFullscreen.value ? "Collapse" : "Expand",
+    label: isFullscreen.value ? "Collapse" : "Fullscreen",
     action: toggle,
     ariaPressed: isFullscreen.value,
   }));
 
-  return { isFullscreen, toggle, enter, exit, menuItem };
+  /**
+   * Critical fullscreen layout as inline styles (only while expanded).
+   * Bound via `:style` on the chart wrapper so it always wins over the
+   * scoped base rule and survives a missing stylesheet import.
+   */
+  const fullscreenStyle = computed<Record<string, string> | undefined>(() =>
+    isFullscreen.value
+      ? {
+          position: "fixed",
+          inset: "0",
+          "z-index": "var(--cfasim-z-fullscreen, 1000)",
+          background: "var(--color-bg-0, #fff)",
+          color: "var(--color-text, inherit)",
+          padding: "2em",
+          "box-sizing": "border-box",
+          display: "flex",
+          "flex-direction": "column",
+          "justify-content": "center",
+        }
+      : undefined,
+  );
+
+  const teleportTarget = computed<string | HTMLElement>(
+    () => opts.target?.() || "body",
+  );
+
+  return {
+    isFullscreen,
+    toggle,
+    enter,
+    exit,
+    menuItem,
+    fullscreenStyle,
+    teleportTarget,
+  };
 }

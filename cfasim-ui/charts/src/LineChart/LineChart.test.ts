@@ -372,7 +372,9 @@ describe("LineChart", () => {
     // Give the async updateTooltipPos a tick to complete after DOM flush.
     await wrapper.vm.$nextTick();
     await wrapper.vm.$nextTick();
-    const tooltip = wrapper.element.querySelector(
+    // The component root is a <Teleport>, so query the attached document
+    // rather than `wrapper.element` (which is the teleport anchor comment).
+    const tooltip = document.querySelector(
       ".chart-tooltip-content",
     ) as HTMLElement;
     expect(tooltip).toBeTruthy();
@@ -582,16 +584,34 @@ describe("LineChart", () => {
     });
 
     describe("expand", () => {
-      it("places the Expand item at the top of the menu", () => {
+      it("forwards fallthrough attrs (class, data-*) onto the wrapper despite the Teleport root", () => {
+        const wrapper = mount(LineChart, {
+          props: { data: [1, 2, 3], height: 100 },
+          attrs: { "data-testid": "my-chart", class: "consumer-class" },
+        });
+        const root = wrapper.find(".line-chart-wrapper");
+        expect(root.attributes("data-testid")).toBe("my-chart");
+        // Consumer class merges with the component's own class.
+        expect(root.classes()).toContain("consumer-class");
+      });
+
+      it("places the Fullscreen item at the top of the menu", () => {
         const wrapper = mount(LineChart, {
           props: { data: [1, 2, 3], height: 100 },
         });
         const items = wrapper.findComponent(ChartMenu).props("items");
-        expect(items[0].label).toBe("Expand");
+        expect(items[0].label).toBe("Fullscreen");
         expect(items[0].ariaPressed).toBe(false);
       });
 
-      it("toggles between Expand and Collapse labels", async () => {
+      // When expanded, the wrapper teleports to <body>, so query the live
+      // document rather than the component subtree.
+      const expandedEl = () =>
+        document.querySelector<HTMLElement>(
+          ".line-chart-wrapper.is-fullscreen",
+        );
+
+      it("toggles between Fullscreen and Collapse labels", async () => {
         const wrapper = mount(LineChart, {
           props: { data: [1, 2, 3], height: 100 },
           attachTo: document.body,
@@ -599,7 +619,7 @@ describe("LineChart", () => {
         const expand = wrapper
           .findComponent(ChartMenu)
           .props("items")
-          .find((i) => i.label === "Expand");
+          .find((i) => i.label === "Fullscreen");
         expect(expand).toBeTruthy();
         expand!.action();
         await wrapper.vm.$nextTick();
@@ -609,9 +629,11 @@ describe("LineChart", () => {
           .find((i) => i.label === "Collapse");
         expect(collapse).toBeTruthy();
         expect(collapse!.ariaPressed).toBe(true);
-        expect(wrapper.find(".line-chart-wrapper.is-fullscreen").exists()).toBe(
-          true,
-        );
+        // The critical layout is applied inline so it can't be lost to CSS
+        // source-order or a missing stylesheet import.
+        const el = expandedEl();
+        expect(el).not.toBeNull();
+        expect(el!.style.position).toBe("fixed");
         wrapper.unmount();
       });
 
@@ -623,17 +645,13 @@ describe("LineChart", () => {
         const expand = wrapper
           .findComponent(ChartMenu)
           .props("items")
-          .find((i) => i.label === "Expand");
+          .find((i) => i.label === "Fullscreen");
         expand!.action();
         await wrapper.vm.$nextTick();
-        expect(wrapper.find(".line-chart-wrapper.is-fullscreen").exists()).toBe(
-          true,
-        );
+        expect(expandedEl()).not.toBeNull();
         document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
         await wrapper.vm.$nextTick();
-        expect(wrapper.find(".line-chart-wrapper.is-fullscreen").exists()).toBe(
-          false,
-        );
+        expect(expandedEl()).toBeNull();
         wrapper.unmount();
       });
 
@@ -645,7 +663,7 @@ describe("LineChart", () => {
         const expand = wrapper
           .findComponent(ChartMenu)
           .props("items")
-          .find((i) => i.label === "Expand");
+          .find((i) => i.label === "Fullscreen");
         expand!.action();
         await wrapper.vm.$nextTick();
         // Simulate Reka's portal'd dropdown content: an element with
@@ -659,9 +677,7 @@ describe("LineChart", () => {
           new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
         );
         await wrapper.vm.$nextTick();
-        expect(wrapper.find(".line-chart-wrapper.is-fullscreen").exists()).toBe(
-          true,
-        );
+        expect(expandedEl()).not.toBeNull();
         document.body.removeChild(menu);
         wrapper.unmount();
       });
@@ -675,7 +691,7 @@ describe("LineChart", () => {
         const expand = wrapper
           .findComponent(ChartMenu)
           .props("items")
-          .find((i) => i.label === "Expand");
+          .find((i) => i.label === "Fullscreen");
         expand!.action();
         await wrapper.vm.$nextTick();
         expect(document.body.style.overflow).toBe("hidden");
@@ -688,6 +704,36 @@ describe("LineChart", () => {
         expect(document.body.style.overflow).toBe("auto");
         wrapper.unmount();
         document.body.style.overflow = "";
+      });
+
+      it("swaps the menu trigger for a close button while expanded, and the close button collapses", async () => {
+        const wrapper = mount(LineChart, {
+          props: { data: [1, 2, 3], height: 100 },
+          attachTo: document.body,
+        });
+        const expand = wrapper
+          .findComponent(ChartMenu)
+          .props("items")
+          .find((i) => i.label === "Fullscreen");
+        expand!.action();
+        await wrapper.vm.$nextTick();
+
+        const close = document.querySelector<HTMLButtonElement>(
+          ".chart-close-button",
+        );
+        expect(close).not.toBeNull();
+        // The "Chart options" (⋯) trigger is gone while expanded.
+        expect(
+          document.querySelector('[aria-label="Chart options"]'),
+        ).toBeNull();
+
+        close!.click();
+        await wrapper.vm.$nextTick();
+        expect(expandedEl()).toBeNull();
+        expect(
+          document.querySelector('[aria-label="Chart options"]'),
+        ).not.toBeNull();
+        wrapper.unmount();
       });
     });
   });

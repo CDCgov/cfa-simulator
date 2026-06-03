@@ -14,16 +14,18 @@ export interface ChartMenuOptions {
   /** Whether a separate download button is rendered (and the CSV menu item should be hidden). */
   downloadButton?: () => boolean | string | undefined;
   /**
-   * When true, prepends an Expand/Collapse menu item that toggles the
-   * chart into a full-window view. The consumer is responsible for
-   * binding the returned `isFullscreen` ref to a CSS class on its
-   * wrapper.
+   * When true, prepends a Fullscreen menu item that toggles the chart
+   * into a full-window view. The consumer binds the returned
+   * `isFullscreen` class plus `fullscreenStyle` to its wrapper and wraps
+   * it in a `<Teleport :to="teleportTarget" :disabled="!isFullscreen">`.
    */
   fullscreen?: boolean;
+  /** Forwarded to `useChartFullscreen` — see its `target` option. */
+  fullscreenTarget?: () => string | HTMLElement | undefined;
 }
 
 /**
- * Computes the standard chart menu items (Expand / SVG / PNG / CSV) plus
+ * Computes the standard chart menu items (Fullscreen / SVG / PNG / CSV) plus
  * the CSV-download-link state shared by every chart.
  */
 export function useChartMenu(opts: ChartMenuOptions) {
@@ -36,7 +38,9 @@ export function useChartMenu(opts: ChartMenuOptions) {
     return typeof menu === "string" ? menu : "chart";
   }
 
-  const fullscreen = opts.fullscreen ? useChartFullscreen() : null;
+  const fullscreen = opts.fullscreen
+    ? useChartFullscreen({ target: opts.fullscreenTarget })
+    : null;
 
   const items = computed<ChartMenuItem[]>(() => {
     const fname = resolvedFilename();
@@ -100,5 +104,8 @@ export function useChartMenu(opts: ChartMenuOptions) {
     triggerCsvDownload,
     resolvedFilename,
     isFullscreen: fullscreen?.isFullscreen ?? ref(false),
+    fullscreenStyle: fullscreen?.fullscreenStyle ?? computed(() => undefined),
+    teleportTarget: fullscreen?.teleportTarget ?? computed(() => "body"),
+    exitFullscreen: fullscreen?.exit ?? (() => {}),
   };
 }
