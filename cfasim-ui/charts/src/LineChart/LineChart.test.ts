@@ -108,6 +108,28 @@ describe("LineChart", () => {
     expect(outlineIdx).toBeLessThan(dataIdx);
   });
 
+  it("honors outlineColor and outlineWidth overrides", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        series: [
+          {
+            data: [0, 10, 20],
+            outline: true,
+            strokeWidth: 2,
+            outlineColor: "#000",
+            outlineWidth: 8,
+          },
+        ],
+        height: 100,
+        menu: false,
+      },
+    });
+    const outline = wrapper.find('[data-testid="line-outline"]');
+    expect(outline.attributes("stroke")).toBe("#000");
+    // outline stroke = strokeWidth + outlineWidth
+    expect(outline.attributes("stroke-width")).toBe("10");
+  });
+
   it("does not render an outline when line is false", () => {
     const wrapper = mount(LineChart, {
       props: {

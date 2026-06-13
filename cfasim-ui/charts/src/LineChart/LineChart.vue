@@ -87,6 +87,17 @@ export interface Series extends LineMarkStyle {
    * effect when `line` is `false`.
    */
   outline?: boolean;
+  /**
+   * Outline stroke color. Defaults to the page background
+   * (`var(--color-bg-0, #fff)`). Only applies when `outline` is true.
+   */
+  outlineColor?: string;
+  /**
+   * Total extra width added to the line's `strokeWidth` for the outline
+   * (split evenly on each side). Defaults to `4`. Only applies when
+   * `outline` is true.
+   */
+  outlineWidth?: number;
   dotFill?: string;
   dotStroke?: string;
   /**
@@ -1214,8 +1225,8 @@ const positionedLegendItems = computed(() => {
             v-if="s.line !== false && s.outline"
             :d="toPath(s)"
             fill="none"
-            stroke="var(--color-bg-0, #fff)"
-            :stroke-width="(s.strokeWidth ?? 1.5) + 4"
+            :stroke="s.outlineColor ?? 'var(--color-bg-0, #fff)'"
+            :stroke-width="(s.strokeWidth ?? 1.5) + (s.outlineWidth ?? 4)"
             stroke-linecap="round"
             stroke-linejoin="round"
             data-testid="line-outline"

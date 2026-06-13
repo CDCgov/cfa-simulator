@@ -419,6 +419,11 @@ Set `outline: true` on a series to draw a page-colored stroke behind the
 line. This is useful when lines overlap, cross dense areas, or sit on a
 busy background — the outline keeps each series visually distinct.
 
+Override the outline's color with `outlineColor` (any CSS color; defaults
+to the page background `var(--color-bg-0, #fff)`) and its thickness with
+`outlineWidth` (extra width added to the line's `strokeWidth`, split evenly
+per side; defaults to `4`).
+
 <ComponentDemo>
   <LineChart
     :series="[
@@ -1036,6 +1041,8 @@ interface Series {
   opacity?: number;
   line?: boolean;
   outline?: boolean; // page-colored stroke drawn behind the line
+  outlineColor?: string; // outline stroke color (default: var(--color-bg-0, #fff))
+  outlineWidth?: number; // extra width added to strokeWidth (default: 4)
   dots?: boolean;
   dotRadius?: number;
   dotFill?: string;
