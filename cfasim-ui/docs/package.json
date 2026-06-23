@@ -21,6 +21,7 @@
     "shared",
     "pyodide",
     "wasm",
+    "rwasm",
     "theme"
   ]
 }

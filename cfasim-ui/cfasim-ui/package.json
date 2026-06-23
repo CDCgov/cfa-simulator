@@ -23,6 +23,8 @@
     "./wasm/vite": "./src/wasm-vite.js",
     "./pyodide": "./src/pyodide.ts",
     "./pyodide/vite": "./src/pyodide-vite.js",
+    "./rwasm": "./src/rwasm.ts",
+    "./rwasm/vite": "./src/rwasm-vite.js",
     "./shared": "./src/shared.ts",
     "./theme": {
       "default": "./src/theme/cfasim.css"
@@ -49,6 +51,7 @@
     "@cfasim-ui/docs": "workspace:*",
     "@cfasim-ui/wasm": "workspace:*",
     "@cfasim-ui/pyodide": "workspace:*",
+    "@cfasim-ui/rwasm": "workspace:*",
     "@cfasim-ui/shared": "workspace:*",
     "@cfasim-ui/theme": "workspace:*"
   },

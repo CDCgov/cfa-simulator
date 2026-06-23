@@ -15,6 +15,8 @@ describe("@cfasim-ui/docs generator", () => {
     );
     const entries = [...index.content.components, ...index.content.charts];
     expect(entries.length).toBeGreaterThan(0);
+    expect(existsSync(resolve(PACKAGE_ROOT, "rwasm/index.ts"))).toBe(true);
+    expect(existsSync(resolve(PACKAGE_ROOT, "rwasm/vitePlugin.js"))).toBe(true);
 
     for (const entry of entries) {
       for (const field of ["docs", "source"] as const) {

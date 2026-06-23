@@ -1,0 +1,8 @@
+Package: cfasim
+Title: cfasim Model Helpers
+Version: 0.5.1
+Description: Minimal R helpers for returning cfasim model outputs.
+License: Apache License (>= 2)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
