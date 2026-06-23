@@ -28,6 +28,15 @@ app/src/pages/metapop/cached-baseline.json
 # Rust
 target/
 
+# R
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+packrat/
+renv/
+
 # Scaffolded test projects
 test-project-python/
 test-project-rust/
@@ -51,7 +60,14 @@ cfasim-ui/docs/*
 !cfasim-ui/docs/vitest.config.ts
 !cfasim-ui/docs/drift.test.ts
 
-/CLAUDE.md
 .vscode/*
 .DS_Store
 .cache/
+
+# ai + spec kit
+/CLAUDE.md
+/AGENTS.md
+/specs
+/.codex
+/.agents
+/.specify
