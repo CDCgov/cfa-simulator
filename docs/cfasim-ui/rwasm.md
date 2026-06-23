@@ -54,3 +54,8 @@ The `cfasim` package provides:
 - `enum(indices, labels)`
 
 These helpers create the same structured model-output contract used by the Python `cfasim_model` module and Rust `cfasim-model` crate.
+
+For simple models, `cfasimRwasm` can also source a loose `model.R` file when no
+R package is present. Put `library(cfasim)` in that script before using the
+helper functions. Prefer the package structure for models with dependencies,
+exports, tests, or anything you expect to maintain beyond a small example.
