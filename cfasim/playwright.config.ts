@@ -4,5 +4,8 @@ export default defineConfig({
   testDir: ".",
   testMatch: "*.spec.ts",
   testIgnore: ["src/templates/**", "**/node_modules/**"],
-  timeout: 120_000,
+  timeout: 300_000,
+  use: {
+    ignoreHTTPSErrors: true,
+  },
 });

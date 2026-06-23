@@ -4,6 +4,7 @@ use std::path::Path;
 pub enum Kind {
     Python,
     Rust,
+    R,
 }
 
 pub struct Project {
@@ -18,14 +19,14 @@ pub fn detect_or_fail(dir: &Path) -> anyhow::Result<Project> {
     detect(dir).ok_or_else(|| {
         anyhow::anyhow!(
             "not inside a cfasim project (expected package.json with cfasim-ui \
-             dep, plus pyproject.toml or Cargo.toml)"
+             dep, plus pyproject.toml, Cargo.toml, or DESCRIPTION with R/)"
         )
     })
 }
 
 /// Detect a cfasim project rooted at `dir`. Returns `None` if `dir` isn't a
 /// cfasim project (no `package.json` with a `cfasim-ui` dep) or doesn't match
-/// either of the python/rust template shapes.
+/// one of the python/rust/R template shapes.
 pub fn detect(dir: &Path) -> Option<Project> {
     let text = std::fs::read_to_string(dir.join("package.json")).ok()?;
     let value: serde_json::Value = serde_json::from_str(&text).ok()?;
@@ -36,6 +37,8 @@ pub fn detect(dir: &Path) -> Option<Project> {
         Kind::Python
     } else if dir.join("Cargo.toml").is_file() {
         Kind::Rust
+    } else if dir.join("DESCRIPTION").is_file() && dir.join("R").is_dir() {
+        Kind::R
     } else {
         return None;
     };
@@ -99,6 +102,22 @@ mod tests {
         let p = detect(dir.path()).unwrap();
         assert_eq!(p.kind, Kind::Rust);
         assert!(!p.has_playwright);
+    }
+
+    #[test]
+    fn detects_r_template() {
+        let dir = tempfile::TempDir::new().unwrap();
+        write(
+            dir.path(),
+            "package.json",
+            r#"{"dependencies":{"cfasim-ui":"^0.3.0"}}"#,
+        );
+        write(dir.path(), "DESCRIPTION", "Package: x\n");
+        std::fs::create_dir(dir.path().join("R")).unwrap();
+        write(dir.path(), "playwright.config.ts", "");
+        let p = detect(dir.path()).unwrap();
+        assert_eq!(p.kind, Kind::R);
+        assert!(p.has_playwright);
     }
 
     #[test]

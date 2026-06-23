@@ -36,6 +36,16 @@ fn run_unit(cwd: &Path, project: &Project) -> Result<()> {
                 .context("failed to spawn `cargo test` (is cargo installed?)")?
                 .check("unit tests")
         }
+        Kind::R => {
+            section("Unit tests — Rscript -e testthat::test_dir('tests/testthat')");
+            spawn_and_wait(
+                Command::new("Rscript")
+                    .args(["-e", "testthat::test_dir('tests/testthat')"])
+                    .current_dir(cwd),
+            )
+            .context("failed to spawn `Rscript` (is R installed?)")?
+            .check("unit tests")
+        }
     }
 }
 
