@@ -19,6 +19,7 @@ overrides:
   "@cfasim-ui/shared": "file:{{ local_ui_dir }}/cfasim-ui/shared"
   "@cfasim-ui/wasm": "file:{{ local_ui_dir }}/cfasim-ui/wasm"
   "@cfasim-ui/pyodide": "file:{{ local_ui_dir }}/cfasim-ui/pyodide"
+  "@cfasim-ui/rwasm": "file:{{ local_ui_dir }}/cfasim-ui/rwasm"
   "@cfasim-ui/theme": "file:{{ local_ui_dir }}/cfasim-ui/theme"
   "@cfasim-ui/docs": "file:{{ local_ui_dir }}/cfasim-ui/docs"
 {% endif %}

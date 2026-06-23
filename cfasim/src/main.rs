@@ -27,7 +27,7 @@ enum Commands {
         #[arg(long, default_missing_value = ".")]
         dir: Option<String>,
 
-        /// Template: python or rust (skips interactive prompt)
+        /// Template: python, rust, ixa, or R (skips interactive prompt)
         #[arg(long)]
         template: Option<TemplateArg>,
 
@@ -71,6 +71,9 @@ enum TemplateArg {
     Python,
     Rust,
     Ixa,
+    // Keep the CLI value uppercase; clap would otherwise expose this as `r`.
+    #[value(name = "R")]
+    R,
 }
 
 fn main() -> Result<()> {
@@ -93,6 +96,7 @@ fn main() -> Result<()> {
                 TemplateArg::Python => init::Template::Python,
                 TemplateArg::Rust => init::Template::Rust,
                 TemplateArg::Ixa => init::Template::Ixa,
+                TemplateArg::R => init::Template::R,
             });
             init::run(dir, template, local).map_err(|e| anyhow::anyhow!("{e}"))
         }
