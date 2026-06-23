@@ -41,6 +41,7 @@ const WORKSPACE_PACKAGES = [
   "shared",
   "pyodide",
   "wasm",
+  "rwasm",
   "theme",
 ];
 

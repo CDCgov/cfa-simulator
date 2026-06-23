@@ -1,0 +1,30 @@
+{
+  "name": "@cfasim-ui/rwasm",
+  "version": "0.5.1",
+  "type": "module",
+  "description": "R/WebAssembly integration for cfasim-ui",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CDCgov/cfa-simulator.git",
+    "directory": "cfasim-ui/rwasm"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "src",
+    "r"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./vite": "./src/vitePlugin.js"
+  },
+  "dependencies": {
+    "@cfasim-ui/shared": "workspace:*",
+    "webr": "^0.5.5"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  }
+}
