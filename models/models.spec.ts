@@ -1,15 +1,52 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+
+function attachCiBrowserDiagnostics(page: Page, testTitle: string) {
+  if (!process.env.CI || !testTitle.toLowerCase().includes("r example")) {
+    return;
+  }
+
+  page.on("console", (message) => {
+    // Emit browser logs in CI so R/webR errors are visible in job output.
+    console.log(`[browser:${message.type()}] ${message.text()}`);
+  });
+
+  page.on("pageerror", (error) => {
+    console.log(`[pageerror] ${error.message}`);
+  });
+
+  page.on("requestfailed", (request) => {
+    console.log(
+      `[requestfailed] ${request.method()} ${request.url()} (${request.failure()?.errorText ?? "unknown error"})`,
+    );
+  });
+
+  page.on("response", (response) => {
+    if (response.ok()) return;
+
+    const url = response.url();
+    if (url.includes("/rwasm/") || url.includes("/webr")) {
+      console.log(
+        `[bad-response] ${response.status()} ${response.request().method()} ${url}`,
+      );
+    }
+  });
+}
+
+test.beforeEach(async ({ page }, testInfo) => {
+  attachCiBrowserDiagnostics(page, testInfo.title);
+});
 
 test("home page lists all models", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("h1")).toContainText("Models");
   const cards = page.locator(".model-card");
-  await expect(cards).toHaveCount(5);
+  await expect(cards).toHaveCount(6);
   await expect(cards.nth(0)).toContainText("Reed-Frost Epidemic");
   await expect(cards.nth(1)).toContainText("Ixa Example");
   await expect(cards.nth(2)).toContainText("Python Example");
-  await expect(cards.nth(3)).toContainText("Fetch Example");
-  await expect(cards.nth(4)).toContainText("State Map");
+  await expect(cards.nth(3)).toContainText("R Example");
+  await expect(cards.nth(4)).toContainText("Fetch Example");
+  await expect(cards.nth(5)).toContainText("State Map");
 });
 
 test("reed-frost model renders", async ({ page }) => {
@@ -112,6 +149,12 @@ test("state-map shows county details and highlights without zooming", async ({
   await expect(page.locator(".choropleth-reset")).toHaveCount(0);
 });
 
+test("r example renders", async ({ page }) => {
+  await page.goto("/r-example");
+  await expect(page.locator("h1")).toContainText("R Example");
+  await expect(page.getByLabel("Steps")).toBeVisible();
+});
+
 test("python-example syncs params to URL and hydrates from URL", async ({
   page,
 }) => {
@@ -136,6 +179,32 @@ test("python-example syncs params to URL and hydrates from URL", async ({
     .toBeNull();
 
   // Reset button clears all query params.
+  await page.getByRole("button", { name: "Reset" }).click();
+  await expect.poll(() => new URL(page.url()).search).toBe("");
+  await expect(stepsInput).toHaveValue("10");
+});
+
+test("r-example syncs params to URL and hydrates from URL", async ({
+  page,
+}) => {
+  await page.goto("/r-example?steps=25&rate=4.5");
+  const stepsInput = page.getByLabel("Steps");
+  const rateInput = page.getByLabel("Rate");
+  await expect(stepsInput).toHaveValue("25");
+  await expect(rateInput).toHaveValue("4.5");
+
+  await stepsInput.fill("40");
+  await stepsInput.press("Tab");
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("steps"))
+    .toBe("40");
+
+  await rateInput.fill("2.5");
+  await rateInput.press("Tab");
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("rate"))
+    .toBeNull();
+
   await page.getByRole("button", { name: "Reset" }).click();
   await expect.poll(() => new URL(page.url()).search).toBe("");
   await expect(stepsInput).toHaveValue("10");

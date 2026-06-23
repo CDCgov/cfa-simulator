@@ -22,6 +22,12 @@ export const models = [
     component: () => import("./python-example/Page.vue"),
   },
   {
+    path: "/r-example",
+    name: "R Example",
+    description: "Simple simulation model running via webR",
+    component: () => import("./r-example/Page.vue"),
+  },
+  {
     path: "/fetch-example",
     name: "Fetch Example",
     description: "CFA Pyrenew hospital admission forecasts",

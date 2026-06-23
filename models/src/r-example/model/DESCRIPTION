@@ -1,0 +1,7 @@
+Package: r.example
+Title: cfasim R Example
+Version: 0.0.1
+Description: Minimal cfasim R model example.
+License: CC0
+Encoding: UTF-8
+Imports: cfasim
