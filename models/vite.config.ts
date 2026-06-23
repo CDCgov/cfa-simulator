@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import { cfasimWasm } from "@cfasim-ui/wasm/vite";
 import { cfasimPyodide } from "@cfasim-ui/pyodide/vite";
+import { cfasimRwasm } from "@cfasim-ui/rwasm/vite";
 
 export default defineConfig({
   base: process.env.BASE_URL || "/",
@@ -12,6 +13,10 @@ export default defineConfig({
     cfasimPyodide({
       model: "src/python-example/model",
       pypiDeps: ["cfasim-model"],
+    }),
+    cfasimRwasm({
+      model: "src/r-example/model",
+      name: "r_example",
     }),
   ],
 });
