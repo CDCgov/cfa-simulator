@@ -132,6 +132,10 @@ export default defineConfig({
               { text: "Hint", link: "/cfasim-ui/components/hint" },
               { text: "Icon", link: "/cfasim-ui/components/icon" },
               {
+                text: "MultiSelect",
+                link: "/cfasim-ui/components/multi-select",
+              },
+              {
                 text: "NumberInput",
                 link: "/cfasim-ui/components/number-input",
               },

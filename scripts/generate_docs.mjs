@@ -93,6 +93,12 @@ export const components = [
     "cfasim-ui/components/src/Icon/Icon.md",
   ],
   [
+    "multi-select",
+    "components",
+    "cfasim-ui/components/src/MultiSelect/MultiSelect.vue",
+    "cfasim-ui/components/src/MultiSelect/MultiSelect.md",
+  ],
+  [
     "number-input",
     "components",
     "cfasim-ui/components/src/NumberInput/NumberInput.vue",
@@ -358,8 +364,9 @@ function extractDefaults(script) {
 
 function extractModels(script) {
   const models = [];
-  const re =
-    /defineModel<(\w+)>\s*\(\s*(?:"(\w+)")?\s*(?:,\s*\{[^}]*\})?\s*\)/g;
+  // Type allows arrays/generics (e.g. `string[]`, `NumberRange`); the first arg
+  // may be an optional name string and/or an options object.
+  const re = /defineModel<([^>]+)>\s*\(\s*(?:"([^"]+)")?/g;
   let m;
   while ((m = re.exec(script)) !== null) {
     models.push({ name: m[2] ?? "modelValue", type: m[1] });

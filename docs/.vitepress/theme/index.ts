@@ -13,6 +13,7 @@ import {
   Hint,
   Icon,
   LightDarkToggle,
+  MultiSelect,
   NumberInput,
   ParamEditor,
   SelectBox,
@@ -48,6 +49,7 @@ export default {
     app.component("Hint", Hint);
     app.component("Icon", Icon);
     app.component("LightDarkToggle", LightDarkToggle);
+    app.component("MultiSelect", MultiSelect);
     app.component("NumberInput", NumberInput);
     app.component("ParamEditor", ParamEditor);
     app.component("SelectBox", SelectBox);

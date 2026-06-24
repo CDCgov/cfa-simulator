@@ -12,6 +12,8 @@ export type { IconSize } from "./Icon/Icon.vue";
 export { registerIcons, hasIcon } from "./Icon/registry";
 export type { IconRegistration, IconVariants } from "./Icon/registry";
 export { default as LightDarkToggle } from "./LightDarkToggle/LightDarkToggle.vue";
+export { default as MultiSelect } from "./MultiSelect/MultiSelect.vue";
+export type { MultiSelectOption } from "./MultiSelect/MultiSelect.vue";
 export { default as NumberInput } from "./NumberInput/NumberInput.vue";
 export type { NumberRange } from "./NumberInput/NumberInput.vue";
 export { default as ParamEditor } from "./ParamEditor/ParamEditor.vue";
