@@ -1,6 +1,26 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.6.0] - 2026-06-24
+
+### Bug Fixes
+
+- **cfasim-ui:** Make chart fullscreen resilient to consumer CSS, add close button
+- **cfasim-ui:** Let vertical swipes scroll over chart tooltips on touch
+- **cfasim-ui:** Emit stateClick from touch taps on ChoroplethMap
+
+### Chores
+
+- **deps:** Bump tar from 0.4.45 to 0.4.46
+- Raise components bundle size limits
+
+### Features
+
+- **cfasim-ui:** Add fontSize prop to ParamEditor
+- Add outline options
+- **cfasim-ui:** Add MultiSelect autocomplete component
+- **cfasim-ui:** Add ButtonGroup and ToggleGroup components
+
 ## [0.5.1] - 2026-06-02
 
 ### Bug Fixes
