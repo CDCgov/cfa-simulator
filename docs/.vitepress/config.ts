@@ -126,6 +126,10 @@ export default defineConfig({
             items: [
               { text: "Box", link: "/cfasim-ui/components/box" },
               { text: "Button", link: "/cfasim-ui/components/button" },
+              {
+                text: "ButtonGroup",
+                link: "/cfasim-ui/components/button-group",
+              },
               { text: "Container", link: "/cfasim-ui/components/container" },
               { text: "Expander", link: "/cfasim-ui/components/expander" },
               { text: "Grid", link: "/cfasim-ui/components/grid" },
@@ -151,6 +155,10 @@ export default defineConfig({
               { text: "Spinner", link: "/cfasim-ui/components/spinner" },
               { text: "TextInput", link: "/cfasim-ui/components/text-input" },
               { text: "Toggle", link: "/cfasim-ui/components/toggle" },
+              {
+                text: "ToggleGroup",
+                link: "/cfasim-ui/components/toggle-group",
+              },
             ],
           },
           {

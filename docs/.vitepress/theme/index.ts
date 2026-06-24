@@ -7,6 +7,7 @@ import "./demo-theme.css";
 import {
   Box,
   Button,
+  ButtonGroup,
   Container,
   Expander,
   Grid,
@@ -21,6 +22,7 @@ import {
   Spinner,
   TextInput,
   Toggle,
+  ToggleGroup,
 } from "@cfasim-ui/components";
 import {
   BarChart,
@@ -43,6 +45,7 @@ export default {
   enhanceApp({ app }) {
     app.component("Box", Box);
     app.component("Button", Button);
+    app.component("ButtonGroup", ButtonGroup);
     app.component("Container", Container);
     app.component("Expander", Expander);
     app.component("Grid", Grid);
@@ -57,6 +60,7 @@ export default {
     app.component("Spinner", Spinner);
     app.component("TextInput", TextInput);
     app.component("Toggle", Toggle);
+    app.component("ToggleGroup", ToggleGroup);
     app.component("BarChart", BarChart);
     app.component("ChoroplethMap", ChoroplethMap);
     app.component("DataTable", DataTable);

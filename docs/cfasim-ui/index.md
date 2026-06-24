@@ -17,6 +17,7 @@ cfasim-ui is the shared component and theming library you use to make simulators
 
 - [Box](./components/box) — colored container for callouts and alerts
 - [Button](./components/button) — primary and secondary actions
+- [ButtonGroup](./components/button-group) — visually joins a set of buttons into one unit
 - [Container](./components/container) — vertical or horizontal layout wrapper with optional border, height, and gap
 - [Expander](./components/expander) — collapsible content section
 - [Grid](./components/grid) — responsive multi-column layout
@@ -29,6 +30,7 @@ cfasim-ui is the shared component and theming library you use to make simulators
 - [Spinner](./components/spinner) — loading indicator
 - [TextInput](./components/text-input) — text field
 - [Toggle](./components/toggle) — boolean switch
+- [ToggleGroup](./components/toggle-group) — segmented single/multi-select control
 
 ## Charts
 

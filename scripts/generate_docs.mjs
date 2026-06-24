@@ -63,6 +63,12 @@ export const components = [
     "cfasim-ui/components/src/Button/Button.md",
   ],
   [
+    "button-group",
+    "components",
+    "cfasim-ui/components/src/ButtonGroup/ButtonGroup.vue",
+    "cfasim-ui/components/src/ButtonGroup/ButtonGroup.md",
+  ],
+  [
     "container",
     "components",
     "cfasim-ui/components/src/Container/Container.vue",
@@ -139,6 +145,12 @@ export const components = [
     "components",
     "cfasim-ui/components/src/Toggle/Toggle.vue",
     "cfasim-ui/components/src/Toggle/Toggle.md",
+  ],
+  [
+    "toggle-group",
+    "components",
+    "cfasim-ui/components/src/ToggleGroup/ToggleGroup.vue",
+    "cfasim-ui/components/src/ToggleGroup/ToggleGroup.md",
   ],
   [
     "bar-chart",
