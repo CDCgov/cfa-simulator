@@ -16,6 +16,22 @@ import type { Topology } from "topojson-specification";
 const statesTopo = usStates as unknown as Topology;
 const countiesTopo = usCounties as unknown as Topology;
 
+// jsdom has no TouchEvent; dispatch a plain bubbling event with the touch
+// lists our handlers read off it. `el` is the path the touch lands on.
+function dispatchTouch(
+  el: Element,
+  type: "touchstart" | "touchend" | "touchcancel",
+  points: { clientX: number; clientY: number }[],
+) {
+  const ev = new Event(type, { bubbles: true, cancelable: true });
+  Object.assign(ev, {
+    // `touches` is the set still down; a touchend lifts the last finger.
+    touches: type === "touchstart" ? points : [],
+    changedTouches: points,
+  });
+  el.dispatchEvent(ev);
+}
+
 describe("ChoroplethMap", () => {
   it("renders SVG with state paths", () => {
     const wrapper = mount(ChoroplethMap, {
@@ -305,6 +321,45 @@ describe("ChoroplethMap", () => {
     };
     expect(payload.id).toBeDefined();
     expect(payload.name).toBeDefined();
+  });
+
+  it("emits stateClick and update:focus on a touch tap", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 600, height: 400 },
+    });
+    const el = wrapper.find(".state-path").element;
+    dispatchTouch(el, "touchstart", [{ clientX: 100, clientY: 100 }]);
+    dispatchTouch(el, "touchend", [{ clientX: 102, clientY: 99 }]);
+
+    expect(wrapper.emitted("stateClick")).toHaveLength(1);
+    const id = (wrapper.emitted("stateClick")![0][0] as { id: string }).id;
+    expect(id).toBeDefined();
+    // Tapping an unfocused feature focuses it.
+    expect(wrapper.emitted("update:focus")![0][0]).toBe(id);
+  });
+
+  it("does not select when a touch drags (pan, not a tap)", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 600, height: 400 },
+    });
+    const el = wrapper.find(".state-path").element;
+    dispatchTouch(el, "touchstart", [{ clientX: 100, clientY: 100 }]);
+    // Lifted 40px away — that's a pan, left to d3-zoom.
+    dispatchTouch(el, "touchend", [{ clientX: 100, clientY: 140 }]);
+    expect(wrapper.emitted("stateClick")).toBeUndefined();
+  });
+
+  it("does not select when a second finger joins (pinch, not a tap)", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 600, height: 400 },
+    });
+    const el = wrapper.find(".state-path").element;
+    dispatchTouch(el, "touchstart", [
+      { clientX: 100, clientY: 100 },
+      { clientX: 150, clientY: 150 },
+    ]);
+    dispatchTouch(el, "touchend", [{ clientX: 100, clientY: 100 }]);
+    expect(wrapper.emitted("stateClick")).toBeUndefined();
   });
 
   it("renders categorical legend with circles and labels", () => {

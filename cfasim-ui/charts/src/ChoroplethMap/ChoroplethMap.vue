@@ -321,10 +321,33 @@ let pendingMoveX = 0;
 let pendingMoveY = 0;
 let pendingMoveFrame = 0;
 
+// Touch tap-to-select. Touch devices get no synthesized-click guarantee
+// (iOS treats the first tap on a hover target as a hover, and the d3-zoom
+// touch listeners can swallow the synthetic click), so we resolve taps from
+// the raw touch events ourselves. A gesture counts as a tap when a single
+// finger lifts close to where it landed, soon after — anything longer or
+// draggier is a pan/long-press and is left to d3-zoom.
+const TAP_SLOP = 10; // px of movement allowed between touchstart and touchend
+const TAP_MAX_MS = 600; // longer presses aren't taps
+let tapStart: {
+  x: number;
+  y: number;
+  time: number;
+  featId: string | null;
+} | null = null;
+
 function setupInteraction() {
-  if (isTouchDevice) return;
   const g = mapGroupRef.value;
   if (!g) return;
+  // Tap-to-select is wired on every device. `touchend` is non-passive so a
+  // confirmed tap can preventDefault and suppress the compatibility
+  // click/hover the browser would otherwise synthesize (the double-fire and
+  // iOS first-tap-hover sources).
+  g.addEventListener("touchstart", onTouchStart, { passive: true });
+  g.addEventListener("touchend", onTouchEnd);
+  g.addEventListener("touchcancel", onTouchCancel, { passive: true });
+  // Hover + tooltip stay off on touch (stroke-width churn degrades zoom/pan).
+  if (isTouchDevice) return;
   g.addEventListener("click", onDelegatedEvent);
   g.addEventListener("mouseover", onDelegatedEvent);
   g.addEventListener("mousemove", onDelegatedMouseMove);
@@ -334,6 +357,9 @@ function setupInteraction() {
 function teardownInteraction() {
   const g = mapGroupRef.value;
   if (!g) return;
+  g.removeEventListener("touchstart", onTouchStart);
+  g.removeEventListener("touchend", onTouchEnd);
+  g.removeEventListener("touchcancel", onTouchCancel);
   g.removeEventListener("click", onDelegatedEvent);
   g.removeEventListener("mouseover", onDelegatedEvent);
   g.removeEventListener("mousemove", onDelegatedMouseMove);
@@ -1159,6 +1185,18 @@ function eventToFeatureId(target: EventTarget | null): string | null {
   return el ? ((el as HTMLElement).dataset.featId ?? null) : null;
 }
 
+// Emits stateClick plus the baked-in click-to-focus toggle so
+// `v-model:focus="ref"` Just Works: selecting the currently focused feature
+// clears focus (emits null); selecting any other feature emits its id. With
+// a `focus` array, any selection of a member clears everything — parents
+// wanting fine-grained multi-select handle merging via `@update:focus`.
+// Shared by the mouse-click and touch-tap paths.
+function emitSelection(data: TooltipPayload) {
+  emit("stateClick", { id: data.id, name: data.name, value: data.value });
+  const wasFocused = focusedBaseIds(normalizedFocus.value).has(data.id);
+  emit("update:focus", wasFocused ? null : data.id);
+}
+
 function onDelegatedEvent(event: Event) {
   if (isZooming) return;
   const me = event as MouseEvent;
@@ -1168,14 +1206,7 @@ function onDelegatedEvent(event: Event) {
   if (!data) return;
   const payload = { id: data.id, name: data.name, value: data.value };
   if (event.type === "click") {
-    emit("stateClick", payload);
-    // Click-to-focus toggle, baked in so `v-model:focus="ref"` Just Works:
-    // clicking the currently focused feature clears focus (emits null);
-    // clicking any other feature emits its id. With a `focus` array, any
-    // click on a member clears everything — parents wanting fine-grained
-    // multi-select handle merging themselves via `@update:focus`.
-    const wasFocused = focusedBaseIds(normalizedFocus.value).has(data.id);
-    emit("update:focus", wasFocused ? null : data.id);
+    emitSelection(data);
   } else if (event.type === "mouseover") {
     setHover(pathsByFeatureId.get(featId)!);
     if (hasInteractiveTooltip.value)
@@ -1193,6 +1224,44 @@ function onDelegatedMouseOut(event: MouseEvent) {
   const related = event.relatedTarget as Element | null;
   if (related && mapGroupRef.value?.contains(related)) return;
   clearHover();
+}
+
+function onTouchStart(event: TouchEvent) {
+  // Single-finger only — a second touch is a pinch-zoom, not a selection.
+  if (event.touches.length !== 1) {
+    tapStart = null;
+    return;
+  }
+  const t = event.touches[0]!;
+  tapStart = {
+    x: t.clientX,
+    y: t.clientY,
+    time: event.timeStamp,
+    featId: eventToFeatureId(event.target),
+  };
+}
+
+function onTouchEnd(event: TouchEvent) {
+  const start = tapStart;
+  tapStart = null;
+  // No feature under the initial touch, or a second finger joined in.
+  if (!start || !start.featId || event.touches.length > 0) return;
+  const t = event.changedTouches[0];
+  if (!t) return;
+  // Moved too far (a pan) or held too long (a long-press) → not a tap.
+  if (Math.abs(t.clientX - start.x) > TAP_SLOP) return;
+  if (Math.abs(t.clientY - start.y) > TAP_SLOP) return;
+  if (event.timeStamp - start.time > TAP_MAX_MS) return;
+  const data = tooltipDataById.get(start.featId);
+  if (!data) return;
+  // Suppress the synthetic click/hover the browser would replay from this
+  // tap, so selection fires exactly once and never via iOS's hover-first tap.
+  event.preventDefault();
+  emitSelection(data);
+}
+
+function onTouchCancel() {
+  tapStart = null;
 }
 
 // ─── Imperative SVG path management ──────────────────────────────────────

@@ -365,6 +365,10 @@ the focused feature toggles back off. If a tooltip is configured, focusing
 shows that feature's tooltip. Users can pan/zoom freely around the focused
 area; the built-in **Reset** button clears focus and snaps back.
 
+Selection works on touch too: a single-finger **tap** on a feature emits
+`stateClick` and toggles focus, while drags (pan) and pinches (zoom) are left
+to the map. Hover tooltips stay off on touch for performance.
+
 Counties are tiny without a zoom — focus is a natural fit for drill-down.
 
 <ComponentDemo>
