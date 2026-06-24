@@ -1031,6 +1031,9 @@ const {
   hasTooltipSlot: () => hasTooltipSlot.value,
   getCsv: toCsv,
   pointerToIndex,
+  // Bars run along the category axis: vertical orientation scrubs across X
+  // (keep vertical page scroll), horizontal orientation scrubs down Y.
+  scrubAxis: () => (isVertical.value ? "x" : "y"),
   onHover: (payload) => emit("hover", payload),
 });
 
@@ -1758,7 +1761,7 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
           :width="innerW"
           :height="innerH"
           fill="transparent"
-          style="cursor: crosshair; touch-action: none"
+          :style="`cursor: crosshair; touch-action: ${isVertical ? 'pan-y' : 'pan-x'}`"
           v-on="tooltipHandlers"
         />
         <!-- annotations (top layer) -->

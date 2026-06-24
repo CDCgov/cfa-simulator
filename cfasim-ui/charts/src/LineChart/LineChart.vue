@@ -1349,7 +1349,7 @@ const positionedLegendItems = computed(() => {
           :width="innerW"
           :height="innerH"
           fill="transparent"
-          style="cursor: crosshair; touch-action: none"
+          style="cursor: crosshair; touch-action: pan-y"
           v-on="tooltipHandlers"
         />
         <!-- annotations (top layer) -->

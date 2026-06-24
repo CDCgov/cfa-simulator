@@ -267,6 +267,8 @@ Set `legend` on a series to add an entry to the inline legend strip above the pl
 
 Hover over the chart to see a tooltip with values at each data point. Set `tooltip-trigger="hover"` to enable the built-in tooltip with crosshair and highlight dots. Use the `#tooltip` slot for custom content. Pass `tooltip-value-format` to control how numeric values render (e.g. percentages, currency); it falls back to `y-tick-format` when omitted.
 
+On touch devices, drag **horizontally** across the chart to scrub the tooltip between points; a **vertical** swipe scrolls the page instead of getting captured by the chart.
+
 <ComponentDemo>
   <LineChart
     :series="[

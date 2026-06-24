@@ -345,6 +345,9 @@ describe("LineChart", () => {
     const rects = wrapper.findAll("rect");
     const overlay = rects.find((r) => r.attributes("fill") === "transparent");
     expect(overlay).toBeTruthy();
+    // pan-y lets a vertical swipe scroll the page while horizontal drags
+    // still scrub the tooltip.
+    expect(overlay?.attributes("style")).toContain("touch-action: pan-y");
   });
 
   it("does not render tooltip overlay without tooltipTrigger", () => {

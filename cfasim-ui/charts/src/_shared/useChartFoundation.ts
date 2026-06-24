@@ -40,6 +40,12 @@ export interface ChartFoundationOptions {
   pointerToIndex: (clientX: number, clientY: number) => number | null;
   onHover: (payload: { index: number } | null) => void;
   /**
+   * Axis a finger drags along to scrub the tooltip on touch; the
+   * orthogonal direction is left to the browser for page scrolling.
+   * Defaults to `"x"`.
+   */
+  scrubAxis?: () => "x" | "y";
+  /**
    * Extra height (in px) the chart adds *below* the SVG plot area
    * (e.g. LineChart's area-section labels). Used to keep the SVG total
    * height matched to the container when fullscreen.
@@ -118,6 +124,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     clamp: () => opts.tooltipClamp() ?? "chart",
     pointerToIndex: opts.pointerToIndex,
     containerRef,
+    scrubAxis: opts.scrubAxis,
     onHover: opts.onHover,
   });
 

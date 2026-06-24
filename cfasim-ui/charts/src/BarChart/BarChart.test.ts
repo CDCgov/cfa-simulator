@@ -268,6 +268,30 @@ describe("BarChart", () => {
     expect(overlay).toBeTruthy();
   });
 
+  it("sets overlay touch-action to the page-scroll axis per orientation", () => {
+    const findOverlayStyle = (orientation: "vertical" | "horizontal") => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [1, 2, 3],
+          categories: ["a", "b", "c"],
+          width: 400,
+          height: 200,
+          menu: false,
+          orientation,
+          tooltipTrigger: "hover" as const,
+        },
+      });
+      return wrapper
+        .findAll("rect")
+        .find((r) => r.attributes("fill") === "transparent")
+        ?.attributes("style");
+    };
+    // Vertical bars scrub across X, so vertical page scroll stays available.
+    expect(findOverlayStyle("vertical")).toContain("touch-action: pan-y");
+    // Horizontal bars scrub down Y, so horizontal page scroll stays available.
+    expect(findOverlayStyle("horizontal")).toContain("touch-action: pan-x");
+  });
+
   it("emits hover with category index on mousemove", async () => {
     const wrapper = mount(BarChart, {
       props: {

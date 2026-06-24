@@ -213,6 +213,8 @@ contrast).
 
 ### Horizontal orientation
 
+On touch devices the tooltip scrubs along the category axis: drag horizontally on a vertical (column) chart and vertically on a horizontal chart. A swipe in the other direction scrolls the page instead of being captured by the chart.
+
 <ComponentDemo>
   <BarChart
     :data="[42, 31, 18, 12, 7]"
