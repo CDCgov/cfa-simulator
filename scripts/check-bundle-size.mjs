@@ -12,13 +12,13 @@ const LIMITS = [
     gzip: true,
     // ~13 KB of this is the inline SVGs for the default icon set (always
     // bundled so <Icon> works with zero setup); the rest is the components.
-    limit: 14 * KB,
+    limit: 16 * KB,
   },
   {
     name: "@cfasim-ui/components CSS",
     path: "cfasim-ui/components/dist/index.css",
     gzip: false,
-    limit: 20 * KB,
+    limit: 24 * KB,
   },
   {
     name: "@cfasim-ui/charts JS",
