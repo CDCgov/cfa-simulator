@@ -1,5 +1,15 @@
 <script setup lang="ts">
 import {
+  ComboboxAnchor,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxItemIndicator,
+  ComboboxPortal,
+  ComboboxRoot,
+  ComboboxTrigger,
+  ComboboxViewport,
   SelectContent,
   SelectItem,
   SelectItemIndicator,
@@ -25,9 +35,16 @@ const props = defineProps<{
   ariaLabel?: string;
   options: SelectOption[];
   placeholder?: string;
+  /** Turn the field into a filterable single-select autocomplete (combobox). */
+  autocomplete?: boolean;
 }>();
 
 const id = useId();
+
+// Shows the selected option's label in the combobox input when not filtering.
+function displayValue(value: string) {
+  return props.options.find((o) => o.value === value)?.label ?? "";
+}
 </script>
 
 <template>
@@ -35,11 +52,81 @@ const id = useId();
     <label
       v-if="label"
       :id="`${id}-label`"
+      :for="autocomplete ? `${id}-input` : undefined"
       class="select-label"
       :class="{ 'visually-hidden': hideLabel }"
       >{{ label }}</label
     >
-    <SelectRoot v-model="model">
+
+    <ComboboxRoot
+      v-if="autocomplete"
+      v-model="model"
+      open-on-click
+      class="select-combobox-root"
+    >
+      <ComboboxAnchor class="select-anchor">
+        <ComboboxInput
+          :id="`${id}-input`"
+          class="select-input"
+          :display-value="displayValue"
+          :placeholder="placeholder"
+          :aria-labelledby="props.label ? `${id}-label` : undefined"
+          :aria-label="!props.label ? props.ariaLabel : undefined"
+        />
+        <ComboboxTrigger class="select-icon-button" aria-label="Toggle options">
+          <span class="select-icon" aria-hidden="true">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M3 4.5L6 7.5L9 4.5" />
+            </svg>
+          </span>
+        </ComboboxTrigger>
+      </ComboboxAnchor>
+      <ComboboxPortal>
+        <ComboboxContent
+          class="select-content select-content-autocomplete"
+          position="popper"
+          :side-offset="4"
+          :body-lock="false"
+        >
+          <ComboboxViewport class="select-viewport">
+            <ComboboxEmpty class="select-empty">No matches</ComboboxEmpty>
+            <ComboboxItem
+              v-for="opt in options"
+              :key="opt.value"
+              :value="opt.value"
+              class="select-item"
+            >
+              <span>{{ opt.label }}</span>
+              <ComboboxItemIndicator class="select-indicator">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M2 6L5 9L10 3" />
+                </svg>
+              </ComboboxItemIndicator>
+            </ComboboxItem>
+          </ComboboxViewport>
+        </ComboboxContent>
+      </ComboboxPortal>
+    </ComboboxRoot>
+
+    <SelectRoot v-else v-model="model">
       <SelectTrigger
         class="select-trigger"
         :aria-labelledby="props.label ? `${id}-label` : undefined"
@@ -140,6 +227,62 @@ const id = useId();
   color: var(--color-text-secondary);
 }
 
+/* Autocomplete (combobox) field */
+.select-anchor {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  height: 2.5em;
+  padding: 0 0.5em 0 0.75em;
+  font-size: var(--font-size-sm);
+  background: var(--color-bg-0);
+  border: 1px solid var(--color-border);
+  border-radius: 0.375em;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.select-anchor:hover {
+  border-color: var(--color-border-hover);
+}
+
+.select-anchor:focus-within {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: var(--shadow-focus);
+}
+
+.select-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+.select-input:focus {
+  outline: none;
+}
+
+.select-input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+.select-icon-button {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
 .select-icon {
   display: flex;
   align-items: center;
@@ -160,8 +303,21 @@ const id = useId();
   max-height: var(--reka-select-content-available-height);
 }
 
+/* Combobox exposes the anchor width under its own custom property. */
+.select-content-autocomplete {
+  width: var(--reka-combobox-trigger-width);
+  max-height: var(--reka-combobox-content-available-height);
+}
+
 .select-viewport {
   padding: 0.25em;
+}
+
+.select-empty {
+  padding: 0.5em;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  text-align: center;
 }
 
 .select-item {
