@@ -184,6 +184,68 @@ grows automatically for additional lines.
   </template>
 </ComponentDemo>
 
+### Font sizes
+
+Every text element on the chart has its own style prop and default size (in px). The text-styling props (`axisLabelStyle`, `tickLabelStyle`, `legendStyle`) take a `LabelStyle` — `{ fontSize?, color?, fontWeight? }` — and `titleStyle` adds `lineHeight` and `align`. Unset fields fall back to the defaults below.
+
+| Chart part                                  | Prop / field                         | Type         | Default size |
+| ------------------------------------------- | ------------------------------------ | ------------ | -----------: |
+| Title                                       | `titleStyle`                         | `TitleStyle` |           14 |
+| Axis labels (`xLabel` / `yLabel`)           | `axisLabelStyle`                     | `LabelStyle` |           13 |
+| Axis tick labels (the numbers on each axis) | `tickLabelStyle`                     | `LabelStyle` |           10 |
+| Inline legend                               | `legendStyle`                        | `LabelStyle` |           11 |
+| Area section label                          | `areaSection.inlineLabelStyle`       | `LabelStyle` |           11 |
+| Area section description                    | `areaSection.inlineDescriptionStyle` | `LabelStyle` |           11 |
+| Annotation text                             | `annotation.fontSize`                | `number`     |           13 |
+
+These are single styles applied to both axes — there's no separate x vs y font size. The same props (except the LineChart-only area-section fields) exist on `BarChart`, since both compose `ChartCommonProps`.
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      { data: [0, 12, 28, 45, 60, 55, 40, 25, 12], color: '#0057b7', legend: 'No interventions' },
+      { data: [0, 8, 18, 30, 40, 35, 25, 14, 6], color: '#ef4444', legend: 'Masking + distancing' },
+    ]"
+    :height="240"
+    title="Daily ED visits"
+    x-label="Days"
+    y-label="Cases"
+    :title-style="{ fontSize: 18 }"
+    :axis-label-style="{ fontSize: 15, fontWeight: 700 }"
+    :tick-label-style="{ fontSize: 13 }"
+    :legend-style="{ fontSize: 14 }"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    {
+      data: [0, 12, 28, 45, 60, 55, 40, 25, 12],
+      color: '#0057b7',
+      legend: 'No interventions',
+    },
+    {
+      data: [0, 8, 18, 30, 40, 35, 25, 14, 6],
+      color: '#ef4444',
+      legend: 'Masking + distancing',
+    },
+  ]"
+  :height="240"
+  title="Daily ED visits"
+  x-label="Days"
+  y-label="Cases"
+  :title-style="{ fontSize: 18 }"
+  :axis-label-style="{ fontSize: 15, fontWeight: 700 }"
+  :tick-label-style="{ fontSize: 13 }"
+  :legend-style="{ fontSize: 14 }"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Multiple series
 
 <ComponentDemo>
