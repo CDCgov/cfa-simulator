@@ -171,6 +171,12 @@ export const components = [
     "cfasim-ui/charts/src/LineChart/LineChart.md",
   ],
   [
+    "vega-chart",
+    "charts",
+    "cfasim-ui/charts/src/VegaChart/VegaChart.vue",
+    "cfasim-ui/charts/src/VegaChart/VegaChart.md",
+  ],
+  [
     "data-table",
     "charts",
     "cfasim-ui/charts/src/DataTable/DataTable.vue",

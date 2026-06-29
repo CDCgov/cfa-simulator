@@ -172,6 +172,7 @@ export default defineConfig({
               },
               { text: "DataTable", link: "/cfasim-ui/charts/data-table" },
               { text: "LineChart", link: "/cfasim-ui/charts/line-chart" },
+              { text: "VegaChart", link: "/cfasim-ui/charts/vega-chart" },
             ],
           },
           {

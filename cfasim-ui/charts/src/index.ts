@@ -22,6 +22,14 @@ export {
   type FocusValue,
   type FocusStyle,
 } from "./ChoroplethMap/ChoroplethMap.vue";
+export {
+  default as VegaChart,
+  type VegaSpec,
+  type VegaConfig,
+  type VegaView,
+  type VegaRow,
+  type VegaChartData,
+} from "./VegaChart/VegaChart.vue";
 export { default as ChartTooltip } from "./ChartTooltip/ChartTooltip.vue";
 export {
   default as DataTable,

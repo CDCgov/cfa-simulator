@@ -29,6 +29,7 @@ import {
   ChoroplethMap,
   DataTable,
   LineChart,
+  VegaChart,
 } from "@cfasim-ui/charts";
 import usStates from "us-atlas/states-10m.json";
 import usCounties from "us-atlas/counties-10m.json";
@@ -65,6 +66,7 @@ export default {
     app.component("ChoroplethMap", ChoroplethMap);
     app.component("DataTable", DataTable);
     app.component("LineChart", LineChart);
+    app.component("VegaChart", VegaChart);
     app.component("ComponentDemo", ComponentDemo);
     app.config.globalProperties.statesTopo = usStates;
     app.config.globalProperties.countiesTopo = usCounties;
