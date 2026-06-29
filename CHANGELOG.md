@@ -1,6 +1,8 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.6.1] - 2026-06-29
+
 ## [0.6.0] - 2026-06-24
 
 ### Bug Fixes
