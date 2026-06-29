@@ -694,7 +694,9 @@ inverts. The white `outline`, if any, is unaffected.
 Use the `areas` prop to fill a band between two y-series — useful for
 confidence intervals or min/max envelopes around a mean line. Each `Area`
 takes parallel `upper` and `lower` arrays (and an optional `x` array, just
-like `Series`).
+like `Series`). Set `blendMode` on an `Area` to apply a CSS
+`mix-blend-mode` to its fill so overlapping bands combine their colors
+(e.g. `"multiply"`) instead of the later one obscuring the earlier.
 
 <ComponentDemo>
   <LineChart
@@ -1123,6 +1125,7 @@ interface Area {
   x?: LineChartData; // optional parallel x-values
   color?: string;
   opacity?: number;
+  blendMode?: BlendMode; // CSS mix-blend-mode for the fill
 }
 ```
 

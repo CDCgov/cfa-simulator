@@ -333,6 +333,31 @@ describe("LineChart", () => {
     );
   });
 
+  it("applies blendMode as mix-blend-mode style on an area fill", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        areas: [
+          {
+            upper: [10, 20, 30],
+            lower: [0, 5, 10],
+            color: "#ef4444",
+            blendMode: "multiply" as const,
+          },
+          { upper: [12, 22, 32], lower: [2, 7, 12], color: "#3b82f6" },
+        ],
+        height: 100,
+        menu: false,
+      },
+    });
+    // Area fills are the paths with a non-"none" fill.
+    const fills = wrapper
+      .findAll("path")
+      .filter((p) => p.attributes("fill") && p.attributes("fill") !== "none");
+    expect(fills[0].attributes("style")).toContain("mix-blend-mode: multiply");
+    // Plain second area has no blend-mode style.
+    expect(fills[1].attributes("style") ?? "").not.toContain("mix-blend-mode");
+  });
+
   it("renders tooltip overlay when tooltipTrigger is set", () => {
     const wrapper = mount(LineChart, {
       props: {

@@ -114,6 +114,12 @@ export interface Area {
   x?: LineChartXInput;
   color?: string;
   opacity?: number;
+  /**
+   * CSS `mix-blend-mode` applied to the area fill. Lets overlapping
+   * areas (e.g. confidence bands) combine their colors instead of one
+   * obscuring the other.
+   */
+  blendMode?: BlendMode;
 }
 
 export interface AreaSection {
@@ -1218,6 +1224,7 @@ const positionedLegendItems = computed(() => {
           :fill="a.color ?? 'currentColor'"
           :fill-opacity="a.opacity ?? 0.2"
           stroke="none"
+          :style="a.blendMode ? { mixBlendMode: a.blendMode } : undefined"
         />
         <!-- data lines and dots -->
         <template v-for="(s, i) in allSeries" :key="i">
