@@ -1060,3 +1060,126 @@ describe("ChoroplethMap", () => {
     wrapper.unmount();
   });
 });
+
+describe("ChoroplethMap single-state mode", () => {
+  it("scopes counties to a single state by name", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "counties",
+        state: "California",
+      },
+    });
+    const paths = wrapper.findAll(".state-path");
+    // California has 58 counties, all with FIPS prefix "06".
+    expect(paths.length).toBe(58);
+    expect(
+      paths.every((p) => p.attributes("data-feat-id")!.startsWith("06")),
+    ).toBe(true);
+  });
+
+  it("scopes counties to a single state by FIPS code", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "counties",
+        state: "06",
+      },
+    });
+    const paths = wrapper.findAll(".state-path");
+    expect(paths.length).toBe(58);
+    expect(
+      paths.every((p) => p.attributes("data-feat-id")!.startsWith("06")),
+    ).toBe(true);
+  });
+
+  it("scopes HSAs to a single state", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "hsas",
+        state: "California",
+      },
+    });
+    await flushDynamicImports();
+    const paths = wrapper.findAll(".state-path");
+    // A handful of HSAs, far fewer than the national 949, all "06"-prefixed.
+    expect(paths.length).toBeGreaterThan(0);
+    expect(paths.length).toBeLessThan(200);
+    expect(
+      paths.every((p) => p.attributes("data-feat-id")!.startsWith("06")),
+    ).toBe(true);
+  });
+
+  it("renders a single state outline instead of the national border mesh", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "counties",
+        state: "California",
+      },
+    });
+    const borderPaths = wrapper
+      .findAll("path")
+      .filter(
+        (p) =>
+          p.attributes("fill") === "none" &&
+          p.attributes("pointer-events") === "none",
+      );
+    expect(borderPaths.length).toBe(1);
+    expect(borderPaths[0].attributes("d")).toBeTruthy();
+  });
+
+  it("colors only the scoped state's counties from national data", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "counties",
+        state: "California",
+        data: [
+          { id: "06037", value: 100 }, // Los Angeles County, CA — in scope
+          { id: "04015", value: 50 }, // Mohave County, AZ — out of scope
+        ],
+      },
+    });
+    const paths = wrapper.findAll(".state-path");
+    const la = paths.find((p) =>
+      p.find("title").text().includes("Los Angeles"),
+    );
+    expect(la).toBeDefined();
+    expect(la!.attributes("fill")).not.toBe("#ddd");
+    // The out-of-state county isn't rendered at all.
+    expect(
+      paths.find((p) => p.attributes("data-feat-id") === "04015"),
+    ).toBeUndefined();
+  });
+
+  it("falls back to the full map and warns for an unknown state", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "counties",
+        state: "Atlantis",
+      },
+    });
+    const paths = wrapper.findAll(".state-path");
+    expect(paths.length).toBeGreaterThanOrEqual(3000);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('state="Atlantis"'),
+    );
+    warn.mockRestore();
+  });
+});

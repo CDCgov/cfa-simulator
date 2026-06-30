@@ -107,6 +107,15 @@ const props = withDefaults(
      * When unset, data ids must match the base `geoType`.
      */
     dataGeoType?: GeoType;
+    /**
+     * Scope the map to a single state: render only that state's outline with
+     * its `counties` or `hsas` inside it (no surrounding states), and refit
+     * the projection to zoom to it. Accepts a state name ("California") or a
+     * 2-digit FIPS code ("06"). Requires a counties topology when `geoType`
+     * is `"counties"` or `"hsas"`. If the value matches no state, the full
+     * national map is rendered and a warning is logged.
+     */
+    state?: string;
     width?: number;
     height?: number;
     colorScale?: ChoroplethColorScale | ThresholdStop[] | CategoricalStop[];
@@ -692,6 +701,58 @@ type CountiesTopo = Topology<{
   states: NamedGeometry;
 }>;
 
+type StateFeature = GeoJSON.Feature<GeoJSON.Geometry | null, { name?: string }>;
+
+// ─── Single-state scoping (`state` prop) ─────────────────────────────────
+//
+// Resolved directly from the topology's `states` object (not from
+// featuresByGeoType) so it stays free of the featuresGeo → featuresById →
+// featuresByGeoType chain — that chain reads `stateFips`, so depending on it
+// here would form a reactive cycle.
+const statesFeatures = computed<StateFeature[]>(() => {
+  const topo = toRaw(props.topology) as unknown as {
+    objects?: { states?: NamedGeometry };
+  };
+  const statesObj = topo?.objects?.states;
+  if (!statesObj) return [];
+  const fc = feature(topo as unknown as Topology, statesObj) as
+    | GeoJSON.FeatureCollection<GeoJSON.Geometry | null, { name?: string }>
+    | StateFeature;
+  return fc.type === "FeatureCollection" ? fc.features : [fc];
+});
+
+// 2-digit FIPS for the active `state` prop, or null when unset/unresolved.
+const stateFips = computed<string | null>(() => {
+  const s = props.state?.trim();
+  if (!s) return null;
+  if (/^\d{1,2}$/.test(s)) return s.padStart(2, "0");
+  const match = statesFeatures.value.find((f) => f.properties?.name === s);
+  return match?.id != null ? String(match.id).padStart(2, "0") : null;
+});
+
+// The single state's GeoJSON feature — drives the outline path and the
+// projection fit in single-state mode.
+const stateOutlineFeature = computed<StateFeature | null>(() => {
+  const fips = stateFips.value;
+  if (!fips) return null;
+  return (
+    statesFeatures.value.find((f) => String(f.id).padStart(2, "0") === fips) ??
+    null
+  );
+});
+
+watch(
+  () => [props.state, stateFips.value] as const,
+  ([state, fips]) => {
+    if (state && state.trim() && !fips) {
+      console.warn(
+        `[ChoroplethMap] state="${state}" matched no state name or FIPS code; rendering the full map.`,
+      );
+    }
+  },
+  { immediate: true },
+);
+
 // HSA mapping is loaded lazily — it's ~25KB gzipped and only needed when
 // geoType or dataGeoType is "hsas". Keeps the main bundle small for users
 // who only need states/counties maps.
@@ -727,10 +788,14 @@ const hsaFeaturesGeo = computed(() => {
   const { fipsToHsa, hsaNames } = mod;
   const topo = toRaw(props.topology) as unknown as CountiesTopo;
   const countyGeometries = topo.objects.counties.geometries;
+  const scopeFips = stateFips.value;
   const groups = new Map<string, typeof countyGeometries>();
 
   for (const geom of countyGeometries) {
     const fips = String(geom.id).padStart(5, "0");
+    // Single-state mode: drop counties outside the state before grouping, so
+    // the resulting HSAs only cover the selected state.
+    if (scopeFips && fips.slice(0, 2) !== scopeFips) continue;
     const hsaCode = fipsToHsa[fips];
     if (!hsaCode) continue;
     if (!groups.has(hsaCode)) groups.set(hsaCode, []);
@@ -751,30 +816,63 @@ const hsaFeaturesGeo = computed(() => {
 });
 
 const featuresGeo = computed(() => {
+  // hsaFeaturesGeo already honors `state` (it scopes the source counties).
   if (props.geoType === "hsas") return hsaFeaturesGeo.value;
+  const scopeFips = stateFips.value;
   if (props.geoType === "counties") {
     const topo = toRaw(props.topology) as unknown as CountiesTopo;
-    return feature(topo, topo.objects.counties);
+    const fc = feature(topo, topo.objects.counties);
+    if (!scopeFips) return fc;
+    return {
+      type: "FeatureCollection" as const,
+      features: fc.features.filter(
+        (f) => String(f.id).padStart(5, "0").slice(0, 2) === scopeFips,
+      ),
+    };
   }
   const topo = toRaw(props.topology) as unknown as StatesTopo;
-  return feature(topo, topo.objects.states);
+  const fc = feature(topo, topo.objects.states);
+  if (!scopeFips) return fc;
+  return {
+    type: "FeatureCollection" as const,
+    features: fc.features.filter(
+      (f) => String(f.id).padStart(2, "0") === scopeFips,
+    ),
+  };
 });
 
 const stateBordersPath = computed(() => {
   if (props.geoType !== "counties" && props.geoType !== "hsas") return null;
+  // Single-state mode: trace just the selected state's outline instead of
+  // the full national state-border mesh.
+  if (stateFips.value) return stateOutlineFeature.value;
   const topo = toRaw(props.topology) as unknown as CountiesTopo;
   return mesh(topo, topo.objects.states, (a, b) => a !== b);
 });
 
-const projection = computed(() =>
-  geoAlbersUsa().fitExtent(
+// Breathing room (canonical px) around a single state so its outline isn't
+// flush against the SVG edge. Only applied in single-state mode.
+const STATE_FIT_INSET = 12;
+
+const projection = computed(() => {
+  const outline = stateOutlineFeature.value;
+  if (stateFips.value && outline) {
+    return geoAlbersUsa().fitExtent(
+      [
+        [STATE_FIT_INSET, STATE_FIT_INSET],
+        [width.value - STATE_FIT_INSET, height.value - STATE_FIT_INSET],
+      ],
+      outline,
+    );
+  }
+  return geoAlbersUsa().fitExtent(
     [
       [0, 0],
       [width.value, height.value],
     ],
     featuresGeo.value,
-  ),
-);
+  );
+});
 
 const pathGenerator = computed(() => geoPath(projection.value));
 
@@ -1481,9 +1579,12 @@ const menuItems = computed<ChartMenuItem[]>(() => {
 // Registered last so the eagerly-evaluated source getters can read every
 // computed defined above without hitting a TDZ.
 
-// Geometry / projection / tooltip-mode → full rebuild.
+// Geometry / projection / tooltip-mode → full rebuild. `featuresGeo` is
+// watched explicitly because in single-state mode the projection is pinned
+// to the static state outline, so an async change to the feature set (e.g.
+// the lazy HSA module resolving) wouldn't otherwise change `pathGenerator`.
 watch(
-  () => [pathGenerator.value, hasInteractiveTooltip.value],
+  () => [featuresGeo.value, pathGenerator.value, hasInteractiveTooltip.value],
   () => rebuildPaths(),
 );
 

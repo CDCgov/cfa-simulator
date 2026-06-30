@@ -356,6 +356,58 @@ Set `geoType="hsas"` to render Health Service Area boundaries. HSAs are dissolve
   </template>
 </ComponentDemo>
 
+### Single-state map (`state`)
+
+Set the `state` prop to render just one state's outline with its `counties` or
+`hsas` inside it — no surrounding states — and the projection zooms to fit it.
+Accepts a state **name** (`"California"`) or a 2-digit **FIPS code** (`"06"`).
+This needs a counties topology (the same `us-atlas/counties-10m.json`). `data`
+can stay national; only features inside the selected state are drawn and
+colored.
+
+<ComponentDemo>
+  <ChoroplethMap
+    :topology="countiesTopo"
+    geo-type="counties"
+    state="California"
+    :data="[
+      { id: '06037', value: 100 },
+      { id: '06073', value: 80 },
+      { id: '06059', value: 65 },
+      { id: '06065', value: 55 },
+      { id: '06001', value: 45 },
+      { id: '06085', value: 40 },
+    ]"
+    title="California cases by county"
+    :legend-title="'Cases'"
+    :height="400"
+  />
+
+<template #code>
+
+```vue
+<ChoroplethMap
+  :topology="countiesTopo"
+  geo-type="counties"
+  state="California"
+  :data="[
+    { id: '06037', value: 100 }, // Los Angeles
+    { id: '06073', value: 80 }, // San Diego
+    { id: '06059', value: 65 }, // Orange
+  ]"
+  title="California cases by county"
+  :legend-title="'Cases'"
+  :height="400"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+Switch `geo-type="hsas"` to fill the same state with Health Service Areas
+instead. An unrecognized `state` value logs a warning and falls back to the
+full national map.
+
 ### Click to focus (`v-model:focus`)
 
 Bind the `focus` prop to pan and zoom to a specific feature. Pass a feature
