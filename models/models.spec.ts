@@ -58,16 +58,33 @@ test("fetch example renders", async ({ page }) => {
   await expect(page.locator("h1")).toContainText("NSSP Emergency Department");
 });
 
-test("state-map renders a single state without NaN paths", async ({ page }) => {
-  await page.goto("/state-map");
-  await expect(page.locator("h1")).toContainText("State-level map");
-  await expect(page.locator("svg path").first()).toBeVisible();
-  const hasNaN = await page.evaluate(() =>
+const mapHasNaN = (page: import("@playwright/test").Page) =>
+  page.evaluate(() =>
     Array.from(document.querySelectorAll("svg path")).some((p) =>
       (p.getAttribute("d") ?? "").includes("NaN"),
     ),
   );
-  expect(hasNaN).toBe(false);
+
+test("state-map starts national and drills into a clicked state", async ({
+  page,
+}) => {
+  await page.goto("/state-map");
+  await expect(page.locator("h1")).toHaveText("United States");
+  await expect(page.locator("svg path").first()).toBeVisible();
+  expect(await mapHasNaN(page)).toBe(false);
+
+  // Click a state → transition into its single-state map.
+  await page.locator(".state-path").first().click();
+  await expect(page.getByRole("button", { name: "Back to US" })).toBeVisible();
+  await expect(page.locator("h1")).not.toHaveText("United States");
+  expect(await mapHasNaN(page)).toBe(false);
+});
+
+test("state-map back button returns to the national view", async ({ page }) => {
+  await page.goto("/state-map?selectedState=California");
+  await expect(page.locator("h1")).toHaveText("California");
+  await page.getByRole("button", { name: "Back to US" }).click();
+  await expect(page.locator("h1")).toHaveText("United States");
 });
 
 test("state-map renders an island territory via the Mercator fallback", async ({
@@ -77,22 +94,19 @@ test("state-map renders an island territory via the Mercator fallback", async ({
   // geoMercator instead of emitting NaN path data.
   await page.goto("/state-map?selectedState=Puerto%20Rico");
   await expect(page.locator("svg path").first()).toBeVisible();
-  const hasNaN = await page.evaluate(() =>
-    Array.from(document.querySelectorAll("svg path")).some((p) =>
-      (p.getAttribute("d") ?? "").includes("NaN"),
-    ),
-  );
-  expect(hasNaN).toBe(false);
+  expect(await mapHasNaN(page)).toBe(false);
 });
 
-test("state-map highlights a parent HSA when a county is clicked", async ({
+test("state-map shows county details and highlights without zooming", async ({
   page,
 }) => {
-  await page.goto("/state-map");
+  await page.goto("/state-map?selectedState=California");
   await expect(page.locator(".state-path").first()).toBeVisible();
   await page.locator(".state-path").first().click();
-  // The parent HSA renders as a cross-geoType overlay (lazy HSA module).
-  await expect(page.locator(".focus-overlay")).toBeVisible({ timeout: 10_000 });
+  // Clicking updates the info panel...
+  await expect(page.locator(".info-panel .info-selection")).toBeVisible();
+  // ...and highlights on the map without zooming (no Reset button).
+  await expect(page.locator(".choropleth-reset")).toHaveCount(0);
 });
 
 test("python-example syncs params to URL and hydrates from URL", async ({

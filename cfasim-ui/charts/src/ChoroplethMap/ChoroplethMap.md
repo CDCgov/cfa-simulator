@@ -417,6 +417,10 @@ the focused feature toggles back off. If a tooltip is configured, focusing
 shows that feature's tooltip. Users can pan/zoom freely around the focused
 area; the built-in **Reset** button clears focus and snaps back.
 
+Set `:focus-zoom="false"` to highlight (and draw cross-geoType overlays)
+**without** panning or zooming — useful for a click-to-select interaction
+where the map should stay put while a side panel shows the details.
+
 Selection works on touch too: a single-finger **tap** on a feature emits
 `stateClick` and toggles focus, while drags (pan) and pinches (zoom) are left
 to the map. Hover tooltips stay off on touch for performance.

@@ -184,6 +184,14 @@ const props = withDefaults(
     /** Scale factor applied when `focus` is set. Default: 4 */
     focusZoomLevel?: number;
     /**
+     * Whether setting `focus` pans/zooms to fit the focused feature.
+     * Default `true`. Set `false` to highlight (and draw cross-geoType
+     * overlays) without changing the current pan/zoom — useful for a
+     * click-to-select interaction where the map should stay put. The
+     * built-in Reset button is unaffected.
+     */
+    focusZoom?: boolean;
+    /**
      * Where to teleport the map while expanded (the Expand menu item). A
      * CSS selector or element; defaults to `body`. Moving it to the
      * document root keeps `position: fixed` resolving against the viewport
@@ -204,6 +212,7 @@ const props = withDefaults(
     pan: false,
     tooltipClamp: "chart",
     focusZoomLevel: 4,
+    focusZoom: true,
   },
 );
 
@@ -434,10 +443,13 @@ function setupZoom() {
   // Dynamic filter: re-evaluated per event, so toggling `focus`,
   // `zoom`, or `pan` doesn't require tearing down the zoom behavior.
   // When focus is active we always allow drag + wheel so users can
-  // explore away from the focused area regardless of `zoom`/`pan`.
+  // explore away from the focused area regardless of `zoom`/`pan` — but
+  // not in highlight-only mode (`focusZoom=false`), where focus is purely
+  // visual and shouldn't grant interaction the props didn't ask for.
   // Programmatic `.transform()` calls bypass this filter entirely.
   zoomBehavior.filter((event) => {
-    const focused = normalizedFocus.value.length > 0;
+    const focused =
+      normalizedFocus.value.length > 0 && props.focusZoom !== false;
     const allowZoom = !!props.zoom || focused;
     const allowPan = !!props.pan || focused;
     if (event.type === "wheel" || event.type === "dblclick") {
@@ -547,6 +559,13 @@ function applyFocus() {
   if (resolved.length === 0) {
     focusApplied = true;
     clearHover();
+    return;
+  }
+
+  // Highlight-only mode: the strokes + overlays above are applied; skip the
+  // pan/zoom transform so the current view stays put (click-to-select).
+  if (props.focusZoom === false) {
+    focusApplied = true;
     return;
   }
 

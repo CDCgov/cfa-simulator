@@ -1059,6 +1059,57 @@ describe("ChoroplethMap", () => {
     expect(california.attributes("stroke-dasharray")).toBe("8 4");
     wrapper.unmount();
   });
+
+  it("zooms to the focused feature by default", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: { topology: statesTopo, width: 600, height: 400, focus: "06" },
+    });
+    await flushPromises();
+    // Zoom applied → the Reset button appears.
+    expect(wrapper.find(".choropleth-reset").exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("highlights without zooming when focusZoom is false", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        focus: "06",
+        focusZoom: false,
+      },
+    });
+    await flushPromises();
+    // The focused feature is still highlighted...
+    const california = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06")!;
+    expect(california.attributes("stroke")).toBe("#555");
+    // ...but the map didn't pan/zoom, so no Reset button.
+    expect(wrapper.find(".choropleth-reset").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("draws a cross-geoType overlay without zooming when focusZoom is false", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "counties",
+        focus: { id: "060766", geoType: "hsas" },
+        focusZoom: false,
+      },
+    });
+    await flushDynamicImports();
+    expect(wrapper.find(".focus-overlay").exists()).toBe(true);
+    expect(wrapper.find(".choropleth-reset").exists()).toBe(false);
+    wrapper.unmount();
+  });
 });
 
 describe("ChoroplethMap single-state mode", () => {
