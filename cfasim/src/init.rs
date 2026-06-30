@@ -152,7 +152,34 @@ fn to_module_name(name: &str) -> String {
 }
 
 fn to_package_name(name: &str) -> String {
-    name.replace(['-', '_'], ".")
+    // R package names must start with a letter, contain only letters, digits,
+    // and dots, be at least two characters, and not end in a dot. cfasim
+    // project names are looser (leading digits, leading/trailing/repeated
+    // separators), so map `-`/`_` to dots and repair the rest.
+    let mut out = String::with_capacity(name.len() + 3);
+    let mut pending_dot = false;
+    for ch in name.chars() {
+        if matches!(ch, '-' | '_' | '.') {
+            // Defer dots so we never emit a leading, trailing, or doubled one.
+            pending_dot = !out.is_empty();
+            continue;
+        }
+        if out.is_empty() && ch.is_ascii_digit() {
+            out.push('r'); // Can't start with a digit; seed a leading letter.
+        }
+        if pending_dot {
+            out.push('.');
+            pending_dot = false;
+        }
+        out.push(ch);
+    }
+    if out.is_empty() {
+        out.push('r');
+    }
+    while out.len() < 2 {
+        out.push('x');
+    }
+    out
 }
 
 fn build_env() -> Environment<'static> {
@@ -373,4 +400,63 @@ pub fn run(
     println!("Next steps:\n  cd {dir}\n  pnpm install\n  pnpm run dev");
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn is_valid_r_package_name(name: &str) -> bool {
+        let bytes = name.as_bytes();
+        name.len() >= 2
+            && bytes[0].is_ascii_alphabetic()
+            && !name.ends_with('.')
+            && !name.contains("..")
+            && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '.')
+    }
+
+    #[test]
+    fn package_name_maps_separators_to_dots() {
+        assert_eq!(to_package_name("my-model"), "my.model");
+        assert_eq!(to_package_name("my_cool-model"), "my.cool.model");
+        assert_eq!(to_package_name("model"), "model");
+    }
+
+    #[test]
+    fn package_name_repairs_invalid_shapes() {
+        assert_eq!(to_package_name("2024-sir"), "r2024.sir");
+        assert_eq!(to_package_name("model-"), "model");
+        assert_eq!(to_package_name("-model"), "model");
+        assert_eq!(to_package_name("a--b"), "a.b");
+        assert_eq!(to_package_name("a"), "ax");
+        assert_eq!(to_package_name("_"), "rx");
+    }
+
+    #[test]
+    fn package_name_is_always_valid_for_valid_project_names() {
+        for name in [
+            "my-model",
+            "2fast",
+            "model-",
+            "-model",
+            "a--b",
+            "a",
+            "_",
+            "123",
+            "ABC",
+            "sir_model_2",
+        ] {
+            let pkg = to_package_name(name);
+            assert!(
+                is_valid_r_package_name(&pkg),
+                "to_package_name({name:?}) = {pkg:?} is not a valid R package name"
+            );
+        }
+    }
+
+    #[test]
+    fn module_name_maps_hyphens_to_underscores() {
+        assert_eq!(to_module_name("my-model"), "my_model");
+        assert_eq!(to_module_name("model"), "model");
+    }
 }
