@@ -1110,6 +1110,29 @@ describe("ChoroplethMap", () => {
     expect(wrapper.find(".choropleth-reset").exists()).toBe(false);
     wrapper.unmount();
   });
+
+  it("sets touch-action to pan-y when twoFingerPan is enabled", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        pan: true,
+        twoFingerPan: true,
+      },
+    });
+    // The map svg is the one carrying the feature paths (menu icons are svgs too).
+    const mapSvg = wrapper.find(".state-path").element.closest("svg");
+    expect(mapSvg?.getAttribute("style")).toContain("pan-y");
+  });
+
+  it("does not constrain touch-action by default", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 600, height: 400, pan: true },
+    });
+    const mapSvg = wrapper.find(".state-path").element.closest("svg");
+    expect(mapSvg?.getAttribute("style") ?? "").not.toContain("pan-y");
+  });
 });
 
 describe("ChoroplethMap single-state mode", () => {

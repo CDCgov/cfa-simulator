@@ -258,6 +258,8 @@ Use an array of `CategoricalStop` objects to map string values to colors. Each s
 
 Set `geoType="counties"` to render county-level data using 5-digit FIPS codes. State borders are drawn on top for context. Use `pan` and `zoom` props to enable interactive navigation — useful for dense county data.
 
+On touch devices, add `two-finger-pan` so a single finger scrolls the page (the map sets `touch-action: pan-y`) and two fingers pan/pinch-zoom the map — tap-to-select still works with one finger.
+
 <ComponentDemo>
   <ChoroplethMap
     :topology="countiesTopo"

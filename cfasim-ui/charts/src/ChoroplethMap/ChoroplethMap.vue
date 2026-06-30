@@ -140,6 +140,14 @@ const props = withDefaults(
     zoom?: boolean;
     /** Enable click-and-drag panning. Default: false */
     pan?: boolean;
+    /**
+     * Require two fingers to pan/zoom on touch devices. Default `false`.
+     * When `true`, a single finger scrolls the page (the map sets
+     * `touch-action: pan-y` and ignores one-finger drags) while two fingers
+     * pan and pinch-zoom the map. Single-finger tap-to-select still works.
+     * Has no effect with a mouse.
+     */
+    twoFingerPan?: boolean;
     /** Tooltip activation mode */
     tooltipTrigger?: "hover" | "click";
     /**
@@ -210,6 +218,7 @@ const props = withDefaults(
     legend: true,
     zoom: false,
     pan: false,
+    twoFingerPan: false,
     tooltipClamp: "chart",
     focusZoomLevel: 4,
     focusZoom: true,
@@ -456,6 +465,15 @@ function setupZoom() {
       if (!allowZoom) return false;
     } else if (event.type === "mousedown" || event.type === "touchstart") {
       if (!allowPan) return false;
+      // Two-finger-only mode: ignore single-finger touches so the page can
+      // scroll; a second finger drives the map (pan + pinch-zoom).
+      if (
+        props.twoFingerPan &&
+        event.type === "touchstart" &&
+        (event as TouchEvent).touches.length < 2
+      ) {
+        return false;
+      }
     } else if (!allowZoom && !allowPan) {
       return false;
     }
@@ -1724,6 +1742,7 @@ watch(
         ref="svgRef"
         :viewBox="`0 0 ${width} ${height}`"
         preserveAspectRatio="xMidYMid meet"
+        :style="twoFingerPan ? { touchAction: 'pan-y' } : undefined"
       >
         <!--
         Path elements are created imperatively in `rebuildPaths()`; Vue never
