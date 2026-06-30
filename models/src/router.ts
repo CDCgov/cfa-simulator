@@ -27,6 +27,13 @@ export const models = [
     description: "CFA Pyrenew hospital admission forecasts",
     component: () => import("./fetch-example/Page.vue"),
   },
+  {
+    path: "/state-map",
+    name: "State Map",
+    description:
+      "Single-state choropleth: one state's counties or HSAs, click to highlight",
+    component: () => import("./state-map/Page.vue"),
+  },
 ];
 
 export const router = createRouter({

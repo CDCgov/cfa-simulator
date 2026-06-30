@@ -4,11 +4,12 @@ test("home page lists all models", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("h1")).toContainText("Models");
   const cards = page.locator(".model-card");
-  await expect(cards).toHaveCount(4);
+  await expect(cards).toHaveCount(5);
   await expect(cards.nth(0)).toContainText("Reed-Frost Epidemic");
   await expect(cards.nth(1)).toContainText("Ixa Example");
   await expect(cards.nth(2)).toContainText("Python Example");
   await expect(cards.nth(3)).toContainText("Fetch Example");
+  await expect(cards.nth(4)).toContainText("State Map");
 });
 
 test("reed-frost model renders", async ({ page }) => {
@@ -55,6 +56,43 @@ test("python example renders", async ({ page }) => {
 test("fetch example renders", async ({ page }) => {
   await page.goto("/fetch-example");
   await expect(page.locator("h1")).toContainText("NSSP Emergency Department");
+});
+
+test("state-map renders a single state without NaN paths", async ({ page }) => {
+  await page.goto("/state-map");
+  await expect(page.locator("h1")).toContainText("State-level map");
+  await expect(page.locator("svg path").first()).toBeVisible();
+  const hasNaN = await page.evaluate(() =>
+    Array.from(document.querySelectorAll("svg path")).some((p) =>
+      (p.getAttribute("d") ?? "").includes("NaN"),
+    ),
+  );
+  expect(hasNaN).toBe(false);
+});
+
+test("state-map renders an island territory via the Mercator fallback", async ({
+  page,
+}) => {
+  // geoAlbersUsa can't project Puerto Rico; the component must fall back to
+  // geoMercator instead of emitting NaN path data.
+  await page.goto("/state-map?selectedState=Puerto%20Rico");
+  await expect(page.locator("svg path").first()).toBeVisible();
+  const hasNaN = await page.evaluate(() =>
+    Array.from(document.querySelectorAll("svg path")).some((p) =>
+      (p.getAttribute("d") ?? "").includes("NaN"),
+    ),
+  );
+  expect(hasNaN).toBe(false);
+});
+
+test("state-map highlights a parent HSA when a county is clicked", async ({
+  page,
+}) => {
+  await page.goto("/state-map");
+  await expect(page.locator(".state-path").first()).toBeVisible();
+  await page.locator(".state-path").first().click();
+  // The parent HSA renders as a cross-geoType overlay (lazy HSA module).
+  await expect(page.locator(".focus-overlay")).toBeVisible({ timeout: 10_000 });
 });
 
 test("python-example syncs params to URL and hydrates from URL", async ({
