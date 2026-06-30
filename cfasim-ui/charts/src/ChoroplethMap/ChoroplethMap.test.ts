@@ -1182,4 +1182,71 @@ describe("ChoroplethMap single-state mode", () => {
     );
     warn.mockRestore();
   });
+
+  it("renders an island territory without NaN paths (Mercator fallback)", () => {
+    // geoAlbersUsa doesn't cover Puerto Rico, so fitExtent would otherwise
+    // yield a NaN transform and every path would render as "MNaN,NaN…".
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "counties",
+        state: "Puerto Rico",
+      },
+    });
+    const paths = wrapper.findAll("path");
+    expect(paths.length).toBeGreaterThan(0);
+    for (const p of paths) {
+      expect(p.attributes("d") ?? "").not.toContain("NaN");
+    }
+  });
+
+  it("highlights a cross-geoType HSA overlay on a county state map", async () => {
+    // "Click a county, highlight its HSA": a counties base map scoped to one
+    // state, with an HSA focused as a cross-geoType overlay.
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "counties",
+        state: "California",
+        dataGeoType: "hsas",
+        focus: { id: "060766", geoType: "hsas" }, // a California HSA
+      },
+    });
+    await flushDynamicImports();
+    const overlay = wrapper.find(".focus-overlay");
+    expect(overlay.exists()).toBe(true);
+    expect(overlay.attributes("fill")).toBe("none");
+    expect(overlay.attributes("pointer-events")).toBe("none");
+    // The overlay is projected through the state projection — it must have a
+    // real, finite path.
+    const d = overlay.attributes("d") ?? "";
+    expect(d.length).toBeGreaterThan(0);
+    expect(d).not.toContain("NaN");
+    wrapper.unmount();
+  });
+
+  it("emits stateClick and update:focus for a county on the state map", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "counties",
+        state: "California",
+      },
+    });
+    const county = wrapper.find(".state-path");
+    await county.trigger("click");
+    const click = wrapper.emitted("stateClick");
+    expect(click).toHaveLength(1);
+    const payload = click![0][0] as { id: string; name: string };
+    // Only California counties are present, so the clicked id is "06"-scoped.
+    expect(payload.id.startsWith("06")).toBe(true);
+    expect(wrapper.emitted("update:focus")![0][0]).toBe(payload.id);
+  });
 });

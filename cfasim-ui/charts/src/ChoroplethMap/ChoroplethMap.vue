@@ -8,7 +8,7 @@ import {
   toRaw,
   useSlots,
 } from "vue";
-import { geoPath, geoAlbersUsa } from "d3-geo";
+import { geoPath, geoAlbersUsa, geoMercator } from "d3-geo";
 import { zoom as d3Zoom, zoomIdentity } from "d3-zoom";
 import { select } from "d3-selection";
 // Side-effect import: enables `selection.transition()` on d3 selections so
@@ -857,13 +857,21 @@ const STATE_FIT_INSET = 12;
 const projection = computed(() => {
   const outline = stateOutlineFeature.value;
   if (stateFips.value && outline) {
-    return geoAlbersUsa().fitExtent(
-      [
-        [STATE_FIT_INSET, STATE_FIT_INSET],
-        [width.value - STATE_FIT_INSET, height.value - STATE_FIT_INSET],
-      ],
-      outline,
-    );
+    const extent: [[number, number], [number, number]] = [
+      [STATE_FIT_INSET, STATE_FIT_INSET],
+      [width.value - STATE_FIT_INSET, height.value - STATE_FIT_INSET],
+    ];
+    const albers = geoAlbersUsa().fitExtent(extent, outline);
+    // geoAlbersUsa only covers the 50 states + DC (it handles Alaska and
+    // Hawaii via insets). The island territories — Puerto Rico, Guam, the
+    // US Virgin Islands, American Samoa, the N. Mariana Islands — fall
+    // outside it and project to null, so fitExtent yields a NaN transform
+    // and every path renders as "MNaN,NaN…". Detect that by projecting the
+    // outline's centroid and fall back to a plain Mercator that can render
+    // any region.
+    const c = geoPath(albers).centroid(outline);
+    if (Number.isFinite(c[0]) && Number.isFinite(c[1])) return albers;
+    return geoMercator().fitExtent(extent, outline);
   }
   return geoAlbersUsa().fitExtent(
     [
