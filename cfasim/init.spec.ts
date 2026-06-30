@@ -72,7 +72,7 @@ async function waitForServer(url: string, timeoutMs = SERVER_START_TIMEOUT_MS) {
 }
 
 test.describe("cfasim init", () => {
-  const projects: {
+  const allProjects: {
     name: string;
     template: Template;
     port: number;
@@ -103,6 +103,10 @@ test.describe("cfasim init", () => {
       paramLabel: "Steps",
     },
   ];
+
+  // The R template's webR build/download pushes the shared beforeAll past the
+  // 5-minute hook timeout, so skip the R project (its setup + tests) for now.
+  const projects = allProjects.filter((p) => p.template !== "R");
 
   const procs: ChildProcess[] = [];
 
