@@ -64,7 +64,14 @@ function buildCall(fn: string, params?: Record<string, JsonValue>): string {
 }
 
 function asArrayBuffer(value: unknown, type: string): ArrayBuffer {
-  const values = Array.from(value as Iterable<number | boolean>);
+  // webR's toJs() collapses a length-1 atomic vector to a bare scalar, so a
+  // single-row column arrives here as a number/boolean rather than an array.
+  // Wrap it back into a one-element column so the buffer isn't empty.
+  const column =
+    Array.isArray(value) || ArrayBuffer.isView(value)
+      ? (value as Iterable<number | boolean>)
+      : [value as number | boolean];
+  const values = Array.from(column);
   switch (type) {
     case "f64":
       return new Float64Array(values as number[]).buffer;
@@ -84,6 +91,15 @@ function arrayFromNamedList(value: unknown): unknown[] | null {
   if (Array.isArray(value)) return value;
   if (value && typeof value === "object") return Object.values(value);
   return null;
+}
+
+function normalizeColumn(col: ColumnDescriptor): ColumnDescriptor {
+  // A single-label enum() collapses its labels to a bare string the same way a
+  // single-row column does; restore the array so enum decoding sees string[].
+  if (col.enumLabels !== undefined && !Array.isArray(col.enumLabels)) {
+    return { ...col, enumLabels: [col.enumLabels as unknown as string] };
+  }
+  return col;
 }
 
 export function normalizeWebRValue(value: unknown): unknown {
@@ -157,14 +173,15 @@ export function convertRModelOutputs(value: unknown): ModelOutputsWire | null {
   for (const [name, output] of Object.entries(
     maybe.outputs as Record<string, any>,
   )) {
-    const columns = arrayFromNamedList(output.columns) as
+    const rawColumns = arrayFromNamedList(output.columns) as
       | ColumnDescriptor[]
       | null;
     const data = arrayFromNamedList(output.buffers ?? output.data);
-    if (!columns || !data) {
+    if (!rawColumns || !data) {
       throw new Error(`Invalid R ModelOutput: ${name}`);
     }
 
+    const columns = rawColumns.map(normalizeColumn);
     const buffers = columns.map((col, i) => asArrayBuffer(data[i], col.type));
     const firstColumn = data[0] as { length?: number } | undefined;
     const length =
