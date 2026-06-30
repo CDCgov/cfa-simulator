@@ -1,6 +1,21 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.6.2] - 2026-06-30
+
+### Bug Fixes
+
+- **charts:** Render island territories in single-state map
+- **charts:** Reset pan/zoom when the state prop changes
+
+### Features
+
+- **charts:** Add single-state mode to ChoroplethMap
+- **models:** Add state-level map example
+- **charts:** Add focusZoom prop and rework the state-map demo as a drill-down
+- **charts:** Add twoFingerPan option for two-finger pan/zoom on touch
+- **models:** Enable pan/zoom on the national map, remove menu and title
+
 ## [0.6.1] - 2026-06-29
 
 ## [0.6.0] - 2026-06-24
