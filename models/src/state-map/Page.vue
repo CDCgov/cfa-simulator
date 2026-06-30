@@ -158,7 +158,6 @@ const subtitle = computed(() =>
   </Teleport>
 
   <div class="state-map-page">
-    <h1>{{ heading }}</h1>
     <p class="subtitle">{{ subtitle }}</p>
 
     <div class="layout" :class="{ 'is-state': params.selectedState }">
@@ -171,8 +170,9 @@ const subtitle = computed(() =>
           :focus="focus"
           :focus-zoom="false"
           :legend="false"
-          :pan="!!params.selectedState"
-          :zoom="!!params.selectedState"
+          :menu="false"
+          :pan="true"
+          :zoom="true"
           two-finger-pan
           tooltip-trigger="hover"
           @state-click="onMapClick"

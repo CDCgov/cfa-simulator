@@ -69,22 +69,25 @@ test("state-map starts national and drills into a clicked state", async ({
   page,
 }) => {
   await page.goto("/state-map");
-  await expect(page.locator("h1")).toHaveText("United States");
+  await expect(page.locator(".subtitle")).toContainText("Click a state");
   await expect(page.locator("svg path").first()).toBeVisible();
   expect(await mapHasNaN(page)).toBe(false);
+  // No info panel at the national level.
+  await expect(page.locator(".info-panel")).toHaveCount(0);
 
   // Click a state → transition into its single-state map.
   await page.locator(".state-path").first().click();
   await expect(page.getByRole("button", { name: "Back to US" })).toBeVisible();
-  await expect(page.locator("h1")).not.toHaveText("United States");
+  await expect(page.locator(".info-panel")).toBeVisible();
   expect(await mapHasNaN(page)).toBe(false);
 });
 
 test("state-map back button returns to the national view", async ({ page }) => {
   await page.goto("/state-map?selectedState=California");
-  await expect(page.locator("h1")).toHaveText("California");
+  await expect(page.locator(".info-panel h2")).toHaveText("California");
   await page.getByRole("button", { name: "Back to US" }).click();
-  await expect(page.locator("h1")).toHaveText("United States");
+  await expect(page.locator(".info-panel")).toHaveCount(0);
+  await expect(page.locator(".subtitle")).toContainText("Click a state");
 });
 
 test("state-map renders an island territory via the Mercator fallback", async ({
