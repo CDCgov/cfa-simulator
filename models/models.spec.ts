@@ -153,6 +153,12 @@ test("r example renders", async ({ page }) => {
   await page.goto("/r-example");
   await expect(page.locator("h1")).toContainText("R Example");
   await expect(page.getByLabel("Steps")).toBeVisible();
+  // The R model must actually run in webR and produce output, not just mount —
+  // a broken runtime would leave loading/error up with no series rows.
+  const rows = page.getByRole("listitem");
+  await expect(rows).toHaveCount(10, { timeout: 60_000 });
+  await expect(rows.first()).toContainText("t=0, v=0");
+  await expect(page.getByText("Loading...")).toHaveCount(0);
 });
 
 test("python-example syncs params to URL and hydrates from URL", async ({
@@ -192,6 +198,8 @@ test("r-example syncs params to URL and hydrates from URL", async ({
   const rateInput = page.getByLabel("Rate");
   await expect(stepsInput).toHaveValue("25");
   await expect(rateInput).toHaveValue("4.5");
+  // The URL-provided steps must drive the model output (25 series rows).
+  await expect(page.getByRole("listitem")).toHaveCount(25, { timeout: 60_000 });
 
   await stepsInput.fill("40");
   await stepsInput.press("Tab");
