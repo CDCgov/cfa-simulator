@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { convertRModelOutputs, normalizeWebRValue } from "./rwasm.worker.js";
+import {
+  buildCall,
+  convertRModelOutputs,
+  normalizeWebRValue,
+} from "./rConvert.js";
 
 // Minimal stand-ins for webR's `toJs()` output shape (WebRDataJs): every R
 // object becomes `{ type, names, values }`, and atomic vectors of length 1
@@ -142,5 +146,31 @@ describe("convertRModelOutputs", () => {
   it("returns null for values that are not model outputs", () => {
     expect(convert(dbl(1, 2, 3))).toBeNull();
     expect(convert(namedList({ a: dbl(1) }))).toBeNull();
+  });
+});
+
+describe("buildCall", () => {
+  it("renders named arguments as R literals", () => {
+    expect(buildCall("simulate", { steps: 10, rate: 2.5 })).toBe(
+      "simulate(steps = 10, rate = 2.5)",
+    );
+    expect(buildCall("run")).toBe("run()");
+  });
+
+  it("escapes string arguments so they can't break out of the literal", () => {
+    expect(buildCall("f", { x: 'a"); stop("x' })).toBe(
+      'f(x = "a\\"); stop(\\"x")',
+    );
+  });
+
+  it("maps booleans and null to R keywords", () => {
+    expect(buildCall("f", { a: true, b: false, c: null })).toBe(
+      "f(a = TRUE, b = FALSE, c = NULL)",
+    );
+  });
+
+  it("rejects non-finite numbers and unsafe function names", () => {
+    expect(() => buildCall("f", { x: Infinity })).toThrow(/finite/);
+    expect(() => buildCall("system('rm')")).toThrow(/Invalid R function name/);
   });
 });

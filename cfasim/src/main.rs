@@ -71,8 +71,10 @@ enum TemplateArg {
     Python,
     Rust,
     Ixa,
-    // Keep the CLI value uppercase; clap would otherwise expose this as `r`.
-    #[value(name = "R")]
+    // Surface as `R` (matches the template/display name) but also accept the
+    // lowercase `r` a user would naturally type — otherwise clap rejects `r`
+    // and unhelpfully suggests `rust`.
+    #[value(name = "R", alias = "r")]
     R,
 }
 

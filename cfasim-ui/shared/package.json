@@ -18,7 +18,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./transfer": "./src/transferUtils.ts",
-    "./model-output": "./src/ModelOutput.ts"
+    "./model-output": "./src/ModelOutput.ts",
+    "./worker-pool": "./src/workerPool.ts",
+    "./use-model": "./src/useModelFactory.ts"
   },
   "peerDependencies": {
     "vue": "^3.5.0"
