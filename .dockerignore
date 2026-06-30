@@ -1,0 +1,13 @@
+node_modules/
+.git/
+*.log*
+.env*
+coverage/
+target/
+dist/
+build/
+.venv/
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/

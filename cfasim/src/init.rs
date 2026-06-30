@@ -19,6 +19,7 @@ pub enum Template {
     Python,
     Rust,
     Ixa,
+    R,
 }
 
 impl Template {
@@ -27,6 +28,7 @@ impl Template {
             Template::Python => "python",
             Template::Rust => "rust",
             Template::Ixa => "ixa",
+            Template::R => "R",
         }
     }
 
@@ -35,6 +37,7 @@ impl Template {
             Template::Python => "python",
             Template::Rust => "rust",
             Template::Ixa => "ixa",
+            Template::R => "R",
         }
     }
 }
@@ -45,6 +48,7 @@ impl fmt::Display for Template {
             Template::Python => write!(f, "Python"),
             Template::Rust => write!(f, "Rust (WASM)"),
             Template::Ixa => write!(f, "Ixa (Rust agent-based model on WASM)"),
+            Template::R => write!(f, "R"),
         }
     }
 }
@@ -147,6 +151,10 @@ fn to_module_name(name: &str) -> String {
     name.replace('-', "_")
 }
 
+fn to_package_name(name: &str) -> String {
+    name.replace(['-', '_'], ".")
+}
+
 fn build_env() -> Environment<'static> {
     let mut env = Environment::new();
     // Don't auto-escape — these aren't HTML, they're source files.
@@ -167,6 +175,7 @@ fn render(
         context! {
             project_name => name,
             module_name => to_module_name(name),
+            package_name => to_package_name(name),
             cfasim_version => env!("CARGO_PKG_VERSION"),
             runtime => runtime,
             // Set by the e2e tests to the cfa-simulator repo root so the
@@ -316,6 +325,11 @@ pub fn run(
                 Template::Ixa,
                 "Ixa",
                 "Agent-based model using the ixa framework on WASM",
+            )
+            .item(
+                Template::R,
+                "R",
+                "Bundles R packages for WebAssembly via rwasm",
             )
             .interact()?,
     };

@@ -1,6 +1,6 @@
 # Getting Started
 
-cfasim-ui is a Vue 3 component library for building interactive simulations. It runs your model — written in Python or Rust — directly in the browser using Web Workers.
+cfasim-ui is a Vue 3 component library for building interactive simulations. It runs your model — written in Python, Rust, or R — directly in the browser using Web Workers.
 
 ## Create a new project
 
@@ -63,7 +63,7 @@ And finally, create a new project:
 cfasim init
 ```
 
-`cfasim init` prompts for a project name and language (Python or Rust), then generates a Vite + Vue app wired up to run your model in the browser.
+`cfasim init` prompts for a project name and language (Python, Rust, or R), then generates a Vite + Vue app wired up to run your model in the browser.
 
 ## Packages
 
@@ -74,6 +74,7 @@ cfasim init
 | `@cfasim-ui/theme`      | Design tokens, reset, and utility classes                     |
 | `@cfasim-ui/pyodide`    | Run Python models in the browser via Pyodide                  |
 | `@cfasim-ui/wasm`       | Run Rust/WASM models in the browser                           |
+| `@cfasim-ui/rwasm`      | Run bundled R models in the browser via webR                  |
 
 ## Choose your guide
 
@@ -81,5 +82,6 @@ Follow the guide for the language your model is written in:
 
 - **[Python Projects](./guide/python)** — Vite + Vue + Pyodide. Write your model in Python, build it as a wheel, and run it in the browser.
 - **[Rust Projects](./guide/rust)** — Vite + Vue + WebAssembly. Write your model in Rust, compile to WASM, and run it in the browser.
+- **[R Projects](./guide/r)** — Vite + Vue + webR. Write your model in R, bundle dependencies with rwasm, and run it in the browser.
 
-Both guides walk through project setup, model creation, Vite configuration, and wiring up the UI from scratch.
+These guides walk through project setup, model creation, Vite configuration, and wiring up the UI from scratch.

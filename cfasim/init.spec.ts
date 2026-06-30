@@ -1,14 +1,26 @@
 import { test, expect } from "@playwright/test";
 import { execSync, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { existsSync, rmSync, mkdtempSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync, rmSync, mkdtempSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const CLI = resolve(ROOT, "target/debug/cfasim");
+const require = createRequire(import.meta.url);
+const rwasmRequire = createRequire(
+  resolve(ROOT, "cfasim-ui/rwasm/package.json"),
+);
+const WEBR_ENTRY = rwasmRequire.resolve("webr");
+const WEBR_VERSION = JSON.parse(
+  readFileSync(resolve(dirname(dirname(WEBR_ENTRY)), "package.json"), "utf8"),
+).version;
+const SERVER_START_TIMEOUT_MS = Number(
+  process.env.CFASIM_E2E_SERVER_TIMEOUT_MS ?? "300000",
+);
 
-type Template = "python" | "rust" | "ixa";
+type Template = "python" | "rust" | "ixa" | "R";
 
 const TMP_DIR = mkdtempSync(resolve(tmpdir(), "cfasim-test-"));
 
@@ -45,7 +57,7 @@ function startVite(
   return { proc, url: `http://localhost:${port}` };
 }
 
-async function waitForServer(url: string, timeoutMs = 30_000) {
+async function waitForServer(url: string, timeoutMs = SERVER_START_TIMEOUT_MS) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
@@ -84,6 +96,12 @@ test.describe("cfasim init", () => {
       port: 7203,
       paramLabel: "Population",
     },
+    {
+      name: "test-project-R",
+      template: "R",
+      port: 7204,
+      paramLabel: "Steps",
+    },
   ];
 
   const procs: ChildProcess[] = [];
@@ -104,13 +122,27 @@ test.describe("cfasim init", () => {
     for (const p of projects) {
       scaffoldProject(p.name, p.template);
       execSync("pnpm install", { cwd: resolve(TMP_DIR, p.name) });
+      if (p.template === "R") {
+        execSync("pnpm run build", {
+          cwd: resolve(TMP_DIR, p.name),
+          stdio: "pipe",
+        });
+        const webrWorker = resolve(
+          TMP_DIR,
+          p.name,
+          `dist/rwasm/webr/v${WEBR_VERSION}/webr-worker.js`,
+        );
+        if (!existsSync(webrWorker)) {
+          throw new Error(`Missing hosted webR worker asset: ${webrWorker}`);
+        }
+      }
     }
 
     // Pre-build wasm so `waitForServer` doesn't time out waiting on the
     // `cfasimWasm` plugin's cold cargo build during vite startup. Mirrors
     // the plugin's invocation in cfasim-ui/wasm/src/vitePlugin.js.
     for (const p of projects) {
-      if (p.template === "python") continue; // pyodide template, no wasm-pack
+      if (p.template === "python" || p.template === "R") continue;
       const moduleName = p.name.replace(/-/g, "_");
       execSync(
         `wasm-pack build .. --target web --out-dir public/wasm/${moduleName}`,

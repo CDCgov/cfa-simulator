@@ -7,6 +7,15 @@ __pycache__/
 {%- elif runtime == "rust" -%}
 # Rust
 target/
+{%- elif runtime == "R" -%}
+# R
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+packrat/
+renv/
 {%- endif %}
 
 # UI
@@ -17,6 +26,8 @@ interactive/public/*.whl
 interactive/public/wheels.json
 {%- elif runtime == "rust" -%}
 interactive/public/wasm/
+{%- elif runtime == "R" -%}
+interactive/public/rwasm/
 {%- endif %}
 
 # Tests

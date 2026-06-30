@@ -11,6 +11,7 @@ cfasim-ui/docs/charts/
 cfasim-ui/docs/shared/
 cfasim-ui/docs/pyodide/
 cfasim-ui/docs/wasm/
+cfasim-ui/docs/rwasm/
 cfasim-ui/docs/theme/
 # Template source with minijinja conditionals — prettier can't parse {% %} blocks
 cfasim/src/templates/_shared/interactive/src/env.d.ts
