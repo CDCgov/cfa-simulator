@@ -112,6 +112,7 @@ export default defineConfig({
           { text: "Getting Started", link: "/getting-started" },
           { text: "Python Projects", link: "/guide/python" },
           { text: "Rust Projects", link: "/guide/rust" },
+          { text: "R Projects", link: "/guide/r" },
         ],
       },
       {
@@ -180,6 +181,7 @@ export default defineConfig({
             items: [
               { text: "Pyodide", link: "/cfasim-ui/pyodide" },
               { text: "WASM", link: "/cfasim-ui/wasm" },
+              { text: "rwasm", link: "/cfasim-ui/rwasm" },
             ],
           },
         ],
