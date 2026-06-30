@@ -36,9 +36,9 @@ const ANCHOR_GAP_PX = 4;
 const LABEL_GAP_PX = 6;
 const LINE_HEIGHT_RATIO = 1.2;
 // Ratio of font-size that puts the pointer endpoint at the visual center
-// of the first text line (between baseline and cap-height). Lands on the
-// x-height middle for most fonts.
-const FIRST_LINE_CENTER_RATIO = 0.35;
+// of a text line (between baseline and cap-height). Lands on the x-height
+// middle for most fonts.
+const LINE_CENTER_RATIO = 0.35;
 
 interface TextRun {
   text: string;
@@ -139,6 +139,8 @@ const items = computed<RenderedAnnotation[]>(() => {
       a.align ?? (offsetX > 0 ? "left" : offsetX < 0 ? "right" : "center");
     const textAnchor = alignMap[align];
 
+    const lines = a.text.split("\n").map(parseInline);
+
     let rule: RenderedAnnotation["rule"];
     let pointerPath = "";
     let arrowTip: RenderedAnnotation["arrowTip"];
@@ -152,6 +154,7 @@ const items = computed<RenderedAnnotation[]>(() => {
         labelX,
         labelY,
         fontSize,
+        lines.length,
         pointer as "curved" | "straight" | "none",
       );
       pointerPath = built.path;
@@ -159,7 +162,7 @@ const items = computed<RenderedAnnotation[]>(() => {
     }
 
     out.push({
-      lines: a.text.split("\n").map(parseInline),
+      lines,
       textX: labelX,
       textY: labelY,
       textAnchor,
@@ -220,12 +223,17 @@ function computeRule(
  * - When the label has offset in only one dimension, the line is
  *   straight (vertical or horizontal) ending at the label's baseline.
  * - When both dimensions have offset, the line is a quarter-arc:
- *   a quadratic Bezier with the control point at `(anchorX, firstLineY)`
- *   where `firstLineY` is the visual center of the first line of text
- *   (slightly above the baseline). The curve emerges from the anchor
- *   vertically toward the label's row, then bends horizontally into the
- *   label so the endpoint reads as pointing at the first line — not at
- *   the bottom of a multi-line block.
+ *   a quadratic Bezier with the control point at `(anchorX, targetY)`
+ *   where `targetY` is the visual center of the text line nearest the
+ *   anchor (slightly above its baseline). The curve emerges from the
+ *   anchor vertically toward the label's row, then bends horizontally
+ *   into the label.
+ *
+ * `targetY` tracks the *near* edge of the text block: the first line
+ * when the label sits below the anchor (connector points up at the top
+ * line), the last line when the label sits above the anchor (connector
+ * points up at the bottom line) — so multi-line text above the point
+ * connects to its bottom edge instead of having the line cut through it.
  */
 interface PointerGeom {
   path: string;
@@ -242,23 +250,30 @@ function buildPointerPath(
   lx: number,
   ly: number,
   fontSize: number,
+  lineCount: number,
   pointer: "curved" | "straight" | "none",
 ): PointerGeom {
   if (pointer === "none") return { path: "" };
   const dx = lx - ax;
   const dy = ly - ay;
 
-  // Target the visual center of the first line so multi-line text
-  // doesn't have the pointer dive below the whole block.
-  const targetY = ly - fontSize * FIRST_LINE_CENTER_RATIO;
+  // Aim at the visual center of the text line nearest the anchor: the
+  // first (top) line when the label is below the anchor, the last
+  // (bottom) line when the label is above it. That keeps the connector
+  // attached to the block's near edge instead of cutting through the
+  // lower lines of text that sits above the point.
+  const lineHeight = fontSize * LINE_HEIGHT_RATIO;
+  const nearestBaseline = dy < 0 ? ly + (lineCount - 1) * lineHeight : ly;
+  const targetY = nearestBaseline - fontSize * LINE_CENTER_RATIO;
 
   // Pure horizontal or vertical → straight line at baseline, no curve.
   // Force straight when explicitly requested.
   if (dx === 0 || dy === 0 || pointer === "straight") {
-    // For straight pointers, aim at first-line-center (so multi-line text
-    // still points at the first line) — but only when the anchor isn't
-    // already at exactly the same Y (pure horizontal offset). The pure
-    // horizontal case stays on the baseline so it's a real horizontal line.
+    // For straight pointers, aim at the near-line center (so multi-line
+    // text above the point connects to its bottom edge) — but only when
+    // the anchor isn't already at exactly the same Y (pure horizontal
+    // offset). The pure horizontal case stays on the baseline so it's a
+    // real horizontal line.
     const ey = dy === 0 ? ly : targetY;
     const segDx = lx - ax;
     const segDy = ey - ay;

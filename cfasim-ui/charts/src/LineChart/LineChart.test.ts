@@ -1682,6 +1682,62 @@ describe("LineChart", () => {
       expect(d).toMatch(/^M[\d.,-]+ L[\d.,-]+$/);
     });
 
+    it("connects multi-line text above the point to its bottom edge", () => {
+      // Text sits above the anchor (negative y offset), so the connector
+      // should end below the first line of text — attaching to the block's
+      // bottom edge instead of cutting up through the lower lines.
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 0, y: -60 },
+              text: "line one\nline two\nline three",
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const group = wrapper.find("g.chart-annotations");
+      // First-line baseline = the text element's y.
+      const textY = Number(group.find("text").attributes("y"));
+      // Label end of the straight connector is the `L` point.
+      const d = group.find("path:not(.annotation-outline)").attributes("d")!;
+      const labelEndY = Number(d.match(/L[\d.-]+,([\d.-]+)$/)![1]);
+      // Endpoint lands below the first line (old behavior put it above).
+      expect(labelEndY).toBeGreaterThan(textY);
+    });
+
+    it("connects multi-line text below the point to its top edge", () => {
+      // Text sits below the anchor (positive y offset): connector ends
+      // above the first line, pointing at the top of the block.
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [20, 10, 0],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 0, y: 60 },
+              text: "line one\nline two\nline three",
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const group = wrapper.find("g.chart-annotations");
+      const textY = Number(group.find("text").attributes("y"));
+      const d = group.find("path:not(.annotation-outline)").attributes("d")!;
+      const labelEndY = Number(d.match(/L[\d.-]+,([\d.-]+)$/)![1]);
+      expect(labelEndY).toBeLessThan(textY);
+    });
+
     it("quarter-arc control X matches start X, end Y matches control Y", () => {
       const wrapper = mount(LineChart, {
         props: {

@@ -892,6 +892,56 @@ Markers compose (`**_bold italic_**`).
   </template>
 </ComponentDemo>
 
+Multi-line callouts attach to whichever edge of the text faces the anchor:
+text **above** the point connects to its bottom edge, text **below**
+connects to its top, and text to the side connects to its near vertical
+edge — so the pointer never cuts through the lines. The demo below anchors
+the same two-line label at one point and fans it out in every direction.
+
+<ComponentDemo>
+  <LineChart
+    :data="[2, 10, 7, 6, 8, 4, 9]"
+    :annotations="[
+      { x: 3, y: 6, offset: { x: 0, y: -86 }, text: 'Cluster\ndetected' },
+      { x: 3, y: 6, offset: { x: 62, y: -62 }, text: 'Cluster\ndetected' },
+      { x: 3, y: 6, offset: { x: 96, y: 0 }, text: 'Cluster\ndetected' },
+      { x: 3, y: 6, offset: { x: 62, y: 62 }, text: 'Cluster\ndetected' },
+      { x: 3, y: 6, offset: { x: 0, y: 86 }, text: 'Cluster\ndetected' },
+      { x: 3, y: 6, offset: { x: -62, y: 62 }, text: 'Cluster\ndetected' },
+      { x: 3, y: 6, offset: { x: -96, y: 0 }, text: 'Cluster\ndetected' },
+      { x: 3, y: 6, offset: { x: -62, y: -62 }, text: 'Cluster\ndetected' },
+    ]"
+    :chart-padding="{ top: 70, right: 120, bottom: 50, left: 120 }"
+    :height="340"
+    x-label="Days"
+    y-label="Cases"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :data="[2, 10, 7, 6, 8, 4, 9]"
+  :annotations="[
+    { x: 3, y: 6, offset: { x: 0, y: -86 }, text: 'Cluster\ndetected' },
+    { x: 3, y: 6, offset: { x: 62, y: -62 }, text: 'Cluster\ndetected' },
+    { x: 3, y: 6, offset: { x: 96, y: 0 }, text: 'Cluster\ndetected' },
+    { x: 3, y: 6, offset: { x: 62, y: 62 }, text: 'Cluster\ndetected' },
+    { x: 3, y: 6, offset: { x: 0, y: 86 }, text: 'Cluster\ndetected' },
+    { x: 3, y: 6, offset: { x: -62, y: 62 }, text: 'Cluster\ndetected' },
+    { x: 3, y: 6, offset: { x: -96, y: 0 }, text: 'Cluster\ndetected' },
+    { x: 3, y: 6, offset: { x: -62, y: -62 }, text: 'Cluster\ndetected' },
+  ]"
+  :chart-padding="{ top: 70, right: 120, bottom: 50, left: 120 }"
+  :height="340"
+  x-label="Days"
+  y-label="Cases"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ```ts
 interface ChartAnnotation {
   x: number; // anchor in data coords (x-axis)
