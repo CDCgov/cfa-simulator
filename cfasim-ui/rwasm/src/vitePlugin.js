@@ -183,6 +183,23 @@ export function dockerCommand({
   };
 }
 
+function describeDockerFailure(error) {
+  if (error?.code === "ENOENT") {
+    return (
+      "Docker is required to build R model packages, but the `docker` command " +
+      "was not found. Install Docker (https://docs.docker.com/get-docker/), or " +
+      "pass `docker: false` to cfasimRwasm() to use a prebuilt package repo."
+    );
+  }
+  // execFileSync surfaces the child's output on stderr/stdout, not in the
+  // default "Command failed" message — fold it in so the R/Docker error shows.
+  const detail = [error?.stderr, error?.stdout]
+    .map((buf) => buf?.toString().trim())
+    .find(Boolean);
+  const base = "R package build failed while running Docker";
+  return detail ? `${base}:\n${detail}` : `${base}: ${error?.message ?? error}`;
+}
+
 function shouldRunDocker(
   outDir,
   packages,
@@ -487,7 +504,11 @@ export function buildRwasmBundle(root, options = {}) {
       rwasmPackage,
       docker,
     });
-    execFileSync(command.file, command.args, { cwd: root, stdio: "pipe" });
+    try {
+      execFileSync(command.file, command.args, { cwd: root, stdio: "pipe" });
+    } catch (error) {
+      throw new Error(describeDockerFailure(error), { cause: error });
+    }
   }
 
   if (

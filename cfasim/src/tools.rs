@@ -368,6 +368,21 @@ fn run_inner(skip_network: bool, offer_setup: bool) -> Result<()> {
         wp_hint,
     ));
 
+    // Docker has no pinned minimum — R model builds just need it present.
+    let docker = match run_version("docker", "--version") {
+        Some(v) => Status::Ok(v),
+        None => Status::Missing,
+    };
+    let docker_hint = match &docker {
+        Status::Missing => Some("Install Docker: https://docs.docker.com/get-docker/".into()),
+        _ => None,
+    };
+    results.push((
+        "docker \x1b[2m(R projects)\x1b[0m".into(),
+        docker,
+        docker_hint,
+    ));
+
     println!();
     for (name, status, hint) in &results {
         report(name, status, hint.as_deref());
@@ -473,6 +488,14 @@ mod tests {
         assert_eq!(
             parse_first_semver("wasm-pack 0.13.1"),
             Some(Version::new(0, 13, 1))
+        );
+    }
+
+    #[test]
+    fn parses_docker_style() {
+        assert_eq!(
+            parse_first_semver("Docker version 27.0.3, build 7d4bcd8"),
+            Some(Version::new(27, 0, 3))
         );
     }
 
