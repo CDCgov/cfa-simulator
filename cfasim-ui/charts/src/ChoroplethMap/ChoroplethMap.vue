@@ -713,6 +713,19 @@ watch(
   },
 );
 
+// Switching the scoped `state` refits the projection to a different region,
+// so any leftover pan/zoom transform would leave the new map off-center.
+// Reset it instantly (no animation) when the region changes.
+watch(
+  () => props.state,
+  () => {
+    if (!svgRef.value || !zoomBehavior) return;
+    const svg = select(svgRef.value);
+    svg.interrupt();
+    zoomBehavior.transform(svg, zoomIdentity);
+  },
+);
+
 // Canonical internal coordinate system. All layout (projection, legend,
 // title) is computed at this size; the SVG's viewBox makes the browser
 // scale the entire canvas to whatever the container provides, so there's no

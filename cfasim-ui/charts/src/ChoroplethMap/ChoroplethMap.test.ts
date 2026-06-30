@@ -1238,6 +1238,28 @@ describe("ChoroplethMap single-state mode", () => {
     ).toBeUndefined();
   });
 
+  it("resets pan/zoom when the state changes", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "counties",
+        state: "California",
+        focus: "06037", // focusZoom defaults true → zooms in (Reset appears)
+      },
+    });
+    await flushPromises();
+    expect(wrapper.find(".choropleth-reset").exists()).toBe(true);
+    // Switch regions. Clearing focus alone preserves the transform, so the
+    // Reset button only disappears if the state change resets the zoom.
+    await wrapper.setProps({ state: "Texas", focus: null });
+    await flushPromises();
+    expect(wrapper.find(".choropleth-reset").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it("falls back to the full map and warns for an unknown state", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const wrapper = mount(ChoroplethMap, {
