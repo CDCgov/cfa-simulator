@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.6.4] - 2026-07-01
+
+### Bug Fixes
+
+- **charts:** Put role/ariaLabel on the chart svg as role="img"
+
 ## [0.6.3] - 2026-07-01
 
 ### Bug Fixes
