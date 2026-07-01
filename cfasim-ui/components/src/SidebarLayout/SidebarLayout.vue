@@ -86,7 +86,7 @@ if (globals) {
 <template>
   <div class="SidebarLayout" :data-collapsed="collapsed">
     <div class="SidebarRail">
-      <aside class="Sidebar">
+      <aside class="Sidebar" :inert="collapsed">
         <div class="SidebarScroll">
           <div class="SidebarHeader">
             <button
@@ -105,6 +105,7 @@ if (globals) {
       <button
         type="button"
         class="Toggle Toggle--expand"
+        :inert="!collapsed"
         aria-label="Expand sidebar"
         title="Expand sidebar"
         @click="toggle"

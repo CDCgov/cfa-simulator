@@ -2,6 +2,8 @@
 
 A responsive two-panel layout with a collapsible sidebar and main content area. On mobile, the sidebar becomes an overlay.
 
+When the sidebar is collapsed it is marked [`inert`](https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/inert), so its contents (including the collapse button) are removed from the tab order and the accessibility tree while visually hidden. The expand button is likewise `inert` while the sidebar is open. This keeps keyboard and screen-reader focus on whichever control is actually visible.
+
 ## Demo
 
 <a href="/cfa-simulator/docs/demos/sidebar-layout/index.html" target="_blank">Open in full window ↗</a>

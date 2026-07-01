@@ -84,3 +84,20 @@ describe("SidebarLayout tabs", () => {
     expect(wrapper.findAll("[role='tab']")).toHaveLength(3);
   });
 });
+
+describe("SidebarLayout collapse accessibility", () => {
+  it("keeps the sidebar interactive and hides the expand button when expanded", () => {
+    const wrapper = mount(SidebarLayout);
+    // Starts expanded on desktop (matchMedia matches=false).
+    expect(wrapper.find(".Sidebar").attributes("inert")).toBeUndefined();
+    expect(wrapper.find(".Toggle--expand").attributes("inert")).toBe("");
+  });
+
+  it("makes the hidden sidebar inert and the expand button interactive when collapsed", async () => {
+    const wrapper = mount(SidebarLayout);
+    await wrapper.find(".SidebarHeader .Toggle").trigger("click");
+    // Collapsed: sidebar is visually hidden, expand button is shown.
+    expect(wrapper.find(".Sidebar").attributes("inert")).toBe("");
+    expect(wrapper.find(".Toggle--expand").attributes("inert")).toBeUndefined();
+  });
+});
