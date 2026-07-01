@@ -2543,4 +2543,45 @@ describe("LineChart", () => {
       wrapper.unmount();
     });
   });
+
+  describe("accessibility", () => {
+    it("has no role or aria-label when unlabeled", () => {
+      const wrapper = mount(LineChart, { props: { data: [1, 2, 3] } });
+      const root = wrapper.find(".line-chart-wrapper");
+      expect(root.attributes("role")).toBeUndefined();
+      expect(root.attributes("aria-label")).toBeUndefined();
+    });
+
+    it("labels the chart as a figure using the title by default", () => {
+      const wrapper = mount(LineChart, {
+        props: { data: [1, 2, 3], title: "Cases over time" },
+      });
+      const root = wrapper.find(".line-chart-wrapper");
+      expect(root.attributes("role")).toBe("figure");
+      expect(root.attributes("aria-label")).toBe("Cases over time");
+    });
+
+    it("prefers ariaLabel over title for the accessible name", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1, 2, 3],
+          title: "Cases",
+          ariaLabel: "Line chart of weekly cases, rising then falling",
+        },
+      });
+      const root = wrapper.find(".line-chart-wrapper");
+      expect(root.attributes("aria-label")).toBe(
+        "Line chart of weekly cases, rising then falling",
+      );
+    });
+
+    it("honors an explicit role override", () => {
+      const wrapper = mount(LineChart, {
+        props: { data: [1, 2, 3], title: "Cases", role: "img" },
+      });
+      expect(wrapper.find(".line-chart-wrapper").attributes("role")).toBe(
+        "img",
+      );
+    });
+  });
 });

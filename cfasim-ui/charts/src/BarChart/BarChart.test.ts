@@ -1951,4 +1951,40 @@ describe("BarChart", () => {
       expect(firstBarY(withHeaders)).toBeGreaterThan(firstBarY(without));
     });
   });
+
+  describe("accessibility", () => {
+    const base = { data: [10, 20, 30], categories: ["A", "B", "C"] };
+
+    it("has no role or aria-label when unlabeled", () => {
+      const wrapper = mount(BarChart, { props: base });
+      const root = wrapper.find(".bar-chart-wrapper");
+      expect(root.attributes("role")).toBeUndefined();
+      expect(root.attributes("aria-label")).toBeUndefined();
+    });
+
+    it("labels the chart as a figure using the title by default", () => {
+      const wrapper = mount(BarChart, {
+        props: { ...base, title: "Cases by region" },
+      });
+      const root = wrapper.find(".bar-chart-wrapper");
+      expect(root.attributes("role")).toBe("figure");
+      expect(root.attributes("aria-label")).toBe("Cases by region");
+    });
+
+    it("prefers ariaLabel over title and honors a role override", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          ...base,
+          title: "Cases",
+          ariaLabel: "Bar chart of cases in three regions",
+          role: "img",
+        },
+      });
+      const root = wrapper.find(".bar-chart-wrapper");
+      expect(root.attributes("role")).toBe("img");
+      expect(root.attributes("aria-label")).toBe(
+        "Bar chart of cases in three regions",
+      );
+    });
+  });
 });

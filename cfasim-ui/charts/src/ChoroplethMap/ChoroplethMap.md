@@ -745,6 +745,30 @@ set `tooltip-trigger`.
   </template>
 </ComponentDemo>
 
+## Accessibility
+
+The map's individual regions aren't exposed to assistive tech, so the map
+announces itself with a single accessible name. When it has a `title`, the root
+element gets `role="figure"` and an `aria-label` set to the title, so screen
+readers announce it as a labeled figure while the menu and reset controls stay
+reachable.
+
+Set `ariaLabel` to give screen readers a fuller summary than the visible title
+(it overrides `title` for the accessible name only):
+
+```vue
+<ChoroplethMap
+  :topology="usStates"
+  :data="cases"
+  title="Cases by state"
+  aria-label="US map shaded by case count per state, highest in the Southeast"
+/>
+```
+
+Pass `role` to override the default, e.g. `role="img"` to expose the map as a
+single image (note this hides the inner menu/reset controls from assistive
+tech).
+
 <!--@include: ./_api/choropleth-map.md-->
 
 ### StateData

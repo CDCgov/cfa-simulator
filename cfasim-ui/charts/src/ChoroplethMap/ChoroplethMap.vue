@@ -126,6 +126,21 @@ const props = withDefaults(
     title?: string;
     /** Styling for the map title. See `TitleStyle`. */
     titleStyle?: TitleStyle;
+    /**
+     * ARIA role for the map's root element. Defaults to `"figure"` when an
+     * accessible name is present (from `ariaLabel` or `title`), so screen
+     * readers announce the map as a labeled figure while its controls (menu,
+     * reset) stay reachable. Pass `"img"` to expose it as a single image
+     * (which hides the inner controls from assistive tech), or your own role.
+     */
+    role?: string;
+    /**
+     * Accessible name for the map, announced by screen readers via the root
+     * element's `aria-label`. Defaults to the `title` prop. The individual
+     * regions aren't exposed to assistive tech, so set this to a short summary
+     * of what the map shows.
+     */
+    ariaLabel?: string;
     /** Styling for the legend (title, swatch labels, and continuous-scale ticks). */
     legendStyle?: LabelStyle;
     noDataColor?: string;
@@ -223,6 +238,14 @@ const props = withDefaults(
     focusZoomLevel: 4,
     focusZoom: true,
   },
+);
+
+// Accessible name for the whole map; falls back to the visible title.
+const chartAriaLabel = computed(() => props.ariaLabel ?? props.title);
+// Label the map as a figure when it has a name (keeps inner controls
+// reachable, unlike role="img"). An explicit `role` prop always wins.
+const chartRole = computed(
+  () => props.role ?? (chartAriaLabel.value ? "figure" : undefined),
 );
 
 // The template root is a <Teleport>, so fallthrough attrs (class, style,
@@ -1694,6 +1717,8 @@ watch(
         { pannable: pan, 'is-fullscreen': fullscreen.isFullscreen.value },
       ]"
       :style="fullscreen.fullscreenStyle.value"
+      :role="chartRole || undefined"
+      :aria-label="chartAriaLabel || undefined"
     >
       <ChartMenu
         v-if="menu"

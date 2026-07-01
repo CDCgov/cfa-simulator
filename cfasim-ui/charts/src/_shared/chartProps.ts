@@ -103,6 +103,21 @@ export interface ChartCommonProps {
   title?: string;
   /** Styling for the chart title. See `TitleStyle`. */
   titleStyle?: TitleStyle;
+  /**
+   * ARIA role for the chart's root element. Defaults to `"figure"` when an
+   * accessible name is present (from `ariaLabel` or `title`), so screen
+   * readers announce the chart as a labeled figure while its controls (menu,
+   * download) stay reachable. Pass `"img"` to expose it as a single image
+   * (which hides the inner controls from assistive tech), or your own role.
+   */
+  role?: string;
+  /**
+   * Accessible name for the chart, announced by screen readers via the root
+   * element's `aria-label`. Defaults to the `title` prop. The individual
+   * marks aren't exposed to assistive tech, so set this to a short summary of
+   * what the chart shows.
+   */
+  ariaLabel?: string;
   /** Styling for axis labels (the `xLabel` / `yLabel` text). */
   axisLabelStyle?: LabelStyle;
   /** Styling for axis tick labels (the numbers/categories on each axis). */

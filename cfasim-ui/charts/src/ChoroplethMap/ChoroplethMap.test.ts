@@ -1346,3 +1346,46 @@ describe("ChoroplethMap single-state mode", () => {
     expect(wrapper.emitted("update:focus")![0][0]).toBe(payload.id);
   });
 });
+
+describe("ChoroplethMap accessibility", () => {
+  it("has no role or aria-label when unlabeled", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 600, height: 400 },
+    });
+    const root = wrapper.find(".choropleth-wrapper");
+    expect(root.attributes("role")).toBeUndefined();
+    expect(root.attributes("aria-label")).toBeUndefined();
+  });
+
+  it("labels the map as a figure using the title by default", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        title: "Cases by state",
+      },
+    });
+    const root = wrapper.find(".choropleth-wrapper");
+    expect(root.attributes("role")).toBe("figure");
+    expect(root.attributes("aria-label")).toBe("Cases by state");
+  });
+
+  it("prefers ariaLabel over title and honors a role override", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        title: "Cases",
+        ariaLabel: "US map shaded by case count per state",
+        role: "img",
+      },
+    });
+    const root = wrapper.find(".choropleth-wrapper");
+    expect(root.attributes("role")).toBe("img");
+    expect(root.attributes("aria-label")).toBe(
+      "US map shaded by case count per state",
+    );
+  });
+});

@@ -286,6 +286,14 @@ const props = withDefaults(defineProps<BarChartProps>(), {
   valueAxis: true,
 });
 
+// Accessible name for the whole chart; falls back to the visible title.
+const chartAriaLabel = computed(() => props.ariaLabel ?? props.title);
+// Label the chart as a figure when it has a name (keeps inner controls
+// reachable, unlike role="img"). An explicit `role` prop always wins.
+const chartRole = computed(
+  () => props.role ?? (chartAriaLabel.value ? "figure" : undefined),
+);
+
 // The template root is a <Teleport>, so fallthrough attrs (class, style,
 // data-*, id…) can't auto-inherit — forward them onto the wrapper manually.
 defineOptions({ inheritAttrs: false });
@@ -1475,6 +1483,8 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
       class="bar-chart-wrapper"
       :class="{ 'is-fullscreen': isFullscreen }"
       :style="fullscreenStyle"
+      :role="chartRole || undefined"
+      :aria-label="chartAriaLabel || undefined"
     >
       <ChartMenu
         v-if="menu"

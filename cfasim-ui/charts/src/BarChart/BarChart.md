@@ -715,6 +715,30 @@ anchor. `lineColor`, `lineWidth`, and `lineDash` style the line.
   </template>
 </ComponentDemo>
 
+## Accessibility
+
+The chart's individual bars aren't exposed to assistive tech, so the chart
+announces itself with a single accessible name. When the chart has a `title`,
+its root element gets `role="figure"` and an `aria-label` set to the title, so
+screen readers announce it as a labeled figure while the menu and download
+controls stay reachable.
+
+Set `ariaLabel` to give screen readers a fuller summary than the visible title
+(it overrides `title` for the accessible name only):
+
+```vue
+<BarChart
+  :data="cases"
+  :categories="regions"
+  title="Cases by region"
+  aria-label="Cases by region: North 120, South 80, West 45"
+/>
+```
+
+Pass `role` to override the default, e.g. `role="img"` to expose the chart as a
+single image (note this hides the inner menu/download controls from assistive
+tech).
+
 ## API
 
 <!-- @include: ./_api/bar-chart.md -->

@@ -1117,6 +1117,29 @@ until the user clicks Download:
 <LineChart :data="cases" :csv="() => buildCsv(cases, dates)" />
 ```
 
+## Accessibility
+
+The chart's individual marks aren't exposed to assistive tech, so the chart
+announces itself with a single accessible name. When the chart has a `title`,
+its root element gets `role="figure"` and an `aria-label` set to the title, so
+screen readers announce it as a labeled figure while the menu and download
+controls stay reachable.
+
+Set `ariaLabel` to give screen readers a fuller summary than the visible title
+(it overrides `title` for the accessible name only):
+
+```vue
+<LineChart
+  :data="cases"
+  title="Daily ED visits"
+  aria-label="Daily ED visits over 11 days, rising from 12 to a peak of 48"
+/>
+```
+
+Pass `role` to override the default, e.g. `role="img"` to expose the chart as a
+single image (note this hides the inner menu/download controls from assistive
+tech).
+
 <!--@include: ./_api/line-chart.md-->
 
 ### Data
