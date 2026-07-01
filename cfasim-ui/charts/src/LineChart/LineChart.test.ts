@@ -2545,20 +2545,25 @@ describe("LineChart", () => {
   });
 
   describe("accessibility", () => {
-    it("has no role or aria-label when unlabeled", () => {
+    // The chart's own <svg> is a direct child of the wrapper; scope past the
+    // ChartMenu's icon <svg> (which renders first).
+    const chartSvg = (wrapper: ReturnType<typeof mount>) =>
+      wrapper.find(".line-chart-wrapper").element.querySelector(":scope > svg");
+
+    it("has no role or aria-label on the svg when unlabeled", () => {
       const wrapper = mount(LineChart, { props: { data: [1, 2, 3] } });
-      const root = wrapper.find(".line-chart-wrapper");
-      expect(root.attributes("role")).toBeUndefined();
-      expect(root.attributes("aria-label")).toBeUndefined();
+      const svg = chartSvg(wrapper);
+      expect(svg?.getAttribute("role")).toBeNull();
+      expect(svg?.getAttribute("aria-label")).toBeNull();
     });
 
-    it("labels the chart as a figure using the title by default", () => {
+    it("labels the svg as an image using the title by default", () => {
       const wrapper = mount(LineChart, {
         props: { data: [1, 2, 3], title: "Cases over time" },
       });
-      const root = wrapper.find(".line-chart-wrapper");
-      expect(root.attributes("role")).toBe("figure");
-      expect(root.attributes("aria-label")).toBe("Cases over time");
+      const svg = chartSvg(wrapper);
+      expect(svg?.getAttribute("role")).toBe("img");
+      expect(svg?.getAttribute("aria-label")).toBe("Cases over time");
     });
 
     it("prefers ariaLabel over title for the accessible name", () => {
@@ -2569,19 +2574,16 @@ describe("LineChart", () => {
           ariaLabel: "Line chart of weekly cases, rising then falling",
         },
       });
-      const root = wrapper.find(".line-chart-wrapper");
-      expect(root.attributes("aria-label")).toBe(
+      expect(chartSvg(wrapper)?.getAttribute("aria-label")).toBe(
         "Line chart of weekly cases, rising then falling",
       );
     });
 
     it("honors an explicit role override", () => {
       const wrapper = mount(LineChart, {
-        props: { data: [1, 2, 3], title: "Cases", role: "img" },
+        props: { data: [1, 2, 3], title: "Cases", role: "figure" },
       });
-      expect(wrapper.find(".line-chart-wrapper").attributes("role")).toBe(
-        "img",
-      );
+      expect(chartSvg(wrapper)?.getAttribute("role")).toBe("figure");
     });
   });
 });

@@ -1119,11 +1119,11 @@ until the user clicks Download:
 
 ## Accessibility
 
-The chart's individual marks aren't exposed to assistive tech, so the chart
-announces itself with a single accessible name. When the chart has a `title`,
-its root element gets `role="figure"` and an `aria-label` set to the title, so
-screen readers announce it as a labeled figure while the menu and download
-controls stay reachable.
+The chart's `<svg>` is exposed as a single labeled image so screen readers
+announce one accessible name instead of wandering through the individual marks.
+When the chart has a `title`, the `<svg>` gets `role="img"` and an `aria-label`
+set to the title. The menu and download controls live outside the `<svg>`, so
+they stay reachable regardless.
 
 Set `ariaLabel` to give screen readers a fuller summary than the visible title
 (it overrides `title` for the accessible name only):
@@ -1136,9 +1136,8 @@ Set `ariaLabel` to give screen readers a fuller summary than the visible title
 />
 ```
 
-Pass `role` to override the default, e.g. `role="img"` to expose the chart as a
-single image (note this hides the inner menu/download controls from assistive
-tech).
+Pass `role` to override the default `"img"` (e.g. `role="figure"`, or a role of
+your own).
 
 <!--@include: ./_api/line-chart.md-->
 

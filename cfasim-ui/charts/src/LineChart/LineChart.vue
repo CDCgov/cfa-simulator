@@ -240,12 +240,14 @@ const props = withDefaults(defineProps<LineChartProps>(), {
   yScaleType: "linear",
 });
 
-// Accessible name for the whole chart; falls back to the visible title.
+// Accessible name for the chart; falls back to the visible title.
 const chartAriaLabel = computed(() => props.ariaLabel ?? props.title);
-// Label the chart as a figure when it has a name (keeps inner controls
-// reachable, unlike role="img"). An explicit `role` prop always wins.
+// Expose the <svg> as a single labeled image so screen readers announce the
+// name instead of wandering through the individual marks. The menu/download
+// controls live outside the <svg>, so they stay reachable. An explicit `role`
+// prop always wins.
 const chartRole = computed(
-  () => props.role ?? (chartAriaLabel.value ? "figure" : undefined),
+  () => props.role ?? (chartAriaLabel.value ? "img" : undefined),
 );
 
 // The template root is a <Teleport>, so fallthrough attrs (class, style,
@@ -1056,8 +1058,6 @@ const positionedLegendItems = computed(() => {
       class="line-chart-wrapper"
       :class="{ 'is-fullscreen': isFullscreen }"
       :style="fullscreenStyle"
-      :role="chartRole || undefined"
-      :aria-label="chartAriaLabel || undefined"
     >
       <ChartMenu
         v-if="menu"
@@ -1068,7 +1068,13 @@ const positionedLegendItems = computed(() => {
       <div class="chart-sr-only" aria-live="polite">
         {{ isFullscreen ? "Chart expanded to fill window" : "" }}
       </div>
-      <svg ref="svgRef" :width="width" :height="totalHeight">
+      <svg
+        ref="svgRef"
+        :width="width"
+        :height="totalHeight"
+        :role="chartRole || undefined"
+        :aria-label="chartAriaLabel || undefined"
+      >
         <!-- title -->
         <text
           v-if="title"

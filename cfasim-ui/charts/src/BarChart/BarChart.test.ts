@@ -1955,20 +1955,25 @@ describe("BarChart", () => {
   describe("accessibility", () => {
     const base = { data: [10, 20, 30], categories: ["A", "B", "C"] };
 
-    it("has no role or aria-label when unlabeled", () => {
+    // The chart's own <svg> is a direct child of the wrapper; scope past the
+    // ChartMenu's icon <svg> (which renders first).
+    const chartSvg = (wrapper: ReturnType<typeof mount>) =>
+      wrapper.find(".bar-chart-wrapper").element.querySelector(":scope > svg");
+
+    it("has no role or aria-label on the svg when unlabeled", () => {
       const wrapper = mount(BarChart, { props: base });
-      const root = wrapper.find(".bar-chart-wrapper");
-      expect(root.attributes("role")).toBeUndefined();
-      expect(root.attributes("aria-label")).toBeUndefined();
+      const svg = chartSvg(wrapper);
+      expect(svg?.getAttribute("role")).toBeNull();
+      expect(svg?.getAttribute("aria-label")).toBeNull();
     });
 
-    it("labels the chart as a figure using the title by default", () => {
+    it("labels the svg as an image using the title by default", () => {
       const wrapper = mount(BarChart, {
         props: { ...base, title: "Cases by region" },
       });
-      const root = wrapper.find(".bar-chart-wrapper");
-      expect(root.attributes("role")).toBe("figure");
-      expect(root.attributes("aria-label")).toBe("Cases by region");
+      const svg = chartSvg(wrapper);
+      expect(svg?.getAttribute("role")).toBe("img");
+      expect(svg?.getAttribute("aria-label")).toBe("Cases by region");
     });
 
     it("prefers ariaLabel over title and honors a role override", () => {
@@ -1977,12 +1982,12 @@ describe("BarChart", () => {
           ...base,
           title: "Cases",
           ariaLabel: "Bar chart of cases in three regions",
-          role: "img",
+          role: "figure",
         },
       });
-      const root = wrapper.find(".bar-chart-wrapper");
-      expect(root.attributes("role")).toBe("img");
-      expect(root.attributes("aria-label")).toBe(
+      const svg = chartSvg(wrapper);
+      expect(svg?.getAttribute("role")).toBe("figure");
+      expect(svg?.getAttribute("aria-label")).toBe(
         "Bar chart of cases in three regions",
       );
     });
