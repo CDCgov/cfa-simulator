@@ -1,6 +1,17 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.6.3] - 2026-07-01
+
+### Bug Fixes
+
+- **charts:** Connect annotations to the near edge of multi-line text
+- **SidebarLayout:** Make hidden sidebar and expand button inert
+
+### Features
+
+- **charts:** Add role and ariaLabel props for screen-reader chart descriptions
+
 ## [0.6.2] - 2026-06-30
 
 ### Bug Fixes
