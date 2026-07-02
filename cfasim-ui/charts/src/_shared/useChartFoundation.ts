@@ -153,7 +153,6 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     fullscreenStyle,
     teleportTarget,
     exitFullscreen,
-    measuredHeight,
   };
 }
 

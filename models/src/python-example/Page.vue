@@ -1,16 +1,10 @@
 <script setup lang="ts">
-import { reactive } from "vue";
-import { useRouter, useRoute } from "vue-router";
 import { NumberInput, Button } from "@cfasim-ui/components";
 import { useModel } from "@cfasim-ui/pyodide";
-import { useUrlParams } from "@cfasim-ui/shared";
+import { useModelParams } from "../useModelParams";
 
 const defaults = { steps: 10, rate: 2.5 };
-const params = reactive({ ...defaults });
-const { reset } = useUrlParams(params, defaults, {
-  router: useRouter(),
-  route: useRoute(),
-});
+const { params, reset } = useModelParams(defaults);
 const { useOutputs } = useModel("python_example");
 const { outputs, loading, error } = useOutputs("simulate", params);
 </script>

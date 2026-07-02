@@ -117,18 +117,7 @@ function onInputKeydown(event: KeyboardEvent) {
           aria-label="Toggle options"
         >
           <span class="multi-select-icon" aria-hidden="true">
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 12 12"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M3 4.5L6 7.5L9 4.5" />
-            </svg>
+            <Icon icon="keyboard_arrow_down" :size="16" />
           </span>
         </ComboboxTrigger>
       </ComboboxAnchor>

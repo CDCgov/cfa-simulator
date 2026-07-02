@@ -9,6 +9,7 @@ import {
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
 import { downloadCsv } from "../ChartMenu/download.js";
+import { escapeCsvField } from "../_shared/seriesCsv.js";
 
 export type TableRecord = Record<string, ArrayLike<number | string | boolean>>;
 export type TableData = TableRecord | ModelOutput;
@@ -191,13 +192,6 @@ function cellValue(col: Column, row: number): string {
 function menuFilename() {
   if (props.filename) return props.filename;
   return typeof props.menu === "string" ? props.menu : "data";
-}
-
-function escapeCsvField(val: string): string {
-  if (val.includes(",") || val.includes('"') || val.includes("\n")) {
-    return `"${val.replace(/"/g, '""')}"`;
-  }
-  return val;
 }
 
 function toCsv(): string {

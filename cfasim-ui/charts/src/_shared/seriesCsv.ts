@@ -51,7 +51,7 @@ export function categoricalToCsv(
       : [categoryHeader, ...series.map((s, i) => s.label || `series_${i}`)];
   const rows = [headers.join(",")];
   for (let r = 0; r < categories.length; r++) {
-    const cells = [escapeCsv(categories[r])];
+    const cells = [escapeCsvField(categories[r])];
     for (const s of series) {
       cells.push(r < s.data.length ? String(s.data[r]) : "");
     }
@@ -60,7 +60,7 @@ export function categoricalToCsv(
   return rows.join("\n");
 }
 
-function escapeCsv(value: string): string {
+export function escapeCsvField(value: string): string {
   if (value.includes(",") || value.includes('"') || value.includes("\n")) {
     return `"${value.replace(/"/g, '""')}"`;
   }

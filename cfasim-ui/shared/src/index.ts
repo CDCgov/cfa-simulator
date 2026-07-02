@@ -14,6 +14,7 @@ export type {
   ModelOutputsWire,
 } from "./ModelOutput.js";
 export { modelOutputToCSV } from "./csv.js";
+export { describeWorkerError, MESSAGEERROR_TEXT } from "./workerError.js";
 export { formatNumber, isNumberFormat } from "./formatNumber.js";
 export type { NumberFormat, NumberFormatPreset } from "./formatNumber.js";
 export {

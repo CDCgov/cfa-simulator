@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { reactive, computed } from "vue";
-import { useRouter, useRoute } from "vue-router";
+import { computed } from "vue";
 import { NumberInput, Button } from "@cfasim-ui/components";
 import { LineChart, DataTable } from "@cfasim-ui/charts";
 import type { Series } from "@cfasim-ui/charts";
 import { useModel } from "@cfasim-ui/wasm";
-import { useUrlParams } from "@cfasim-ui/shared";
+import { useModelParams } from "../useModelParams";
 
 const defaults = {
   population: 20,
@@ -14,11 +13,7 @@ const defaults = {
   generations: 20,
   n_trajectories: 100,
 };
-const params = reactive({ ...defaults });
-const { reset } = useUrlParams(params, defaults, {
-  router: useRouter(),
-  route: useRoute(),
-});
+const { params, reset } = useModelParams(defaults);
 const { useOutputs } = useModel("rust_example");
 const { outputs, error } = useOutputs("simulate", params);
 

@@ -16,3 +16,4 @@ cfasim-ui/docs/theme/
 cfasim/src/templates/_shared/interactive/src/env.d.ts
 cfasim/src/templates/_shared/interactive/index.html
 cfasim/src/templates/_shared/pnpm-workspace.yaml
+cfasim/src/templates/_shared/vite.config.ts

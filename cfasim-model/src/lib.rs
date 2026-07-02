@@ -26,20 +26,17 @@ impl ModelOutput {
     }
 
     pub fn add_f64(mut self, name: &str, data: Vec<f64>) -> Self {
-        self.columns
-            .push((name.to_string(), ColumnData::F64(data)));
+        self.columns.push((name.to_string(), ColumnData::F64(data)));
         self
     }
 
     pub fn add_i32(mut self, name: &str, data: Vec<i32>) -> Self {
-        self.columns
-            .push((name.to_string(), ColumnData::I32(data)));
+        self.columns.push((name.to_string(), ColumnData::I32(data)));
         self
     }
 
     pub fn add_u32(mut self, name: &str, data: Vec<u32>) -> Self {
-        self.columns
-            .push((name.to_string(), ColumnData::U32(data)));
+        self.columns.push((name.to_string(), ColumnData::U32(data)));
         self
     }
 

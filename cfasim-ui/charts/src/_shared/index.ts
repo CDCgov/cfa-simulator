@@ -1,16 +1,9 @@
-export {
-  snap,
-  niceStep,
-  intervalValues,
-  formatTick,
-  type ChartData,
-} from "./axes.js";
+export { snap, formatTick, type ChartData } from "./axes.js";
 export { computeTickValues, type TickValueOptions } from "./computeTicks.js";
 export {
   scaleFraction,
   clampExtentForScale,
   computeLogTickValues,
-  LOG_FLOOR,
   type ScaleType,
 } from "./scale.js";
 export { useChartSize, type ChartSizeOptions } from "./useChartSize.js";
@@ -54,13 +47,7 @@ export type {
   BlendMode,
   LineMarkStyle,
 } from "./chartProps.js";
-export {
-  parseRgb,
-  relativeLuminance,
-  resolveColorToRgb,
-  pickContrastColor,
-  type Rgb,
-} from "./contrast.js";
+export { resolveColorToRgb, pickContrastColor, type Rgb } from "./contrast.js";
 export {
   parseDate,
   isDateLike,

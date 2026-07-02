@@ -10,7 +10,7 @@ mod update;
 mod update_check;
 
 use anyhow::Result;
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "cfasim", about = "CFA Simulator CLI")]
@@ -29,7 +29,7 @@ enum Commands {
 
         /// Template: python or rust (skips interactive prompt)
         #[arg(long)]
-        template: Option<TemplateArg>,
+        template: Option<init::Template>,
 
         /// Use local templates instead of downloading from GitHub
         #[arg(long)]
@@ -66,21 +66,10 @@ enum Commands {
     },
 }
 
-#[derive(Clone, ValueEnum)]
-enum TemplateArg {
-    Python,
-    Rust,
-    Ixa,
-}
-
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let is_update = matches!(cli.command, Commands::Update);
-    let is_tools = matches!(cli.command, Commands::Tools { .. });
-    let is_docs = matches!(cli.command, Commands::Docs { .. });
-    let is_test = matches!(cli.command, Commands::Test { .. });
-    let is_run = matches!(cli.command, Commands::Run { .. });
-    if !is_update {
+    let is_init = matches!(cli.command, Commands::Init { .. });
+    if !matches!(cli.command, Commands::Update) {
         settings::prompt_for_updates_if_first_run();
     }
     let result = match cli.command {
@@ -88,14 +77,7 @@ fn main() -> Result<()> {
             dir,
             template,
             local,
-        } => {
-            let template = template.map(|t| match t {
-                TemplateArg::Python => init::Template::Python,
-                TemplateArg::Rust => init::Template::Rust,
-                TemplateArg::Ixa => init::Template::Ixa,
-            });
-            init::run(dir, template, local).map_err(|e| anyhow::anyhow!("{e}"))
-        }
+        } => init::run(dir, template, local).map_err(|e| anyhow::anyhow!("{e}")),
         Commands::Update => update::run(),
         Commands::Tools { offline } => tools::run(offline),
         Commands::Docs { json } => docs::run(json),
@@ -103,7 +85,7 @@ fn main() -> Result<()> {
         Commands::Run { args } => run::run(args),
     };
 
-    if !is_update && !is_tools && !is_docs && !is_test && !is_run {
+    if is_init {
         update_check::maybe_print_update_hint();
     }
     result

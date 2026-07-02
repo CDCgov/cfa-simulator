@@ -4,26 +4,7 @@ import {
   postErrorWithTransfer,
 } from "@cfasim-ui/shared/transfer";
 import type { ColumnDescriptor, ModelOutputsWire } from "@cfasim-ui/shared";
-
-interface RunMessage {
-  id: number;
-  type?: "run";
-  python: string;
-  context?: Record<string, unknown>;
-}
-interface CallMessage {
-  id: number;
-  type: "call";
-  module: string;
-  fn: string;
-  kwargs?: Record<string, unknown>;
-}
-interface LoadModuleMessage {
-  id: number;
-  type: "loadModule";
-  module: string;
-}
-type WorkerMessage = RunMessage | CallMessage | LoadModuleMessage;
+import type { WorkerMessage } from "./messages.js";
 
 let wheelMap: Record<string, string> = {};
 
@@ -63,8 +44,8 @@ async function fetchPyodidePackages(): Promise<string[]> {
 
 const pyodideReadyPromise = (async () => {
   const [pyodideModule, packages] = await Promise.all([
-    // @ts-expect-error - Pyodide types from CDN
     import(
+      // @ts-expect-error - Pyodide types from CDN
       /* @vite-ignore */ "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/pyodide.mjs"
     ),
     fetchPyodidePackages(),

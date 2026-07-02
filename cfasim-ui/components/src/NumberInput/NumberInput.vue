@@ -75,7 +75,7 @@ onMounted(() => {
   }
 });
 
-const sliderMin = computed(() => props.min ?? (props.percent ? 0 : 0));
+const sliderMin = computed(() => props.min ?? 0);
 const sliderMax = computed(() => props.max ?? (props.percent ? 1 : 100));
 const sliderStep = computed(() => props.step ?? (props.percent ? 0.01 : 1));
 

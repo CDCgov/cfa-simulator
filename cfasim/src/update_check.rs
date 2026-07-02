@@ -1,12 +1,12 @@
-use std::sync::mpsc;
-use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crate::proc::run_with_timeout;
 use crate::settings;
 
 const CHECK_INTERVAL_SECS: u64 = 7 * 24 * 60 * 60; // 7 days
 const CHECK_TIMEOUT: Duration = Duration::from_millis(500);
 
+#[derive(Default)]
 struct CachedCheck {
     last_check: u64,
     latest_version: Option<String>,
@@ -17,23 +17,11 @@ fn cache_path() -> Option<std::path::PathBuf> {
 }
 
 fn read_cache(path: &std::path::Path) -> CachedCheck {
-    let content = match std::fs::read_to_string(path) {
-        Ok(c) => c,
-        Err(_) => {
-            return CachedCheck {
-                last_check: 0,
-                latest_version: None,
-            };
-        }
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return CachedCheck::default();
     };
-    let doc = match content.parse::<toml_edit::DocumentMut>() {
-        Ok(d) => d,
-        Err(_) => {
-            return CachedCheck {
-                last_check: 0,
-                latest_version: None,
-            };
-        }
+    let Ok(doc) = content.parse::<toml_edit::DocumentMut>() else {
+        return CachedCheck::default();
     };
     CachedCheck {
         last_check: doc
@@ -110,22 +98,16 @@ pub fn maybe_print_update_hint() {
     let needs_fetch = now.saturating_sub(cache.last_check) >= CHECK_INTERVAL_SECS;
 
     if needs_fetch {
-        let cache_path = path.clone();
-        let (tx, rx) = mpsc::channel();
-        thread::spawn(move || {
-            let _ = tx.send(fetch_latest_version());
-        });
-
-        match rx.recv_timeout(CHECK_TIMEOUT) {
-            Ok(Some(version)) => {
-                write_cache(&cache_path, &version);
+        match run_with_timeout(CHECK_TIMEOUT, fetch_latest_version) {
+            Some(Some(version)) => {
+                write_cache(&path, &version);
                 print_hint(&version);
             }
-            Ok(None) => {
+            Some(None) => {
                 let current = env!("CARGO_PKG_VERSION");
-                write_cache(&cache_path, current);
+                write_cache(&path, current);
             }
-            Err(_) => {
+            None => {
                 if let Some(ref v) = cache.latest_version {
                     print_hint(v);
                 }

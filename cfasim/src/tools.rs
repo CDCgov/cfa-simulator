@@ -2,9 +2,9 @@ use anyhow::Result;
 use semver::Version;
 use std::io::IsTerminal;
 use std::process::Command;
-use std::sync::mpsc;
-use std::thread;
 use std::time::Duration;
+
+use crate::proc::run_with_timeout;
 
 const UPDATE_CHECK_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -137,9 +137,7 @@ fn check(cmd: &str, arg: &str, min: &Version) -> Status {
 }
 
 fn tool_exists(cmd: &str) -> bool {
-    spawn_version(cmd, "--version")
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    spawn_version(cmd, "--version").is_some_and(|o| o.status.success())
 }
 
 fn symbol(status: &Status) -> &'static str {
@@ -161,9 +159,6 @@ fn report(name: &str, status: &Status, hint: Option<&str>) {
                 found,
                 min
             );
-            if let Some(h) = hint {
-                println!("    \x1b[2m{}\x1b[0m", h);
-            }
         }
         Status::UpdateAvailable { found, latest } => {
             println!(
@@ -173,15 +168,12 @@ fn report(name: &str, status: &Status, hint: Option<&str>) {
                 found,
                 latest
             );
-            if let Some(h) = hint {
-                println!("    \x1b[2m{}\x1b[0m", h);
-            }
         }
-        Status::Missing => {
-            println!("  {} {} not found", symbol(status), name);
-            if let Some(h) = hint {
-                println!("    \x1b[2m{}\x1b[0m", h);
-            }
+        Status::Missing => println!("  {} {} not found", symbol(status), name),
+    }
+    if !status.is_ok() {
+        if let Some(h) = hint {
+            println!("    \x1b[2m{}\x1b[0m", h);
         }
     }
 }
@@ -192,11 +184,10 @@ fn current_cfasim_version() -> Version {
 
 fn check_cfasim() -> Status {
     let current = current_cfasim_version();
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        let _ = tx.send(crate::update_check::fetch_latest_version());
-    });
-    let Ok(Some(latest_str)) = rx.recv_timeout(UPDATE_CHECK_TIMEOUT) else {
+    let Some(Some(latest_str)) = run_with_timeout(
+        UPDATE_CHECK_TIMEOUT,
+        crate::update_check::fetch_latest_version,
+    ) else {
         return Status::Ok(current);
     };
     let Ok(latest) = Version::parse(&latest_str) else {
@@ -225,14 +216,11 @@ fn check_uv() -> Status {
     };
     // uv self update --dry-run hits the network. Run it in a thread with a
     // short timeout so a slow or offline network doesn't stall the diagnostic.
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        let result = Command::new("uv")
+    let Some(Ok(output)) = run_with_timeout(UPDATE_CHECK_TIMEOUT, || {
+        Command::new("uv")
             .args(["self", "update", "--dry-run"])
-            .output();
-        let _ = tx.send(result);
-    });
-    let Ok(Ok(output)) = rx.recv_timeout(UPDATE_CHECK_TIMEOUT) else {
+            .output()
+    }) else {
         return Status::Ok(current);
     };
     if !output.status.success() {
@@ -261,11 +249,7 @@ fn parse_uv_target_version(line: &str, current: &Version) -> Option<Version> {
     let idx = line.find(" to ")?;
     let after = &line[idx + 4..];
     let v = parse_first_semver(after)?;
-    if v != *current {
-        Some(v)
-    } else {
-        None
-    }
+    (v != *current).then_some(v)
 }
 
 pub fn run(skip_network: bool) -> Result<()> {

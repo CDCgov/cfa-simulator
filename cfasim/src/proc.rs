@@ -31,6 +31,20 @@ pub fn spawn_and_wait(cmd: &mut Command) -> std::io::Result<ExitCheck> {
     Ok(ExitCheck(status))
 }
 
+/// Run `f` on a detached thread, returning its result or `None` if it doesn't
+/// finish within `timeout` (the thread is left running; it dies with the
+/// process).
+pub fn run_with_timeout<T: Send + 'static>(
+    timeout: std::time::Duration,
+    f: impl FnOnce() -> T + Send + 'static,
+) -> Option<T> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(f());
+    });
+    rx.recv_timeout(timeout).ok()
+}
+
 /// Print a bold cyan section banner to stderr so it doesn't interleave with
 /// the child's stdout when the user pipes cfasim's output.
 pub fn section(title: &str) {

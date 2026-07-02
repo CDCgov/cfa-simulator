@@ -20,8 +20,7 @@
     "./vite": "./src/vitePlugin.js"
   },
   "dependencies": {
-    "@cfasim-ui/shared": "workspace:*",
-    "pyodide": "^0.29.3"
+    "@cfasim-ui/shared": "workspace:*"
   },
   "peerDependencies": {
     "vue": "^3.5.0"

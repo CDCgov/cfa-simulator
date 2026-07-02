@@ -1,29 +1,12 @@
 import type { TransferableResponse } from "@cfasim-ui/shared";
-import { unwrapResponse } from "@cfasim-ui/shared";
-
-interface WorkerMessage {
-  id: number;
-  model: string;
-  fn: string;
-  args: string[];
-}
+import {
+  unwrapResponse,
+  describeWorkerError,
+  MESSAGEERROR_TEXT,
+} from "@cfasim-ui/shared";
+import type { WorkerMessage } from "./messages.js";
 
 let lastId = 0;
-
-/**
- * Convert a worker `ErrorEvent` into a human-readable message. Cross-origin
- * worker failures sanitize the event so every field is null/empty (e.g.
- * the worker's module fails to evaluate); fall back to a hint rather than
- * an empty string.
- */
-function describeWorkerError(e: ErrorEvent): string {
-  const msg = e.message || e.error?.message || "";
-  if (msg) {
-    if (e.filename) return `${msg} (${e.filename}:${e.lineno})`;
-    return msg;
-  }
-  return "Worker failed to load (no error details available — most often a cross-origin script load failure or a syntax error in the worker module)";
-}
 
 // Rejects keyed by request id so `cancelWasm` can fail in-flight promises
 // when we terminate the worker mid-run, and so worker-level errors can drain
@@ -40,6 +23,7 @@ function newWorker(): Worker {
     type: "module",
   });
   function failAll(message: string) {
+    if (workerDeadError) return;
     workerDeadError = new Error(message);
     const rejects = Array.from(pendingRejects.values());
     pendingRejects.clear();
@@ -49,9 +33,7 @@ function newWorker(): Worker {
     failAll(describeWorkerError(e));
   });
   w.addEventListener("messageerror", () => {
-    failAll(
-      "Worker received a message it could not deserialize (messageerror)",
-    );
+    failAll(MESSAGEERROR_TEXT);
   });
   return w;
 }

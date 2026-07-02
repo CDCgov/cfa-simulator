@@ -22,6 +22,7 @@ import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
 import { saveSvg, savePng } from "../ChartMenu/download.js";
 import {
   useChartFullscreen,
+  resolveColorToRgb,
   TITLE_FONT_SIZE,
   TITLE_LINE_HEIGHT,
   TITLE_FONT_WEIGHT,
@@ -1118,18 +1119,10 @@ const maxColor = computed(() =>
     : "",
 );
 
-function parseHex(hex: string): [number, number, number] {
-  const h = hex.replace("#", "");
-  return [
-    parseInt(h.slice(0, 2), 16),
-    parseInt(h.slice(2, 4), 16),
-    parseInt(h.slice(4, 6), 16),
-  ];
-}
-
+// Unresolvable endpoint colors fall back to the default scale endpoints.
 function interpolateColor(t: number): string {
-  const [r1, g1, b1] = parseHex(minColor.value);
-  const [r2, g2, b2] = parseHex(maxColor.value);
+  const [r1, g1, b1] = resolveColorToRgb(minColor.value) ?? [229, 240, 250];
+  const [r2, g2, b2] = resolveColorToRgb(maxColor.value) ?? [8, 81, 156];
   const r = Math.round(r1 + (r2 - r1) * t);
   const g = Math.round(g1 + (g2 - g1) * t);
   const b = Math.round(b1 + (b2 - b1) * t);

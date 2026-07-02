@@ -3,13 +3,7 @@ import {
   postModelOutputsWithTransfer,
   postErrorWithTransfer,
 } from "@cfasim-ui/shared/transfer";
-
-interface WorkerMessage {
-  id: number;
-  model: string;
-  fn: string;
-  args: string[];
-}
+import type { WorkerMessage } from "./messages.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const modulePromises = new Map<string, Promise<Record<string, any>>>();

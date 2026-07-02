@@ -21,6 +21,7 @@ import {
   SelectViewport,
   useId,
 } from "reka-ui";
+import Icon from "../Icon/Icon.vue";
 
 export interface SelectOption {
   value: string;
@@ -75,18 +76,7 @@ function displayValue(value: string) {
         />
         <ComboboxTrigger class="select-icon-button" aria-label="Toggle options">
           <span class="select-icon" aria-hidden="true">
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 12 12"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M3 4.5L6 7.5L9 4.5" />
-            </svg>
+            <Icon icon="keyboard_arrow_down" :size="16" />
           </span>
         </ComboboxTrigger>
       </ComboboxAnchor>
@@ -107,18 +97,7 @@ function displayValue(value: string) {
             >
               <span>{{ opt.label }}</span>
               <ComboboxItemIndicator class="select-indicator">
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 12 12"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M2 6L5 9L10 3" />
-                </svg>
+                <Icon icon="check" :size="14" />
               </ComboboxItemIndicator>
             </ComboboxItem>
           </ComboboxViewport>
@@ -134,18 +113,7 @@ function displayValue(value: string) {
       >
         <SelectValue :placeholder="placeholder" />
         <span class="select-icon" aria-hidden="true">
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M3 4.5L6 7.5L9 4.5" />
-          </svg>
+          <Icon icon="keyboard_arrow_down" :size="16" />
         </span>
       </SelectTrigger>
       <SelectPortal>
@@ -164,18 +132,7 @@ function displayValue(value: string) {
             >
               <SelectItemText>{{ opt.label }}</SelectItemText>
               <SelectItemIndicator class="select-indicator">
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 12 12"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M2 6L5 9L10 3" />
-                </svg>
+                <Icon icon="check" :size="14" />
               </SelectItemIndicator>
             </SelectItem>
           </SelectViewport>

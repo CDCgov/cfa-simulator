@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { ref, reactive, watch, computed, onMounted } from "vue";
-import { useRouter, useRoute } from "vue-router";
+import { ref, watch, computed, onMounted } from "vue";
 import { SelectBox, Toggle, Spinner, Button } from "@cfasim-ui/components";
 import { ChoroplethMap } from "@cfasim-ui/charts";
 import type { StateData } from "@cfasim-ui/charts";
-import { useUrlParams } from "@cfasim-ui/shared";
+import { useModelParams } from "../useModelParams";
 import usStates from "us-atlas/states-10m.json";
 import usCounties from "us-atlas/counties-10m.json";
 import type { Topology } from "topojson-specification";
@@ -23,11 +22,7 @@ const defaults = {
   countyLevel: true,
   selectedWeek: "",
 };
-const params = reactive({ ...defaults });
-const { reset } = useUrlParams(params, defaults, {
-  router: useRouter(),
-  route: useRoute(),
-});
+const { params, reset } = useModelParams(defaults);
 
 const loading = ref(true);
 const weeks = ref<string[]>([]);

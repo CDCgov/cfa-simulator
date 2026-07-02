@@ -14,7 +14,7 @@ const SHARED_DIR: &str = "_shared";
 
 static TEMPLATES: Dir = include_dir!("$CARGO_MANIFEST_DIR/src/templates");
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
 pub enum Template {
     Python,
     Rust,
@@ -30,12 +30,9 @@ impl Template {
         }
     }
 
+    /// The `runtime` minijinja context variable; same values as `dir_name`.
     fn runtime(&self) -> &str {
-        match self {
-            Template::Python => "python",
-            Template::Rust => "rust",
-            Template::Ixa => "ixa",
-        }
+        self.dir_name()
     }
 }
 

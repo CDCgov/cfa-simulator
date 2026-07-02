@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from "vue";
-import { useRouter, useRoute } from "vue-router";
+import { ref, computed, watch } from "vue";
 import { SelectBox, Button } from "@cfasim-ui/components";
 import { ChoroplethMap } from "@cfasim-ui/charts";
 import type { StateData, GeoType, FocusValue } from "@cfasim-ui/charts";
 import { fipsToHsa, hsaNames } from "@cfasim-ui/charts/hsa-mapping";
-import { useUrlParams } from "@cfasim-ui/shared";
+import { useModelParams } from "../useModelParams";
 import usCounties from "us-atlas/counties-10m.json";
 import type { Topology } from "topojson-specification";
 
@@ -55,8 +54,7 @@ const defaults = {
   selectedState: "",
   geoType: "counties" as GeoType,
 };
-const params = reactive({ ...defaults });
-useUrlParams(params, defaults, { router: useRouter(), route: useRoute() });
+const { params } = useModelParams(defaults);
 
 const lastClicked = ref<{ id: string; name: string } | null>(null);
 const focus = ref<FocusValue>(null);

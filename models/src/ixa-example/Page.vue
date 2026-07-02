@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { reactive, computed, ref, watch, onScopeDispose } from "vue";
-import { useRouter, useRoute } from "vue-router";
+import { computed, ref, watch, onScopeDispose } from "vue";
 import {
   NumberInput,
   Button,
@@ -11,8 +10,9 @@ import type { ParamEditorValue } from "@cfasim-ui/components";
 import { LineChart, DataTable } from "@cfasim-ui/charts";
 import type { ChartAnnotation } from "@cfasim-ui/charts";
 import { runWasm, cancelWasm } from "@cfasim-ui/wasm";
-import { useUrlParams, ModelOutput } from "@cfasim-ui/shared";
+import { ModelOutput } from "@cfasim-ui/shared";
 import type { ColumnDescriptor, TypedColumn } from "@cfasim-ui/shared";
+import { useModelParams } from "../useModelParams";
 
 const defaults = {
   infectionRate: 0.5,
@@ -23,11 +23,7 @@ const defaults = {
   maxTime: 100,
   nSimulations: 20,
 };
-const params = reactive({ ...defaults });
-const { reset } = useUrlParams(params, defaults, {
-  router: useRouter(),
-  route: useRoute(),
-});
+const { params, reset } = useModelParams(defaults);
 
 // When `useEditor` is on, the sidebar shows a JSON/TOML/YAML editor
 // instead of the per-field NumberInput form. Both views share the same

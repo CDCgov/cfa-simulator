@@ -1,52 +1,17 @@
 import type { TransferableResponse } from "@cfasim-ui/shared";
-import { unwrapResponse } from "@cfasim-ui/shared";
+import {
+  unwrapResponse,
+  describeWorkerError,
+  MESSAGEERROR_TEXT,
+} from "@cfasim-ui/shared";
+import type { WorkerMessage, OutgoingMessage } from "./messages.js";
 
 let lastId = 0;
 function getId(): number {
   return ++lastId;
 }
 
-interface RunMessage {
-  id: number;
-  type?: "run";
-  python: string;
-  context?: Record<string, unknown>;
-}
-interface CallMessage {
-  id: number;
-  type: "call";
-  module: string;
-  fn: string;
-  kwargs?: Record<string, unknown>;
-}
-interface LoadModuleMessage {
-  id: number;
-  type: "loadModule";
-  module: string;
-}
-type WorkerMessage = RunMessage | CallMessage | LoadModuleMessage;
-type OutgoingMessage =
-  | Omit<RunMessage, "id">
-  | Omit<CallMessage, "id">
-  | Omit<LoadModuleMessage, "id">;
-
 export type PyodideResponse = { result?: unknown; error?: string };
-
-/**
- * Convert a worker `ErrorEvent` into a human-readable message. Cross-origin
- * worker failures sanitize the event so every field is null/empty (e.g. a
- * dynamic `import("https://cdn…")` that fails at module evaluation): in
- * that case we fall back to a hint about likely causes instead of an
- * empty string, which would otherwise surface as a blank error.
- */
-function describeWorkerError(e: ErrorEvent): string {
-  const msg = e.message || e.error?.message || "";
-  if (msg) {
-    if (e.filename) return `${msg} (${e.filename}:${e.lineno})`;
-    return msg;
-  }
-  return "Worker failed to load (no error details available — most often a cross-origin script load failure or a syntax error in the worker module)";
-}
 
 /**
  * Worker names are arbitrary string keys. Workers are spawned lazily on first
@@ -96,9 +61,7 @@ function getWorker(name: string): WorkerEntry {
       failAll(describeWorkerError(e));
     });
     worker.addEventListener("messageerror", () => {
-      failAll(
-        "Worker received a message it could not deserialize (messageerror)",
-      );
+      failAll(MESSAGEERROR_TEXT);
     });
     entry = newEntry;
     workers.set(name, entry);
