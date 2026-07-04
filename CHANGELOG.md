@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.7.1] - 2026-07-04
+
+### Features
+
+- **charts:** Themed focus highlight color and per-item stroke/strokeWidth
+
 ## [0.7.0] - 2026-07-04
 
 ### Bug Fixes
