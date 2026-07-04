@@ -108,8 +108,59 @@ test("state-map shows county details and highlights without zooming", async ({
   await page.locator(".state-path").first().click();
   // Clicking updates the info panel...
   await expect(page.locator(".info-panel .info-selection")).toBeVisible();
-  // ...and highlights on the map without zooming (no Reset button).
-  await expect(page.locator(".choropleth-reset")).toHaveCount(0);
+  // ...and highlights on the map without zooming (no zoom controls).
+  await expect(page.locator(".chart-zoom-controls")).toHaveCount(0);
+});
+
+test("fetch-example map is static until double-click activates zoom", async ({
+  page,
+}) => {
+  await page.goto("/fetch-example");
+  const path = page.locator(".state-path").first();
+  await path.waitFor();
+  // Static map advertises the gesture, and the controls are already there
+  // (− and home disabled at the identity transform).
+  await expect(page.locator(".choropleth-zoom-hint")).toHaveText(
+    "Double click to zoom",
+  );
+  const home = page.getByRole("button", { name: "Reset view" });
+  await expect(home).toBeDisabled();
+  // The wheel never zooms.
+  await path.hover();
+  await page.mouse.wheel(0, -100);
+  await expect(home).toBeDisabled();
+  // Double-click zooms in place; the interaction is live from then on.
+  await path.dblclick();
+  await expect(home).toBeEnabled();
+  await expect(page.locator(".choropleth-zoom-hint")).toHaveCount(0);
+  // Home returns to full extent but activation is sticky — controls stay.
+  await home.click();
+  await expect(page.locator(".chart-zoom-controls")).toBeVisible();
+});
+
+test.describe("choropleth touch zoom", () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 664 } });
+
+  test("tap expands the map to fill the window and ✕ closes it", async ({
+    page,
+  }) => {
+    await page.goto("/fetch-example");
+    const path = page.locator(".state-path").first();
+    await path.waitFor();
+    await expect(page.locator(".choropleth-zoom-hint")).toHaveText(
+      "Tap to zoom",
+    );
+    await path.tap();
+    await expect(
+      page.locator(".choropleth-wrapper.is-fullscreen"),
+    ).toBeVisible();
+    await expect(page.locator(".chart-zoom-controls")).toBeVisible();
+    await page.locator(".chart-close-button").tap();
+    await expect(page.locator(".choropleth-wrapper.is-fullscreen")).toHaveCount(
+      0,
+    );
+    await expect(page.locator(".chart-zoom-controls")).toHaveCount(0);
+  });
 });
 
 test("python-example syncs params to URL and hydrates from URL", async ({

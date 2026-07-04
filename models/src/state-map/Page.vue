@@ -169,9 +169,7 @@ const subtitle = computed(() =>
           :focus-zoom="false"
           :legend="false"
           :menu="false"
-          :pan="true"
-          :zoom="true"
-          two-finger-pan
+          :zoom="false"
           tooltip-trigger="hover"
           @state-click="onMapClick"
         />

@@ -254,18 +254,66 @@ Use an array of `CategoricalStop` objects to map string values to colors. Each s
   </template>
 </ComponentDemo>
 
-### County-level map with pan and zoom
+### Pan and zoom
 
-Set `geoType="counties"` to render county-level data using 5-digit FIPS codes. State borders are drawn on top for context. Use `pan` and `zoom` props to enable interactive navigation — useful for dense county data.
+Every map is **static until activated** — tooltips, hover, and click-select
+work immediately, but the scroll wheel never zooms, so the map can't hijack
+page scrolling. A grey hint overlaid on the top of the map ("Double click to
+zoom" / "Tap to zoom") advertises the gesture until it's been used; pass
+`:zoom-hint="false"` to hide it.
 
-On touch devices, add `two-finger-pan` so a single finger scrolls the page (the map sets `touch-action: pan-y`) and two fingers pan/pinch-zoom the map — tap-to-select still works with one finger.
+- **Desktop:** double-click zooms in place (shift+double-click zooms out),
+  or press **+** in the always-present **+ / − / reset** control stack in
+  the top-left corner. Any of these — or clicking a feature — starts the
+  pan/zoom mode; from then on, drag pans the map. The reset button (a
+  counterclockwise arrow) animates back to the full extent (clearing any
+  `focus`); − and reset are disabled while the map is at its full extent.
+- **Touch:** a tap expands the map to fill the window, zoomed in on the
+  tapped point. Inside, one finger pans, a pinch zooms, and a tap selects a
+  feature; the +/−/reset controls sit top-left and a close (✕) button
+  top-right returns to the inline map at full extent. The inline map ignores
+  touch gestures entirely, so the page always scrolls freely.
+
+Filling the window is always an activated state: whether entered via the
+menu's **Fullscreen** item or a tap, pan/zoom works immediately and the
+controls are present — no double-click needed first. The scroll wheel (and
+trackpad pinch) zooms there too, since page scrolling is locked while the
+map fills the window.
+
+Prefer in-place zooming on touch? Set `:touch-expand="false"` — the first
+tap zooms the inline map in on the tapped point (the touch analogue of a
+desktop double-click) instead of expanding it. From there one finger pans,
+a pinch zooms, and taps select; the +/−/reset controls render inline, and
+reset restores the original static, page-scrollable state. Fullscreen is
+unaffected: that view stays continuously interactive and its reset only
+recenters.
+
+Set `:zoom="false"` for a fully static map with no zoom gestures — useful
+when clicks mean navigation instead (see the state-map pattern below).
+Programmatic `focus` zoom still applies, and the controls still appear on
+desktop once the map is zoomed so users can find their way back.
+
+#### Full-page mode (`zoom-mode="scroll"`)
+
+When the map _is_ the page — a dedicated map route, a dashboard panel, a
+kiosk — the activation step just gets in the way, and there's no page
+scroll to protect. Set `zoom-mode="scroll"` to make the map immediately
+interactive: the wheel (and trackpad pinch) zooms, dragging pans, and touch
+gestures work inline with no tap-to-expand step. The +/−/reset controls are
+always shown and the hint is suppressed.
+
+```vue
+<ChoroplethMap :topology="statesTopo" :data="stateData" zoom-mode="scroll" />
+```
+
+### County-level map
+
+Set `geoType="counties"` to render county-level data using 5-digit FIPS codes. State borders are drawn on top for context. Double-click (or tap on touch) to explore — useful for dense county data.
 
 <ComponentDemo>
   <ChoroplethMap
     :topology="countiesTopo"
     geo-type="counties"
-    :pan="true"
-    :zoom="true"
     :data="[
       { id: '06037', value: 100 },
       { id: '06073', value: 80 },
@@ -289,8 +337,6 @@ On touch devices, add `two-finger-pan` so a single finger scrolls the page (the 
 <ChoroplethMap
   :topology="countiesTopo"
   geo-type="counties"
-  pan
-  zoom
   :data="[
     { id: '06037', value: 100 },
     { id: '36061', value: 90 },
@@ -315,8 +361,6 @@ Set `geoType="hsas"` to render Health Service Area boundaries. HSAs are dissolve
   <ChoroplethMap
     :topology="countiesTopo"
     geo-type="hsas"
-    :pan="true"
-    :zoom="true"
     :data="[
       { id: '010259', value: 100 },
       { id: '060766', value: 90 },
@@ -340,8 +384,6 @@ Set `geoType="hsas"` to render Health Service Area boundaries. HSAs are dissolve
 <ChoroplethMap
   :topology="countiesTopo"
   geo-type="hsas"
-  pan
-  zoom
   :data="[
     { id: '010259', value: 100 },
     { id: '060766', value: 90 },
@@ -416,16 +458,18 @@ Bind the `focus` prop to pan and zoom to a specific feature. Pass a feature
 id (FIPS code, HSA code, or name) — or an array of ids to focus on a region.
 With `v-model:focus`, clicking an unfocused feature focuses it and clicking
 the focused feature toggles back off. If a tooltip is configured, focusing
-shows that feature's tooltip. Users can pan/zoom freely around the focused
-area; the built-in **Reset** button clears focus and snaps back.
+shows that feature's tooltip. Users can keep exploring around the focused
+area; the built-in **reset** button clears focus and snaps back to the full
+extent.
 
 Set `:focus-zoom="false"` to highlight (and draw cross-geoType overlays)
 **without** panning or zooming — useful for a click-to-select interaction
 where the map should stay put while a side panel shows the details.
 
-Selection works on touch too: a single-finger **tap** on a feature emits
-`stateClick` and toggles focus, while drags (pan) and pinches (zoom) are left
-to the map. Hover tooltips stay off on touch for performance.
+On touch, selection happens inside the tap-to-expand view: a single-finger
+**tap** on a feature there emits `stateClick` and toggles focus. (With
+`:zoom="false"` a tap selects directly on the inline map instead.) Hover
+tooltips stay off on touch for performance.
 
 Counties are tiny without a zoom — focus is a natural fit for drill-down.
 
@@ -496,8 +540,6 @@ on top with a `FocusItem`.
     :topology="countiesTopo"
     geo-type="counties"
     data-geo-type="hsas"
-    :pan="true"
-    :zoom="true"
     :data="[
       { id: '060737', value: 80 },
       { id: '060723', value: 60 },
@@ -549,8 +591,6 @@ subpath so consumers that don't need HSA lookups don't pay for the
     :topology="countiesTopo"
     geo-type="counties"
     data-geo-type="hsas"
-    :pan="true"
-    :zoom="true"
     :focus="parentFocus"
     @update:focus="focusedCounty = typeof $event === 'string' ? $event : null"
     :data="[
@@ -654,8 +694,6 @@ Renders every US county with a value and a custom tooltip slot.
     :topology="countiesTopo"
     geo-type="counties"
     :data="denseCountyData"
-    :pan="true"
-    :zoom="true"
     :color-scale="{ min: '#f0f5ff', max: '#08306b' }"
     title="All US counties — tooltip perf demo"
     :height="500"
@@ -680,13 +718,7 @@ const data = countiesTopo.objects.counties.geometries.map((g, i) => ({
 }));
 </script>
 
-<ChoroplethMap
-  :topology="countiesTopo"
-  geo-type="counties"
-  :data="data"
-  pan
-  zoom
->
+<ChoroplethMap :topology="countiesTopo" geo-type="counties" :data="data">
   <template #tooltip="{ id, name, value }">
     <div style="font-weight: 600">{{ name }}</div>
     <div style="opacity: 0.7; font-size: 0.85em">FIPS {{ id }}</div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   computed,
+  nextTick,
   ref,
   watch,
   onMounted,
@@ -9,7 +10,12 @@ import {
   useSlots,
 } from "vue";
 import { geoPath, geoAlbersUsa, geoMercator } from "d3-geo";
-import { zoom as d3Zoom, zoomIdentity } from "d3-zoom";
+import {
+  zoom as d3Zoom,
+  zoomIdentity,
+  zoomTransform,
+  type ZoomTransform,
+} from "d3-zoom";
 import { select } from "d3-selection";
 // Side-effect import: enables `selection.transition()` on d3 selections so
 // `applyFocus` can animate the zoom transform.
@@ -22,6 +28,8 @@ import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
 import { saveSvg, savePng } from "../ChartMenu/download.js";
 import {
   useChartFullscreen,
+  isTouchDevice,
+  ChartZoomControls,
   resolveColorToRgb,
   TITLE_FONT_SIZE,
   TITLE_LINE_HEIGHT,
@@ -152,18 +160,44 @@ const props = withDefaults(
     legend?: boolean;
     /** Title displayed next to the legend */
     legendTitle?: string;
-    /** Enable mouse-wheel zooming. Default: false */
-    zoom?: boolean;
-    /** Enable click-and-drag panning. Default: false */
-    pan?: boolean;
     /**
-     * Require two fingers to pan/zoom on touch devices. Default `false`.
-     * When `true`, a single finger scrolls the page (the map sets
-     * `touch-action: pan-y` and ignores one-finger drags) while two fingers
-     * pan and pinch-zoom the map. Single-finger tap-to-select still works.
-     * Has no effect with a mouse.
+     * Enable the activate-to-zoom interaction. Default `true`. The map
+     * renders static (tooltips and click-select still work) until the user
+     * double-clicks (desktop) or taps (touch). Desktop double-click zooms in
+     * place and reveals +/−/reset controls; drag-pan works once zoomed. On
+     * touch a tap expands the map to fill the window, where one finger pans,
+     * pinch zooms, and a tap selects. The scroll wheel never zooms, so the
+     * map can't hijack page scrolling. Set `false` for a fully static map
+     * with no zoom gestures (programmatic `focus` zoom still applies).
      */
-    twoFingerPan?: boolean;
+    zoom?: boolean;
+    /**
+     * Interaction style when `zoom` is enabled. `"activate"` (default)
+     * keeps the map static until a double-click / tap / feature click, so
+     * the page scrolls freely past it. `"scroll"` makes the map immediately
+     * interactive — the wheel zooms, dragging pans, and touch gestures work
+     * inline with no tap-to-expand step. Use it for full-page experiences
+     * where the map is the main surface and there's no page scroll to
+     * hijack.
+     */
+    zoomMode?: "activate" | "scroll";
+    /**
+     * On touch devices, expand the map to fill the window when tapped.
+     * Default `true`. Set `false` to zoom in place instead: the first tap
+     * zooms the inline map in on the tapped point (like a desktop
+     * double-click), after which one-finger pan / pinch work and taps
+     * select features; the +/−/reset controls render inline. Note the
+     * activated map captures touch scrolling over it. No effect on desktop
+     * or when `zoom` is off; `zoom-mode="scroll"` already implies inline
+     * interaction.
+     */
+    touchExpand?: boolean;
+    /**
+     * Show the grey "Double click to zoom" / "Tap to zoom" affordance over
+     * the top of the map while the zoom gesture hasn't been used yet.
+     * Default `true`; set `false` to hide it. No effect when `zoom` is off.
+     */
+    zoomHint?: boolean;
     /** Tooltip activation mode */
     tooltipTrigger?: "hover" | "click";
     /**
@@ -200,7 +234,7 @@ const props = withDefaults(
      * current pan/zoom transform is preserved; only the highlight is
      * removed. Works with `v-model:focus`: clicking an unfocused feature
      * (in the base geoType) emits its id; clicking the focused feature
-     * emits `null`. The built-in Reset button clears focus *and* resets
+     * emits `null`. The built-in reset button clears focus *and* resets
      * the zoom. If a tooltip is configured, focusing a feature in the
      * base geoType shows its tooltip.
      */
@@ -212,7 +246,7 @@ const props = withDefaults(
      * Default `true`. Set `false` to highlight (and draw cross-geoType
      * overlays) without changing the current pan/zoom — useful for a
      * click-to-select interaction where the map should stay put. The
-     * built-in Reset button is unaffected.
+     * built-in reset button is unaffected.
      */
     focusZoom?: boolean;
     /**
@@ -232,9 +266,10 @@ const props = withDefaults(
     strokeWidth: 0.5,
     menu: true,
     legend: true,
-    zoom: false,
-    pan: false,
-    twoFingerPan: false,
+    zoom: true,
+    zoomMode: "activate",
+    touchExpand: true,
+    zoomHint: true,
     tooltipClamp: "chart",
     focusZoomLevel: 4,
     focusZoom: true,
@@ -354,18 +389,38 @@ const focusedPathStyles = new Map<SVGPathElement, FocusStyle>();
 // remove / restyle on each applyFocus.
 const overlayPathEls = new Map<string, SVGPathElement>();
 let isZooming = false;
-// TODO: map hover/tooltip causes performance issues on mobile (SVG stroke-width
-// changes + compositing layers degrade zoom/pan). Disabled on touch devices.
-const isTouchDevice = typeof window !== "undefined" && "ontouchstart" in window;
 let tooltipObserver: ResizeObserver | null = null;
 const lastTooltipSize = { width: 0, height: 0 };
 let lastPointer: { x: number; y: number } | null = null;
 let tooltipVisible = false;
 let zoomBehavior: ReturnType<typeof d3Zoom<SVGSVGElement, unknown>> | null =
   null;
-// True once the user has zoomed or panned away from the identity transform.
-// Drives the visibility of the reset button.
+// True while the transform is away from identity.
 const isZoomed = ref(false);
+// Current zoom scale — drives the +/− buttons' disabled states.
+const scaleK = ref(1);
+// Latched true the first time the transform leaves identity (double-click,
+// tap zoom, +/− press, or a focus zoom).
+const hasZoomed = ref(false);
+// Latched true when the user selects a feature while zooming is enabled —
+// engaging with the map's clickable elements counts as opting in.
+const hasInteracted = ref(false);
+// The pan/zoom interaction is "activated" once the user has zoomed or
+// engaged with the map. Activation is sticky (reset keeps it, except the
+// inline touch flow, where reset restores the pre-tap static mode by
+// clearing both latches).
+const isActivated = computed(() => hasZoomed.value || hasInteracted.value);
+// `zoom-mode="scroll"`: no activation step at all — the map owns wheel,
+// drag, and touch gestures from the start (for full-page experiences).
+const isScrollMode = computed(() => props.zoomMode === "scroll");
+// Inline touch gestures (one-finger pan, pinch) go to the map instead of
+// the page: always in scroll mode, and — with tap-to-expand opted out —
+// once the first tap has activated the interaction.
+const touchGesturesInline = computed(
+  () =>
+    props.zoom &&
+    (isScrollMode.value || (!props.touchExpand && isActivated.value)),
+);
 // rAF-throttled cursor coords for moveTooltip; we coalesce many mousemove
 // events into one transform write per animation frame.
 let pendingMoveX = 0;
@@ -387,18 +442,26 @@ let tapStart: {
   featId: string | null;
 } | null = null;
 
+// Desktop click-vs-double-click: with the zoom interaction on, a click can
+// be the first half of a double-click zoom, so selection defers by a
+// double-click-sized window and the second click cancels it.
+const CLICK_SELECT_DELAY_MS = 250;
+let pendingSelectTimer = 0;
+
 function setupInteraction() {
+  const svg = svgRef.value;
   const g = mapGroupRef.value;
-  if (!g) return;
-  // Tap-to-select is wired on every device. `touchend` is non-passive so a
-  // confirmed tap can preventDefault and suppress the compatibility
-  // click/hover the browser would otherwise synthesize (the double-fire and
-  // iOS first-tap-hover sources).
-  g.addEventListener("touchstart", onTouchStart, { passive: true });
-  g.addEventListener("touchend", onTouchEnd);
-  g.addEventListener("touchcancel", onTouchCancel, { passive: true });
+  if (!svg || !g) return;
+  // Tap handling is wired on every device, on the svg itself so taps on the
+  // map background (not just feature paths) can expand the touch map.
+  // `touchend` is non-passive so a confirmed tap can preventDefault and
+  // suppress the compatibility click/hover the browser would otherwise
+  // synthesize (the double-fire and iOS first-tap-hover sources).
+  svg.addEventListener("touchstart", onTouchStart, { passive: true });
+  svg.addEventListener("touchend", onTouchEnd);
+  svg.addEventListener("touchcancel", onTouchCancel, { passive: true });
   // Hover + tooltip stay off on touch (stroke-width churn degrades zoom/pan).
-  if (isTouchDevice) return;
+  if (isTouchDevice()) return;
   g.addEventListener("click", onDelegatedEvent);
   g.addEventListener("mouseover", onDelegatedEvent);
   g.addEventListener("mousemove", onDelegatedMouseMove);
@@ -406,11 +469,14 @@ function setupInteraction() {
 }
 
 function teardownInteraction() {
+  const svg = svgRef.value;
   const g = mapGroupRef.value;
+  if (svg) {
+    svg.removeEventListener("touchstart", onTouchStart);
+    svg.removeEventListener("touchend", onTouchEnd);
+    svg.removeEventListener("touchcancel", onTouchCancel);
+  }
   if (!g) return;
-  g.removeEventListener("touchstart", onTouchStart);
-  g.removeEventListener("touchend", onTouchEnd);
-  g.removeEventListener("touchcancel", onTouchCancel);
   g.removeEventListener("click", onDelegatedEvent);
   g.removeEventListener("mouseover", onDelegatedEvent);
   g.removeEventListener("mousemove", onDelegatedMouseMove);
@@ -440,6 +506,7 @@ onMounted(() => {
 onUnmounted(() => {
   tooltipObserver?.disconnect();
   if (pendingMoveFrame) cancelAnimationFrame(pendingMoveFrame);
+  window.clearTimeout(pendingSelectTimer);
   teardownZoom();
   teardownInteraction();
   window.removeEventListener("scroll", dismissOnViewportChange, {
@@ -452,12 +519,8 @@ function setupZoom() {
   if (!svgRef.value || !mapGroupRef.value) return;
 
   const svg = select(svgRef.value);
-  // Always span focusZoomLevel and at least the standard 12× ceiling so the
-  // user can wheel further in/out of a focused view. Programmatic
-  // `.transform()` calls are clamped to this range too.
-  const maxScale = Math.max(12, props.focusZoomLevel);
   zoomBehavior = d3Zoom<SVGSVGElement, unknown>()
-    .scaleExtent([1, maxScale])
+    .scaleExtent([1, maxScale.value])
     .on("start", () => {
       isZooming = true;
       clearHover();
@@ -467,41 +530,46 @@ function setupZoom() {
         mapGroupRef.value.setAttribute("transform", event.transform);
       }
       const t = event.transform;
+      scaleK.value = t.k;
       isZoomed.value = t.k !== 1 || t.x !== 0 || t.y !== 0;
+      if (isZoomed.value) hasZoomed.value = true;
     })
     .on("end", () => {
       isZooming = false;
     });
 
-  // Dynamic filter: re-evaluated per event, so toggling `focus`,
-  // `zoom`, or `pan` doesn't require tearing down the zoom behavior.
-  // When focus is active we always allow drag + wheel so users can
-  // explore away from the focused area regardless of `zoom`/`pan` — but
-  // not in highlight-only mode (`focusZoom=false`), where focus is purely
-  // visual and shouldn't grant interaction the props didn't ask for.
-  // Programmatic `.transform()` calls bypass this filter entirely.
+  // Dynamic filter deciding which pointer gestures d3-zoom may handle —
+  // re-evaluated per event, so mode/activation changes never require
+  // tearing down the zoom behavior. Programmatic `.transform()` calls
+  // (focus zoom, the +/− controls, reset) bypass it entirely. Scroll mode
+  // skips every gate; otherwise, per gesture:
+  //  - wheel: only while the map fills the window (body scroll is locked
+  //    there, so there's no page scroll to hijack);
+  //  - dblclick: desktop's activation + zoom-in gesture (touch uses taps);
+  //  - mousedown (drag-pan): once activated or while filling the window;
+  //  - touchstart (pan/pinch): while filling the window, or inline once
+  //    `touchGesturesInline` says the map owns touch gestures.
   zoomBehavior.filter((event) => {
-    const focused =
-      normalizedFocus.value.length > 0 && props.focusZoom !== false;
-    const allowZoom = !!props.zoom || focused;
-    const allowPan = !!props.pan || focused;
-    if (event.type === "wheel" || event.type === "dblclick") {
-      if (!allowZoom) return false;
-    } else if (event.type === "mousedown" || event.type === "touchstart") {
-      if (!allowPan) return false;
-      // Two-finger-only mode: ignore single-finger touches so the page can
-      // scroll; a second finger drives the map (pan + pinch-zoom).
-      if (
-        props.twoFingerPan &&
-        event.type === "touchstart" &&
-        (event as TouchEvent).touches.length < 2
-      ) {
-        return false;
+    if (!props.zoom) return false;
+    if (!isScrollMode.value) {
+      const expanded = fullscreen.isFullscreen.value;
+      switch (event.type) {
+        case "wheel":
+          if (!expanded) return false;
+          break;
+        case "dblclick":
+          if (isTouchDevice()) return false;
+          break;
+        case "mousedown":
+          if (!expanded && !isActivated.value) return false;
+          break;
+        case "touchstart":
+          if (!expanded && !touchGesturesInline.value) return false;
+          break;
       }
-    } else if (!allowZoom && !allowPan) {
-      return false;
     }
-    // Mirror d3-zoom's default rejections (ctrl-click, non-primary buttons).
+    // Mirror d3-zoom's default rejections (ctrl-click, non-primary
+    // buttons); ctrl+wheel is trackpad pinch, so it stays allowed.
     return (!event.ctrlKey || event.type === "wheel") && !event.button;
   });
 
@@ -557,7 +625,7 @@ function focusedBaseIds(items: FocusItem[]): Set<string> {
 
 // Duration (ms) of focus zoom-in and Reset-button zoom-out transitions.
 // Initial mount applies instantly; clearing focus is a no-op on the
-// transform (the Reset button is the only path back to identity).
+// transform (the reset button is the only path back to identity).
 const FOCUS_ANIM_MS = 450;
 // Tracks whether applyFocus has been called once — initial mount apply
 // is instant, subsequent focus-in calls animate.
@@ -596,7 +664,7 @@ function applyFocus() {
   syncOverlayPaths(overlayResolved);
 
   // Clearing focus doesn't touch the zoom transform — the user keeps
-  // whatever pan/zoom they had. Only the Reset button snaps back to
+  // whatever pan/zoom they had. Only the reset button snaps back to
   // identity. Drop the highlight + tooltip and we're done.
   if (resolved.length === 0) {
     focusApplied = true;
@@ -718,20 +786,140 @@ function resetZoom() {
   const svg = select(svgRef.value);
   svg.interrupt();
   hideTooltip();
-  svg
+  // In the inline touch flow (no tap-to-expand step), reset restores the
+  // pre-tap mode: once the zoom-out lands, deactivate so the page gets
+  // touch scrolling back and the tap hint returns. Desktop stays
+  // activated (sticky), and inside fullscreen the ✕ handles leaving.
+  const deactivate =
+    isTouchDevice() && !fullscreen.isFullscreen.value && !isScrollMode.value;
+  const transition = svg
     .transition()
     .duration(FOCUS_ANIM_MS)
     .call(zoomBehavior.transform, zoomIdentity);
+  if (deactivate) {
+    transition.on("end", () => {
+      hasZoomed.value = false;
+      hasInteracted.value = false;
+    });
+  }
+}
+
+// Ceiling always spans focusZoomLevel and at least the standard 12× so the
+// user can zoom further in/out of a focused view. Programmatic
+// `.transform()` calls are clamped to this range too.
+const maxScale = computed(() => Math.max(12, props.focusZoomLevel));
+
+// Scale factor per +/− press and per desktop double-click (d3's built-in).
+const ZOOM_STEP = 2;
+
+// The +/−/reset controls. On desktop they're always present while zooming
+// is enabled — pressing + is itself an activation path. On touch they
+// render inline only when the inline map is (or can become) interactive
+// (scroll mode / in-place tap zoom), plus always in the expanded view.
+// With `zoom: false`, a programmatic focus zoom still activates, keeping
+// an escape hatch back to the full extent.
+const showZoomControls = computed(() =>
+  isTouchDevice()
+    ? fullscreen.isFullscreen.value ||
+      (props.zoom && (isScrollMode.value || !props.touchExpand))
+    : props.zoom || isActivated.value,
+);
+
+// Drag-pan cursor affordance — desktop only, once drag-pan is available.
+const isPannable = computed(
+  () =>
+    props.zoom &&
+    !isTouchDevice() &&
+    (isScrollMode.value || isActivated.value || fullscreen.isFullscreen.value),
+);
+
+// Grey affordance line shown while the activation gesture is still the way
+// in: on desktop until activation (the controls take over from there), on
+// touch whenever the inline map is showing (with tap-to-expand) or until
+// the first in-place tap zoom (without). Never while fullscreen or in
+// scroll mode — those are already interactive.
+const showZoomHint = computed(
+  () =>
+    props.zoom &&
+    props.zoomHint &&
+    !isScrollMode.value &&
+    !fullscreen.isFullscreen.value &&
+    ((isTouchDevice() && props.touchExpand) || !isActivated.value),
+);
+const zoomHintText = computed(() =>
+  isTouchDevice() ? "Tap to zoom" : "Double click to zoom",
+);
+
+function zoomBy(factor: number) {
+  if (!svgRef.value || !zoomBehavior) return;
+  const svg = select(svgRef.value);
+  svg.interrupt();
+  hideTooltip();
+  // scaleBy centers on the viewBox extent's midpoint; scaleExtent clamps.
+  svg.transition().duration(250).call(zoomBehavior.scaleBy, factor);
+}
+
+// Zoom level a tap zooms to (expanding or in place).
+const TAP_ZOOM_SCALE = 2;
+
+// Target transform for a tap: TAP_ZOOM_SCALE× centered on the tapped
+// point. Falls back to the map center when the CTM is unavailable (jsdom).
+function tapZoomTransform(clientX: number, clientY: number): ZoomTransform {
+  const svgEl = svgRef.value!;
+  const k = TAP_ZOOM_SCALE;
+  let mx = width.value / 2;
+  let my = height.value / 2;
+  let ctm: DOMMatrix | null = null;
+  try {
+    ctm = svgEl.getScreenCTM();
+  } catch {
+    ctm = null;
+  }
+  if (ctm) {
+    // client → viewBox coords (the svg CTM covers viewBox scaling and
+    // letterboxing), then unwind the current zoom transform.
+    const inv = ctm.inverse();
+    const px = inv.a * clientX + inv.c * clientY + inv.e;
+    const py = inv.b * clientX + inv.d * clientY + inv.f;
+    [mx, my] = zoomTransform(svgEl).invert([px, py]);
+  }
+  return zoomIdentity
+    .translate(width.value / 2 - k * mx, height.value / 2 - k * my)
+    .scale(k);
+}
+
+function animateZoomTo(target: ZoomTransform) {
+  if (!svgRef.value || !zoomBehavior) return;
+  const svg = select(svgRef.value);
+  svg.interrupt();
+  svg.transition().duration(FOCUS_ANIM_MS).call(zoomBehavior.transform, target);
+}
+
+// Tap on the inline touch map: expand to fill the window, then zoom in
+// centered on the tapped point once the expanded layout has committed.
+function enterTouchZoom(clientX: number, clientY: number) {
+  if (!svgRef.value || !zoomBehavior) return;
+  // Resolve the tapped point to map coords before the layout changes.
+  const target = tapZoomTransform(clientX, clientY);
+  fullscreen.enter();
+  nextTick(() => animateZoomTo(target));
+}
+
+// `touchExpand: false`: the first tap zooms the inline map in place
+// instead of expanding it (the touch analogue of desktop double-click).
+function zoomInPlaceAt(clientX: number, clientY: number) {
+  if (!svgRef.value || !zoomBehavior) return;
+  animateZoomTo(tapZoomTransform(clientX, clientY));
 }
 
 // `focusZoomLevel` only affects scaleExtent + the next focus apply. The
-// d3-zoom filter reads `props.zoom` / `props.pan` dynamically, so we don't
-// need to tear down zoom on those changes.
+// d3-zoom filter reads `props.zoom` and the activation state dynamically,
+// so we don't need to tear down zoom on those changes.
 watch(
   () => props.focusZoomLevel,
   () => {
     if (zoomBehavior) {
-      zoomBehavior.scaleExtent([1, Math.max(12, props.focusZoomLevel)]);
+      zoomBehavior.scaleExtent([1, maxScale.value]);
     }
     applyFocus();
   },
@@ -1364,6 +1552,9 @@ function eventToFeatureId(target: EventTarget | null): string | null {
 // wanting fine-grained multi-select handle merging via `@update:focus`.
 // Shared by the mouse-click and touch-tap paths.
 function emitSelection(data: TooltipPayload) {
+  // Selecting a feature counts as engaging with the map — it switches the
+  // pan/zoom interaction on, same as a first zoom would.
+  if (props.zoom) hasInteracted.value = true;
   emit("stateClick", { id: data.id, name: data.name, value: data.value });
   const wasFocused = focusedBaseIds(normalizedFocus.value).has(data.id);
   emit("update:focus", wasFocused ? null : data.id);
@@ -1378,7 +1569,20 @@ function onDelegatedEvent(event: Event) {
   if (!data) return;
   const payload = { id: data.id, name: data.name, value: data.value };
   if (event.type === "click") {
-    emitSelection(data);
+    if (props.zoom) {
+      window.clearTimeout(pendingSelectTimer);
+      pendingSelectTimer = 0;
+      // detail > 1 is the second click of a double-click — that gesture is
+      // a zoom (handled by d3), not a select.
+      if (me.detail <= 1) {
+        pendingSelectTimer = window.setTimeout(() => {
+          pendingSelectTimer = 0;
+          emitSelection(data);
+        }, CLICK_SELECT_DELAY_MS);
+      }
+    } else {
+      emitSelection(data);
+    }
   } else if (event.type === "mouseover") {
     setHover(pathsByFeatureId.get(featId)!);
     if (hasInteractiveTooltip.value)
@@ -1416,14 +1620,38 @@ function onTouchStart(event: TouchEvent) {
 function onTouchEnd(event: TouchEvent) {
   const start = tapStart;
   tapStart = null;
-  // No feature under the initial touch, or a second finger joined in.
-  if (!start || !start.featId || event.touches.length > 0) return;
+  // A second finger joined in — that's a pinch, not a tap.
+  if (!start || event.touches.length > 0) return;
   const t = event.changedTouches[0];
   if (!t) return;
   // Moved too far (a pan) or held too long (a long-press) → not a tap.
   if (Math.abs(t.clientX - start.x) > TAP_SLOP) return;
   if (Math.abs(t.clientY - start.y) > TAP_SLOP) return;
   if (event.timeStamp - start.time > TAP_MAX_MS) return;
+  // Inline touch map with zoom on (activate mode): a tap anywhere
+  // (features and background alike) starts the interaction — expanding to
+  // fill the window by default, or zooming in place with
+  // `touchExpand: false`, after which taps fall through to selection.
+  // Scroll mode skips all of this: the inline map is already the
+  // interactive surface.
+  if (
+    props.zoom &&
+    !isScrollMode.value &&
+    isTouchDevice() &&
+    !fullscreen.isFullscreen.value
+  ) {
+    if (props.touchExpand) {
+      event.preventDefault();
+      enterTouchZoom(t.clientX, t.clientY);
+      return;
+    }
+    if (!isActivated.value) {
+      event.preventDefault();
+      zoomInPlaceAt(t.clientX, t.clientY);
+      return;
+    }
+  }
+  if (!start.featId) return;
   const data = tooltipDataById.get(start.featId);
   if (!data) return;
   // Suppress the synthetic click/hover the browser would replay from this
@@ -1695,6 +1923,20 @@ watch(
   () => applyFocus(),
   { flush: "post" },
 );
+
+// Exiting the expanded touch view (✕, Escape) returns to the static inline
+// map at full extent — the inline map has no pan gestures, so a preserved
+// transform would strand the user off-center.
+watch(
+  () => fullscreen.isFullscreen.value,
+  (expanded) => {
+    if (expanded || !isTouchDevice()) return;
+    if (!svgRef.value || !zoomBehavior) return;
+    const svg = select(svgRef.value);
+    svg.interrupt();
+    zoomBehavior.transform(svg, zoomIdentity);
+  },
+);
 </script>
 
 <template>
@@ -1707,14 +1949,19 @@ watch(
       v-bind="$attrs"
       :class="[
         'choropleth-wrapper',
-        { pannable: pan, 'is-fullscreen': fullscreen.isFullscreen.value },
+        {
+          pannable: isPannable,
+          'is-fullscreen': fullscreen.isFullscreen.value,
+        },
       ]"
       :style="fullscreen.fullscreenStyle.value"
       :role="chartRole || undefined"
       :aria-label="chartAriaLabel || undefined"
     >
+      <!-- Rendered while expanded even with `menu` off — the ✕ close
+      button it swaps to is the way back from the tap-to-expand view. -->
       <ChartMenu
-        v-if="menu"
+        v-if="menu || fullscreen.isFullscreen.value"
         :items="menuItems"
         :is-fullscreen="fullscreen.isFullscreen.value"
         @close="fullscreen.exit"
@@ -1769,11 +2016,23 @@ watch(
           </div>
         </div>
       </div>
+      <div v-if="showZoomHint" class="choropleth-zoom-hint">
+        {{ zoomHintText }}
+      </div>
+      <!-- Inline, touch gestures pass through to the page (the map is
+      static); while expanded — or whenever inline gestures belong to the
+      map (scroll mode, activated in-place touch) — `touch-action: none`
+      hands one-finger pan and pinch to d3-zoom and blocks scroll
+      chaining. -->
       <svg
         ref="svgRef"
         :viewBox="`0 0 ${width} ${height}`"
         preserveAspectRatio="xMidYMid meet"
-        :style="twoFingerPan ? { touchAction: 'pan-y' } : undefined"
+        :style="
+          fullscreen.isFullscreen.value || touchGesturesInline
+            ? { touchAction: 'none' }
+            : undefined
+        "
       >
         <!--
         Path elements are created imperatively in `rebuildPaths()`; Vue never
@@ -1789,15 +2048,16 @@ watch(
           <g ref="overlayGroupRef" />
         </g>
       </svg>
-      <button
-        v-if="isZoomed"
-        type="button"
-        class="choropleth-reset"
-        aria-label="Reset zoom"
-        @click="resetZoom"
-      >
-        Reset
-      </button>
+      <ChartZoomControls
+        v-if="showZoomControls"
+        :can-zoom-in="scaleK < maxScale"
+        :can-zoom-out="scaleK > 1"
+        :can-reset="isZoomed"
+        :is-fullscreen="fullscreen.isFullscreen.value"
+        @zoom-in="zoomBy(ZOOM_STEP)"
+        @zoom-out="zoomBy(1 / ZOOM_STEP)"
+        @reset="resetZoom"
+      />
       <ChoroplethTooltip v-if="hasInteractiveTooltip" ref="tooltipChildRef">
         <template #default="raw">
           <slot name="tooltip" v-bind="narrowSlotProps(raw)">
@@ -1857,24 +2117,20 @@ watch(
   cursor: pointer;
 }
 
-.choropleth-reset {
+/* Overlays the top of the map: absolutely positioned with no `top`, the
+   box keeps its static position — the top edge of the svg that follows it
+   in the markup — without taking up flow space. */
+.choropleth-zoom-hint {
   position: absolute;
-  bottom: 8px;
-  left: 8px;
-  padding: 4px 10px;
-  font: inherit;
+  left: 0;
+  right: 0;
+  padding-top: 6px;
+  text-align: center;
   font-size: 12px;
-  color: var(--color-text-secondary, #555);
-  background: var(--color-bg-0, #fff);
-  border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: 4px;
-  cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-.choropleth-reset:hover {
-  background: var(--color-bg-1, #f8f9fa);
-  color: var(--color-text, #212529);
+  line-height: 1.4;
+  color: var(--color-text-secondary, #777);
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 /*

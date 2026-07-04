@@ -1,5 +1,12 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
+import { isTouchDevice } from "../_shared/touch.js";
+
+// Touch detection is probed per event, so tests can flip devices per case.
+// jsdom defaults to a mouse-only environment.
+vi.mock("../_shared/touch.js", () => ({
+  isTouchDevice: vi.fn(() => false),
+}));
 
 // HSA mapping is dynamic-imported inside ChoroplethMap to keep the main
 // bundle small. Tests that exercise hsas geoType or cross-geoType focus
@@ -9,6 +16,7 @@ async function flushDynamicImports() {
   await flushPromises();
 }
 import ChoroplethMap from "./ChoroplethMap.vue";
+import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import usStates from "us-atlas/states-10m.json";
 import usCounties from "us-atlas/counties-10m.json";
 import type { Topology } from "topojson-specification";
@@ -30,6 +38,18 @@ function dispatchTouch(
     changedTouches: points,
   });
   el.dispatchEvent(ev);
+}
+
+// Click-select defers by a double-click-sized window so a double-click can
+// zoom instead of selecting; run a click and flush past that window.
+async function clickSelect(target: { trigger: (e: string) => Promise<void> }) {
+  vi.useFakeTimers();
+  try {
+    await target.trigger("click");
+    vi.advanceTimersByTime(300);
+  } finally {
+    vi.useRealTimers();
+  }
 }
 
 describe("ChoroplethMap", () => {
@@ -313,7 +333,7 @@ describe("ChoroplethMap", () => {
       props: { topology: statesTopo, width: 600, height: 400 },
     });
     const firstPath = wrapper.find(".state-path");
-    await firstPath.trigger("click");
+    await clickSelect(firstPath);
     expect(wrapper.emitted("stateClick")).toHaveLength(1);
     const payload = wrapper.emitted("stateClick")![0][0] as {
       id: string;
@@ -676,7 +696,7 @@ describe("ChoroplethMap", () => {
     const california = wrapper
       .findAll(".state-path")
       .find((p) => p.attributes("data-feat-id") === "06");
-    await california!.trigger("click");
+    await clickSelect(california!);
     const events = wrapper.emitted("update:focus");
     expect(events).toHaveLength(1);
     expect(events![0][0]).toBe("06");
@@ -689,7 +709,7 @@ describe("ChoroplethMap", () => {
     const california = wrapper
       .findAll(".state-path")
       .find((p) => p.attributes("data-feat-id") === "06");
-    await california!.trigger("click");
+    await clickSelect(california!);
     const events = wrapper.emitted("update:focus");
     expect(events).toHaveLength(1);
     expect(events![0][0]).toBeNull();
@@ -707,7 +727,7 @@ describe("ChoroplethMap", () => {
     const california = wrapper
       .findAll(".state-path")
       .find((p) => p.attributes("data-feat-id") === "06");
-    await california!.trigger("click");
+    await clickSelect(california!);
     expect(wrapper.emitted("update:focus")![0][0]).toBeNull();
   });
 
@@ -1066,8 +1086,8 @@ describe("ChoroplethMap", () => {
       props: { topology: statesTopo, width: 600, height: 400, focus: "06" },
     });
     await flushPromises();
-    // Zoom applied → the Reset button appears.
-    expect(wrapper.find(".choropleth-reset").exists()).toBe(true);
+    // Zoom applied → the +/−/home controls appear.
+    expect(wrapper.find(".chart-zoom-controls").exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -1088,8 +1108,8 @@ describe("ChoroplethMap", () => {
       .findAll(".state-path")
       .find((p) => p.attributes("data-feat-id") === "06")!;
     expect(california.attributes("stroke")).toBe("#555");
-    // ...but the map didn't pan/zoom, so no Reset button.
-    expect(wrapper.find(".choropleth-reset").exists()).toBe(false);
+    // ...but the map didn't pan/zoom — no transform was ever applied.
+    expect(wrapper.find("g").attributes("transform")).toBeUndefined();
     wrapper.unmount();
   });
 
@@ -1107,31 +1127,393 @@ describe("ChoroplethMap", () => {
     });
     await flushDynamicImports();
     expect(wrapper.find(".focus-overlay").exists()).toBe(true);
-    expect(wrapper.find(".choropleth-reset").exists()).toBe(false);
+    expect(wrapper.find("g").attributes("transform")).toBeUndefined();
     wrapper.unmount();
   });
 
-  it("sets touch-action to pan-y when twoFingerPan is enabled", () => {
+  it("does not constrain touch-action inline (page scroll passes through)", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 600, height: 400 },
+    });
+    // The map svg is the one carrying the feature paths (menu icons are svgs too).
+    const mapSvg = wrapper.find(".state-path").element.closest("svg");
+    expect(mapSvg?.getAttribute("style") ?? "").not.toContain("touch-action");
+  });
+
+  it("ignores wheel events (scroll never zooms)", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 600, height: 400 },
+    });
+    const mapSvg = wrapper.find(".state-path").element.closest("svg")!;
+    mapSvg.dispatchEvent(
+      new WheelEvent("wheel", {
+        deltaY: -120,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    // d3-zoom never fires, so no transform is ever written to the group.
+    expect(wrapper.find("g").attributes("transform")).toBeUndefined();
+  });
+
+  it("cancels the deferred selection when a double-click lands", () => {
+    vi.useFakeTimers();
+    try {
+      const wrapper = mount(ChoroplethMap, {
+        props: { topology: statesTopo, width: 600, height: 400 },
+      });
+      const el = wrapper.find(".state-path").element;
+      el.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+      el.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 2 }));
+      vi.advanceTimersByTime(400);
+      // The pair was a double-click zoom, not a select.
+      expect(wrapper.emitted("stateClick")).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("scroll mode zooms on wheel immediately, with no hint", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        zoomMode: "scroll",
+      },
+    });
+    // Immediately interactive: controls shown, no activation hint.
+    expect(wrapper.find(".chart-zoom-controls").exists()).toBe(true);
+    expect(wrapper.find(".choropleth-zoom-hint").exists()).toBe(false);
+    expect(wrapper.find(".choropleth-wrapper").classes()).toContain("pannable");
+    const mapSvg = wrapper.find(".state-path").element.closest("svg")!;
+    // happy-dom's SVGPoint lacks matrixTransform; drop createSVGPoint so
+    // d3's pointer() falls back to getBoundingClientRect coordinates.
+    (mapSvg as unknown as { createSVGPoint?: unknown }).createSVGPoint =
+      undefined;
+    mapSvg.dispatchEvent(
+      new WheelEvent("wheel", {
+        deltaY: -120,
+        clientX: 100,
+        clientY: 100,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await flushPromises();
+    const transform = wrapper.find("g").attributes("transform") ?? "";
+    const k = parseFloat(/scale\(([\d.]+)\)/.exec(transform)?.[1] ?? "1");
+    expect(k).toBeGreaterThan(1);
+    wrapper.unmount();
+  });
+
+  it("reset returns to full extent, clears focus, and keeps the controls", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: { topology: statesTopo, width: 600, height: 400, focus: "06" },
+    });
+    await flushPromises();
+    expect(wrapper.find(".chart-zoom-controls").exists()).toBe(true);
+    await wrapper.find('[aria-label="Reset view"]').trigger("click");
+    expect(wrapper.emitted("update:focus")![0][0]).toBeNull();
+    // Wait out the zoom-out animation.
+    await new Promise((r) => setTimeout(r, 550));
+    expect(wrapper.find("g").attributes("transform")).toContain("scale(1)");
+    // Activation is sticky — home doesn't dismiss the controls.
+    expect(wrapper.find(".chart-zoom-controls").exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("shows the double-click hint until the map is first zoomed", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: { topology: statesTopo, width: 600, height: 400 },
+    });
+    expect(wrapper.find(".choropleth-zoom-hint").text()).toBe(
+      "Double click to zoom",
+    );
+    // Any first zoom (here a focus zoom) retires the hint for good.
+    await wrapper.setProps({ focus: "06" });
+    await flushPromises();
+    await new Promise((r) => setTimeout(r, 550));
+    await flushPromises();
+    expect(wrapper.find(".choropleth-zoom-hint").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("renders no zoom hint when zoom is disabled", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 600, height: 400, zoom: false },
+    });
+    expect(wrapper.find(".choropleth-zoom-hint").exists()).toBe(false);
+  });
+
+  it("clicking a feature switches the pan/zoom mode on", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 600, height: 400 },
+    });
+    const root = wrapper.find(".choropleth-wrapper");
+    expect(root.classes()).not.toContain("pannable");
+    await clickSelect(wrapper.find(".state-path"));
+    await flushPromises();
+    expect(root.classes()).toContain("pannable");
+    expect(wrapper.find(".choropleth-zoom-hint").exists()).toBe(false);
+  });
+
+  it("renders no zoom hint when zoomHint is false", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         topology: statesTopo,
         width: 600,
         height: 400,
-        pan: true,
-        twoFingerPan: true,
+        zoomHint: false,
       },
     });
-    // The map svg is the one carrying the feature paths (menu icons are svgs too).
-    const mapSvg = wrapper.find(".state-path").element.closest("svg");
-    expect(mapSvg?.getAttribute("style")).toContain("pan-y");
+    expect(wrapper.find(".choropleth-zoom-hint").exists()).toBe(false);
+    // The controls are unaffected by the hint preference.
+    expect(wrapper.find(".chart-zoom-controls").exists()).toBe(true);
   });
 
-  it("does not constrain touch-action by default", () => {
+  it("controls are always present; + activates the interaction", async () => {
     const wrapper = mount(ChoroplethMap, {
-      props: { topology: statesTopo, width: 600, height: 400, pan: true },
+      attachTo: document.body,
+      props: { topology: statesTopo, width: 600, height: 400 },
     });
-    const mapSvg = wrapper.find(".state-path").element.closest("svg");
-    expect(mapSvg?.getAttribute("style") ?? "").not.toContain("pan-y");
+    // Visible from the start; − and home are no-ops at identity.
+    expect(wrapper.find(".chart-zoom-controls").exists()).toBe(true);
+    expect(
+      wrapper.find('[aria-label="Zoom out"]').attributes("disabled"),
+    ).toBeDefined();
+    expect(
+      wrapper.find('[aria-label="Reset view"]').attributes("disabled"),
+    ).toBeDefined();
+    await wrapper.find('[aria-label="Zoom in"]').trigger("click");
+    await new Promise((r) => setTimeout(r, 550));
+    await flushPromises();
+    expect(wrapper.find("g").attributes("transform")).toContain("scale(2)");
+    // Zoomed now — the interaction is live and −/home are enabled.
+    expect(
+      wrapper.find('[aria-label="Zoom out"]').attributes("disabled"),
+    ).toBeUndefined();
+    expect(
+      wrapper.find('[aria-label="Reset view"]').attributes("disabled"),
+    ).toBeUndefined();
+    expect(wrapper.find(".choropleth-zoom-hint").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("hides the controls when zoom is disabled (until a focus zoom)", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 600, height: 400, zoom: false },
+    });
+    expect(wrapper.find(".chart-zoom-controls").exists()).toBe(false);
+  });
+
+  it("wheel zoom works while fullscreen (page scroll is locked)", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: { topology: statesTopo, width: 600, height: 400 },
+    });
+    const expand = wrapper
+      .findComponent(ChartMenu)
+      .props("items")
+      .find((i) => i.label === "Fullscreen");
+    expand!.action();
+    await wrapper.vm.$nextTick();
+    const mapSvg = document.querySelector(".state-path")!.closest("svg")!;
+    // happy-dom's SVGPoint lacks matrixTransform; drop createSVGPoint so
+    // d3's pointer() falls back to getBoundingClientRect coordinates.
+    (mapSvg as unknown as { createSVGPoint?: unknown }).createSVGPoint =
+      undefined;
+    mapSvg.dispatchEvent(
+      new WheelEvent("wheel", {
+        deltaY: -120,
+        clientX: 100,
+        clientY: 100,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await flushPromises();
+    const transform = mapSvg.querySelector("g")!.getAttribute("transform");
+    const k = parseFloat(/scale\(([\d.]+)\)/.exec(transform ?? "")?.[1] ?? "1");
+    expect(k).toBeGreaterThan(1);
+    wrapper.unmount();
+  });
+
+  it("fullscreen keeps the hint hidden and restores it on exit", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: { topology: statesTopo, width: 600, height: 400 },
+    });
+    const expand = wrapper
+      .findComponent(ChartMenu)
+      .props("items")
+      .find((i) => i.label === "Fullscreen");
+    expand!.action();
+    await wrapper.vm.$nextTick();
+    expect(document.querySelector(".chart-zoom-controls")).not.toBeNull();
+    expect(document.querySelector(".choropleth-zoom-hint")).toBeNull();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await wrapper.vm.$nextTick();
+    expect(document.querySelector(".choropleth-zoom-hint")).not.toBeNull();
+    wrapper.unmount();
+  });
+
+  it("+ and − buttons step the zoom scale", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        focus: "06",
+        focusZoomLevel: 4,
+      },
+    });
+    await flushPromises();
+    await wrapper.find('[aria-label="Zoom out"]').trigger("click");
+    await new Promise((r) => setTimeout(r, 550));
+    expect(wrapper.find("g").attributes("transform")).toContain("scale(2)");
+    await wrapper.find('[aria-label="Zoom in"]').trigger("click");
+    await new Promise((r) => setTimeout(r, 550));
+    expect(wrapper.find("g").attributes("transform")).toContain("scale(4)");
+    wrapper.unmount();
+  });
+});
+
+describe("ChoroplethMap touch zoom", () => {
+  afterEach(() => {
+    vi.mocked(isTouchDevice).mockReturnValue(false);
+  });
+
+  function mountTouch(extraProps: Record<string, unknown> = {}) {
+    vi.mocked(isTouchDevice).mockReturnValue(true);
+    return mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: { topology: statesTopo, width: 600, height: 400, ...extraProps },
+    });
+  }
+
+  function tap(el: Element, x = 100, y = 100) {
+    dispatchTouch(el, "touchstart", [{ clientX: x, clientY: y }]);
+    dispatchTouch(el, "touchend", [{ clientX: x, clientY: y }]);
+  }
+
+  // Query through document — the map teleports to body while expanded, and
+  // after a teleport round-trip VTU's wrapper loses track of the subtree.
+  const mapSvg = () => document.querySelector(".state-path")!.closest("svg")!;
+  const mapTransform = () =>
+    mapSvg().querySelector("g")!.getAttribute("transform");
+
+  it("expands to fill the window on a tap instead of selecting", async () => {
+    const wrapper = mountTouch({ menu: false });
+    // Inline touch map advertises the tap gesture...
+    expect(wrapper.find(".choropleth-zoom-hint").text()).toBe("Tap to zoom");
+    tap(wrapper.find(".state-path").element);
+    await flushPromises();
+    // ...and the hint retires while expanded.
+    expect(document.querySelector(".choropleth-zoom-hint")).toBeNull();
+    const root = document.querySelector(".choropleth-wrapper");
+    expect(root?.classList.contains("is-fullscreen")).toBe(true);
+    expect(wrapper.emitted("stateClick")).toBeUndefined();
+    // Controls + the ✕ close button appear even with the menu disabled.
+    expect(document.querySelector(".chart-zoom-controls")).not.toBeNull();
+    expect(document.querySelector(".chart-close-button")).not.toBeNull();
+    // Touch gestures belong to the map while expanded.
+    expect(mapSvg().getAttribute("style") ?? "").toContain("touch-action");
+    wrapper.unmount();
+  });
+
+  it("taps select features once expanded, and closing resets the zoom", async () => {
+    const wrapper = mountTouch();
+    const el = wrapper.find(".state-path").element;
+    tap(el);
+    await flushPromises();
+    // Wait out the enter animation so a transform is definitely applied.
+    await new Promise((r) => setTimeout(r, 550));
+    tap(el);
+    await flushPromises();
+    expect(wrapper.emitted("stateClick")).toHaveLength(1);
+
+    const close = document.querySelector<HTMLElement>(".chart-close-button")!;
+    close.click();
+    await flushPromises();
+    const root = document.querySelector(".choropleth-wrapper");
+    expect(root?.classList.contains("is-fullscreen")).toBe(false);
+    // Back to the static inline map at full extent.
+    expect(mapTransform()).toContain("scale(1)");
+    // Inline touch map shows no controls.
+    expect(document.querySelector(".chart-zoom-controls")).toBeNull();
+    wrapper.unmount();
+  });
+
+  it("touchExpand=false: first tap zooms in place, next tap selects", async () => {
+    const wrapper = mountTouch({ touchExpand: false });
+    // Inline controls + hint present; the page keeps touch gestures.
+    expect(wrapper.find(".chart-zoom-controls").exists()).toBe(true);
+    expect(wrapper.find(".choropleth-zoom-hint").text()).toBe("Tap to zoom");
+    expect(mapSvg().getAttribute("style") ?? "").not.toContain("touch-action");
+    const el = wrapper.find(".state-path").element;
+    tap(el);
+    await flushPromises();
+    // No fullscreen and no selection — the tap zoomed in place.
+    expect(
+      document.querySelector(".choropleth-wrapper.is-fullscreen"),
+    ).toBeNull();
+    expect(wrapper.emitted("stateClick")).toBeUndefined();
+    await new Promise((r) => setTimeout(r, 550));
+    await flushPromises();
+    expect(mapTransform()).toContain("scale(2)");
+    // Activated: the map claims touch gestures and the hint retires.
+    expect(mapSvg().getAttribute("style") ?? "").toContain("touch-action");
+    expect(wrapper.find(".choropleth-zoom-hint").exists()).toBe(false);
+    // A second tap falls through to selection.
+    tap(el);
+    await flushPromises();
+    expect(wrapper.emitted("stateClick")).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it("touchExpand=false: reset restores the pre-tap mode", async () => {
+    const wrapper = mountTouch({ touchExpand: false });
+    tap(wrapper.find(".state-path").element);
+    await new Promise((r) => setTimeout(r, 550));
+    await flushPromises();
+    expect(mapTransform()).toContain("scale(2)");
+    await wrapper.find('[aria-label="Reset view"]').trigger("click");
+    await new Promise((r) => setTimeout(r, 550));
+    await flushPromises();
+    expect(mapTransform()).toContain("scale(1)");
+    // Pre-tap mode restored: gestures released, hint back.
+    expect(mapSvg().getAttribute("style") ?? "").not.toContain("touch-action");
+    expect(wrapper.find(".choropleth-zoom-hint").exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("scroll mode taps select inline — no expand step", async () => {
+    const wrapper = mountTouch({ zoomMode: "scroll" });
+    // The inline map is the interactive surface: controls present, touch
+    // gestures claimed by the map.
+    expect(wrapper.find(".chart-zoom-controls").exists()).toBe(true);
+    expect(mapSvg().getAttribute("style") ?? "").toContain("touch-action");
+    tap(wrapper.find(".state-path").element);
+    await flushPromises();
+    const root = document.querySelector(".choropleth-wrapper");
+    expect(root?.classList.contains("is-fullscreen")).toBe(false);
+    expect(wrapper.emitted("stateClick")).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it("does not expand on tap when zoom is disabled (tap selects inline)", async () => {
+    const wrapper = mountTouch({ zoom: false });
+    tap(wrapper.find(".state-path").element);
+    await flushPromises();
+    const root = document.querySelector(".choropleth-wrapper");
+    expect(root?.classList.contains("is-fullscreen")).toBe(false);
+    expect(wrapper.emitted("stateClick")).toHaveLength(1);
+    wrapper.unmount();
   });
 });
 
@@ -1251,12 +1633,12 @@ describe("ChoroplethMap single-state mode", () => {
       },
     });
     await flushPromises();
-    expect(wrapper.find(".choropleth-reset").exists()).toBe(true);
-    // Switch regions. Clearing focus alone preserves the transform, so the
-    // Reset button only disappears if the state change resets the zoom.
+    expect(wrapper.find("g").attributes("transform")).not.toContain("scale(1)");
+    // Switch regions. Clearing focus alone preserves the transform, so an
+    // identity transform proves the state change reset the zoom.
     await wrapper.setProps({ state: "Texas", focus: null });
     await flushPromises();
-    expect(wrapper.find(".choropleth-reset").exists()).toBe(false);
+    expect(wrapper.find("g").attributes("transform")).toContain("scale(1)");
     wrapper.unmount();
   });
 
@@ -1337,7 +1719,7 @@ describe("ChoroplethMap single-state mode", () => {
       },
     });
     const county = wrapper.find(".state-path");
-    await county.trigger("click");
+    await clickSelect(county);
     const click = wrapper.emitted("stateClick");
     expect(click).toHaveLength(1);
     const payload = click![0][0] as { id: string; name: string };

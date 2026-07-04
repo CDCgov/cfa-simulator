@@ -29,6 +29,8 @@ export {
 } from "./useChartTooltip.js";
 export { useChartMenu, type ChartMenuOptions } from "./useChartMenu.js";
 export { useChartFullscreen } from "./useChartFullscreen.js";
+export { isTouchDevice } from "./touch.js";
+export { default as ChartZoomControls } from "./ChartZoomControls.vue";
 export { seriesToCsv, categoricalToCsv, type CsvSeries } from "./seriesCsv.js";
 export { default as ChartAnnotations } from "./ChartAnnotations.vue";
 export type { ChartAnnotation } from "./annotations.js";

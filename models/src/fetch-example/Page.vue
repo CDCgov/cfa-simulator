@@ -145,8 +145,6 @@ function formatTooltip(data: {
     :data="mapData"
     :geo-type="geoType"
     :title="title"
-    :zoom="params.countyLevel"
-    :pan="params.countyLevel"
     legend-title="% visits"
     tooltip-trigger="hover"
     :tooltip-format="formatTooltip"
