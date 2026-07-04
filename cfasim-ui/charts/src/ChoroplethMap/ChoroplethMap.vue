@@ -1769,6 +1769,11 @@ function rebuildPaths() {
 
   const path = pathGenerator.value;
   const features = featuresGeo.value.features;
+  // No features (e.g. geoType="hsas" before the lazy HSA module resolves)
+  // means the projection was fitted to an empty collection and yields NaN
+  // coordinates — skip drawing entirely, including the state-borders mesh,
+  // until real features arrive and re-trigger a rebuild.
+  if (features.length === 0) return;
   const stroke = props.strokeColor;
   const wantsTitleFallback = !hasInteractiveTooltip.value;
 

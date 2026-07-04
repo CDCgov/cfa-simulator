@@ -587,7 +587,7 @@ describe("ChoroplethMap", () => {
     expect(butler!.attributes("fill")).not.toBe("#ddd");
   });
 
-  it("renders state borders overlay in HSA mode", () => {
+  it("renders state borders overlay in HSA mode", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         topology: countiesTopo,
@@ -596,6 +596,9 @@ describe("ChoroplethMap", () => {
         geoType: "hsas",
       },
     });
+    // Borders arrive with the features, once the lazy HSA module resolves
+    // (nothing renders through the unfittable pre-module projection).
+    await flushDynamicImports();
     const allPaths = wrapper.findAll("path");
     const borderPath = allPaths.find(
       (p) =>
@@ -1170,6 +1173,30 @@ describe("ChoroplethMap", () => {
       expect(wrapper.emitted("stateClick")).toBeUndefined();
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it("draws no NaN paths while the lazy HSA module is still loading", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "hsas",
+        width: 600,
+        height: 400,
+      },
+    });
+    // Before the dynamic import resolves there are no HSA features, so the
+    // projection can't be fitted — nothing (incl. the state-borders mesh)
+    // may render through it.
+    const bad = wrapper
+      .findAll("path")
+      .filter((p) => (p.attributes("d") ?? "").includes("NaN"));
+    expect(bad.length).toBe(0);
+    // Once the module lands the real features (and valid paths) appear.
+    await flushDynamicImports();
+    expect(wrapper.findAll(".state-path").length).toBeGreaterThan(100);
+    for (const p of wrapper.findAll("path")) {
+      expect(p.attributes("d") ?? "").not.toContain("NaN");
     }
   });
 
