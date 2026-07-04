@@ -1385,6 +1385,76 @@ describe("ChoroplethMap", () => {
     wrapper.unmount();
   });
 
+  it("keeps the tooltip through a plain click once drag-pan is live", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        zoom: true,
+        focus: "06",
+        tooltipTrigger: "hover",
+        data: [{ id: "06", value: 42 }],
+      },
+    });
+    await flushPromises();
+    const mapSvg = wrapper.find(".state-path").element.closest("svg")!;
+    // happy-dom's SVGPoint lacks matrixTransform; drop createSVGPoint so
+    // d3's pointer() falls back to getBoundingClientRect coordinates.
+    (mapSvg as unknown as { createSVGPoint?: unknown }).createSVGPoint =
+      undefined;
+    const california = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06")!;
+    await california.trigger("mouseover", { clientX: 100, clientY: 100 });
+    const tip = document.body.querySelector<HTMLElement>(
+      ".chart-tooltip-content",
+    )!;
+    expect(tip.style.visibility).toBe("visible");
+    // A motionless press-and-release opens/closes a d3 gesture (drag-pan
+    // is unlocked after the focus zoom) — it must not eat the tooltip.
+    california.element.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        view: window,
+        clientX: 100,
+        clientY: 100,
+      }),
+    );
+    window.dispatchEvent(
+      new MouseEvent("mouseup", {
+        view: window,
+        clientX: 100,
+        clientY: 100,
+      }),
+    );
+    await flushPromises();
+    expect(tip.style.visibility).toBe("visible");
+    wrapper.unmount();
+  });
+
+  it("clicks still select while a zoom animation is in flight", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: { topology: statesTopo, width: 600, height: 400, zoom: true },
+    });
+    await flushPromises();
+    // Kick off the 450ms focus-zoom animation...
+    await wrapper.setProps({ focus: "06" });
+    await new Promise((r) => setTimeout(r, 50));
+    // ...and click a different state mid-animation.
+    const texas = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "48")!;
+    texas.element.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, detail: 1 }),
+    );
+    await new Promise((r) => setTimeout(r, 300));
+    expect(wrapper.emitted("stateClick")).toHaveLength(1);
+    wrapper.unmount();
+  });
+
   it("reset returns to full extent, clears focus, and keeps the controls", async () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,

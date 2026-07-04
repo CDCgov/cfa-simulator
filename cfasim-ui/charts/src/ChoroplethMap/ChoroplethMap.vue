@@ -555,11 +555,20 @@ function setupZoom() {
   const svg = select(svgRef.value);
   zoomBehavior = d3Zoom<SVGSVGElement, unknown>()
     .scaleExtent([1, maxScale.value])
+    // d3-zoom swallows the click after any mousedown→mouseup movement
+    // beyond this distance. The default of 0 makes clicks unreliable the
+    // moment drag-pan is live (a pixel of hand jitter reads as a drag),
+    // so allow a few pixels of slack.
+    .clickDistance(6)
     .on("start", () => {
       isZooming = true;
-      clearHover();
     })
     .on("zoom", (event) => {
+      // Cleared here, not on gesture start: a plain mousedown opens a
+      // gesture once drag-pan is live, and hiding the tooltip on every
+      // click press felt broken. The tooltip only needs to go once the
+      // map actually moves under the cursor.
+      clearHover();
       if (mapGroupRef.value) {
         mapGroupRef.value.setAttribute("transform", event.transform);
       }
@@ -1690,7 +1699,10 @@ function emitSelection(data: TooltipPayload) {
 }
 
 function onDelegatedEvent(event: Event) {
-  if (isZooming) return;
+  // Only hover is suppressed mid-gesture (stroke churn while the map
+  // moves); clicks stay live — even during zoom animations — since d3
+  // already swallows genuine post-drag clicks via clickDistance.
+  if (event.type === "mouseover" && isZooming) return;
   const me = event as MouseEvent;
   const featId = eventToFeatureId(me.target);
   if (!featId) return;
