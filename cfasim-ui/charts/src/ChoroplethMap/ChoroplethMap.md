@@ -482,6 +482,12 @@ shows that feature's tooltip. Users can keep exploring around the focused
 area; the built-in **reset** button clears focus and snaps back to the full
 extent.
 
+Each focus target's outline can be styled by passing a `FocusItem` object:
+`style` picks the dash pattern (`"solid" | "dashed" | "dotted"`), `stroke`
+the color, and `strokeWidth` the width in CSS px. In-place highlights
+default to pure black/white following the theme (`light-dark(#000, #fff)`);
+cross-geoType overlays default to white.
+
 Set `:focus-zoom="false"` to highlight (and draw cross-geoType overlays)
 **without** panning or zooming — useful for a click-to-select interaction
 where the map should stay put while a side panel shows the details.

@@ -40,6 +40,11 @@ function dispatchTouch(
   el.dispatchEvent(ev);
 }
 
+// Highlight color is applied as inline style (so the theme-following
+// light-dark() default resolves); read it back off the raw element.
+const strokeStyle = (w: { element: Element }) =>
+  (w.element as SVGPathElement).style.stroke;
+
 // Click-select defers by a double-click-sized window so a double-click can
 // zoom instead of selecting; run a click and flush past that window.
 async function clickSelect(target: { trigger: (e: string) => Promise<void> }) {
@@ -858,12 +863,14 @@ describe("ChoroplethMap", () => {
     const california = wrapper
       .findAll(".state-path")
       .find((p) => p.attributes("data-feat-id") === "06")!;
-    expect(california.attributes("stroke")).toBe("#555");
+    // Theme-following default: pure black (light) / white (dark), applied
+    // as inline style so light-dark() resolves.
+    expect(strokeStyle(california)).toContain("light-dark");
     // Pick any other state and confirm it kept the default stroke.
     const other = wrapper
       .findAll(".state-path")
       .find((p) => p.attributes("data-feat-id") !== "06")!;
-    expect(other.attributes("stroke")).not.toBe("#555");
+    expect(strokeStyle(other)).toBe("");
     wrapper.unmount();
   });
 
@@ -1078,8 +1085,53 @@ describe("ChoroplethMap", () => {
     const california = wrapper
       .findAll(".state-path")
       .find((p) => p.attributes("data-feat-id") === "06")!;
-    expect(california.attributes("stroke")).toBe("#555");
+    expect(strokeStyle(california)).toContain("light-dark");
     expect(california.attributes("stroke-dasharray")).toBe("8 4");
+    wrapper.unmount();
+  });
+
+  it("honors FocusItem stroke and strokeWidth on in-place highlights", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        focus: { id: "06", stroke: "red", strokeWidth: 3 },
+        focusZoom: false,
+      },
+    });
+    await flushPromises();
+    const california = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06")!;
+    expect(strokeStyle(california)).toBe("red");
+    // Visual width 3 at identity zoom → attribute width 3.
+    expect(california.attributes("stroke-width")).toBe("3");
+    wrapper.unmount();
+  });
+
+  it("honors FocusItem stroke and strokeWidth on cross-geoType overlays", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "counties",
+        focus: {
+          id: "060766",
+          geoType: "hsas",
+          stroke: "#666",
+          strokeWidth: 4,
+        },
+        focusZoom: false,
+      },
+    });
+    await flushDynamicImports();
+    const overlay = wrapper.find(".focus-overlay");
+    expect(overlay.attributes("stroke")).toBe("#666");
+    expect(overlay.attributes("stroke-width")).toBe("4");
     wrapper.unmount();
   });
 
@@ -1110,7 +1162,7 @@ describe("ChoroplethMap", () => {
     const california = wrapper
       .findAll(".state-path")
       .find((p) => p.attributes("data-feat-id") === "06")!;
-    expect(california.attributes("stroke")).toBe("#555");
+    expect(strokeStyle(california)).toContain("light-dark");
     // ...but the map didn't pan/zoom — no transform was ever applied.
     expect(wrapper.find("g").attributes("transform")).toBeUndefined();
     wrapper.unmount();

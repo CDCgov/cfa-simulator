@@ -90,10 +90,14 @@ export interface FocusItem {
    * `"dashed"` uses long dashes; `"dotted"` uses small round dots —
    * useful when stacking multiple outlines of different geoTypes. */
   style?: FocusStyle;
-  /** Stroke color for the outline. Applies to cross-geoType overlay
-   * paths only (base-geoType highlights stay at the default focus
-   * color). Default: `"#fff"`. */
+  /** Stroke color for the outline. In-place highlights (items in the
+   * base geoType) default to pure black/white following the theme
+   * (`light-dark(#000, #fff)`); cross-geoType overlay paths default to
+   * `"#fff"`. */
   stroke?: string;
+  /** Outline width in CSS px. Defaults to the map's stroke width + 1
+   * for in-place highlights and + 1.5 for cross-geoType overlays. */
+  strokeWidth?: number;
 }
 
 export type FocusValue = string | FocusItem | Array<string | FocusItem> | null;
@@ -381,14 +385,18 @@ let hoveredEl: SVGPathElement | null = null;
 // Paths currently styled as focused. Tracked separately from hover so the
 // two states compose: hovering a focused path keeps the highlight on
 // un-hover, and clearing focus while still hovering keeps the hover style.
-// Maps each focused base-geoType path to the style it was given so a
-// repeat focus with a different style can re-apply without diffing the
+// Maps each focused base-geoType path to the FocusItem that styled it so
+// a repeat focus with different styling can re-apply without diffing the
 // attribute set manually.
-const focusedPathStyles = new Map<SVGPathElement, FocusStyle>();
+const focusedPathStyles = new Map<SVGPathElement, FocusItem>();
 // Cross-geoType focus items render as standalone outline paths layered on
 // top of the base map. Keyed by `${geoType}:${id}` so we can diff add /
-// remove / restyle on each applyFocus.
-const overlayPathEls = new Map<string, SVGPathElement>();
+// remove / restyle on each applyFocus. `strokeWidth` (visual CSS px) is
+// kept alongside so applyStrokeScale can re-compensate custom widths.
+const overlayPathEls = new Map<
+  string,
+  { el: SVGPathElement; strokeWidth?: number }
+>();
 let isZooming = false;
 let tooltipObserver: ResizeObserver | null = null;
 const lastTooltipSize = { width: 0, height: 0 };
@@ -665,22 +673,27 @@ function applyFocus() {
 
   // Diff base-geoType highlights, keyed by path element so we can
   // restyle on style change without churning unrelated paths.
-  const nextBaseStyles = new Map<SVGPathElement, FocusStyle>();
+  const nextBaseStyles = new Map<SVGPathElement, FocusItem>();
   for (const r of baseResolved) {
     const p = pathsByFeatureId.get(String(r.feature.id));
-    if (p) nextBaseStyles.set(p, r.item.style ?? "solid");
+    if (p) nextBaseStyles.set(p, r.item);
   }
   for (const [p] of focusedPathStyles) {
     if (nextBaseStyles.has(p) || p === hoveredEl) continue;
     restoreDefaultStroke(p);
   }
-  for (const [p, style] of nextBaseStyles) {
+  for (const [p, item] of nextBaseStyles) {
     const prev = focusedPathStyles.get(p);
-    if (prev === style && p !== hoveredEl) continue; // already styled
-    if (p !== hoveredEl) applyHighlightStroke(p, style);
+    const unchanged =
+      prev != null &&
+      prev.style === item.style &&
+      prev.stroke === item.stroke &&
+      prev.strokeWidth === item.strokeWidth;
+    if (unchanged && p !== hoveredEl) continue; // already styled
+    if (p !== hoveredEl) applyHighlightStroke(p, item);
   }
   focusedPathStyles.clear();
-  for (const [p, style] of nextBaseStyles) focusedPathStyles.set(p, style);
+  for (const [p, item] of nextBaseStyles) focusedPathStyles.set(p, item);
 
   // Cross-geoType outlines render as non-interactive paths on top of
   // the base layer.
@@ -766,9 +779,9 @@ function syncOverlayPaths(items: ResolvedFocus[]) {
   if (!g) return;
 
   const nextKeys = new Set(items.map((i) => i.key));
-  for (const [key, el] of overlayPathEls) {
+  for (const [key, entry] of overlayPathEls) {
     if (!nextKeys.has(key)) {
-      el.remove();
+      entry.el.remove();
       overlayPathEls.delete(key);
     }
   }
@@ -777,25 +790,29 @@ function syncOverlayPaths(items: ResolvedFocus[]) {
   // Overlay strokes need extra weight: they paint on top of the base map
   // and the (optional) state-borders mesh, so a stroke that matches the
   // in-place focused base path's weight would visually merge with the
-  // layers underneath. The width itself lives on the overlay *group*
-  // (compensated by applyStrokeScale); the paths only carry color/dash.
+  // layers underneath. The default width lives on the overlay *group*;
+  // per-item `strokeWidth` overrides are written per path — both
+  // compensated by applyStrokeScale.
   for (const { item, feature: f, key } of items) {
-    let el = overlayPathEls.get(key);
-    if (!el) {
-      el = document.createElementNS(SVG_NS, "path") as SVGPathElement;
+    let entry = overlayPathEls.get(key);
+    if (!entry) {
+      const el = document.createElementNS(SVG_NS, "path") as SVGPathElement;
       el.setAttribute("d", generator(f) ?? "");
       el.setAttribute("fill", "none");
       el.setAttribute("pointer-events", "none");
       el.setAttribute("stroke-linejoin", "round");
       el.setAttribute("class", "focus-overlay");
       g.appendChild(el);
-      overlayPathEls.set(key, el);
+      entry = { el };
+      overlayPathEls.set(key, entry);
     }
+    entry.strokeWidth = item.strokeWidth;
     // White contrasts cleanly against the (typically dark) data-colored
     // fill; callers can override per-item via `FocusItem.stroke`.
-    el.setAttribute("stroke", item.stroke ?? "#fff");
-    applyDasharray(el, item.style);
+    entry.el.setAttribute("stroke", item.stroke ?? "#fff");
+    applyDasharray(entry.el, item.style);
   }
+  applyStrokeScale();
 }
 
 function resetZoom() {
@@ -1550,37 +1567,56 @@ function strokeDivisor(): number {
   return scaleK.value * viewScale.value || 1;
 }
 
+// Highlight (hover + focus) outline color: pure black on light, pure
+// white on dark, following the theme's color-scheme (the same
+// light-dark() mechanism the theme tokens use). Applied via inline style
+// — SVG presentation attributes don't parse CSS functions.
+const HIGHLIGHT_STROKE = "light-dark(#000, #fff)";
+
+/** Visual outline width for an in-place highlight (hover or focus). */
+function highlightWidthFor(item?: FocusItem): number {
+  return item?.strokeWidth ?? effectiveStrokeWidth.value + 1;
+}
+
 function applyStrokeScale() {
   const d = strokeDivisor();
   const eff = effectiveStrokeWidth.value;
   baseGroupRef.value?.setAttribute("stroke-width", String(eff / d));
   bordersPathEl?.setAttribute("stroke-width", String(1 / d));
   overlayGroupRef.value?.setAttribute("stroke-width", String((eff + 1.5) / d));
-  const hw = String((eff + 1) / d);
-  for (const [p] of focusedPathStyles) p.setAttribute("stroke-width", hw);
-  if (hoveredEl) hoveredEl.setAttribute("stroke-width", hw);
+  for (const { el, strokeWidth } of overlayPathEls.values()) {
+    if (strokeWidth != null) {
+      el.setAttribute("stroke-width", String(strokeWidth / d));
+    } else {
+      el.removeAttribute("stroke-width");
+    }
+  }
+  for (const [p, item] of focusedPathStyles) {
+    p.setAttribute("stroke-width", String(highlightWidthFor(item) / d));
+  }
+  if (hoveredEl && !focusedPathStyles.has(hoveredEl)) {
+    hoveredEl.setAttribute("stroke-width", String(highlightWidthFor() / d));
+  }
 }
 
-function applyHighlightStroke(
-  pathEl: SVGPathElement,
-  style: FocusStyle = "solid",
-) {
+function applyHighlightStroke(pathEl: SVGPathElement, item?: FocusItem) {
   // Bring path to top so its thicker border isn't clipped by neighbors.
   // Skip for overlay paths (they live above everything and own their
   // own z-order via syncOverlayPaths).
   pathEl.parentNode?.appendChild(pathEl);
   pathEl.setAttribute(
     "stroke-width",
-    String((effectiveStrokeWidth.value + 1) / strokeDivisor()),
+    String(highlightWidthFor(item) / strokeDivisor()),
   );
-  pathEl.setAttribute("stroke", "#555");
-  applyDasharray(pathEl, style);
+  pathEl.style.stroke = item?.stroke ?? HIGHLIGHT_STROKE;
+  applyDasharray(pathEl, item?.style);
 }
 
 function restoreDefaultStroke(pathEl: SVGPathElement) {
   // Dropping the attribute lets the path inherit the compensated width
   // from the base group again.
   pathEl.removeAttribute("stroke-width");
+  pathEl.style.stroke = "";
   pathEl.setAttribute("stroke", props.strokeColor);
   pathEl.removeAttribute("stroke-dasharray");
   pathEl.removeAttribute("stroke-linecap");
@@ -1594,18 +1630,20 @@ function setHover(pathEl: SVGPathElement) {
     restoreDefaultStroke(hoveredEl);
   }
   hoveredEl = pathEl;
-  // Hover style follows whatever focus style is in effect (or solid).
-  applyHighlightStroke(pathEl, focusedPathStyles.get(pathEl) ?? "solid");
+  // Hover styling follows whatever focus styling is in effect (or the
+  // defaults).
+  applyHighlightStroke(pathEl, focusedPathStyles.get(pathEl));
 }
 
 function clearHover() {
   if (hoveredEl) {
-    const focusStyle = focusedPathStyles.get(hoveredEl);
-    if (focusStyle == null) {
+    const focusItem = focusedPathStyles.get(hoveredEl);
+    if (focusItem == null) {
       restoreDefaultStroke(hoveredEl);
     } else {
-      // Restore the focused style (in case hover overwrote a dashed item).
-      applyHighlightStroke(hoveredEl, focusStyle);
+      // Restore the focused styling (in case hover overwrote a dashed
+      // or custom-styled item).
+      applyHighlightStroke(hoveredEl, focusItem);
     }
     hoveredEl = null;
     emit("stateHover", null);
