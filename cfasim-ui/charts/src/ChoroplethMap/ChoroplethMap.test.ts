@@ -1615,8 +1615,10 @@ describe("ChoroplethMap touch zoom", () => {
     await flushPromises();
     // ...and the hint retires while expanded.
     expect(document.querySelector(".choropleth-zoom-hint")).toBeNull();
-    const root = document.querySelector(".choropleth-wrapper");
+    const root = document.querySelector<HTMLElement>(".choropleth-wrapper");
     expect(root?.classList.contains("is-fullscreen")).toBe(true);
+    // Edge-to-edge on touch — no modal padding framing page content.
+    expect(root?.style.padding).toBe("0px");
     expect(wrapper.emitted("stateClick")).toBeUndefined();
     // Controls + the ✕ close button appear even with the menu disabled.
     expect(document.querySelector(".chart-zoom-controls")).not.toBeNull();
@@ -1647,6 +1649,77 @@ describe("ChoroplethMap touch zoom", () => {
     // Inline touch map shows no controls.
     expect(document.querySelector(".chart-zoom-controls")).toBeNull();
     wrapper.unmount();
+  });
+
+  it("locks the page pinch-zoom while expanded and restores it on close", async () => {
+    const meta = document.createElement("meta");
+    meta.setAttribute("name", "viewport");
+    meta.setAttribute("content", "width=device-width, initial-scale=1");
+    document.head.appendChild(meta);
+    try {
+      const wrapper = mountTouch();
+      tap(wrapper.find(".state-path").element);
+      await flushPromises();
+      // Entering snaps the visual viewport back to 1× and holds it there.
+      expect(meta.getAttribute("content")).toContain("maximum-scale=1");
+      document.querySelector<HTMLElement>(".chart-close-button")!.click();
+      await flushPromises();
+      expect(meta.getAttribute("content")).toBe(
+        "width=device-width, initial-scale=1",
+      );
+      wrapper.unmount();
+    } finally {
+      meta.remove();
+    }
+  });
+
+  it("pins the expanded view to the visual viewport when pinch-zoomed", async () => {
+    const listeners: Record<string, () => void> = {};
+    const vv = {
+      scale: 2,
+      offsetTop: 120,
+      offsetLeft: 40,
+      width: 195,
+      height: 422,
+      addEventListener: (t: string, cb: () => void) => {
+        listeners[t] = cb;
+      },
+      removeEventListener: () => {},
+    };
+    Object.defineProperty(window, "visualViewport", {
+      value: vv,
+      configurable: true,
+    });
+    try {
+      const wrapper = mountTouch();
+      tap(wrapper.find(".state-path").element);
+      await flushPromises();
+      const root = document.querySelector<HTMLElement>(
+        ".choropleth-wrapper.is-fullscreen",
+      )!;
+      // Fills exactly the visible box, not the (larger) layout viewport.
+      expect(root.style.top).toBe("120px");
+      expect(root.style.left).toBe("40px");
+      expect(root.style.width).toBe("195px");
+      expect(root.style.height).toBe("422px");
+      // Once the page returns to 1×, the overlay re-expands with it.
+      vv.scale = 1;
+      vv.offsetTop = 0;
+      vv.offsetLeft = 0;
+      vv.width = 390;
+      vv.height = 844;
+      listeners.resize?.();
+      await flushPromises();
+      expect(root.style.top).toBe("0px");
+      expect(root.style.width).toBe("390px");
+      expect(root.style.height).toBe("844px");
+      wrapper.unmount();
+    } finally {
+      Object.defineProperty(window, "visualViewport", {
+        value: undefined,
+        configurable: true,
+      });
+    }
   });
 
   it("touchExpand=false: first tap zooms in place, next tap selects", async () => {

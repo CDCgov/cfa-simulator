@@ -1,5 +1,6 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
+import { isTouchDevice } from "./touch.js";
 
 /**
  * Module-level refcount so multiple expanded charts on the same page
@@ -24,6 +25,50 @@ function unlockBodyScroll() {
   bodyLockCount--;
   if (bodyLockCount === 0) {
     document.body.style.overflow = savedBodyOverflow;
+  }
+}
+
+/**
+ * Pinch-zoom lock (touch devices): a `position: fixed` overlay covers the
+ * *layout* viewport, so if the user has pinch-zoomed the page, the
+ * expanded chart's corners (controls, ✕) sit outside the visible area.
+ * Tightening the viewport meta to `maximum-scale=1` snaps the page zoom
+ * back to 1× and holds it while expanded — a pinch should zoom the chart,
+ * not the page. The last chart to collapse restores the original content
+ * so page zoom (an accessibility feature) comes back. No-op without a
+ * viewport meta or on mouse-only devices.
+ */
+let viewportLockCount = 0;
+let savedViewportContent: string | null = null;
+
+function viewportMeta(): HTMLMetaElement | null {
+  return document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+}
+
+function lockViewportZoom() {
+  if (typeof document === "undefined" || !isTouchDevice()) return;
+  const meta = viewportMeta();
+  if (!meta) return;
+  if (viewportLockCount === 0) {
+    savedViewportContent = meta.getAttribute("content");
+    // Append rather than replace so app directives (e.g. viewport-fit for
+    // safe-area insets) survive while expanded; a later duplicate key wins.
+    const base = savedViewportContent || "width=device-width, initial-scale=1";
+    meta.setAttribute("content", `${base}, maximum-scale=1`);
+  }
+  viewportLockCount++;
+}
+
+function unlockViewportZoom() {
+  if (typeof document === "undefined") return;
+  if (viewportLockCount === 0) return;
+  viewportLockCount--;
+  if (viewportLockCount === 0) {
+    const meta = viewportMeta();
+    if (meta && savedViewportContent != null) {
+      meta.setAttribute("content", savedViewportContent);
+    }
+    savedViewportContent = null;
   }
 }
 
@@ -62,14 +107,55 @@ export function useChartFullscreen(opts: ChartFullscreenOptions = {}) {
   const isFullscreen = ref(false);
   let locked = false;
 
+  // Visual-viewport pinning. A fixed overlay covers the *layout* viewport,
+  // but on a pinch-zoomed page only part of that is visible — and iOS
+  // refuses to programmatically reset page zoom (the viewport-meta clamp
+  // above is best-effort; it works on Android and older iOS). While
+  // expanded, track the visual viewport and pin the overlay to exactly the
+  // visible box instead of `inset: 0`, so the chart and its controls are
+  // always fully on screen whatever the page zoom.
+  const visualBox = ref<Record<string, string> | null>(null);
+
+  function updateVisualBox() {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    // Always box off the visual viewport while it's observable — at 1×
+    // this equals inset: 0, and it additionally tracks mobile URL-bar
+    // collapse. `inset: 0` remains only as the no-API fallback.
+    visualBox.value = {
+      top: `${vv.offsetTop}px`,
+      left: `${vv.offsetLeft}px`,
+      width: `${vv.width}px`,
+      height: `${vv.height}px`,
+    };
+  }
+
+  function watchVisualViewport(on: boolean) {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    if (on) {
+      vv.addEventListener("resize", updateVisualBox);
+      vv.addEventListener("scroll", updateVisualBox);
+      updateVisualBox();
+    } else {
+      vv.removeEventListener("resize", updateVisualBox);
+      vv.removeEventListener("scroll", updateVisualBox);
+      visualBox.value = null;
+    }
+  }
+
   function setExpanded(value: boolean) {
     if (value === isFullscreen.value) return;
     isFullscreen.value = value;
     if (value && !locked) {
       lockBodyScroll();
+      lockViewportZoom();
+      watchVisualViewport(true);
       locked = true;
     } else if (!value && locked) {
       unlockBodyScroll();
+      unlockViewportZoom();
+      watchVisualViewport(false);
       locked = false;
     }
   }
@@ -104,10 +190,12 @@ export function useChartFullscreen(opts: ChartFullscreenOptions = {}) {
   onUnmounted(() => {
     if (typeof document === "undefined") return;
     document.removeEventListener("keydown", onKey);
-    // Component torn down while expanded — release the lock so the body
-    // doesn't stay frozen.
+    // Component torn down while expanded — release the locks so the body
+    // doesn't stay frozen and page zoom comes back.
     if (locked) {
       unlockBodyScroll();
+      unlockViewportZoom();
+      watchVisualViewport(false);
       locked = false;
     }
   });
@@ -132,11 +220,16 @@ export function useChartFullscreen(opts: ChartFullscreenOptions = {}) {
     isFullscreen.value
       ? {
           position: "fixed",
-          inset: "0",
+          // Pinned to the visual viewport when the page is pinch-zoomed;
+          // identical to inset: 0 otherwise.
+          ...(visualBox.value ?? { inset: "0" }),
           "z-index": "var(--cfasim-z-fullscreen, 1000)",
           background: "var(--color-bg-0, #fff)",
           color: "var(--color-text, inherit)",
-          padding: "2em",
+          // Edge-to-edge on touch — padding just frames slivers of the
+          // page underneath on small screens; desktop keeps modal-style
+          // breathing room.
+          padding: isTouchDevice() ? "0" : "2em",
           "box-sizing": "border-box",
           display: "flex",
           "flex-direction": "column",
