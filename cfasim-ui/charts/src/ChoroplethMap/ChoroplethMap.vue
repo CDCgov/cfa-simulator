@@ -2239,6 +2239,17 @@ watch(
   font-weight: 600;
 }
 
+/* Continuous legend: the tick labels under the gradient unbalance the
+   row's vertical centering, so anchor items to the top and line the title
+   up with the gradient bar itself (line-height matches its 12px height). */
+.choropleth-legend:has(.choropleth-legend-continuous) {
+  align-items: flex-start;
+}
+
+.choropleth-legend:has(.choropleth-legend-continuous) .choropleth-legend-title {
+  line-height: 12px;
+}
+
 .choropleth-legend-item {
   display: inline-flex;
   align-items: center;
