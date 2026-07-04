@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.7.4] - 2026-07-04
+
+### Bug Fixes
+
+- **charts:** Register tap listeners before d3-zoom's
+- **charts:** Mobile tap speed and tooltip placement under page pinch-zoom
+
 ## [0.7.3] - 2026-07-04
 
 ### Bug Fixes
