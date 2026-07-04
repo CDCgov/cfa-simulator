@@ -1,0 +1,54 @@
+/* Shared text-field skin for TextInput/NumberInput. Global (not scoped)
+ * so both components can use one copy; prefixed to avoid consumer
+ * collisions. */
+
+.cfasim-input-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
+  font-size: var(--font-size-sm);
+}
+
+.cfasim-input-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cfasim-input {
+  display: block;
+  width: 100%;
+  height: 2.5em;
+  padding: 0 0.75em;
+  font-size: inherit;
+  background-color: var(--color-bg-0);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 0.375em;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.cfasim-input:hover {
+  border-color: var(--color-border-hover);
+}
+
+.cfasim-input:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: var(--shadow-focus);
+}
+
+.cfasim-input[aria-invalid="true"] {
+  border-color: var(--color-error);
+}
+
+.cfasim-input[aria-invalid="true"]:focus {
+  border-color: var(--color-error);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error) 25%, transparent);
+}
+
+.cfasim-input::placeholder {
+  color: var(--color-text-tertiary);
+}

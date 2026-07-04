@@ -27,6 +27,7 @@ cfasim-ui is the shared component and theming library you use to make simulators
 - [NumberInput](./components/number-input) — number field with optional slider
 - [ParamEditor](./components/param-editor) — lazy-loaded JSON/TOML/YAML editor for parameter sets
 - [SelectBox](./components/select-box) — dropdown select
+- [SidebarLayout](./components/sidebar-layout) — two-panel layout with a collapsible sidebar
 - [Spinner](./components/spinner) — loading indicator
 - [TextInput](./components/text-input) — text field
 - [Toggle](./components/toggle) — boolean switch
@@ -34,6 +35,7 @@ cfasim-ui is the shared component and theming library you use to make simulators
 
 ## Charts
 
+- [BarChart](./charts/bar-chart) — grouped/stacked/overlay bar chart, vertical or horizontal
 - [ChoroplethMap](./charts/choropleth-map) — US state choropleth map with D3
 - [DataTable](./charts/data-table) — table for columnar data or ModelOutput
 - [LineChart](./charts/line-chart) — responsive SVG line chart

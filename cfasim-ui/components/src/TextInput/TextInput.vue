@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import Hint from "../Hint/Hint.vue";
+import type { FieldProps } from "../_internal/field";
+import "../_internal/input.css";
 
 const model = defineModel<string>();
 const local = ref(model.value);
@@ -13,18 +15,17 @@ function commit() {
   model.value = local.value;
 }
 
-const props = defineProps<{
-  label?: string;
-  hideLabel?: boolean;
+interface Props extends FieldProps {
   placeholder?: string;
-  hint?: string;
-}>();
+}
+
+const props = defineProps<Props>();
 </script>
 
 <template>
-  <label v-if="props.label" class="input-label">
+  <label v-if="props.label" class="cfasim-input-label">
     <span
-      class="input-label-row"
+      class="cfasim-input-label-row"
       :class="{ 'visually-hidden': props.hideLabel }"
     >
       {{ props.label }}
@@ -32,6 +33,7 @@ const props = defineProps<{
     </span>
     <input
       type="text"
+      class="cfasim-input"
       v-model="local"
       :placeholder="props.placeholder"
       @blur="commit"
@@ -41,54 +43,12 @@ const props = defineProps<{
   <div v-else>
     <input
       type="text"
+      class="cfasim-input"
       v-model="local"
       :placeholder="props.placeholder"
+      :aria-label="props.ariaLabel"
       @blur="commit"
       @keydown.enter="commit"
     />
   </div>
 </template>
-
-<style scoped>
-.input-label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25em;
-  font-size: var(--font-size-sm);
-}
-
-.input-label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-input {
-  display: block;
-  width: 100%;
-  height: 2.5em;
-  padding: 0 0.75em;
-  font-size: inherit;
-  background-color: var(--color-bg-0);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: 0.375em;
-  transition:
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast);
-}
-
-input:hover {
-  border-color: var(--color-border-hover);
-}
-
-input:focus {
-  outline: none;
-  border-color: var(--color-border-focus);
-  box-shadow: var(--shadow-focus);
-}
-
-input::placeholder {
-  color: var(--color-text-tertiary);
-}
-</style>

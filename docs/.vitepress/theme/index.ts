@@ -1,39 +1,31 @@
 import { h } from "vue";
+import type { Component } from "vue";
 import DefaultTheme from "vitepress/theme";
 import type { Theme } from "vitepress";
 import "@cfasim-ui/components/style.css";
 import "@cfasim-ui/charts/style.css";
 import "./demo-theme.css";
-import {
-  Box,
-  Button,
-  ButtonGroup,
-  Container,
-  Expander,
-  Grid,
-  Hint,
-  Icon,
-  LightDarkToggle,
-  MultiSelect,
-  NumberInput,
-  ParamEditor,
-  SelectBox,
-  SidebarLayout,
-  Spinner,
-  TextInput,
-  Toggle,
-  ToggleGroup,
-} from "@cfasim-ui/components";
-import {
-  BarChart,
-  ChoroplethMap,
-  DataTable,
-  LineChart,
-} from "@cfasim-ui/charts";
+import * as uiComponents from "@cfasim-ui/components";
+import * as chartComponents from "@cfasim-ui/charts";
 import usStates from "us-atlas/states-10m.json";
 import usCounties from "us-atlas/counties-10m.json";
 import ComponentDemo from "./ComponentDemo.vue";
 import InstallBox from "./InstallBox.vue";
+
+// Every component export from the two packages, under its export name, so
+// markdown demos can use them without a hand-maintained list. The barrels
+// also export helper functions (registerIcons, hasIcon) — filter to
+// component-shaped objects.
+function componentEntries(
+  mod: Record<string, unknown>,
+): Array<[string, Component]> {
+  return Object.entries(mod).filter(
+    (entry): entry is [string, Component] =>
+      typeof entry[1] === "object" &&
+      entry[1] !== null &&
+      ("setup" in entry[1] || "render" in entry[1]),
+  );
+}
 
 export default {
   extends: DefaultTheme,
@@ -43,28 +35,12 @@ export default {
     });
   },
   enhanceApp({ app }) {
-    app.component("Box", Box);
-    app.component("Button", Button);
-    app.component("ButtonGroup", ButtonGroup);
-    app.component("Container", Container);
-    app.component("Expander", Expander);
-    app.component("Grid", Grid);
-    app.component("Hint", Hint);
-    app.component("Icon", Icon);
-    app.component("LightDarkToggle", LightDarkToggle);
-    app.component("MultiSelect", MultiSelect);
-    app.component("NumberInput", NumberInput);
-    app.component("ParamEditor", ParamEditor);
-    app.component("SelectBox", SelectBox);
-    app.component("SidebarLayout", SidebarLayout);
-    app.component("Spinner", Spinner);
-    app.component("TextInput", TextInput);
-    app.component("Toggle", Toggle);
-    app.component("ToggleGroup", ToggleGroup);
-    app.component("BarChart", BarChart);
-    app.component("ChoroplethMap", ChoroplethMap);
-    app.component("DataTable", DataTable);
-    app.component("LineChart", LineChart);
+    for (const [name, component] of [
+      ...componentEntries(uiComponents),
+      ...componentEntries(chartComponents),
+    ]) {
+      app.component(name, component);
+    }
     app.component("ComponentDemo", ComponentDemo);
     app.config.globalProperties.statesTopo = usStates;
     app.config.globalProperties.countiesTopo = usCounties;

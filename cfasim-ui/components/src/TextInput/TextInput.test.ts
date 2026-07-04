@@ -7,7 +7,7 @@ describe("TextInput", () => {
     const wrapper = mount(TextInput, {
       props: { modelValue: "hello", label: "Name" },
     });
-    const label = wrapper.find("label.input-label");
+    const label = wrapper.find("label.cfasim-input-label");
     expect(label.exists()).toBe(true);
     expect(label.text()).toContain("Name");
   });
@@ -60,10 +60,10 @@ describe("TextInput", () => {
     const wrapper = mount(TextInput, {
       props: { modelValue: "hello", label: "Name", hideLabel: true },
     });
-    const label = wrapper.find("label.input-label");
+    const label = wrapper.find("label.cfasim-input-label");
     expect(label.exists()).toBe(true);
     expect(label.text()).toContain("Name");
-    expect(wrapper.find(".input-label-row").classes()).toContain(
+    expect(wrapper.find(".cfasim-input-label-row").classes()).toContain(
       "visually-hidden",
     );
   });

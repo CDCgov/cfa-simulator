@@ -10,11 +10,12 @@ import {
   ComboboxRoot,
   ComboboxTrigger,
   ComboboxViewport,
-  useId,
 } from "reka-ui";
 import { computed, nextTick, ref, watch } from "vue";
 import Icon from "../Icon/Icon.vue";
-import Hint from "../Hint/Hint.vue";
+import FieldLabel from "../_internal/FieldLabel.vue";
+import { useField, type FieldProps } from "../_internal/field";
+import "../_internal/listbox.css";
 
 export interface MultiSelectOption {
   value: string;
@@ -23,16 +24,14 @@ export interface MultiSelectOption {
 
 const model = defineModel<string[]>({ default: () => [] });
 
-const props = defineProps<{
-  label?: string;
-  hideLabel?: boolean;
-  ariaLabel?: string;
+interface Props extends FieldProps {
   options: MultiSelectOption[];
   placeholder?: string;
-  hint?: string;
-}>();
+}
 
-const id = useId();
+const props = defineProps<Props>();
+
+const { labelId, ariaProps } = useField(props);
 const fieldRef = ref<HTMLElement | null>(null);
 
 // In multiple mode the list stays open after a selection, so reka keeps
@@ -70,15 +69,13 @@ function onInputKeydown(event: KeyboardEvent) {
 
 <template>
   <div class="multi-select">
-    <label
-      v-if="label"
-      :id="`${id}-label`"
+    <FieldLabel
       class="multi-select-label"
-      :class="{ 'visually-hidden': hideLabel }"
-    >
-      {{ label }}
-      <Hint v-if="hint && !hideLabel" :text="hint" />
-    </label>
+      :label="label"
+      :label-id="labelId"
+      :hide-label="hideLabel"
+      :hint="hint"
+    />
     <ComboboxRoot
       v-model="model"
       multiple
@@ -107,8 +104,7 @@ function onInputKeydown(event: KeyboardEvent) {
           <ComboboxInput
             class="multi-select-input"
             :placeholder="selectedOptions.length ? undefined : placeholder"
-            :aria-labelledby="label ? `${id}-label` : undefined"
-            :aria-label="!label ? ariaLabel : undefined"
+            v-bind="ariaProps"
             @keydown="onInputKeydown"
           />
         </div>
@@ -123,21 +119,23 @@ function onInputKeydown(event: KeyboardEvent) {
       </ComboboxAnchor>
       <ComboboxPortal>
         <ComboboxContent
-          class="multi-select-content"
+          class="cfasim-listbox-content multi-select-content"
           position="popper"
           :side-offset="4"
           :body-lock="false"
         >
-          <ComboboxViewport class="multi-select-viewport">
-            <ComboboxEmpty class="multi-select-empty">No matches</ComboboxEmpty>
+          <ComboboxViewport class="cfasim-listbox-viewport">
+            <ComboboxEmpty class="cfasim-listbox-empty">
+              No matches
+            </ComboboxEmpty>
             <ComboboxItem
               v-for="opt in options"
               :key="opt.value"
               :value="opt.value"
-              class="multi-select-item"
+              class="cfasim-listbox-item"
             >
               <span>{{ opt.label }}</span>
-              <ComboboxItemIndicator class="multi-select-indicator">
+              <ComboboxItemIndicator class="cfasim-listbox-indicator">
                 <Icon icon="check" :size="14" />
               </ComboboxItemIndicator>
             </ComboboxItem>
@@ -273,55 +271,9 @@ function onInputKeydown(event: KeyboardEvent) {
 </style>
 
 <style>
+/* Sizing only — the dropdown skin lives in _internal/listbox.css. */
 .multi-select-content {
-  z-index: 100;
-  background: var(--color-bg-0);
-  border: 1px solid var(--color-border);
-  border-radius: 0.25em;
-  box-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.1),
-    0 2px 4px -2px rgba(0, 0, 0, 0.1);
   width: var(--reka-combobox-trigger-width);
   max-height: var(--reka-combobox-content-available-height);
-}
-
-.multi-select-viewport {
-  padding: 0.25em;
-}
-
-.multi-select-empty {
-  padding: 0.5em;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  text-align: center;
-}
-
-.multi-select-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5em;
-  padding: 0.25em 0.5em;
-  border-radius: 0.25em;
-  font-size: var(--font-size-sm);
-  white-space: nowrap;
-  cursor: pointer;
-  user-select: none;
-  outline: none;
-}
-
-.multi-select-item[data-highlighted] {
-  background: var(--color-primary);
-  color: white;
-}
-
-.multi-select-item[data-state="checked"] {
-  font-weight: 600;
-}
-
-.multi-select-indicator {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
 }
 </style>

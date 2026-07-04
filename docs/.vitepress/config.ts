@@ -4,6 +4,7 @@ import svgLoader from "vite-svg-loader";
 import { iconSvgoConfig } from "../../cfasim-ui/components/svgLoaderConfig.mjs";
 import {
   components,
+  componentDocs,
   findComponentForSource,
   regenerateComponent,
 } from "../../scripts/generate_docs.mjs";
@@ -49,6 +50,17 @@ function watchComponentSources() {
       });
     },
   };
+}
+
+// Sidebar entries for one package's components, from the same source of
+// truth that drives generation (scripts/generate_docs.mjs).
+function componentSidebarItems(outDir: "components" | "charts") {
+  return componentDocs
+    .filter((c: { outDir: string }) => c.outDir === outDir)
+    .map((c: { name: string; slug: string }) => ({
+      text: c.name,
+      link: `/cfasim-ui/${outDir}/${c.slug}`,
+    }));
 }
 
 export default defineConfig({
@@ -114,56 +126,12 @@ export default defineConfig({
           {
             text: "Components",
             collapsed: false,
-            items: [
-              { text: "Box", link: "/cfasim-ui/components/box" },
-              { text: "Button", link: "/cfasim-ui/components/button" },
-              {
-                text: "ButtonGroup",
-                link: "/cfasim-ui/components/button-group",
-              },
-              { text: "Container", link: "/cfasim-ui/components/container" },
-              { text: "Expander", link: "/cfasim-ui/components/expander" },
-              { text: "Grid", link: "/cfasim-ui/components/grid" },
-              { text: "Hint", link: "/cfasim-ui/components/hint" },
-              { text: "Icon", link: "/cfasim-ui/components/icon" },
-              {
-                text: "MultiSelect",
-                link: "/cfasim-ui/components/multi-select",
-              },
-              {
-                text: "NumberInput",
-                link: "/cfasim-ui/components/number-input",
-              },
-              {
-                text: "ParamEditor",
-                link: "/cfasim-ui/components/param-editor",
-              },
-              { text: "SelectBox", link: "/cfasim-ui/components/select-box" },
-              {
-                text: "SidebarLayout",
-                link: "/cfasim-ui/components/sidebar-layout",
-              },
-              { text: "Spinner", link: "/cfasim-ui/components/spinner" },
-              { text: "TextInput", link: "/cfasim-ui/components/text-input" },
-              { text: "Toggle", link: "/cfasim-ui/components/toggle" },
-              {
-                text: "ToggleGroup",
-                link: "/cfasim-ui/components/toggle-group",
-              },
-            ],
+            items: componentSidebarItems("components"),
           },
           {
             text: "Charts",
             collapsed: false,
-            items: [
-              { text: "BarChart", link: "/cfasim-ui/charts/bar-chart" },
-              {
-                text: "ChoroplethMap",
-                link: "/cfasim-ui/charts/choropleth-map",
-              },
-              { text: "DataTable", link: "/cfasim-ui/charts/data-table" },
-              { text: "LineChart", link: "/cfasim-ui/charts/line-chart" },
-            ],
+            items: componentSidebarItems("charts"),
           },
           {
             text: "Workers",

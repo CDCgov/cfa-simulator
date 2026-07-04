@@ -19,9 +19,11 @@ import {
   SelectTrigger,
   SelectValue,
   SelectViewport,
-  useId,
 } from "reka-ui";
 import Icon from "../Icon/Icon.vue";
+import FieldLabel from "../_internal/FieldLabel.vue";
+import { useField, type FieldProps } from "../_internal/field";
+import "../_internal/listbox.css";
 
 export interface SelectOption {
   value: string;
@@ -30,17 +32,16 @@ export interface SelectOption {
 
 const model = defineModel<string>();
 
-const props = defineProps<{
-  label?: string;
-  hideLabel?: boolean;
-  ariaLabel?: string;
+interface Props extends FieldProps {
   options: SelectOption[];
   placeholder?: string;
   /** Turn the field into a filterable single-select autocomplete (combobox). */
   autocomplete?: boolean;
-}>();
+}
 
-const id = useId();
+const props = defineProps<Props>();
+
+const { id, labelId, ariaProps } = useField(props);
 
 // Shows the selected option's label in the combobox input when not filtering.
 function displayValue(value: string) {
@@ -50,14 +51,14 @@ function displayValue(value: string) {
 
 <template>
   <div class="select-box">
-    <label
-      v-if="label"
-      :id="`${id}-label`"
-      :for="autocomplete ? `${id}-input` : undefined"
+    <FieldLabel
       class="select-label"
-      :class="{ 'visually-hidden': hideLabel }"
-      >{{ label }}</label
-    >
+      :label="label"
+      :label-id="labelId"
+      :hide-label="hideLabel"
+      :hint="hint"
+      :html-for="autocomplete ? `${id}-input` : undefined"
+    />
 
     <ComboboxRoot
       v-if="autocomplete"
@@ -71,8 +72,7 @@ function displayValue(value: string) {
           class="select-input"
           :display-value="displayValue"
           :placeholder="placeholder"
-          :aria-labelledby="props.label ? `${id}-label` : undefined"
-          :aria-label="!props.label ? props.ariaLabel : undefined"
+          v-bind="ariaProps"
         />
         <ComboboxTrigger class="select-icon-button" aria-label="Toggle options">
           <span class="select-icon" aria-hidden="true">
@@ -82,21 +82,23 @@ function displayValue(value: string) {
       </ComboboxAnchor>
       <ComboboxPortal>
         <ComboboxContent
-          class="select-content select-content-autocomplete"
+          class="cfasim-listbox-content select-content-autocomplete"
           position="popper"
           :side-offset="4"
           :body-lock="false"
         >
-          <ComboboxViewport class="select-viewport">
-            <ComboboxEmpty class="select-empty">No matches</ComboboxEmpty>
+          <ComboboxViewport class="cfasim-listbox-viewport">
+            <ComboboxEmpty class="cfasim-listbox-empty">
+              No matches
+            </ComboboxEmpty>
             <ComboboxItem
               v-for="opt in options"
               :key="opt.value"
               :value="opt.value"
-              class="select-item"
+              class="cfasim-listbox-item"
             >
               <span>{{ opt.label }}</span>
-              <ComboboxItemIndicator class="select-indicator">
+              <ComboboxItemIndicator class="cfasim-listbox-indicator">
                 <Icon icon="check" :size="14" />
               </ComboboxItemIndicator>
             </ComboboxItem>
@@ -106,11 +108,7 @@ function displayValue(value: string) {
     </ComboboxRoot>
 
     <SelectRoot v-else v-model="model">
-      <SelectTrigger
-        class="select-trigger"
-        :aria-labelledby="props.label ? `${id}-label` : undefined"
-        :aria-label="!props.label ? props.ariaLabel : undefined"
-      >
+      <SelectTrigger class="select-trigger" v-bind="ariaProps">
         <SelectValue :placeholder="placeholder" />
         <span class="select-icon" aria-hidden="true">
           <Icon icon="keyboard_arrow_down" :size="16" />
@@ -118,20 +116,20 @@ function displayValue(value: string) {
       </SelectTrigger>
       <SelectPortal>
         <SelectContent
-          class="select-content"
+          class="cfasim-listbox-content select-content"
           position="popper"
           :side-offset="4"
           :body-lock="false"
         >
-          <SelectViewport class="select-viewport">
+          <SelectViewport class="cfasim-listbox-viewport">
             <SelectItem
               v-for="opt in options"
               :key="opt.value"
               :value="opt.value"
-              class="select-item"
+              class="cfasim-listbox-item"
             >
               <SelectItemText>{{ opt.label }}</SelectItemText>
-              <SelectItemIndicator class="select-indicator">
+              <SelectItemIndicator class="cfasim-listbox-indicator">
                 <Icon icon="check" :size="14" />
               </SelectItemIndicator>
             </SelectItem>
@@ -248,14 +246,8 @@ function displayValue(value: string) {
 </style>
 
 <style>
+/* Sizing only — the dropdown skin lives in _internal/listbox.css. */
 .select-content {
-  z-index: 100;
-  background: var(--color-bg-0);
-  border: 1px solid var(--color-border);
-  border-radius: 0.25em;
-  box-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.1),
-    0 2px 4px -2px rgba(0, 0, 0, 0.1);
   min-width: var(--reka-select-trigger-width);
   max-height: var(--reka-select-content-available-height);
 }
@@ -264,45 +256,5 @@ function displayValue(value: string) {
 .select-content-autocomplete {
   width: var(--reka-combobox-trigger-width);
   max-height: var(--reka-combobox-content-available-height);
-}
-
-.select-viewport {
-  padding: 0.25em;
-}
-
-.select-empty {
-  padding: 0.5em;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  text-align: center;
-}
-
-.select-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5em;
-  padding: 0.25em 0.5em;
-  border-radius: 0.25em;
-  font-size: var(--font-size-sm);
-  white-space: nowrap;
-  cursor: pointer;
-  user-select: none;
-  outline: none;
-}
-
-.select-item[data-highlighted] {
-  background: var(--color-primary);
-  color: white;
-}
-
-.select-item[data-state="checked"] {
-  font-weight: 600;
-}
-
-.select-indicator {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
 }
 </style>

@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { componentDocs } from "../../scripts/generate_docs.mjs";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 const PACKAGE_ROOT = resolve(ROOT, "cfasim-ui/docs");
@@ -24,6 +25,20 @@ describe("@cfasim-ui/docs generator", () => {
           `${entry.name}.${field} missing: ${path}`,
         ).toBe(true);
       }
+    }
+  });
+});
+
+describe("docs overview page", () => {
+  it("links every documented component", () => {
+    const overview = readFileSync(
+      resolve(ROOT, "docs/cfasim-ui/index.md"),
+      "utf-8",
+    );
+    for (const { name, slug, outDir } of componentDocs) {
+      expect(overview, `docs/cfasim-ui/index.md is missing ${name}`).toContain(
+        `(./${outDir}/${slug})`,
+      );
     }
   });
 });

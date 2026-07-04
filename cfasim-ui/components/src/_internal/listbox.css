@@ -1,0 +1,53 @@
+/* Shared skin for the SelectBox/MultiSelect dropdown (reka-ui Select and
+ * Combobox portals render outside the component, so these are global).
+ * Sizing (width/max-height from the reka trigger vars) stays per-component. */
+
+.cfasim-listbox-content {
+  z-index: 100;
+  background: var(--color-bg-0);
+  border: 1px solid var(--color-border);
+  border-radius: 0.25em;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -2px rgba(0, 0, 0, 0.1);
+}
+
+.cfasim-listbox-viewport {
+  padding: 0.25em;
+}
+
+.cfasim-listbox-empty {
+  padding: 0.5em;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.cfasim-listbox-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5em;
+  padding: 0.25em 0.5em;
+  border-radius: 0.25em;
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+}
+
+.cfasim-listbox-item[data-highlighted] {
+  background: var(--color-primary);
+  color: white;
+}
+
+.cfasim-listbox-item[data-state="checked"] {
+  font-weight: 600;
+}
+
+.cfasim-listbox-indicator {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}

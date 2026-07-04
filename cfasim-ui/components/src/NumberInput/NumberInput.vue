@@ -3,6 +3,8 @@ import { ref, watch, computed, onMounted, getCurrentInstance } from "vue";
 import { SliderRoot, SliderTrack, SliderRange, SliderThumb } from "reka-ui";
 import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import Hint from "../Hint/Hint.vue";
+import type { FieldProps } from "../_internal/field";
+import "../_internal/input.css";
 
 export type NumberRange = [number, number];
 
@@ -16,14 +18,11 @@ const range = defineModel<NumberRange>("range");
 const lower = defineModel<number>("lower");
 const upper = defineModel<number>("upper");
 
-const props = defineProps<{
-  label?: string;
-  hideLabel?: boolean;
+interface Props extends FieldProps {
   placeholder?: string;
   step?: number;
   min?: number;
   max?: number;
-  hint?: string;
   percent?: boolean;
   slider?: boolean;
   live?: boolean;
@@ -42,7 +41,9 @@ const props = defineProps<{
   /** @deprecated Use `format` instead. Still honored for slider labels
    * when `format` is unset, but will be removed in a future release. */
   sliderDisplay?: (value: number) => string;
-}>();
+}
+
+const props = defineProps<Props>();
 
 function isRangeValue(v: unknown): v is NumberRange {
   return Array.isArray(v) && v.length === 2;
@@ -408,11 +409,11 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
 <template>
   <component
     :is="props.label ? 'label' : 'div'"
-    :class="props.label ? 'input-label' : undefined"
+    :class="props.label ? 'cfasim-input-label' : undefined"
   >
     <span
       v-if="props.label"
-      class="input-label-row"
+      class="cfasim-input-label-row"
       :class="{ 'visually-hidden': props.hideLabel }"
     >
       {{ props.label }}
@@ -421,9 +422,11 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
     <span v-if="!isSlider" class="input-wrapper">
       <input
         type="text"
+        class="cfasim-input"
         :inputmode="props.numberType === 'integer' ? 'numeric' : 'decimal'"
         v-model="local"
         :placeholder="props.placeholder"
+        :aria-label="!props.label ? props.ariaLabel : undefined"
         :aria-invalid="!!validationError"
         :aria-required="props.required || undefined"
         :required="props.required"
@@ -475,65 +478,15 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
 </template>
 
 <style scoped>
-.input-label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25em;
-}
-
-.input-label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
 .input-wrapper {
   display: flex;
   align-items: center;
   gap: 0.25em;
 }
 
-.input-wrapper input {
+.input-wrapper .cfasim-input {
   flex: 1;
   min-width: 0;
-}
-
-input {
-  display: block;
-  width: 100%;
-  height: 2.5em;
-  padding: 0 0.75em;
-  font-size: inherit;
-  background-color: var(--color-bg-0);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: 0.375em;
-  transition:
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast);
-}
-
-input:hover {
-  border-color: var(--color-border-hover);
-}
-
-input:focus {
-  outline: none;
-  border-color: var(--color-border-focus);
-  box-shadow: var(--shadow-focus);
-}
-
-input[aria-invalid="true"] {
-  border-color: var(--color-error);
-}
-
-input[aria-invalid="true"]:focus {
-  border-color: var(--color-error);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error) 25%, transparent);
-}
-
-input::placeholder {
-  color: var(--color-text-tertiary);
 }
 
 .input-suffix {

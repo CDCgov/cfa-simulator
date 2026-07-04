@@ -48,135 +48,50 @@ function isTestFile(path) {
   return path.endsWith(".test.ts") || path.endsWith(".spec.ts");
 }
 
-// [slug, output dir, vue source path, doc source path]
-export const components = [
-  [
-    "box",
-    "components",
-    "cfasim-ui/components/src/Box/Box.vue",
-    "cfasim-ui/components/src/Box/Box.md",
-  ],
-  [
-    "button",
-    "components",
-    "cfasim-ui/components/src/Button/Button.vue",
-    "cfasim-ui/components/src/Button/Button.md",
-  ],
-  [
-    "button-group",
-    "components",
-    "cfasim-ui/components/src/ButtonGroup/ButtonGroup.vue",
-    "cfasim-ui/components/src/ButtonGroup/ButtonGroup.md",
-  ],
-  [
-    "container",
-    "components",
-    "cfasim-ui/components/src/Container/Container.vue",
-    "cfasim-ui/components/src/Container/Container.md",
-  ],
-  [
-    "expander",
-    "components",
-    "cfasim-ui/components/src/Expander/Expander.vue",
-    "cfasim-ui/components/src/Expander/Expander.md",
-  ],
-  [
-    "grid",
-    "components",
-    "cfasim-ui/components/src/Grid/Grid.vue",
-    "cfasim-ui/components/src/Grid/Grid.md",
-  ],
-  [
-    "hint",
-    "components",
-    "cfasim-ui/components/src/Hint/Hint.vue",
-    "cfasim-ui/components/src/Hint/Hint.md",
-  ],
-  [
-    "icon",
-    "components",
-    "cfasim-ui/components/src/Icon/Icon.vue",
-    "cfasim-ui/components/src/Icon/Icon.md",
-  ],
-  [
-    "multi-select",
-    "components",
-    "cfasim-ui/components/src/MultiSelect/MultiSelect.vue",
-    "cfasim-ui/components/src/MultiSelect/MultiSelect.md",
-  ],
-  [
-    "number-input",
-    "components",
-    "cfasim-ui/components/src/NumberInput/NumberInput.vue",
-    "cfasim-ui/components/src/NumberInput/NumberInput.md",
-  ],
-  [
-    "param-editor",
-    "components",
-    "cfasim-ui/components/src/ParamEditor/ParamEditor.vue",
-    "cfasim-ui/components/src/ParamEditor/ParamEditor.md",
-  ],
-  [
-    "select-box",
-    "components",
-    "cfasim-ui/components/src/SelectBox/SelectBox.vue",
-    "cfasim-ui/components/src/SelectBox/SelectBox.md",
-  ],
-  [
-    "sidebar-layout",
-    "components",
-    "cfasim-ui/components/src/SidebarLayout/SidebarLayout.vue",
-    "cfasim-ui/components/src/SidebarLayout/SidebarLayout.md",
-  ],
-  [
-    "spinner",
-    "components",
-    "cfasim-ui/components/src/Spinner/Spinner.vue",
-    "cfasim-ui/components/src/Spinner/Spinner.md",
-  ],
-  [
-    "text-input",
-    "components",
-    "cfasim-ui/components/src/TextInput/TextInput.vue",
-    "cfasim-ui/components/src/TextInput/TextInput.md",
-  ],
-  [
-    "toggle",
-    "components",
-    "cfasim-ui/components/src/Toggle/Toggle.vue",
-    "cfasim-ui/components/src/Toggle/Toggle.md",
-  ],
-  [
-    "toggle-group",
-    "components",
-    "cfasim-ui/components/src/ToggleGroup/ToggleGroup.vue",
-    "cfasim-ui/components/src/ToggleGroup/ToggleGroup.md",
-  ],
-  [
-    "bar-chart",
-    "charts",
-    "cfasim-ui/charts/src/BarChart/BarChart.vue",
-    "cfasim-ui/charts/src/BarChart/BarChart.md",
-  ],
-  [
-    "choropleth-map",
-    "charts",
-    "cfasim-ui/charts/src/ChoroplethMap/ChoroplethMap.vue",
-    "cfasim-ui/charts/src/ChoroplethMap/ChoroplethMap.md",
-  ],
-  [
-    "line-chart",
-    "charts",
-    "cfasim-ui/charts/src/LineChart/LineChart.vue",
-    "cfasim-ui/charts/src/LineChart/LineChart.md",
-  ],
-  [
-    "data-table",
-    "charts",
-    "cfasim-ui/charts/src/DataTable/DataTable.vue",
-    "cfasim-ui/charts/src/DataTable/DataTable.md",
-  ],
+// PascalCase component names per package. Everything else — the docs slug
+// (kebab-case) and the .vue/.md source paths — is derived below, so adding
+// a component to the docs is one entry here (plus a sidebar-free .md next
+// to the source; the sidebar in docs/.vitepress/config.ts derives from
+// `componentDocs` too).
+const COMPONENT_NAMES = [
+  "Box",
+  "Button",
+  "ButtonGroup",
+  "Container",
+  "Expander",
+  "Grid",
+  "Hint",
+  "Icon",
+  "MultiSelect",
+  "NumberInput",
+  "ParamEditor",
+  "SelectBox",
+  "SidebarLayout",
+  "Spinner",
+  "TextInput",
+  "Toggle",
+  "ToggleGroup",
 ];
+const CHART_NAMES = ["BarChart", "ChoroplethMap", "DataTable", "LineChart"];
+
+function docEntry(name, outDir) {
+  const slug = name.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+  return { name, slug, outDir };
+}
+
+/** `{ name, slug, outDir }` for every documented component. */
+export const componentDocs = [
+  ...COMPONENT_NAMES.map((n) => docEntry(n, "components")),
+  ...CHART_NAMES.map((n) => docEntry(n, "charts")),
+];
+
+// [slug, output dir, vue source path, doc source path]
+export const components = componentDocs.map(({ name, slug, outDir }) => [
+  slug,
+  outDir,
+  `cfasim-ui/${outDir}/src/${name}/${name}.vue`,
+  `cfasim-ui/${outDir}/src/${name}/${name}.md`,
+]);
 
 // --- Prop extraction helpers ---
 

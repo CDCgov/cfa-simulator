@@ -1,0 +1,14 @@
+name: Setup Node
+description: Enable corepack, install Node with the pnpm cache, and pnpm install
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: corepack enable
+    - uses: actions/setup-node@v6
+      with:
+        node-version: 24
+        cache: pnpm
+    - shell: bash
+      run: pnpm install

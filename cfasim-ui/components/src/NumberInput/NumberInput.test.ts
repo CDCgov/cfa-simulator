@@ -24,7 +24,7 @@ describe("NumberInput", () => {
       },
     });
 
-    const label = wrapper.find("label.input-label");
+    const label = wrapper.find("label.cfasim-input-label");
     expect(label.exists()).toBe(true);
     expect(label.text()).toContain("Population");
     expect(label.find("input").exists()).toBe(true);
@@ -38,10 +38,10 @@ describe("NumberInput", () => {
         hideLabel: true,
       },
     });
-    const label = wrapper.find("label.input-label");
+    const label = wrapper.find("label.cfasim-input-label");
     expect(label.exists()).toBe(true);
     expect(label.text()).toContain("Population");
-    expect(wrapper.find(".input-label-row").classes()).toContain(
+    expect(wrapper.find(".cfasim-input-label-row").classes()).toContain(
       "visually-hidden",
     );
   });

@@ -11,12 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: k88hudson/setup-plz@v1
-      - run: corepack enable
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install
+      - uses: ./.github/actions/setup-node
       - run: plz format
       - run: plz typecheck
 
@@ -34,12 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: k88hudson/setup-plz@v1
-      - run: corepack enable
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install
+      - uses: ./.github/actions/setup-node
       - run: plz test
 
   test-rust:
@@ -55,21 +45,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: k88hudson/setup-plz@v1
-      - run: corepack enable
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install
-      - uses: actions/cache@v5
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('pnpm-lock.yaml') }}
-      - if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
-      - if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
+      - uses: ./.github/actions/setup-node
+      - uses: ./.github/actions/setup-playwright
       - run: plz docs test
 
   test-cli-e2e:
@@ -77,23 +54,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: k88hudson/setup-plz@v1
-      - run: corepack enable
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
+      - uses: ./.github/actions/setup-node
       - uses: ./.github/actions/setup-rust
       - uses: astral-sh/setup-uv@v7
-      - run: pnpm install
-      - uses: actions/cache@v5
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('pnpm-lock.yaml') }}
-      - if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
-      - if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
+      - uses: ./.github/actions/setup-playwright
       - run: cargo build -p cfasim
       - run: plz cli e2e
 
@@ -102,23 +66,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: k88hudson/setup-plz@v1
-      - run: corepack enable
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
+      - uses: ./.github/actions/setup-node
       - uses: astral-sh/setup-uv@v7
       - uses: ./.github/actions/setup-rust
-      - run: pnpm install
-      - uses: actions/cache@v5
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('pnpm-lock.yaml') }}
-      - if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
-      - if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
+      - uses: ./.github/actions/setup-playwright
       - run: echo "week=$(date +%G-W%V)" >> "$GITHUB_OUTPUT"
         id: week
       - uses: actions/cache@v5

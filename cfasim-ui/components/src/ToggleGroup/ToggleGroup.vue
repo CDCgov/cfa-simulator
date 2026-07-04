@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ToggleGroupItem, ToggleGroupRoot, useId } from "reka-ui";
+import { ToggleGroupItem, ToggleGroupRoot } from "reka-ui";
 import { computed } from "vue";
-import Hint from "../Hint/Hint.vue";
+import FieldLabel from "../_internal/FieldLabel.vue";
+import { useField, type FieldProps } from "../_internal/field";
 
 export interface ToggleGroupOption {
   value: string;
@@ -12,21 +13,18 @@ export interface ToggleGroupOption {
 // `string` in single mode, `string[]` in multiple mode.
 const model = defineModel<string | string[]>();
 
-const props = withDefaults(
-  defineProps<{
-    options: ToggleGroupOption[];
-    multiple?: boolean;
-    label?: string;
-    hideLabel?: boolean;
-    ariaLabel?: string;
-    hint?: string;
-    disabled?: boolean;
-    orientation?: "horizontal" | "vertical";
-  }>(),
-  { orientation: "horizontal" },
-);
+interface Props extends FieldProps {
+  options: ToggleGroupOption[];
+  multiple?: boolean;
+  disabled?: boolean;
+  orientation?: "horizontal" | "vertical";
+}
 
-const id = useId();
+const props = withDefaults(defineProps<Props>(), {
+  orientation: "horizontal",
+});
+
+const { labelId, ariaProps } = useField(props);
 const type = computed<"single" | "multiple">(() =>
   props.multiple ? "multiple" : "single",
 );
@@ -34,23 +32,20 @@ const type = computed<"single" | "multiple">(() =>
 
 <template>
   <div class="toggle-group-field">
-    <label
-      v-if="label"
-      :id="`${id}-label`"
+    <FieldLabel
       class="toggle-group-label"
-      :class="{ 'visually-hidden': hideLabel }"
-    >
-      {{ label }}
-      <Hint v-if="hint && !hideLabel" :text="hint" />
-    </label>
+      :label="label"
+      :label-id="labelId"
+      :hide-label="hideLabel"
+      :hint="hint"
+    />
     <ToggleGroupRoot
       v-model="model"
       :type="type"
       :disabled="disabled"
       :orientation="orientation"
       :class="['toggle-group', `toggle-group--${orientation}`]"
-      :aria-labelledby="label ? `${id}-label` : undefined"
-      :aria-label="!label ? ariaLabel : undefined"
+      v-bind="ariaProps"
     >
       <ToggleGroupItem
         v-for="opt in options"
