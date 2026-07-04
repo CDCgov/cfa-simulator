@@ -1089,8 +1089,8 @@ describe("ChoroplethMap", () => {
       props: { topology: statesTopo, width: 600, height: 400, focus: "06" },
     });
     await flushPromises();
-    // Zoom applied → the +/−/home controls appear.
-    expect(wrapper.find(".chart-zoom-controls").exists()).toBe(true);
+    // Zoom applied even without the `zoom` interaction enabled.
+    expect(wrapper.find("g").attributes("transform")).toContain("scale(4)");
     wrapper.unmount();
   });
 
@@ -1143,9 +1143,9 @@ describe("ChoroplethMap", () => {
     expect(mapSvg?.getAttribute("style") ?? "").not.toContain("touch-action");
   });
 
-  it("ignores wheel events (scroll never zooms)", () => {
+  it("ignores wheel events inline even with zoom enabled", () => {
     const wrapper = mount(ChoroplethMap, {
-      props: { topology: statesTopo, width: 600, height: 400 },
+      props: { topology: statesTopo, width: 600, height: 400, zoom: true },
     });
     const mapSvg = wrapper.find(".state-path").element.closest("svg")!;
     mapSvg.dispatchEvent(
@@ -1163,7 +1163,7 @@ describe("ChoroplethMap", () => {
     vi.useFakeTimers();
     try {
       const wrapper = mount(ChoroplethMap, {
-        props: { topology: statesTopo, width: 600, height: 400 },
+        props: { topology: statesTopo, width: 600, height: 400, zoom: true },
       });
       const el = wrapper.find(".state-path").element;
       el.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
@@ -1283,7 +1283,7 @@ describe("ChoroplethMap", () => {
     it("promotes the svg to its own layer only while interactive", async () => {
       const wrapper = mount(ChoroplethMap, {
         attachTo: document.body,
-        props: { topology: statesTopo, width: 600, height: 400 },
+        props: { topology: statesTopo, width: 600, height: 400, zoom: true },
       });
       const svgEl = () => wrapper.find(".state-path").element.closest("svg")!;
       expect(svgEl().getAttribute("style") ?? "").not.toContain("will-change");
@@ -1304,6 +1304,7 @@ describe("ChoroplethMap", () => {
         topology: statesTopo,
         width: 600,
         height: 400,
+        zoom: true,
         zoomMode: "scroll",
       },
     });
@@ -1335,7 +1336,13 @@ describe("ChoroplethMap", () => {
   it("reset returns to full extent, clears focus, and keeps the controls", async () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
-      props: { topology: statesTopo, width: 600, height: 400, focus: "06" },
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        zoom: true,
+        focus: "06",
+      },
     });
     await flushPromises();
     expect(wrapper.find(".chart-zoom-controls").exists()).toBe(true);
@@ -1352,7 +1359,7 @@ describe("ChoroplethMap", () => {
   it("shows the double-click hint until the map is first zoomed", async () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
-      props: { topology: statesTopo, width: 600, height: 400 },
+      props: { topology: statesTopo, width: 600, height: 400, zoom: true },
     });
     expect(wrapper.find(".choropleth-zoom-hint").text()).toBe(
       "Double click to zoom",
@@ -1375,7 +1382,7 @@ describe("ChoroplethMap", () => {
 
   it("clicking a feature switches the pan/zoom mode on", async () => {
     const wrapper = mount(ChoroplethMap, {
-      props: { topology: statesTopo, width: 600, height: 400 },
+      props: { topology: statesTopo, width: 600, height: 400, zoom: true },
     });
     const root = wrapper.find(".choropleth-wrapper");
     expect(root.classes()).not.toContain("pannable");
@@ -1391,6 +1398,7 @@ describe("ChoroplethMap", () => {
         topology: statesTopo,
         width: 600,
         height: 400,
+        zoom: true,
         zoomHint: false,
       },
     });
@@ -1402,7 +1410,7 @@ describe("ChoroplethMap", () => {
   it("controls are always present; + activates the interaction", async () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
-      props: { topology: statesTopo, width: 600, height: 400 },
+      props: { topology: statesTopo, width: 600, height: 400, zoom: true },
     });
     // Visible from the start; − and home are no-ops at identity.
     expect(wrapper.find(".chart-zoom-controls").exists()).toBe(true);
@@ -1427,17 +1435,26 @@ describe("ChoroplethMap", () => {
     wrapper.unmount();
   });
 
-  it("hides the controls when zoom is disabled (until a focus zoom)", () => {
+  it("never shows the controls when zoom is disabled", async () => {
     const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
       props: { topology: statesTopo, width: 600, height: 400, zoom: false },
     });
     expect(wrapper.find(".chart-zoom-controls").exists()).toBe(false);
+    // Even a programmatic focus zoom doesn't surface them — a parent
+    // driving `focus` owns its own way back.
+    await wrapper.setProps({ focus: "06" });
+    await flushPromises();
+    await new Promise((r) => setTimeout(r, 550));
+    await flushPromises();
+    expect(wrapper.find(".chart-zoom-controls").exists()).toBe(false);
+    wrapper.unmount();
   });
 
   it("wheel zoom works while fullscreen (page scroll is locked)", async () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
-      props: { topology: statesTopo, width: 600, height: 400 },
+      props: { topology: statesTopo, width: 600, height: 400, zoom: true },
     });
     const expand = wrapper
       .findComponent(ChartMenu)
@@ -1469,7 +1486,7 @@ describe("ChoroplethMap", () => {
   it("fullscreen keeps the hint hidden and restores it on exit", async () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
-      props: { topology: statesTopo, width: 600, height: 400 },
+      props: { topology: statesTopo, width: 600, height: 400, zoom: true },
     });
     const expand = wrapper
       .findComponent(ChartMenu)
@@ -1492,6 +1509,7 @@ describe("ChoroplethMap", () => {
         topology: statesTopo,
         width: 600,
         height: 400,
+        zoom: true,
         focus: "06",
         focusZoomLevel: 4,
       },
@@ -1516,7 +1534,13 @@ describe("ChoroplethMap touch zoom", () => {
     vi.mocked(isTouchDevice).mockReturnValue(true);
     return mount(ChoroplethMap, {
       attachTo: document.body,
-      props: { topology: statesTopo, width: 600, height: 400, ...extraProps },
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        zoom: true,
+        ...extraProps,
+      },
     });
   }
 

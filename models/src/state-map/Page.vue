@@ -169,7 +169,6 @@ const subtitle = computed(() =>
           :focus-zoom="false"
           :legend="false"
           :menu="false"
-          :zoom="false"
           tooltip-trigger="hover"
           @state-click="onMapClick"
         />

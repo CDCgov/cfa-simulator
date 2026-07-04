@@ -145,6 +145,7 @@ function formatTooltip(data: {
     :data="mapData"
     :geo-type="geoType"
     :title="title"
+    zoom
     legend-title="% visits"
     tooltip-trigger="hover"
     :tooltip-format="formatTooltip"

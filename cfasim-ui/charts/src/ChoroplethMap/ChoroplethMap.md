@@ -256,11 +256,17 @@ Use an array of `CategoricalStop` objects to map string values to colors. Each s
 
 ### Pan and zoom
 
-Every map is **static until activated** — tooltips, hover, and click-select
-work immediately, but the scroll wheel never zooms, so the map can't hijack
-page scrolling. A grey hint overlaid on the top of the map ("Double click to
-zoom" / "Tap to zoom") advertises the gesture until it's been used; pass
-`:zoom-hint="false"` to hide it.
+Maps are **fully static by default** — tooltips, hover, click-select, and
+programmatic `focus` zoom all work, but there are no zoom gestures and no
+controls. That's the right mode when clicks mean navigation instead of
+exploration (see the state-map pattern below); a parent driving `focus`
+provides its own way back (e.g. a "Back" button that clears the focus).
+
+Add the `zoom` prop to enable the interaction. The map is then **static
+until activated** — the scroll wheel never zooms inline, so the map can't
+hijack page scrolling. A grey hint overlaid on the top of the map ("Double
+click to zoom" / "Tap to zoom") advertises the gesture until it's been
+used; pass `:zoom-hint="false"` to hide it.
 
 - **Desktop:** double-click zooms in place (shift+double-click zooms out),
   or press **+** in the always-present **+ / − / reset** control stack in
@@ -288,22 +294,22 @@ reset restores the original static, page-scrollable state. Fullscreen is
 unaffected: that view stays continuously interactive and its reset only
 recenters.
 
-Set `:zoom="false"` for a fully static map with no zoom gestures — useful
-when clicks mean navigation instead (see the state-map pattern below).
-Programmatic `focus` zoom still applies, and the controls still appear on
-desktop once the map is zoomed so users can find their way back.
-
 #### Full-page mode (`zoom-mode="scroll"`)
 
 When the map _is_ the page — a dedicated map route, a dashboard panel, a
 kiosk — the activation step just gets in the way, and there's no page
-scroll to protect. Set `zoom-mode="scroll"` to make the map immediately
-interactive: the wheel (and trackpad pinch) zooms, dragging pans, and touch
-gestures work inline with no tap-to-expand step. The +/−/reset controls are
-always shown and the hint is suppressed.
+scroll to protect. Pair `zoom` with `zoom-mode="scroll"` to make the map
+immediately interactive: the wheel (and trackpad pinch) zooms, dragging
+pans, and touch gestures work inline with no tap-to-expand step. The
++/−/reset controls are always shown and the hint is suppressed.
 
 ```vue
-<ChoroplethMap :topology="statesTopo" :data="stateData" zoom-mode="scroll" />
+<ChoroplethMap
+  :topology="statesTopo"
+  :data="stateData"
+  zoom
+  zoom-mode="scroll"
+/>
 ```
 
 ### County-level map
@@ -314,6 +320,7 @@ Set `geoType="counties"` to render county-level data using 5-digit FIPS codes. S
   <ChoroplethMap
     :topology="countiesTopo"
     geo-type="counties"
+    zoom
     :data="[
       { id: '06037', value: 100 },
       { id: '06073', value: 80 },
@@ -337,6 +344,7 @@ Set `geoType="counties"` to render county-level data using 5-digit FIPS codes. S
 <ChoroplethMap
   :topology="countiesTopo"
   geo-type="counties"
+  zoom
   :data="[
     { id: '06037', value: 100 },
     { id: '36061', value: 90 },
@@ -361,6 +369,7 @@ Set `geoType="hsas"` to render Health Service Area boundaries. HSAs are dissolve
   <ChoroplethMap
     :topology="countiesTopo"
     geo-type="hsas"
+    zoom
     :data="[
       { id: '010259', value: 100 },
       { id: '060766', value: 90 },
@@ -384,6 +393,7 @@ Set `geoType="hsas"` to render Health Service Area boundaries. HSAs are dissolve
 <ChoroplethMap
   :topology="countiesTopo"
   geo-type="hsas"
+  zoom
   :data="[
     { id: '010259', value: 100 },
     { id: '060766', value: 90 },
@@ -418,6 +428,7 @@ a tap zoom in place instead of expanding to fill the window, and
     :topology="countiesTopo"
     geo-type="counties"
     state="California"
+    zoom
     :touch-expand="false"
     :zoom-hint="false"
     :data="[
@@ -440,6 +451,7 @@ a tap zoom in place instead of expanding to fill the window, and
   :topology="countiesTopo"
   geo-type="counties"
   state="California"
+  zoom
   :touch-expand="false"
   :zoom-hint="false"
   :data="[
@@ -491,6 +503,7 @@ Counties are tiny without a zoom — focus is a natural fit for drill-down.
     geo-type="counties"
     v-model:focus="focused"
     :focus-zoom-level="8"
+    zoom
     :touch-expand="false"
     :data="[
       { id: '06037', value: 100 },
@@ -526,6 +539,7 @@ const focused = ref(null);
   geo-type="counties"
   v-model:focus="focused"
   :focus-zoom-level="8"
+  zoom
   :touch-expand="false"
   :data="data"
   title="Click a county to focus"
@@ -554,6 +568,7 @@ on top with a `FocusItem`.
     :topology="countiesTopo"
     geo-type="counties"
     data-geo-type="hsas"
+    zoom
     :touch-expand="false"
     :data="[
       { id: '060737', value: 80 },
@@ -580,6 +595,7 @@ on top with a `FocusItem`.
   :topology="countiesTopo"
   geo-type="counties"
   data-geo-type="hsas"
+  zoom
   :touch-expand="false"
   :data="hsaData"
   :focus="[{ id: '06043' }, { id: '060737', geoType: 'hsas', style: 'dashed' }]"
@@ -607,6 +623,7 @@ subpath so consumers that don't need HSA lookups don't pay for the
     :topology="countiesTopo"
     geo-type="counties"
     data-geo-type="hsas"
+    zoom
     :touch-expand="false"
     :focus="parentFocus"
     @update:focus="focusedCounty = typeof $event === 'string' ? $event : null"
@@ -652,6 +669,7 @@ const focus = computed(() => {
   :topology="countiesTopo"
   geo-type="counties"
   data-geo-type="hsas"
+  zoom
   :touch-expand="false"
   :data="hsaData"
   :focus="focus"
@@ -712,6 +730,7 @@ Renders every US county with a value and a custom tooltip slot.
     :topology="countiesTopo"
     geo-type="counties"
     :data="denseCountyData"
+    zoom
     :color-scale="{ min: '#f0f5ff', max: '#08306b' }"
     title="All US counties — tooltip perf demo"
     :height="500"
@@ -736,7 +755,7 @@ const data = countiesTopo.objects.counties.geometries.map((g, i) => ({
 }));
 </script>
 
-<ChoroplethMap :topology="countiesTopo" geo-type="counties" :data="data">
+<ChoroplethMap :topology="countiesTopo" geo-type="counties" :data="data" zoom>
   <template #tooltip="{ id, name, value }">
     <div style="font-weight: 600">{{ name }}</div>
     <div style="opacity: 0.7; font-size: 0.85em">FIPS {{ id }}</div>

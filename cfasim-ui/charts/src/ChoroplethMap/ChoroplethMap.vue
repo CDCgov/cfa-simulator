@@ -161,14 +161,15 @@ const props = withDefaults(
     /** Title displayed next to the legend */
     legendTitle?: string;
     /**
-     * Enable the activate-to-zoom interaction. Default `true`. The map
-     * renders static (tooltips and click-select still work) until the user
-     * double-clicks (desktop) or taps (touch). Desktop double-click zooms in
-     * place and reveals +/−/reset controls; drag-pan works once zoomed. On
-     * touch a tap expands the map to fill the window, where one finger pans,
-     * pinch zooms, and a tap selects. The scroll wheel never zooms, so the
-     * map can't hijack page scrolling. Set `false` for a fully static map
-     * with no zoom gestures (programmatic `focus` zoom still applies).
+     * Enable the activate-to-zoom interaction. Default `false` — the map
+     * is fully static (tooltips and click-select still work, and
+     * programmatic `focus` zoom still applies). When enabled, the map
+     * stays static until the user double-clicks (desktop) or taps (touch):
+     * desktop double-click zooms in place alongside always-visible
+     * +/−/reset controls, with drag-pan once zoomed; on touch a tap
+     * expands the map to fill the window, where one finger pans, pinch
+     * zooms, and a tap selects. The scroll wheel never zooms inline, so
+     * the map can't hijack page scrolling.
      */
     zoom?: boolean;
     /**
@@ -266,7 +267,7 @@ const props = withDefaults(
     strokeWidth: 0.5,
     menu: true,
     legend: true,
-    zoom: true,
+    zoom: false,
     zoomMode: "activate",
     touchExpand: true,
     zoomHint: true,
@@ -832,17 +833,20 @@ const maxScale = computed(() => Math.max(12, props.focusZoomLevel));
 // Scale factor per +/− press and per desktop double-click (d3's built-in).
 const ZOOM_STEP = 2;
 
-// The +/−/reset controls. On desktop they're always present while zooming
-// is enabled — pressing + is itself an activation path. On touch they
-// render inline only when the inline map is (or can become) interactive
-// (scroll mode / in-place tap zoom), plus always in the expanded view.
-// With `zoom: false`, a programmatic focus zoom still activates, keeping
-// an escape hatch back to the full extent.
-const showZoomControls = computed(() =>
-  isTouchDevice()
-    ? fullscreen.isFullscreen.value ||
-      (props.zoom && (isScrollMode.value || !props.touchExpand))
-    : props.zoom || isActivated.value,
+// The +/−/reset controls — only ever shown while zooming is enabled. On
+// desktop they're always present (pressing + is itself an activation
+// path). On touch they render inline only when the inline map is (or can
+// become) interactive (scroll mode / in-place tap zoom), plus always in
+// the expanded view. With `zoom: false` the map never shows them; a
+// parent driving `focus` owns its own way back.
+const showZoomControls = computed(
+  () =>
+    props.zoom &&
+    (isTouchDevice()
+      ? fullscreen.isFullscreen.value ||
+        isScrollMode.value ||
+        !props.touchExpand
+      : true),
 );
 
 // Drag-pan cursor affordance — desktop only, once drag-pan is available.
