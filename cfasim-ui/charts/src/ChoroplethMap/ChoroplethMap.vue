@@ -397,8 +397,14 @@ let zoomBehavior: ReturnType<typeof d3Zoom<SVGSVGElement, unknown>> | null =
   null;
 // True while the transform is away from identity.
 const isZoomed = ref(false);
-// Current zoom scale — drives the +/− buttons' disabled states.
+// Current zoom scale — drives the +/− buttons' disabled states and the
+// stroke-width compensation in applyStrokeScale.
 const scaleK = ref(1);
+// How much the browser scales the canonical viewBox to fit the container
+// (rendered CSS width / CANONICAL_WIDTH). Tracked by a ResizeObserver so
+// stroke widths can stay visually constant without `vector-effect:
+// non-scaling-stroke` (see applyStrokeScale).
+const viewScale = ref(1);
 // Latched true the first time the transform leaves identity (double-click,
 // tap zoom, +/− press, or a focus zoom).
 const hasZoomed = ref(false);
@@ -490,12 +496,26 @@ function dismissOnViewportChange() {
   clearHover();
 }
 
+// Tracks the svg's rendered width so applyStrokeScale can compensate
+// stroke widths for the viewBox-to-CSS scale. Fires on container resizes
+// only — cheap, and the map itself never relayouts on zoom/pan.
+let svgResizeObserver: ResizeObserver | null = null;
+
 onMounted(() => {
   setupZoom();
   setupInteraction();
   rebuildPaths();
   applyFocus();
   attachTooltipObserver();
+  if (svgRef.value && typeof ResizeObserver !== "undefined") {
+    svgResizeObserver = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (!w) return;
+      viewScale.value = w / CANONICAL_WIDTH;
+      applyStrokeScale();
+    });
+    svgResizeObserver.observe(svgRef.value);
+  }
   window.addEventListener("scroll", dismissOnViewportChange, {
     passive: true,
     capture: true,
@@ -505,6 +525,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   tooltipObserver?.disconnect();
+  svgResizeObserver?.disconnect();
   if (pendingMoveFrame) cancelAnimationFrame(pendingMoveFrame);
   window.clearTimeout(pendingSelectTimer);
   teardownZoom();
@@ -531,6 +552,7 @@ function setupZoom() {
       }
       const t = event.transform;
       scaleK.value = t.k;
+      applyStrokeScale();
       isZoomed.value = t.k !== 1 || t.x !== 0 || t.y !== 0;
       if (isZoomed.value) hasZoomed.value = true;
     })
@@ -751,11 +773,11 @@ function syncOverlayPaths(items: ResolvedFocus[]) {
   }
 
   const generator = pathGenerator.value;
-  // Overlay strokes need extra weight: they paint on top of the base
-  // map and the (optional) state-borders mesh, so a stroke that matches
-  // the in-place focused base path's weight would visually merge with
-  // the layers underneath.
-  const sw = effectiveStrokeWidth.value + 1.5;
+  // Overlay strokes need extra weight: they paint on top of the base map
+  // and the (optional) state-borders mesh, so a stroke that matches the
+  // in-place focused base path's weight would visually merge with the
+  // layers underneath. The width itself lives on the overlay *group*
+  // (compensated by applyStrokeScale); the paths only carry color/dash.
   for (const { item, feature: f, key } of items) {
     let el = overlayPathEls.get(key);
     if (!el) {
@@ -763,7 +785,6 @@ function syncOverlayPaths(items: ResolvedFocus[]) {
       el.setAttribute("d", generator(f) ?? "");
       el.setAttribute("fill", "none");
       el.setAttribute("pointer-events", "none");
-      el.setAttribute("vector-effect", "non-scaling-stroke");
       el.setAttribute("stroke-linejoin", "round");
       el.setAttribute("class", "focus-overlay");
       g.appendChild(el);
@@ -772,7 +793,6 @@ function syncOverlayPaths(items: ResolvedFocus[]) {
     // White contrasts cleanly against the (typically dark) data-colored
     // fill; callers can override per-item via `FocusItem.stroke`.
     el.setAttribute("stroke", item.stroke ?? "#fff");
-    el.setAttribute("stroke-width", String(sw));
     applyDasharray(el, item.style);
   }
 }
@@ -849,6 +869,28 @@ const showZoomHint = computed(
 const zoomHintText = computed(() =>
   isTouchDevice() ? "Tap to zoom" : "Double click to zoom",
 );
+
+// Inline style for the map svg. `touch-action: none` hands pan/pinch to
+// d3-zoom (and blocks scroll chaining) wherever touch gestures belong to
+// the map. `will-change: transform` gives the svg its own compositor
+// layer while the interaction is live — without it WebKit repaints the
+// surrounding page layer on every zoom/pan frame (~10× slower on iOS).
+// Scoped to active maps so a page of static maps doesn't pay a raster
+// layer apiece.
+const svgStyle = computed(() => {
+  const style: Record<string, string> = {};
+  if (fullscreen.isFullscreen.value || touchGesturesInline.value) {
+    style["touch-action"] = "none";
+  }
+  if (
+    isActivated.value ||
+    fullscreen.isFullscreen.value ||
+    (props.zoom && isScrollMode.value)
+  ) {
+    style["will-change"] = "transform";
+  }
+  return Object.keys(style).length ? style : undefined;
+});
 
 function zoomBy(factor: number) {
   if (!svgRef.value || !zoomBehavior) return;
@@ -1490,6 +1532,31 @@ function applyDasharray(el: SVGPathElement, style?: FocusStyle) {
   }
 }
 
+// ─── Stroke-width compensation (no `vector-effect`) ──────────────────────
+//
+// WebKit renders `vector-effect: non-scaling-stroke` across thousands of
+// paths dramatically slowly (the docs page dropped to ~3fps on iOS), so
+// visual stroke widths are compensated by hand instead: a width of `w`
+// CSS px is written as `w / (zoom scale × viewBox-to-CSS scale)`. Base
+// feature paths inherit one group-level width; only the borders mesh,
+// focus overlays (via their group), and highlighted paths carry their own.
+
+/** Divisor turning a visual CSS-px width into an attribute width. */
+function strokeDivisor(): number {
+  return scaleK.value * viewScale.value || 1;
+}
+
+function applyStrokeScale() {
+  const d = strokeDivisor();
+  const eff = effectiveStrokeWidth.value;
+  baseGroupRef.value?.setAttribute("stroke-width", String(eff / d));
+  bordersPathEl?.setAttribute("stroke-width", String(1 / d));
+  overlayGroupRef.value?.setAttribute("stroke-width", String((eff + 1.5) / d));
+  const hw = String((eff + 1) / d);
+  for (const [p] of focusedPathStyles) p.setAttribute("stroke-width", hw);
+  if (hoveredEl) hoveredEl.setAttribute("stroke-width", hw);
+}
+
 function applyHighlightStroke(
   pathEl: SVGPathElement,
   style: FocusStyle = "solid",
@@ -1498,13 +1565,18 @@ function applyHighlightStroke(
   // Skip for overlay paths (they live above everything and own their
   // own z-order via syncOverlayPaths).
   pathEl.parentNode?.appendChild(pathEl);
-  pathEl.setAttribute("stroke-width", String(effectiveStrokeWidth.value + 1));
+  pathEl.setAttribute(
+    "stroke-width",
+    String((effectiveStrokeWidth.value + 1) / strokeDivisor()),
+  );
   pathEl.setAttribute("stroke", "#555");
   applyDasharray(pathEl, style);
 }
 
 function restoreDefaultStroke(pathEl: SVGPathElement) {
-  pathEl.setAttribute("stroke-width", String(effectiveStrokeWidth.value));
+  // Dropping the attribute lets the path inherit the compensated width
+  // from the base group again.
+  pathEl.removeAttribute("stroke-width");
   pathEl.setAttribute("stroke", props.strokeColor);
   pathEl.removeAttribute("stroke-dasharray");
   pathEl.removeAttribute("stroke-linecap");
@@ -1698,10 +1770,11 @@ function rebuildPaths() {
   const path = pathGenerator.value;
   const features = featuresGeo.value.features;
   const stroke = props.strokeColor;
-  const sw = String(effectiveStrokeWidth.value);
   const wantsTitleFallback = !hasInteractiveTooltip.value;
 
   // Single DocumentFragment append → one layout flush for the whole batch.
+  // Feature paths carry no stroke-width of their own — they inherit the
+  // compensated group-level width from applyStrokeScale.
   const frag = document.createDocumentFragment();
   for (const feat of features) {
     const id = String(feat.id);
@@ -1712,11 +1785,6 @@ function rebuildPaths() {
     p.setAttribute("data-feat-id", id);
     p.setAttribute("fill", colorFor(id));
     p.setAttribute("stroke", stroke);
-    p.setAttribute("stroke-width", sw);
-    // Keep stroke width pixel-accurate regardless of how the browser scales
-    // the viewBox to fit the container — otherwise borders appear thicker
-    // as the map is enlarged.
-    p.setAttribute("vector-effect", "non-scaling-stroke");
     if (wantsTitleFallback) {
       const title = document.createElementNS(SVG_NS, "title");
       title.textContent = titleText(name, value);
@@ -1738,14 +1806,13 @@ function rebuildPaths() {
     const b = makePath(path(borders));
     b.setAttribute("fill", "none");
     b.setAttribute("stroke", stroke);
-    b.setAttribute("stroke-width", "1");
     b.setAttribute("stroke-linejoin", "round");
     b.setAttribute("pointer-events", "none");
-    b.setAttribute("vector-effect", "non-scaling-stroke");
     frag.appendChild(b);
     bordersPathEl = b;
   }
   baseG.appendChild(frag);
+  applyStrokeScale();
 }
 
 function updateFills() {
@@ -1773,6 +1840,8 @@ function updateStrokes() {
     restoreDefaultStroke(p);
   }
   if (bordersPathEl) bordersPathEl.setAttribute("stroke", props.strokeColor);
+  // Group-level widths track effectiveStrokeWidth.
+  applyStrokeScale();
 }
 
 function menuFilename() {
@@ -2019,20 +2088,11 @@ watch(
       <div v-if="showZoomHint" class="choropleth-zoom-hint">
         {{ zoomHintText }}
       </div>
-      <!-- Inline, touch gestures pass through to the page (the map is
-      static); while expanded — or whenever inline gestures belong to the
-      map (scroll mode, activated in-place touch) — `touch-action: none`
-      hands one-finger pan and pinch to d3-zoom and blocks scroll
-      chaining. -->
       <svg
         ref="svgRef"
         :viewBox="`0 0 ${width} ${height}`"
         preserveAspectRatio="xMidYMid meet"
-        :style="
-          fullscreen.isFullscreen.value || touchGesturesInline
-            ? { touchAction: 'none' }
-            : undefined
-        "
+        :style="svgStyle"
       >
         <!--
         Path elements are created imperatively in `rebuildPaths()`; Vue never

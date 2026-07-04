@@ -1173,6 +1173,103 @@ describe("ChoroplethMap", () => {
     }
   });
 
+  // WebKit regression guards: `vector-effect: non-scaling-stroke` across
+  // thousands of paths drops iOS Safari to ~3fps, so strokes are
+  // compensated by hand (group-level width ÷ zoom scale ÷ viewBox-to-CSS
+  // scale) and the svg gets its own compositor layer while interactive.
+  describe("stroke compensation and layer promotion", () => {
+    it("renders no vector-effect and inherits width from the base group", () => {
+      const wrapper = mount(ChoroplethMap, {
+        props: { topology: statesTopo, width: 600, height: 400 },
+      });
+      const svg = wrapper.find(".state-path").element.closest("svg")!;
+      expect(svg.querySelector("[vector-effect]")).toBeNull();
+      const baseGroup = svg.querySelector("g > g")!;
+      expect(baseGroup.getAttribute("stroke-width")).toBe("0.5");
+      expect(
+        wrapper.find(".state-path").attributes("stroke-width"),
+      ).toBeUndefined();
+    });
+
+    it("divides stroke widths by the zoom scale", async () => {
+      const wrapper = mount(ChoroplethMap, {
+        attachTo: document.body,
+        props: {
+          topology: statesTopo,
+          width: 600,
+          height: 400,
+          focus: "06",
+          focusZoomLevel: 5,
+        },
+      });
+      await flushPromises();
+      const svg = wrapper.find(".state-path").element.closest("svg")!;
+      const baseGroup = svg.querySelector("g > g")!;
+      // Base 0.5 at k=5 → 0.1; the focused highlight (0.5 + 1) → 0.3.
+      expect(baseGroup.getAttribute("stroke-width")).toBe("0.1");
+      const california = wrapper
+        .findAll(".state-path")
+        .find((p) => p.attributes("data-feat-id") === "06")!;
+      expect(california.attributes("stroke-width")).toBe("0.3");
+      wrapper.unmount();
+    });
+
+    it("divides stroke widths by the rendered viewBox scale", () => {
+      const observers: {
+        cb: ResizeObserverCallback;
+        targets: Element[];
+      }[] = [];
+      class FakeRO {
+        cb: ResizeObserverCallback;
+        targets: Element[] = [];
+        constructor(cb: ResizeObserverCallback) {
+          this.cb = cb;
+          observers.push(this);
+        }
+        observe(t: Element) {
+          this.targets.push(t);
+        }
+        unobserve() {}
+        disconnect() {}
+      }
+      vi.stubGlobal("ResizeObserver", FakeRO);
+      try {
+        const wrapper = mount(ChoroplethMap, {
+          props: { topology: statesTopo, width: 600, height: 400 },
+        });
+        const svg = wrapper.find(".state-path").element.closest("svg")!;
+        const baseGroup = svg.querySelector("g > g")!;
+        expect(baseGroup.getAttribute("stroke-width")).toBe("0.5");
+        // The svg renders at 500 CSS px of the 1000-unit viewBox, so
+        // attribute widths double to stay visually constant.
+        const ro = observers.find((o) => o.targets.includes(svg))!;
+        ro.cb(
+          [{ contentRect: { width: 500 } } as ResizeObserverEntry],
+          ro as unknown as ResizeObserver,
+        );
+        expect(baseGroup.getAttribute("stroke-width")).toBe("1");
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("promotes the svg to its own layer only while interactive", async () => {
+      const wrapper = mount(ChoroplethMap, {
+        attachTo: document.body,
+        props: { topology: statesTopo, width: 600, height: 400 },
+      });
+      const svgEl = () => wrapper.find(".state-path").element.closest("svg")!;
+      expect(svgEl().getAttribute("style") ?? "").not.toContain("will-change");
+      await wrapper.find('[aria-label="Zoom in"]').trigger("click");
+      await new Promise((r) => setTimeout(r, 550));
+      await flushPromises();
+      expect(svgEl().getAttribute("style") ?? "").toContain(
+        "will-change: transform",
+      );
+      wrapper.unmount();
+    });
+  });
+
   it("scroll mode zooms on wheel immediately, with no hint", async () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
