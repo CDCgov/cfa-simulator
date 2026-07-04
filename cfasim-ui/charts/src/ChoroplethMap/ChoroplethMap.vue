@@ -474,6 +474,8 @@ function setupInteraction() {
   // `touchend` is non-passive so a confirmed tap can preventDefault and
   // suppress the compatibility click/hover the browser would otherwise
   // synthesize (the double-fire and iOS first-tap-hover sources).
+  // Must run before setupZoom(): d3-zoom stopImmediatePropagation()s
+  // touch events once its filter passes, which would starve these.
   svg.addEventListener("touchstart", onTouchStart, { passive: true });
   svg.addEventListener("touchend", onTouchEnd);
   svg.addEventListener("touchcancel", onTouchCancel, { passive: true });
@@ -515,8 +517,13 @@ function dismissOnViewportChange() {
 let svgResizeObserver: ResizeObserver | null = null;
 
 onMounted(() => {
-  setupZoom();
+  // Order is load-bearing: once its filter passes (zoom activated /
+  // expanded), d3-zoom calls stopImmediatePropagation() on touchstart and
+  // touchend. Same-element listeners run in registration order, so our
+  // tap listeners must be registered BEFORE d3-zoom's or taps (selection,
+  // tooltips) go dead the moment the map owns touch gestures.
   setupInteraction();
+  setupZoom();
   rebuildPaths();
   applyFocus();
   attachTooltipObserver();

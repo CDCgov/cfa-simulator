@@ -319,11 +319,16 @@ pans, and touch gestures work inline with no tap-to-expand step. The
 
 Set `geoType="counties"` to render county-level data using 5-digit FIPS codes. State borders are drawn on top for context. Double-click (or double-tap on touch) to explore — useful for dense county data.
 
+This demo also wires up an interactive tooltip (`tooltip-trigger="hover"`):
+hover a county on desktop, or tap one on touch, and it works the same
+before and after zooming in.
+
 <ComponentDemo>
   <ChoroplethMap
     :topology="countiesTopo"
     geo-type="counties"
     zoom
+    tooltip-trigger="hover"
     :data="[
       { id: '06037', value: 100 },
       { id: '06073', value: 80 },
@@ -348,6 +353,7 @@ Set `geoType="counties"` to render county-level data using 5-digit FIPS codes. S
   :topology="countiesTopo"
   geo-type="counties"
   zoom
+  tooltip-trigger="hover"
   :data="[
     { id: '06037', value: 100 },
     { id: '36061', value: 90 },

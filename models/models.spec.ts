@@ -166,6 +166,33 @@ test.describe("choropleth touch zoom", () => {
     );
     await expect(page.locator(".chart-zoom-controls")).toHaveCount(0);
   });
+
+  test("taps still select and show tooltips once the map owns gestures", async ({
+    page,
+  }) => {
+    // Once expanded, the d3-zoom filter accepts touches and d3 calls
+    // stopImmediatePropagation on them — the component's tap listeners
+    // must be registered first or taps go dead (selection + tooltip).
+    await page.goto("/fetch-example");
+    const path = page.locator(".state-path").first();
+    await path.waitFor();
+    const box = (await path.boundingBox())!;
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    const expanded = page.locator(".choropleth-wrapper.is-fullscreen");
+    await expect(expanded).toBeVisible();
+    // Let the enter animation settle, then tap the middle of the map —
+    // central US, guaranteed to be a county in the counties view.
+    await page.waitForTimeout(700);
+    const svgBox = (await expanded
+      .locator("svg:has(.state-path)")
+      .boundingBox())!;
+    await page.touchscreen.tap(
+      svgBox.x + svgBox.width / 2,
+      svgBox.y + svgBox.height / 2,
+    );
+    await expect(page.locator(".chart-tooltip-content")).toBeVisible();
+  });
 });
 
 test("python-example syncs params to URL and hydrates from URL", async ({
