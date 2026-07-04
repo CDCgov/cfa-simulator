@@ -263,36 +263,39 @@ exploration (see the state-map pattern below); a parent driving `focus`
 provides its own way back (e.g. a "Back" button that clears the focus).
 
 Add the `zoom` prop to enable the interaction. The map is then **static
-until activated** — the scroll wheel never zooms inline, so the map can't
-hijack page scrolling. A grey hint overlaid on the top of the map ("Double
-click to zoom" / "Tap to zoom") advertises the gesture until it's been
-used; pass `:zoom-hint="false"` to hide it.
+until the first zoom** — clicks and taps only ever select; it's the first
+zoom gesture that switches panning on. The scroll wheel never zooms
+inline, so the map can't hijack page scrolling. A grey hint overlaid on
+the top of the map ("Double click to zoom" / "Double tap to zoom")
+advertises the gesture until it's been used; pass `:zoom-hint="false"` to
+hide it.
 
 - **Desktop:** double-click zooms in place (shift+double-click zooms out),
   or press **+** in the always-present **+ / − / reset** control stack in
-  the top-left corner. Any of these — or clicking a feature — starts the
-  pan/zoom mode; from then on, drag pans the map. The reset button (a
-  counterclockwise arrow) animates back to the full extent (clearing any
-  `focus`); − and reset are disabled while the map is at its full extent.
-- **Touch:** a tap expands the map to fill the window, zoomed in on the
-  tapped point. Inside, one finger pans, a pinch zooms, and a tap selects a
-  feature; the +/−/reset controls sit top-left and a close (✕) button
-  top-right returns to the inline map at full extent. The inline map ignores
-  touch gestures entirely, so the page always scrolls freely.
+  the top-left corner. The first zoom — including a programmatic `focus`
+  zoom — starts the pan/zoom mode; from then on, drag pans the map. The
+  reset button (a counterclockwise arrow) animates back to the full extent
+  (clearing any `focus`); − and reset are disabled while the map is at its
+  full extent.
+- **Touch:** a **double tap** expands the map to fill the window, zoomed
+  in on the tapped point; single taps select features inline. Inside the
+  expanded view, one finger pans, a pinch zooms, and a tap selects; the
+  +/−/reset controls sit top-left and a close (✕) button top-right returns
+  to the inline map at full extent. A single finger over the inline map
+  still scrolls the page.
 
 Filling the window is always an activated state: whether entered via the
-menu's **Fullscreen** item or a tap, pan/zoom works immediately and the
-controls are present — no double-click needed first. The scroll wheel (and
-trackpad pinch) zooms there too, since page scrolling is locked while the
-map fills the window.
+menu's **Fullscreen** item or a double tap, pan/zoom works immediately and
+the controls are present — no double-click needed first. The scroll wheel
+(and trackpad pinch) zooms there too, since page scrolling is locked while
+the map fills the window.
 
-Prefer in-place zooming on touch? Set `:touch-expand="false"` — the first
-tap zooms the inline map in on the tapped point (the touch analogue of a
-desktop double-click) instead of expanding it. From there one finger pans,
-a pinch zooms, and taps select; the +/−/reset controls render inline, and
-reset restores the original static, page-scrollable state. Fullscreen is
-unaffected: that view stays continuously interactive and its reset only
-recenters.
+Prefer in-place zooming on touch? Set `:touch-expand="false"` — a double
+tap (or a pinch) zooms the inline map on that point instead of expanding
+it. From there one finger pans, a pinch zooms, and taps keep selecting;
+the +/−/reset controls render inline, and reset restores the original
+static, page-scrollable state. Fullscreen is unaffected: that view stays
+continuously interactive and its reset only recenters.
 
 #### Full-page mode (`zoom-mode="scroll"`)
 
@@ -314,7 +317,7 @@ pans, and touch gestures work inline with no tap-to-expand step. The
 
 ### County-level map
 
-Set `geoType="counties"` to render county-level data using 5-digit FIPS codes. State borders are drawn on top for context. Double-click (or tap on touch) to explore — useful for dense county data.
+Set `geoType="counties"` to render county-level data using 5-digit FIPS codes. State borders are drawn on top for context. Double-click (or double-tap on touch) to explore — useful for dense county data.
 
 <ComponentDemo>
   <ChoroplethMap
@@ -420,8 +423,8 @@ can stay national; only features inside the selected state are drawn and
 colored.
 
 This demo also opts for the quieter touch flow: `:touch-expand="false"` makes
-a tap zoom in place instead of expanding to fill the window, and
-`:zoom-hint="false"` drops the grey gesture hint.
+a double tap (or pinch) zoom in place instead of expanding to fill the
+window, and `:zoom-hint="false"` drops the grey gesture hint.
 
 <ComponentDemo>
   <ChoroplethMap
@@ -492,14 +495,15 @@ Set `:focus-zoom="false"` to highlight (and draw cross-geoType overlays)
 **without** panning or zooming — useful for a click-to-select interaction
 where the map should stay put while a side panel shows the details.
 
-On touch, selection happens inside the tap-to-expand view: a single-finger
-**tap** on a feature there emits `stateClick` and toggles focus. (With
-`:zoom="false"` a tap selects directly on the inline map instead.) Hover
-tooltips stay off on touch for performance.
+Selection works the same on touch: a single-finger **tap** on a feature
+emits `stateClick` and toggles focus, inline or inside the expanded view.
+(Inline with `zoom` on, the selection fires after the brief double-tap
+window.) Hover tooltips stay off on touch for performance.
 
 Click-to-focus interactions usually pair best with `:touch-expand="false"`,
-as in the demos below — the first tap zooms in place and the next tap
-selects, so the map stays in your layout instead of taking over the window.
+as in the demos below — a double tap zooms in place while taps keep
+selecting, so the map stays in your layout instead of taking over the
+window.
 
 Counties are tiny without a zoom — focus is a natural fit for drill-down.
 

@@ -1432,16 +1432,17 @@ describe("ChoroplethMap", () => {
     expect(wrapper.find(".choropleth-zoom-hint").exists()).toBe(false);
   });
 
-  it("clicking a feature switches the pan/zoom mode on", async () => {
+  it("clicking a feature selects without activating pan/zoom", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: { topology: statesTopo, width: 600, height: 400, zoom: true },
     });
     const root = wrapper.find(".choropleth-wrapper");
-    expect(root.classes()).not.toContain("pannable");
     await clickSelect(wrapper.find(".state-path"));
     await flushPromises();
-    expect(root.classes()).toContain("pannable");
-    expect(wrapper.find(".choropleth-zoom-hint").exists()).toBe(false);
+    expect(wrapper.emitted("stateClick")).toHaveLength(1);
+    // Only the first *zoom* switches the interaction on — a click doesn't.
+    expect(root.classes()).not.toContain("pannable");
+    expect(wrapper.find(".choropleth-zoom-hint").exists()).toBe(true);
   });
 
   it("renders no zoom hint when zoomHint is false", () => {
@@ -1601,40 +1602,73 @@ describe("ChoroplethMap touch zoom", () => {
     dispatchTouch(el, "touchend", [{ clientX: x, clientY: y }]);
   }
 
+  // Two immediate taps land well inside the double-tap window.
+  function doubleTap(el: Element, x = 100, y = 100) {
+    tap(el, x, y);
+    tap(el, x, y);
+  }
+
+  // Wait out the deferred single-tap selection window.
+  const settleTapSelect = () => new Promise((r) => setTimeout(r, 300));
+
   // Query through document — the map teleports to body while expanded, and
   // after a teleport round-trip VTU's wrapper loses track of the subtree.
   const mapSvg = () => document.querySelector(".state-path")!.closest("svg")!;
   const mapTransform = () =>
     mapSvg().querySelector("g")!.getAttribute("transform");
 
-  it("expands to fill the window on a tap instead of selecting", async () => {
+  it("expands to fill the window on a double tap without selecting", async () => {
     const wrapper = mountTouch({ menu: false });
-    // Inline touch map advertises the tap gesture...
-    expect(wrapper.find(".choropleth-zoom-hint").text()).toBe("Tap to zoom");
-    tap(wrapper.find(".state-path").element);
+    // Inline touch map advertises the zoom gesture...
+    expect(wrapper.find(".choropleth-zoom-hint").text()).toBe(
+      "Double tap to zoom",
+    );
+    // ...and suppresses the browser's own double-tap zoom.
+    expect(mapSvg().getAttribute("style") ?? "").toContain("manipulation");
+    doubleTap(wrapper.find(".state-path").element);
     await flushPromises();
-    // ...and the hint retires while expanded.
+    // The hint retires while expanded.
     expect(document.querySelector(".choropleth-zoom-hint")).toBeNull();
     const root = document.querySelector<HTMLElement>(".choropleth-wrapper");
     expect(root?.classList.contains("is-fullscreen")).toBe(true);
     // Edge-to-edge on touch — no modal padding framing page content.
     expect(root?.style.padding).toBe("0px");
+    // The first tap's deferred selection was cancelled by the second.
+    await settleTapSelect();
     expect(wrapper.emitted("stateClick")).toBeUndefined();
     // Controls + the ✕ close button appear even with the menu disabled.
     expect(document.querySelector(".chart-zoom-controls")).not.toBeNull();
     expect(document.querySelector(".chart-close-button")).not.toBeNull();
     // Touch gestures belong to the map while expanded.
-    expect(mapSvg().getAttribute("style") ?? "").toContain("touch-action");
+    expect(mapSvg().getAttribute("style") ?? "").toContain("none");
+    wrapper.unmount();
+  });
+
+  it("a single tap selects inline instead of expanding", async () => {
+    const wrapper = mountTouch();
+    tap(wrapper.find(".state-path").element);
+    await flushPromises();
+    expect(
+      document.querySelector(".choropleth-wrapper.is-fullscreen"),
+    ).toBeNull();
+    // Selection defers by the double-tap window, then fires.
+    expect(wrapper.emitted("stateClick")).toBeUndefined();
+    await settleTapSelect();
+    expect(wrapper.emitted("stateClick")).toHaveLength(1);
+    expect(
+      document.querySelector(".choropleth-wrapper.is-fullscreen"),
+    ).toBeNull();
     wrapper.unmount();
   });
 
   it("taps select features once expanded, and closing resets the zoom", async () => {
     const wrapper = mountTouch();
     const el = wrapper.find(".state-path").element;
-    tap(el);
+    doubleTap(el);
     await flushPromises();
     // Wait out the enter animation so a transform is definitely applied.
     await new Promise((r) => setTimeout(r, 550));
+    // Inside the expanded view taps select directly, no deferral.
     tap(el);
     await flushPromises();
     expect(wrapper.emitted("stateClick")).toHaveLength(1);
@@ -1658,7 +1692,7 @@ describe("ChoroplethMap touch zoom", () => {
     document.head.appendChild(meta);
     try {
       const wrapper = mountTouch();
-      tap(wrapper.find(".state-path").element);
+      doubleTap(wrapper.find(".state-path").element);
       await flushPromises();
       // Entering snaps the visual viewport back to 1× and holds it there.
       expect(meta.getAttribute("content")).toContain("maximum-scale=1");
@@ -1692,7 +1726,7 @@ describe("ChoroplethMap touch zoom", () => {
     });
     try {
       const wrapper = mountTouch();
-      tap(wrapper.find(".state-path").element);
+      doubleTap(wrapper.find(".state-path").element);
       await flushPromises();
       const root = document.querySelector<HTMLElement>(
         ".choropleth-wrapper.is-fullscreen",
@@ -1722,36 +1756,41 @@ describe("ChoroplethMap touch zoom", () => {
     }
   });
 
-  it("touchExpand=false: first tap zooms in place, next tap selects", async () => {
+  it("touchExpand=false: double tap zooms in place, single tap selects", async () => {
     const wrapper = mountTouch({ touchExpand: false });
-    // Inline controls + hint present; the page keeps touch gestures.
+    // Inline controls + hint present; a single finger still scrolls the
+    // page, but browser pinch/double-tap zoom is claimed for the map.
     expect(wrapper.find(".chart-zoom-controls").exists()).toBe(true);
-    expect(wrapper.find(".choropleth-zoom-hint").text()).toBe("Tap to zoom");
-    expect(mapSvg().getAttribute("style") ?? "").not.toContain("touch-action");
+    expect(wrapper.find(".choropleth-zoom-hint").text()).toBe(
+      "Double tap to zoom",
+    );
+    expect(mapSvg().getAttribute("style") ?? "").toContain("pan-x pan-y");
     const el = wrapper.find(".state-path").element;
+    // A single tap only selects (deferred by the double-tap window).
     tap(el);
+    await settleTapSelect();
     await flushPromises();
-    // No fullscreen and no selection — the tap zoomed in place.
+    expect(wrapper.emitted("stateClick")).toHaveLength(1);
+    expect(mapTransform()).toBeNull();
+    // A double tap is the zoom gesture: in place, no fullscreen.
+    doubleTap(el);
+    await flushPromises();
     expect(
       document.querySelector(".choropleth-wrapper.is-fullscreen"),
     ).toBeNull();
-    expect(wrapper.emitted("stateClick")).toBeUndefined();
     await new Promise((r) => setTimeout(r, 550));
     await flushPromises();
     expect(mapTransform()).toContain("scale(2)");
-    // Activated: the map claims touch gestures and the hint retires.
-    expect(mapSvg().getAttribute("style") ?? "").toContain("touch-action");
-    expect(wrapper.find(".choropleth-zoom-hint").exists()).toBe(false);
-    // A second tap falls through to selection.
-    tap(el);
-    await flushPromises();
+    // No further selection fired, and the map now owns touch gestures.
     expect(wrapper.emitted("stateClick")).toHaveLength(1);
+    expect(mapSvg().getAttribute("style") ?? "").toContain("none");
+    expect(wrapper.find(".choropleth-zoom-hint").exists()).toBe(false);
     wrapper.unmount();
   });
 
-  it("touchExpand=false: reset restores the pre-tap mode", async () => {
+  it("touchExpand=false: reset restores the pre-zoom mode", async () => {
     const wrapper = mountTouch({ touchExpand: false });
-    tap(wrapper.find(".state-path").element);
+    doubleTap(wrapper.find(".state-path").element);
     await new Promise((r) => setTimeout(r, 550));
     await flushPromises();
     expect(mapTransform()).toContain("scale(2)");
@@ -1759,8 +1798,8 @@ describe("ChoroplethMap touch zoom", () => {
     await new Promise((r) => setTimeout(r, 550));
     await flushPromises();
     expect(mapTransform()).toContain("scale(1)");
-    // Pre-tap mode restored: gestures released, hint back.
-    expect(mapSvg().getAttribute("style") ?? "").not.toContain("touch-action");
+    // Pre-zoom mode restored: one-finger gestures released, hint back.
+    expect(mapSvg().getAttribute("style") ?? "").toContain("pan-x pan-y");
     expect(wrapper.find(".choropleth-zoom-hint").exists()).toBe(true);
     wrapper.unmount();
   });

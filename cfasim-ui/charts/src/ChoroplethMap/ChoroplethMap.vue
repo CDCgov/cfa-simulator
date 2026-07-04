@@ -167,13 +167,13 @@ const props = withDefaults(
     /**
      * Enable the activate-to-zoom interaction. Default `false` — the map
      * is fully static (tooltips and click-select still work, and
-     * programmatic `focus` zoom still applies). When enabled, the map
-     * stays static until the user double-clicks (desktop) or taps (touch):
-     * desktop double-click zooms in place alongside always-visible
-     * +/−/reset controls, with drag-pan once zoomed; on touch a tap
-     * expands the map to fill the window, where one finger pans, pinch
-     * zooms, and a tap selects. The scroll wheel never zooms inline, so
-     * the map can't hijack page scrolling.
+     * programmatic `focus` zoom still applies). When enabled, clicks and
+     * taps still only select; the first *zoom* is what switches panning
+     * on: desktop double-click (or the always-visible +/−/reset controls,
+     * or a programmatic focus zoom) zooms in place, and on touch a double
+     * tap expands the map to fill the window, where one finger pans,
+     * pinch zooms, and a tap selects. The scroll wheel never zooms
+     * inline, so the map can't hijack page scrolling.
      */
     zoom?: boolean;
     /**
@@ -187,20 +187,21 @@ const props = withDefaults(
      */
     zoomMode?: "activate" | "scroll";
     /**
-     * On touch devices, expand the map to fill the window when tapped.
-     * Default `true`. Set `false` to zoom in place instead: the first tap
-     * zooms the inline map in on the tapped point (like a desktop
-     * double-click), after which one-finger pan / pinch work and taps
-     * select features; the +/−/reset controls render inline. Note the
-     * activated map captures touch scrolling over it. No effect on desktop
-     * or when `zoom` is off; `zoom-mode="scroll"` already implies inline
+     * On touch devices, expand the map to fill the window on a double
+     * tap. Default `true`. Set `false` to zoom in place instead: a double
+     * tap (or pinch) zooms the inline map on that point, after which
+     * one-finger pan / pinch work and the +/−/reset controls render
+     * inline. Single taps select in both modes. Note the zoomed in-place
+     * map captures touch scrolling over it. No effect on desktop or when
+     * `zoom` is off; `zoom-mode="scroll"` already implies inline
      * interaction.
      */
     touchExpand?: boolean;
     /**
-     * Show the grey "Double click to zoom" / "Tap to zoom" affordance over
-     * the top of the map while the zoom gesture hasn't been used yet.
-     * Default `true`; set `false` to hide it. No effect when `zoom` is off.
+     * Show the grey "Double click to zoom" / "Double tap to zoom"
+     * affordance over the top of the map while the zoom gesture hasn't
+     * been used yet. Default `true`; set `false` to hide it. No effect
+     * when `zoom` is off.
      */
     zoomHint?: boolean;
     /** Tooltip activation mode */
@@ -414,27 +415,22 @@ const scaleK = ref(1);
 // stroke widths can stay visually constant without `vector-effect:
 // non-scaling-stroke` (see applyStrokeScale).
 const viewScale = ref(1);
-// Latched true the first time the transform leaves identity (double-click,
-// tap zoom, +/− press, or a focus zoom).
+// The first *zoom* is what activates the pan/zoom interaction — plain
+// clicks/taps only select. Latched true the first time the transform
+// leaves identity (double-click, double-tap/pinch zoom, +/− press, or a
+// programmatic focus zoom) and sticky except in the inline touch flow,
+// where reset restores the pre-zoom static mode by clearing it.
 const hasZoomed = ref(false);
-// Latched true when the user selects a feature while zooming is enabled —
-// engaging with the map's clickable elements counts as opting in.
-const hasInteracted = ref(false);
-// The pan/zoom interaction is "activated" once the user has zoomed or
-// engaged with the map. Activation is sticky (reset keeps it, except the
-// inline touch flow, where reset restores the pre-tap static mode by
-// clearing both latches).
-const isActivated = computed(() => hasZoomed.value || hasInteracted.value);
 // `zoom-mode="scroll"`: no activation step at all — the map owns wheel,
 // drag, and touch gestures from the start (for full-page experiences).
 const isScrollMode = computed(() => props.zoomMode === "scroll");
-// Inline touch gestures (one-finger pan, pinch) go to the map instead of
-// the page: always in scroll mode, and — with tap-to-expand opted out —
-// once the first tap has activated the interaction.
+// Inline touch gestures (one-finger pan, pinch-to-continue) go to the map
+// instead of the page: always in scroll mode, and — with tap-to-expand
+// opted out — once the first zoom has activated the interaction.
 const touchGesturesInline = computed(
   () =>
     props.zoom &&
-    (isScrollMode.value || (!props.touchExpand && isActivated.value)),
+    (isScrollMode.value || (!props.touchExpand && hasZoomed.value)),
 );
 // rAF-throttled cursor coords for moveTooltip; we coalesce many mousemove
 // events into one transform write per animation frame.
@@ -457,11 +453,17 @@ let tapStart: {
   featId: string | null;
 } | null = null;
 
-// Desktop click-vs-double-click: with the zoom interaction on, a click can
-// be the first half of a double-click zoom, so selection defers by a
-// double-click-sized window and the second click cancels it.
+// Click/tap-vs-double: with the zoom interaction on, a click or tap can be
+// the first half of a double-click/double-tap zoom, so selection defers by
+// this window and the second click/tap cancels it.
 const CLICK_SELECT_DELAY_MS = 250;
 let pendingSelectTimer = 0;
+
+// Double-tap detection for the inline touch map (the zoom gesture there).
+// Two taps landing this close together within the select-defer window
+// count as one double tap.
+const DOUBLE_TAP_SLOP = 30;
+let lastTap: { x: number; y: number; time: number } | null = null;
 
 function setupInteraction() {
   const svg = svgRef.value;
@@ -592,10 +594,19 @@ function setupZoom() {
           if (isTouchDevice()) return false;
           break;
         case "mousedown":
-          if (!expanded && !isActivated.value) return false;
+          if (!expanded && !hasZoomed.value) return false;
           break;
         case "touchstart":
-          if (!expanded && !touchGesturesInline.value) return false;
+          if (!expanded && !touchGesturesInline.value) {
+            // In-place touch mode: a pinch (second finger) is itself the
+            // zoom entry gesture; single-finger drags stay with the page
+            // until the first zoom.
+            const pinchEntry =
+              !props.touchExpand &&
+              props.zoomMode !== "scroll" &&
+              (event as TouchEvent).touches.length >= 2;
+            if (!pinchEntry) return false;
+          }
           break;
       }
     }
@@ -825,8 +836,8 @@ function resetZoom() {
   svg.interrupt();
   hideTooltip();
   // In the inline touch flow (no tap-to-expand step), reset restores the
-  // pre-tap mode: once the zoom-out lands, deactivate so the page gets
-  // touch scrolling back and the tap hint returns. Desktop stays
+  // pre-zoom mode: once the zoom-out lands, deactivate so the page gets
+  // touch scrolling back and the zoom hint returns. Desktop stays
   // activated (sticky), and inside fullscreen the ✕ handles leaving.
   const deactivate =
     isTouchDevice() && !fullscreen.isFullscreen.value && !isScrollMode.value;
@@ -837,7 +848,6 @@ function resetZoom() {
   if (deactivate) {
     transition.on("end", () => {
       hasZoomed.value = false;
-      hasInteracted.value = false;
     });
   }
 }
@@ -871,24 +881,24 @@ const isPannable = computed(
   () =>
     props.zoom &&
     !isTouchDevice() &&
-    (isScrollMode.value || isActivated.value || fullscreen.isFullscreen.value),
+    (isScrollMode.value || hasZoomed.value || fullscreen.isFullscreen.value),
 );
 
-// Grey affordance line shown while the activation gesture is still the way
-// in: on desktop until activation (the controls take over from there), on
+// Grey affordance line shown while the zoom gesture is still the way in:
+// on desktop until the first zoom (the controls take over from there), on
 // touch whenever the inline map is showing (with tap-to-expand) or until
-// the first in-place tap zoom (without). Never while fullscreen or in
-// scroll mode — those are already interactive.
+// the first in-place zoom (without). Never while fullscreen or in scroll
+// mode — those are already interactive.
 const showZoomHint = computed(
   () =>
     props.zoom &&
     props.zoomHint &&
     !isScrollMode.value &&
     !fullscreen.isFullscreen.value &&
-    ((isTouchDevice() && props.touchExpand) || !isActivated.value),
+    ((isTouchDevice() && props.touchExpand) || !hasZoomed.value),
 );
 const zoomHintText = computed(() =>
-  isTouchDevice() ? "Tap to zoom" : "Double click to zoom",
+  isTouchDevice() ? "Double tap to zoom" : "Double click to zoom",
 );
 
 // Inline style for the map svg. `touch-action: none` hands pan/pinch to
@@ -902,9 +912,15 @@ const svgStyle = computed(() => {
   const style: Record<string, string> = {};
   if (fullscreen.isFullscreen.value || touchGesturesInline.value) {
     style["touch-action"] = "none";
+  } else if (props.zoom && !isScrollMode.value && isTouchDevice()) {
+    // Inline, pre-zoom: keep page panning but claim the zoom gestures.
+    // `manipulation` suppresses the browser's double-tap zoom (the expand
+    // gesture); in-place mode also blocks browser pinch-zoom so a pinch
+    // reaches d3-zoom as the entry gesture.
+    style["touch-action"] = props.touchExpand ? "manipulation" : "pan-x pan-y";
   }
   if (
-    isActivated.value ||
+    hasZoomed.value ||
     fullscreen.isFullscreen.value ||
     (props.zoom && isScrollMode.value)
   ) {
@@ -1666,9 +1682,6 @@ function eventToFeatureId(target: EventTarget | null): string | null {
 // wanting fine-grained multi-select handle merging via `@update:focus`.
 // Shared by the mouse-click and touch-tap paths.
 function emitSelection(data: TooltipPayload) {
-  // Selecting a feature counts as engaging with the map — it switches the
-  // pan/zoom interaction on, same as a first zoom would.
-  if (props.zoom) hasInteracted.value = true;
   emit("stateClick", { id: data.id, name: data.name, value: data.value });
   const wasFocused = focusedBaseIds(normalizedFocus.value).has(data.id);
   emit("update:focus", wasFocused ? null : data.id);
@@ -1742,28 +1755,48 @@ function onTouchEnd(event: TouchEvent) {
   if (Math.abs(t.clientX - start.x) > TAP_SLOP) return;
   if (Math.abs(t.clientY - start.y) > TAP_SLOP) return;
   if (event.timeStamp - start.time > TAP_MAX_MS) return;
-  // Inline touch map with zoom on (activate mode): a tap anywhere
-  // (features and background alike) starts the interaction — expanding to
-  // fill the window by default, or zooming in place with
-  // `touchExpand: false`, after which taps fall through to selection.
-  // Scroll mode skips all of this: the inline map is already the
-  // interactive surface.
+  // Inline touch map with zoom on (activate mode): a *double tap*
+  // anywhere (features and background alike) is the zoom gesture —
+  // expanding to fill the window by default, or zooming in place with
+  // `touchExpand: false` (a pinch works there too). Single taps select,
+  // deferred by the double-tap window so the second tap of a double tap
+  // can cancel them — mirroring the desktop click debounce. Scroll mode
+  // and the expanded view skip all of this: taps there select directly.
   if (
     props.zoom &&
     !isScrollMode.value &&
     isTouchDevice() &&
     !fullscreen.isFullscreen.value
   ) {
-    if (props.touchExpand) {
-      event.preventDefault();
-      enterTouchZoom(t.clientX, t.clientY);
+    // Suppress the synthetic click/hover the browser would replay from
+    // this tap (and iOS's hover-first tap).
+    event.preventDefault();
+    const prev = lastTap;
+    lastTap = { x: t.clientX, y: t.clientY, time: event.timeStamp };
+    const isDoubleTap =
+      prev != null &&
+      event.timeStamp - prev.time <= CLICK_SELECT_DELAY_MS &&
+      Math.abs(t.clientX - prev.x) <= DOUBLE_TAP_SLOP &&
+      Math.abs(t.clientY - prev.y) <= DOUBLE_TAP_SLOP;
+    if (isDoubleTap) {
+      lastTap = null;
+      window.clearTimeout(pendingSelectTimer);
+      pendingSelectTimer = 0;
+      if (props.touchExpand) {
+        enterTouchZoom(t.clientX, t.clientY);
+      } else {
+        zoomInPlaceAt(t.clientX, t.clientY);
+      }
       return;
     }
-    if (!isActivated.value) {
-      event.preventDefault();
-      zoomInPlaceAt(t.clientX, t.clientY);
-      return;
-    }
+    const data = start.featId ? tooltipDataById.get(start.featId) : undefined;
+    if (!data) return;
+    window.clearTimeout(pendingSelectTimer);
+    pendingSelectTimer = window.setTimeout(() => {
+      pendingSelectTimer = 0;
+      emitSelection(data);
+    }, CLICK_SELECT_DELAY_MS);
+    return;
   }
   if (!start.featId) return;
   const data = tooltipDataById.get(start.featId);

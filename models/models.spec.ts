@@ -141,16 +141,21 @@ test("fetch-example map is static until double-click activates zoom", async ({
 test.describe("choropleth touch zoom", () => {
   test.use({ hasTouch: true, viewport: { width: 390, height: 664 } });
 
-  test("tap expands the map to fill the window and ✕ closes it", async ({
+  test("double tap expands the map to fill the window and ✕ closes it", async ({
     page,
   }) => {
     await page.goto("/fetch-example");
     const path = page.locator(".state-path").first();
     await path.waitFor();
     await expect(page.locator(".choropleth-zoom-hint")).toHaveText(
-      "Tap to zoom",
+      "Double tap to zoom",
     );
-    await path.tap();
+    // Two quick taps at the same point — a double tap, the zoom gesture.
+    const box = (await path.boundingBox())!;
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    await page.touchscreen.tap(cx, cy);
+    await page.touchscreen.tap(cx, cy);
     await expect(
       page.locator(".choropleth-wrapper.is-fullscreen"),
     ).toBeVisible();
