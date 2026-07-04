@@ -2192,6 +2192,8 @@ watch(
 
   position: relative;
   width: 100%;
+  /* Size container so the zoom hint can reposition on narrow maps. */
+  container-type: inline-size;
 }
 
 .choropleth-wrapper svg {
@@ -2226,11 +2228,13 @@ watch(
 
 /* Overlays the top of the map: absolutely positioned with no `top`, the
    box keeps its static position — the top edge of the svg that follows it
-   in the markup — without taking up flow space. */
+   in the markup — without taking up flow space. The text carries a
+   page-color halo so it stays legible over map fills. */
 .choropleth-zoom-hint {
   position: absolute;
   left: 0;
   right: 0;
+  z-index: 1;
   padding-top: 6px;
   text-align: center;
   font-size: 12px;
@@ -2238,6 +2242,21 @@ watch(
   color: var(--color-text-secondary, #777);
   opacity: 0.6;
   pointer-events: none;
+  text-shadow:
+    1px 0 0 var(--color-bg-0, #fff),
+    -1px 0 0 var(--color-bg-0, #fff),
+    0 1px 0 var(--color-bg-0, #fff),
+    0 -1px 0 var(--color-bg-0, #fff),
+    0 0 3px var(--color-bg-0, #fff);
+}
+
+/* On narrow maps the overlay would cover content that matters — show the
+   hint in flow above the map instead (the wrapper is the container). */
+@container (max-width: 480px) {
+  .choropleth-zoom-hint {
+    position: static;
+    padding: 0;
+  }
 }
 
 /*
