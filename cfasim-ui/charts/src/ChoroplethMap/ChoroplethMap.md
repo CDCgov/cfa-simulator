@@ -409,11 +409,17 @@ This needs a counties topology (the same `us-atlas/counties-10m.json`). `data`
 can stay national; only features inside the selected state are drawn and
 colored.
 
+This demo also opts for the quieter touch flow: `:touch-expand="false"` makes
+a tap zoom in place instead of expanding to fill the window, and
+`:zoom-hint="false"` drops the grey gesture hint.
+
 <ComponentDemo>
   <ChoroplethMap
     :topology="countiesTopo"
     geo-type="counties"
     state="California"
+    :touch-expand="false"
+    :zoom-hint="false"
     :data="[
       { id: '06037', value: 100 },
       { id: '06073', value: 80 },
@@ -434,6 +440,8 @@ colored.
   :topology="countiesTopo"
   geo-type="counties"
   state="California"
+  :touch-expand="false"
+  :zoom-hint="false"
   :data="[
     { id: '06037', value: 100 }, // Los Angeles
     { id: '06073', value: 80 }, // San Diego
@@ -471,6 +479,10 @@ On touch, selection happens inside the tap-to-expand view: a single-finger
 `:zoom="false"` a tap selects directly on the inline map instead.) Hover
 tooltips stay off on touch for performance.
 
+Click-to-focus interactions usually pair best with `:touch-expand="false"`,
+as in the demos below — the first tap zooms in place and the next tap
+selects, so the map stays in your layout instead of taking over the window.
+
 Counties are tiny without a zoom — focus is a natural fit for drill-down.
 
 <ComponentDemo>
@@ -479,6 +491,7 @@ Counties are tiny without a zoom — focus is a natural fit for drill-down.
     geo-type="counties"
     v-model:focus="focused"
     :focus-zoom-level="8"
+    :touch-expand="false"
     :data="[
       { id: '06037', value: 100 },
       { id: '06073', value: 80 },
@@ -513,6 +526,7 @@ const focused = ref(null);
   geo-type="counties"
   v-model:focus="focused"
   :focus-zoom-level="8"
+  :touch-expand="false"
   :data="data"
   title="Click a county to focus"
 >
@@ -540,6 +554,7 @@ on top with a `FocusItem`.
     :topology="countiesTopo"
     geo-type="counties"
     data-geo-type="hsas"
+    :touch-expand="false"
     :data="[
       { id: '060737', value: 80 },
       { id: '060723', value: 60 },
@@ -565,6 +580,7 @@ on top with a `FocusItem`.
   :topology="countiesTopo"
   geo-type="counties"
   data-geo-type="hsas"
+  :touch-expand="false"
   :data="hsaData"
   :focus="[{ id: '06043' }, { id: '060737', geoType: 'hsas', style: 'dashed' }]"
   title="HSA-keyed data on a county map"
@@ -591,6 +607,7 @@ subpath so consumers that don't need HSA lookups don't pay for the
     :topology="countiesTopo"
     geo-type="counties"
     data-geo-type="hsas"
+    :touch-expand="false"
     :focus="parentFocus"
     @update:focus="focusedCounty = typeof $event === 'string' ? $event : null"
     :data="[
@@ -635,6 +652,7 @@ const focus = computed(() => {
   :topology="countiesTopo"
   geo-type="counties"
   data-geo-type="hsas"
+  :touch-expand="false"
   :data="hsaData"
   :focus="focus"
   @update:focus="focusedCounty = typeof $event === 'string' ? $event : null"
