@@ -1,6 +1,18 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.7.2] - 2026-07-04
+
+### Bug Fixes
+
+- **charts:** Zoom hint halo and in-flow placement on narrow maps
+- **charts:** Keep mobile fullscreen on-screen when the page is pinch-zoomed
+
+### Features
+
+- **charts:** Activate map pan/zoom on first zoom only
+- **charts:** Taps trigger hover highlight, tooltip, and stateHover on touch
+
 ## [0.7.1] - 2026-07-04
 
 ### Features
