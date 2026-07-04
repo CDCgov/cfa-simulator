@@ -1,6 +1,31 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.7.0] - 2026-07-04
+
+### Bug Fixes
+
+- **charts:** Skip drawing HSA maps until the lazy module resolves
+- **charts:** Align continuous-legend title with the gradient bar
+
+### Documentation
+
+- **charts:** Use in-place tap zoom in single-state and click-to-focus map demos
+
+### Features
+
+- **charts:** Rework ChoroplethMap pan/zoom into activate-to-zoom paradigm
+- **charts:** Make ChoroplethMap zoom opt-in
+
+### Performance
+
+- **charts:** Fix ChoroplethMap pan/zoom jank in Safari
+
+### Refactor
+
+- Dedupe shared helpers, dead code, and template copies across ui, cli, and models
+- Derive docs sidebar/registration from one component list, extract CI setup actions, share form-field internals
+
 ## [0.6.4] - 2026-07-01
 
 ### Bug Fixes
