@@ -279,10 +279,10 @@ hide it.
   full extent.
 - **Touch:** a **double tap** expands the map to fill the window, zoomed
   in on the tapped point; single taps select features inline. Inside the
-  expanded view, one finger pans, a pinch zooms, and a tap selects; the
-  +/−/reset controls sit top-left and a close (✕) button top-right returns
-  to the inline map at full extent. A single finger over the inline map
-  still scrolls the page.
+  expanded view, one finger pans, a pinch zooms, and a tap selects — its
+  tooltip slides up as a bottom sheet; the +/−/reset controls sit top-left
+  and a close (✕) button top-right returns to the inline map at full
+  extent. A single finger over the inline map still scrolls the page.
 
 Filling the window is always an activated state: whether entered via the
 menu's **Fullscreen** item or a double tap, pan/zoom works immediately and
@@ -374,11 +374,15 @@ before and after zooming in.
 
 Set `geoType="hsas"` to render Health Service Area boundaries. HSAs are dissolved from county boundaries using a built-in FIPS-to-HSA mapping. Use 6-digit HSA codes as IDs. State borders are overlaid for context.
 
+This demo pairs `tooltip-trigger="hover"` with a custom `#tooltip` slot —
+hover an HSA on desktop, or tap one on touch, before or after zooming in.
+
 <ComponentDemo>
   <ChoroplethMap
     :topology="countiesTopo"
     geo-type="hsas"
     zoom
+    tooltip-trigger="hover"
     :data="[
       { id: '010259', value: 100 },
       { id: '060766', value: 90 },
@@ -394,7 +398,14 @@ Set `geoType="hsas"` to render Health Service Area boundaries. HSAs are dissolve
     title="Cases by HSA"
     :legend-title="'Cases'"
     :height="400"
-  />
+  >
+    <template #tooltip="{ id, name, value }">
+      <div style="font-weight: 600">{{ name }}</div>
+      <div style="opacity: 0.7; font-size: 0.85em">HSA {{ id }}</div>
+      <div v-if="value != null">Cases: {{ value }}</div>
+      <div v-else style="opacity: 0.6">No data</div>
+    </template>
+  </ChoroplethMap>
 
 <template #code>
 
@@ -403,6 +414,7 @@ Set `geoType="hsas"` to render Health Service Area boundaries. HSAs are dissolve
   :topology="countiesTopo"
   geo-type="hsas"
   zoom
+  tooltip-trigger="hover"
   :data="[
     { id: '010259', value: 100 },
     { id: '060766', value: 90 },
@@ -413,7 +425,14 @@ Set `geoType="hsas"` to render Health Service Area boundaries. HSAs are dissolve
   title="Cases by HSA"
   :legend-title="'Cases'"
   :height="400"
-/>
+>
+  <template #tooltip="{ id, name, value }">
+    <div style="font-weight: 600">{{ name }}</div>
+    <div style="opacity: 0.7; font-size: 0.85em">HSA {{ id }}</div>
+    <div v-if="value != null">Cases: {{ value }}</div>
+    <div v-else style="opacity: 0.6">No data</div>
+  </template>
+</ChoroplethMap>
 ```
 
   </template>
@@ -505,8 +524,9 @@ Selection works the same on touch: a single-finger **tap** on a feature
 emits `stateClick` and toggles focus, inline or inside the expanded view.
 (Inline with `zoom` on, the selection fires after the brief double-tap
 window.) A tap also stands in for hover — it applies the hover highlight,
-emits `stateHover`, and shows the feature's tooltip at the tapped point;
-only continuous hover _tracking_ is off on touch, for performance.
+emits `stateHover`, and shows the feature's tooltip (anchored to the
+feature inline; sliding up as a bottom sheet in the expanded view); only
+continuous hover _tracking_ is off on touch, for performance.
 
 Click-to-focus interactions usually pair best with `:touch-expand="false"`,
 as in the demos below — a double tap zooms in place while taps keep

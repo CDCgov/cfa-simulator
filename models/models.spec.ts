@@ -191,7 +191,8 @@ test.describe("choropleth touch zoom", () => {
       svgBox.x + svgBox.width / 2,
       svgBox.y + svgBox.height / 2,
     );
-    await expect(page.locator(".chart-tooltip-content")).toBeVisible();
+    // Expanded touch view presents the tooltip as a bottom sheet.
+    await expect(page.locator(".chart-tooltip-sheet")).toHaveClass(/is-open/);
   });
 });
 

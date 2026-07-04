@@ -1385,6 +1385,63 @@ describe("ChoroplethMap", () => {
     wrapper.unmount();
   });
 
+  it("self-calibrates tooltip position when client coords are visual-viewport based", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        tooltipTrigger: "hover",
+        tooltipClamp: "none",
+        data: [{ id: "06", value: 42 }],
+      },
+    });
+    const tip = document.body.querySelector<HTMLElement>(
+      ".chart-tooltip-content",
+    )!;
+    const california = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06")!;
+    const parse = () => {
+      const m = /translate3d\((-?[\d.]+)px, (-?[\d.]+)px/.exec(
+        tip.style.transform,
+      )!;
+      return { x: Number(m[1]), y: Number(m[2]) };
+    };
+    // Baseline: no page zoom, no calibration.
+    await california.trigger("mouseover", { clientX: 200, clientY: 150 });
+    const base = parse();
+    // Simulate Safari under pinch-zoom: rects come back in visual space
+    // (shifted by the visual-viewport offsets vs the layout-space fixed
+    // position), and visualViewport reports the zoom.
+    Object.defineProperty(window, "visualViewport", {
+      value: { scale: 2, offsetTop: 100, offsetLeft: 50 },
+      configurable: true,
+    });
+    tip.getBoundingClientRect = () => {
+      const at = parse();
+      return {
+        left: at.x - 50,
+        top: at.y - 100,
+        width: 0,
+        height: 0,
+      } as DOMRect;
+    };
+    try {
+      await california.trigger("mouseover", { clientX: 200, clientY: 150 });
+      const corrected = parse();
+      expect(corrected.x).toBeCloseTo(base.x + 50);
+      expect(corrected.y).toBeCloseTo(base.y + 100);
+    } finally {
+      Object.defineProperty(window, "visualViewport", {
+        value: undefined,
+        configurable: true,
+      });
+    }
+    wrapper.unmount();
+  });
+
   it("keeps the tooltip through a plain click once drag-pan is live", async () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
@@ -1693,8 +1750,12 @@ describe("ChoroplethMap touch zoom", () => {
     expect(wrapper.find(".choropleth-zoom-hint").text()).toBe(
       "Double tap to zoom",
     );
-    // ...and suppresses the browser's own double-tap zoom.
+    // ...suppresses the browser's own double-tap zoom, and carries its
+    // compositor layer up front so tap highlights repaint fast (WebKit).
     expect(mapSvg().getAttribute("style") ?? "").toContain("manipulation");
+    expect(mapSvg().getAttribute("style") ?? "").toContain(
+      "will-change: transform",
+    );
     doubleTap(wrapper.find(".state-path").element);
     await flushPromises();
     // The hint retires while expanded.
@@ -1752,6 +1813,8 @@ describe("ChoroplethMap touch zoom", () => {
     )!;
     expect(tip.style.visibility).toBe("visible");
     expect(tip.textContent).toContain("California");
+    // Stacks above the fullscreen overlay (both are teleported to body).
+    expect(tip.style.zIndex).toContain("--cfasim-z-fullscreen");
     // ...while the selection emit waits out the double-tap window.
     expect(wrapper.emitted("stateClick")).toBeUndefined();
     await settleTapSelect();
@@ -1761,6 +1824,39 @@ describe("ChoroplethMap touch zoom", () => {
     await flushPromises();
     expect(tip.style.visibility).toBe("hidden");
     expect(wrapper.emitted("stateHover")?.at(-1)?.[0]).toBeNull();
+    wrapper.unmount();
+  });
+
+  it("shows tooltips as a bottom sheet in the expanded view", async () => {
+    const wrapper = mountTouch({
+      tooltipTrigger: "hover",
+      data: [{ id: "06", value: 42 }],
+    });
+    const california = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06")!;
+    doubleTap(california.element);
+    await flushPromises();
+    // Wait out the enter animation (its zoom frames clear the hover state).
+    await new Promise((r) => setTimeout(r, 550));
+    tap(california.element);
+    await flushPromises();
+    const sheet = document.querySelector<HTMLElement>(".chart-tooltip-sheet")!;
+    expect(sheet.classList.contains("is-open")).toBe(true);
+    expect(sheet.textContent).toContain("California");
+    // The floating tooltip stays dormant in sheet mode.
+    const float = document.body.querySelector<HTMLElement>(
+      ".chart-tooltip-content",
+    )!;
+    expect(float.style.visibility).toBe("hidden");
+    // A background tap slides the sheet away.
+    tap(mapSvg(), 5, 5);
+    await flushPromises();
+    expect(sheet.classList.contains("is-open")).toBe(false);
+    // Leaving the expanded view drops sheet mode entirely.
+    document.querySelector<HTMLElement>(".chart-close-button")!.click();
+    await flushPromises();
+    expect(document.querySelector(".chart-tooltip-sheet")).toBeNull();
     wrapper.unmount();
   });
 

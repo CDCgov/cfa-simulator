@@ -940,8 +940,12 @@ const svgStyle = computed(() => {
   if (
     hasZoomed.value ||
     fullscreen.isFullscreen.value ||
-    (props.zoom && isScrollMode.value)
+    (props.zoom && (isScrollMode.value || isTouchDevice()))
   ) {
+    // Touch maps get the layer up front, not just once zoomed: a tap
+    // restyles a feature path, and without the layer WebKit repaints the
+    // surrounding page layer (~200ms per mutation on the HSA map — taps
+    // felt sluggish inline while fullscreen, already layered, was fast).
     style["will-change"] = "transform";
   }
   return Object.keys(style).length ? style : undefined;
@@ -1527,23 +1531,53 @@ function applyTooltipPosition(clientX: number, clientY: number) {
     chartRect,
   );
   el.style.transform = `translate3d(${left}px, ${top}px, 0) translateY(-50%)`;
+  // Safari reports client coordinates (events AND element rects) in
+  // visual-viewport space, while position: fixed resolves against the
+  // layout viewport — under page pinch-zoom the tooltip lands offset from
+  // its target (typically "too high" by the pan offset). Rather than
+  // sniffing engines, self-calibrate: re-measure where the tooltip
+  // actually landed — the rect comes back in the same client space as the
+  // target coords — and shift by the residual. Chrome measures ~0.
+  const vv = typeof window !== "undefined" ? window.visualViewport : null;
+  if (!vv || (vv.scale <= 1.01 && vv.offsetTop < 1 && vv.offsetLeft < 1)) {
+    return;
+  }
+  const actual = el.getBoundingClientRect();
+  const dx = actual.left - left;
+  const dy = actual.top + actual.height / 2 - top;
+  if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+    el.style.transform = `translate3d(${left - dx}px, ${top - dy}px, 0) translateY(-50%)`;
+  }
 }
+
+// The expanded touch view swaps the pointer-anchored tooltip for a bottom
+// sheet: floating fixed positioning is unreliable there (Safari reports
+// touch/rect coordinates in visual-viewport space once the page is
+// pinch-zoomed), while a sheet pinned to the wrapper is always right.
+const tooltipMode = computed<"float" | "sheet">(() =>
+  fullscreen.isFullscreen.value && isTouchDevice() ? "sheet" : "float",
+);
 
 function showTooltip(featId: string, clientX: number, clientY: number) {
   const data = tooltipDataById.get(featId);
   if (!data) return;
   const child = tooltipChildRef.value;
-  const el = child?.getEl();
-  if (!child || !el) return;
+  if (!child) return;
   child.setData(data);
-  lastPointer = { x: clientX, y: clientY };
   tooltipVisible = true;
+  if (tooltipMode.value === "sheet") {
+    child.setOpen(true);
+    return;
+  }
+  const el = child.getEl();
+  if (!el) return;
+  lastPointer = { x: clientX, y: clientY };
   applyTooltipPosition(clientX, clientY);
   el.style.visibility = "visible";
 }
 
 function moveTooltip(clientX: number, clientY: number) {
-  if (!tooltipVisible) return;
+  if (!tooltipVisible || tooltipMode.value === "sheet") return;
   pendingMoveX = clientX;
   pendingMoveY = clientY;
   if (pendingMoveFrame) return;
@@ -1561,6 +1595,7 @@ function hideTooltip() {
   if (!tooltipVisible) return;
   tooltipVisible = false;
   lastPointer = null;
+  tooltipChildRef.value?.setOpen(false);
   const el = tooltipChildRef.value?.getEl();
   if (el) el.style.visibility = "hidden";
 }
@@ -1840,14 +1875,29 @@ function onTouchEnd(event: TouchEvent) {
 }
 
 // A tap doubles as the touch replacement for hover: apply the hover-style
-// highlight, announce it, and show the tooltip at the tapped point.
-// (Continuous hover *tracking* stays off on touch — see setupInteraction —
-// this is the one-shot equivalent.)
+// highlight, announce it, and show the tooltip. (Continuous hover
+// *tracking* stays off on touch — see setupInteraction — this is the
+// one-shot equivalent.)
 function touchHover(data: TooltipPayload, clientX: number, clientY: number) {
   const pathEl = pathsByFeatureId.get(data.id);
   if (pathEl) setHover(pathEl);
   emit("stateHover", { id: data.id, name: data.name, value: data.value });
-  if (hasInteractiveTooltip.value) showTooltip(data.id, clientX, clientY);
+  if (!hasInteractiveTooltip.value) return;
+  if (pathEl) {
+    // Anchor to the feature, not the finger: element rects and fixed
+    // positioning share the layout-viewport coordinate space, so this
+    // stays put when the page itself is pinch-zoomed — Safari reports
+    // touch client coords in *visual*-viewport space, which would skew a
+    // finger-anchored tooltip. Also keeps it out from under the finger.
+    const rect = pathEl.getBoundingClientRect();
+    showTooltip(
+      data.id,
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+    );
+  } else {
+    showTooltip(data.id, clientX, clientY);
+  }
 }
 
 function onTouchCancel() {
@@ -2118,10 +2168,12 @@ watch(
 
 // Exiting the expanded touch view (✕, Escape) returns to the static inline
 // map at full extent — the inline map has no pan gestures, so a preserved
-// transform would strand the user off-center.
+// transform would strand the user off-center. Any toggle also drops the
+// tooltip: the presentation mode (float vs sheet) may change with it.
 watch(
   () => fullscreen.isFullscreen.value,
   (expanded) => {
+    hideTooltip();
     if (expanded || !isTouchDevice()) return;
     if (!svgRef.value || !zoomBehavior) return;
     const svg = select(svgRef.value);
@@ -2241,7 +2293,11 @@ watch(
         @zoom-out="zoomBy(1 / ZOOM_STEP)"
         @reset="resetZoom"
       />
-      <ChoroplethTooltip v-if="hasInteractiveTooltip" ref="tooltipChildRef">
+      <ChoroplethTooltip
+        v-if="hasInteractiveTooltip"
+        ref="tooltipChildRef"
+        :mode="tooltipMode"
+      >
         <template #default="raw">
           <slot name="tooltip" v-bind="narrowSlotProps(raw)">
             <span v-if="tooltipFormat" v-html="tooltipFormat(raw)" />
