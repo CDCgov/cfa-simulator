@@ -498,7 +498,9 @@ where the map should stay put while a side panel shows the details.
 Selection works the same on touch: a single-finger **tap** on a feature
 emits `stateClick` and toggles focus, inline or inside the expanded view.
 (Inline with `zoom` on, the selection fires after the brief double-tap
-window.) Hover tooltips stay off on touch for performance.
+window.) A tap also stands in for hover — it applies the hover highlight,
+emits `stateHover`, and shows the feature's tooltip at the tapped point;
+only continuous hover _tracking_ is off on touch, for performance.
 
 Click-to-focus interactions usually pair best with `:touch-expand="false"`,
 as in the demos below — a double tap zooms in place while taps keep

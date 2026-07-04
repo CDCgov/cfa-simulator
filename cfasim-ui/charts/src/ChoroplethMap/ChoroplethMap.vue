@@ -477,7 +477,9 @@ function setupInteraction() {
   svg.addEventListener("touchstart", onTouchStart, { passive: true });
   svg.addEventListener("touchend", onTouchEnd);
   svg.addEventListener("touchcancel", onTouchCancel, { passive: true });
-  // Hover + tooltip stay off on touch (stroke-width churn degrades zoom/pan).
+  // Continuous hover tracking stays off on touch (stroke-width churn
+  // degrades zoom/pan); taps provide the one-shot hover + tooltip instead
+  // (see touchHover).
   if (isTouchDevice()) return;
   g.addEventListener("click", onDelegatedEvent);
   g.addEventListener("mouseover", onDelegatedEvent);
@@ -1790,7 +1792,14 @@ function onTouchEnd(event: TouchEvent) {
       return;
     }
     const data = start.featId ? tooltipDataById.get(start.featId) : undefined;
-    if (!data) return;
+    if (!data) {
+      // Background tap: dismiss any tap-hover state.
+      clearHover();
+      return;
+    }
+    // Highlight + tooltip respond instantly; only the selection emits
+    // wait out the double-tap window.
+    touchHover(data, t.clientX, t.clientY);
     window.clearTimeout(pendingSelectTimer);
     pendingSelectTimer = window.setTimeout(() => {
       pendingSelectTimer = 0;
@@ -1798,13 +1807,28 @@ function onTouchEnd(event: TouchEvent) {
     }, CLICK_SELECT_DELAY_MS);
     return;
   }
-  if (!start.featId) return;
+  if (!start.featId) {
+    clearHover();
+    return;
+  }
   const data = tooltipDataById.get(start.featId);
   if (!data) return;
   // Suppress the synthetic click/hover the browser would replay from this
   // tap, so selection fires exactly once and never via iOS's hover-first tap.
   event.preventDefault();
+  touchHover(data, t.clientX, t.clientY);
   emitSelection(data);
+}
+
+// A tap doubles as the touch replacement for hover: apply the hover-style
+// highlight, announce it, and show the tooltip at the tapped point.
+// (Continuous hover *tracking* stays off on touch — see setupInteraction —
+// this is the one-shot equivalent.)
+function touchHover(data: TooltipPayload, clientX: number, clientY: number) {
+  const pathEl = pathsByFeatureId.get(data.id);
+  if (pathEl) setHover(pathEl);
+  emit("stateHover", { id: data.id, name: data.name, value: data.value });
+  if (hasInteractiveTooltip.value) showTooltip(data.id, clientX, clientY);
 }
 
 function onTouchCancel() {

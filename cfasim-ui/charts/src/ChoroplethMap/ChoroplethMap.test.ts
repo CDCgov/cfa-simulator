@@ -1661,6 +1661,39 @@ describe("ChoroplethMap touch zoom", () => {
     wrapper.unmount();
   });
 
+  it("a tap acts as hover: highlight, stateHover, and tooltip", async () => {
+    const wrapper = mountTouch({
+      tooltipTrigger: "hover",
+      data: [{ id: "06", value: 42 }],
+    });
+    const california = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06")!;
+    tap(california.element);
+    await flushPromises();
+    // Hover-style highlight and tooltip respond instantly...
+    expect(strokeStyle(california)).toContain("light-dark");
+    expect(wrapper.emitted("stateHover")?.[0]?.[0]).toMatchObject({
+      id: "06",
+      value: 42,
+    });
+    const tip = document.body.querySelector<HTMLElement>(
+      ".chart-tooltip-content",
+    )!;
+    expect(tip.style.visibility).toBe("visible");
+    expect(tip.textContent).toContain("California");
+    // ...while the selection emit waits out the double-tap window.
+    expect(wrapper.emitted("stateClick")).toBeUndefined();
+    await settleTapSelect();
+    expect(wrapper.emitted("stateClick")).toHaveLength(1);
+    // A background tap dismisses the tap-hover state.
+    tap(mapSvg(), 5, 5);
+    await flushPromises();
+    expect(tip.style.visibility).toBe("hidden");
+    expect(wrapper.emitted("stateHover")?.at(-1)?.[0]).toBeNull();
+    wrapper.unmount();
+  });
+
   it("taps select features once expanded, and closing resets the zoom", async () => {
     const wrapper = mountTouch();
     const el = wrapper.find(".state-path").element;
