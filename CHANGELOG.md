@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.7.3] - 2026-07-04
+
+### Bug Fixes
+
+- **charts:** Keep clicks and tooltips working once map zoom is active
+
 ## [0.7.2] - 2026-07-04
 
 ### Bug Fixes
