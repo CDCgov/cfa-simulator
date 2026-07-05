@@ -1347,6 +1347,80 @@ describe("ChoroplethMap", () => {
       );
       wrapper.unmount();
     });
+
+    // Smallest x-coordinate in a geoPath `d` string (coords are absolute
+    // "x,y" pairs). Negative → the feature extends left of the viewBox.
+    const minPathX = (d: string): number => {
+      let min = Infinity;
+      for (const m of d.matchAll(/(-?[\d.]+),-?[\d.]+/g)) {
+        const x = Number(m[1]);
+        if (x < min) min = x;
+      }
+      return min;
+    };
+    const alaskaMinX = (wrapper: ReturnType<typeof mount>): number => {
+      const ak = wrapper
+        .findAll(".state-path")
+        .find((p) => p.attributes("data-feat-id") === "02")!;
+      return minPathX(ak.attributes("d")!);
+    };
+
+    it("tightFit crops Alaska's western overhang past the left edge", async () => {
+      const base = mount(ChoroplethMap, {
+        props: { topology: statesTopo, geoType: "states" },
+      });
+      await flushPromises();
+      // Default full fit: Alaska sits fully inside the viewBox (x ≥ 0).
+      expect(alaskaMinX(base)).toBeGreaterThanOrEqual(0);
+      base.unmount();
+
+      const tight = mount(ChoroplethMap, {
+        props: { topology: statesTopo, geoType: "states", tightFit: true },
+      });
+      await flushPromises();
+      // tightFit fits CONUS to the frame, so Alaska's tail clips off the left.
+      expect(alaskaMinX(tight)).toBeLessThan(0);
+      tight.unmount();
+    });
+
+    it("tightFit as a number crops partway (monotonic in the amount)", async () => {
+      const mk = async (tightFit: number | boolean) => {
+        const w = mount(ChoroplethMap, {
+          props: { topology: statesTopo, geoType: "states", tightFit },
+        });
+        await flushPromises();
+        const x = alaskaMinX(w);
+        w.unmount();
+        return x;
+      };
+      const [x0, xHalf, x1] = [await mk(false), await mk(0.5), await mk(1)];
+      // More crop → Alaska reaches further past the left edge.
+      expect(x0).toBeGreaterThanOrEqual(0);
+      expect(xHalf).toBeLessThan(0);
+      expect(x1).toBeLessThan(xHalf);
+    });
+
+    it("tightFit is a no-op in single-state mode", async () => {
+      const base = mount(ChoroplethMap, {
+        props: { topology: statesTopo, geoType: "states", state: "Alaska" },
+      });
+      await flushPromises();
+      const baseX = alaskaMinX(base);
+      base.unmount();
+
+      const tight = mount(ChoroplethMap, {
+        props: {
+          topology: statesTopo,
+          geoType: "states",
+          state: "Alaska",
+          tightFit: true,
+        },
+      });
+      await flushPromises();
+      // Single-state fit ignores tightFit: the state is fit to its own inset.
+      expect(alaskaMinX(tight)).toBeCloseTo(baseX, 1);
+      tight.unmount();
+    });
   });
 
   it("scroll mode zooms on wheel immediately, with no hint", async () => {

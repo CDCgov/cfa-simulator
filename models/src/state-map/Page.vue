@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import { SelectBox, Button } from "@cfasim-ui/components";
+import { SelectBox, Button, ToggleGroup } from "@cfasim-ui/components";
 import { ChoroplethMap } from "@cfasim-ui/charts";
 import type { StateData, GeoType, FocusValue } from "@cfasim-ui/charts";
 import { fipsToHsa, hsaNames } from "@cfasim-ui/charts/hsa-mapping";
@@ -53,6 +53,8 @@ const defaults = {
   // Empty = national view; a state name drills into that state.
   selectedState: "",
   geoType: "counties" as GeoType,
+  // National-view framing: "tight" crops Alaska's overhang so CONUS fills more.
+  fit: "full" as "full" | "tight",
 };
 const { params } = useModelParams(defaults);
 
@@ -153,6 +155,16 @@ const subtitle = computed(() =>
         { value: 'hsas', label: 'HSAs (Health Service Areas)' },
       ]"
     />
+    <ToggleGroup
+      v-if="!params.selectedState"
+      v-model="params.fit"
+      label="Fit"
+      hint="“Tight” crops Alaska’s overhang so the lower-48 fills more of the frame."
+      :options="[
+        { value: 'full', label: 'Full' },
+        { value: 'tight', label: 'Tight' },
+      ]"
+    />
   </Teleport>
 
   <div class="state-map-page">
@@ -167,6 +179,7 @@ const subtitle = computed(() =>
           :data="mapData"
           :focus="focus"
           :focus-zoom="false"
+          :tight-fit="params.fit === 'tight'"
           :legend="false"
           :menu="false"
           tooltip-trigger="hover"

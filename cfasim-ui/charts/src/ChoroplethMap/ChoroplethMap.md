@@ -370,6 +370,41 @@ before and after zooming in.
   </template>
 </ComponentDemo>
 
+### Tighter national fit (`tight-fit`)
+
+The Albers USA projection places Alaska and Hawaii in the bottom-left corner, and by default the whole composite is fit into view — so Alaska's western tail pushes the contiguous US in from the edges. Set `tight-fit` to crop that overhang and let the lower-48 fill more of the frame: Alaska's tail (and Hawaii) clip into the lower-left corner. Pass a number in `0`–`1` (e.g. `:tight-fit="0.5"`) to crop only partway.
+
+Only affects the national (multi-state) view — it's a no-op in single-state mode and on national HSA maps (HSA ids aren't FIPS codes, so Alaska/Hawaii can't be split out).
+
+<ComponentDemo>
+  <ChoroplethMap
+    :topology="statesTopo"
+    tight-fit
+    :data="[
+      { id: '06', value: 100 },
+      { id: '36', value: 80 },
+      { id: '48', value: 90 },
+      { id: '12', value: 70 },
+      { id: '17', value: 60 },
+    ]"
+    title="Cases by State (tight fit)"
+    :legend-title="'Cases'"
+    :height="400"
+  />
+
+<template #code>
+
+```vue
+<!-- Crop Alaska's overhang so the lower-48 fills the frame -->
+<ChoroplethMap :topology="statesTopo" tight-fit :data="data" />
+
+<!-- ...or crop only partway -->
+<ChoroplethMap :topology="statesTopo" :tight-fit="0.5" :data="data" />
+```
+
+  </template>
+</ComponentDemo>
+
 ### HSA-level map
 
 Set `geoType="hsas"` to render Health Service Area boundaries. HSAs are dissolved from county boundaries using a built-in FIPS-to-HSA mapping. Use 6-digit HSA codes as IDs. State borders are overlaid for context.

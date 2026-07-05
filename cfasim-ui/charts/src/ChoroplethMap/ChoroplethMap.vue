@@ -142,6 +142,16 @@ const props = withDefaults(
     state?: string;
     width?: number;
     height?: number;
+    /**
+     * Tighten the national (multi-state) fit by cropping the Alaska/Hawaii
+     * overhang so the contiguous US fills more of the frame. `false`/`0`
+     * (default) fits every region into view; `true`/`1` fits the lower-48 to
+     * the frame and lets Alaska's western tail (and Hawaii) clip into the
+     * lower-left corner. A number in between (e.g. `0.5`) crops partway. No
+     * effect in single-state mode or on a national HSA map (HSA ids aren't
+     * FIPS, so AK/HI can't be split out).
+     */
+    tightFit?: boolean | number;
     colorScale?: ChoroplethColorScale | ThresholdStop[] | CategoricalStop[];
     /**
      * Map title. `\n` in the string creates additional lines, each
@@ -301,6 +311,7 @@ const props = withDefaults(
     tooltipClamp: "chart",
     focusZoomLevel: 4,
     focusZoom: true,
+    tightFit: false,
   },
 );
 
@@ -1357,6 +1368,31 @@ const stateBordersPath = computed(() => {
 // flush against the SVG edge. Only applied in single-state mode.
 const STATE_FIT_INSET = 12;
 
+// Resolved `tightFit` amount in [0,1]: false/0 → 0 (full fit), true → 1.
+const tightFitAmount = computed(() => {
+  const v = props.tightFit;
+  if (v === true) return 1;
+  if (!v) return 0;
+  return Math.max(0, Math.min(1, Number(v)));
+});
+
+// The national fit target with Alaska (FIPS 02) and Hawaii (15) removed, so
+// the projection can be re-fit to just the contiguous US. Null when the crop
+// is off, in single-state mode, on an HSA map (ids aren't FIPS), or when
+// nothing was removed — the projection then uses the plain full fit.
+const conusFeaturesGeo = computed(() => {
+  if (tightFitAmount.value <= 0 || stateFips.value) return null;
+  if (props.geoType === "hsas") return null;
+  const fc = featuresGeo.value;
+  const pad = props.geoType === "counties" ? 5 : 2;
+  const kept = fc.features.filter((f) => {
+    const st = String(f.id).padStart(pad, "0").slice(0, 2);
+    return st !== "02" && st !== "15";
+  });
+  if (kept.length === fc.features.length) return null;
+  return { type: "FeatureCollection" as const, features: kept };
+});
+
 const projection = computed(() => {
   const outline = stateOutlineFeature.value;
   if (stateFips.value && outline) {
@@ -1376,13 +1412,27 @@ const projection = computed(() => {
     if (Number.isFinite(c[0]) && Number.isFinite(c[1])) return albers;
     return geoMercator().fitExtent(extent, outline);
   }
-  return geoAlbersUsa().fitExtent(
-    [
-      [0, 0],
-      [width.value, height.value],
-    ],
-    featuresGeo.value,
-  );
+  const extent: [[number, number], [number, number]] = [
+    [0, 0],
+    [width.value, height.value],
+  ];
+  const full = geoAlbersUsa().fitExtent(extent, featuresGeo.value);
+  const conus = conusFeaturesGeo.value;
+  if (!conus) return full;
+  // Tighten the fit by interpolating the projection's scale + translate from
+  // the full fit toward the contiguous-US fit. At amount 1 CONUS fills the
+  // frame and Alaska's western tail (and Hawaii) clip into the lower-left
+  // corner, cropped by the SVG/canvas viewport. Everything downstream (paths,
+  // picking, tooltip anchors, focus zoom) derives from this projection, so
+  // both renderers stay consistent.
+  const tight = geoAlbersUsa().fitExtent(extent, conus);
+  const t = tightFitAmount.value;
+  const lerp = (a: number, b: number) => a + (b - a) * t;
+  const [fx, fy] = full.translate();
+  const [tx, ty] = tight.translate();
+  return geoAlbersUsa()
+    .scale(lerp(full.scale(), tight.scale()))
+    .translate([lerp(fx, tx), lerp(fy, ty)]);
 });
 
 const pathGenerator = computed(() => geoPath(projection.value));
