@@ -1442,6 +1442,91 @@ describe("ChoroplethMap", () => {
     wrapper.unmount();
   });
 
+  it("re-runs flip/clamp on mousemove, not just on the initial hover", async () => {
+    // Regression: moveTooltip used to hardcode the right side (clientX + 16)
+    // and skip flip/clamp, so a hover near the right edge flipped left on
+    // mouseover then snapped back to the right (overflowing) on the very
+    // next mousemove — reading as the tooltip "switching sides" on dense
+    // maps and ignoring the window edge.
+    const observers: {
+      cb: ResizeObserverCallback;
+      targets: Element[];
+    }[] = [];
+    class FakeRO {
+      cb: ResizeObserverCallback;
+      targets: Element[] = [];
+      constructor(cb: ResizeObserverCallback) {
+        this.cb = cb;
+        observers.push(this);
+      }
+      observe(t: Element) {
+        this.targets.push(t);
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", FakeRO);
+    vi.stubGlobal("innerWidth", 1000);
+    vi.stubGlobal("innerHeight", 800);
+    try {
+      const wrapper = mount(ChoroplethMap, {
+        attachTo: document.body,
+        props: {
+          topology: statesTopo,
+          width: 600,
+          height: 400,
+          tooltipTrigger: "hover",
+          tooltipClamp: "window",
+          data: [{ id: "06", value: 42 }],
+        },
+      });
+      await flushPromises();
+      const tip = document.body.querySelector<HTMLElement>(
+        ".chart-tooltip-content",
+      )!;
+      // Prime the cached tooltip size with a wide box so a hover near the
+      // right window edge flips left.
+      const tipRO = observers.find((o) => o.targets.includes(tip))!;
+      const tipW = 300;
+      tipRO.cb(
+        [{ contentRect: { width: tipW, height: 40 } } as ResizeObserverEntry],
+        tipRO as unknown as ResizeObserver,
+      );
+      const parseX = () =>
+        Number(
+          /translate3d\((-?[\d.]+)px/.exec(tip.style.transform)?.[1] ?? "NaN",
+        );
+
+      const california = wrapper
+        .findAll(".state-path")
+        .find((p) => p.attributes("data-feat-id") === "06")!;
+      // Hover near the right edge → flips left (x well left of the pointer).
+      await california.trigger("mouseover", { clientX: 950, clientY: 200 });
+      const afterHover = parseX();
+      expect(afterHover).toBeLessThan(950);
+      expect(afterHover + tipW).toBeLessThanOrEqual(1000);
+
+      // A mousemove near the same edge must STAY flipped, not snap to 950+16.
+      california.element.dispatchEvent(
+        new MouseEvent("mousemove", {
+          bubbles: true,
+          clientX: 948,
+          clientY: 205,
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 50));
+      const afterMove = parseX();
+      expect(afterMove).toBeLessThan(948);
+      expect(afterMove + tipW).toBeLessThanOrEqual(1000);
+      // Pre-fix this would have been 948 + 16 = 964 (overflowing the edge).
+      expect(afterMove).not.toBeCloseTo(964);
+
+      wrapper.unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("keeps the tooltip through a plain click once drag-pan is live", async () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,

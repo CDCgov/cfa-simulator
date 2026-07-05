@@ -39,7 +39,13 @@ export function placeTooltip(
         };
 
   const flip = clientX + GAP + tipW > bounds.right - PAD;
-  const left = flip ? clientX - GAP - tipW : clientX + GAP;
+  const rawLeft = flip ? clientX - GAP - tipW : clientX + GAP;
+  // Clamp horizontally too: a left-flip near a narrow boundary's left edge
+  // (or a right placement in a chart narrower than the tooltip) must not
+  // overflow the far side. The upper bound is floored to the lower one so a
+  // tooltip wider than the bounds still pins to the left edge.
+  const maxLeft = Math.max(bounds.left + PAD, bounds.right - PAD - tipW);
+  const left = Math.min(Math.max(rawLeft, bounds.left + PAD), maxLeft);
   const halfH = tipH / 2;
   const top = Math.min(
     Math.max(centerY, bounds.top + PAD + halfH),

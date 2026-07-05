@@ -1623,7 +1623,8 @@ function titleText(name: string, value: number | string | undefined): string {
 //      using lastTooltipSize (possibly stale by one frame) → visibility:visible
 //   2. tooltipObserver fires when the slot DOM has actually committed → we
 //      refresh lastTooltipSize and re-apply the position if still visible.
-//   3. mousemove  → rAF-throttled direct DOM write of transform; no reactivity.
+//   3. mousemove  → rAF-throttled; re-runs the same flip/clamp placement as
+//      the initial hover (direct DOM write of transform, no reactivity).
 //   4. mouseout (leaving the map) → visibility:hidden.
 //
 // There is no `await` and no token: out-of-order completion is impossible
@@ -1723,11 +1724,14 @@ function moveTooltip(clientX: number, clientY: number) {
   if (pendingMoveFrame) return;
   pendingMoveFrame = requestAnimationFrame(() => {
     pendingMoveFrame = 0;
-    const el = tooltipChildRef.value?.getEl();
-    if (!el || !tooltipVisible) return;
+    if (!tooltipVisible) return;
     lastPointer = { x: pendingMoveX, y: pendingMoveY };
-    // Mid-hover: don't re-run flip/clamp on every pixel; just translate.
-    el.style.transform = `translate3d(${pendingMoveX + 16}px, ${pendingMoveY}px, 0) translateY(-50%)`;
+    // Re-run the same flip/clamp as the initial hover. This is already
+    // rAF-coalesced (at most once per frame), so the flip/clamp cost is
+    // negligible. Hardcoding the right side here instead made the tooltip
+    // ignore the boundary while moving and fight showTooltip's per-feature
+    // flip on dense maps (the tooltip appeared to switch sides).
+    applyTooltipPosition(pendingMoveX, pendingMoveY);
   });
 }
 
@@ -2244,8 +2248,10 @@ function onTouchEnd(event: TouchEvent) {
     !fullscreen.isFullscreen.value
   ) {
     // Suppress the synthetic click/hover the browser would replay from
-    // this tap (and iOS's hover-first tap).
-    event.preventDefault();
+    // this tap (and iOS's hover-first tap). Guard on cancelable: a
+    // touchend fired while the page is mid-scroll is non-cancelable, and
+    // preventDefault there is a no-op that only logs a console intervention.
+    if (event.cancelable) event.preventDefault();
     const prev = lastTap;
     lastTap = { x: t.clientX, y: t.clientY, time: event.timeStamp };
     const isDoubleTap =
@@ -2287,8 +2293,10 @@ function onTouchEnd(event: TouchEvent) {
   const data = tooltipDataById.get(start.featId);
   if (!data) return;
   // Suppress the synthetic click/hover the browser would replay from this
-  // tap, so selection fires exactly once and never via iOS's hover-first tap.
-  event.preventDefault();
+  // tap, so selection fires exactly once and never via iOS's hover-first
+  // tap. Guard on cancelable — a touchend fired mid page-scroll is
+  // non-cancelable, and preventDefault there only logs an intervention.
+  if (event.cancelable) event.preventDefault();
   touchHover(data, t.clientX, t.clientY);
   emitSelection(data);
 }
