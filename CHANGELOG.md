@@ -1,6 +1,21 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.7.5] - 2026-07-05
+
+### Bug Fixes
+
+- **charts:** Release the slow-renderer fallback after fast draws
+- **charts:** Resize the canvas backing store on devicePixelRatio changes
+
+### Features
+
+- **charts:** Canvas rendering mode for ChoroplethMap
+
+### Performance
+
+- **charts:** Direct canvas rendering with adaptive slow-device fallback
+
 ## [0.7.4] - 2026-07-04
 
 ### Bug Fixes
