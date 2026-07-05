@@ -147,9 +147,9 @@ const props = withDefaults(
      * overhang so the contiguous US fills more of the frame. `false`/`0`
      * (default) fits every region into view; `true`/`1` fits the lower-48 to
      * the frame and lets Alaska's western tail (and Hawaii) clip into the
-     * lower-left corner. A number in between (e.g. `0.5`) crops partway. No
-     * effect in single-state mode or on a national HSA map (HSA ids aren't
-     * FIPS, so AK/HI can't be split out).
+     * lower-left corner. A number in between (e.g. `0.5`) crops partway.
+     * Applies to national states, counties, and HSA maps; no effect in
+     * single-state mode.
      */
     tightFit?: boolean | number;
     colorScale?: ChoroplethColorScale | ThresholdStop[] | CategoricalStop[];
@@ -1376,19 +1376,39 @@ const tightFitAmount = computed(() => {
   return Math.max(0, Math.min(1, Number(v)));
 });
 
-// The national fit target with Alaska (FIPS 02) and Hawaii (15) removed, so
-// the projection can be re-fit to just the contiguous US. Null when the crop
-// is off, in single-state mode, on an HSA map (ids aren't FIPS), or when
-// nothing was removed — the projection then uses the plain full fit.
+// Predicate marking a feature id as Alaska (FIPS 02) or Hawaii (15), so the
+// projection can re-fit to just the contiguous US. States/counties key off
+// the FIPS prefix directly; HSA ids are HSA codes, so an HSA counts as AK/HI
+// when any of its member counties is — derived from the `fipsToHsa` table
+// (null until that lazy chunk loads, so the crop kicks in once it's ready).
+const isAkHiFeature = computed<((id: string) => boolean) | null>(() => {
+  if (props.geoType === "hsas") {
+    const mod = hsaModule.value;
+    if (!mod) return null;
+    const akHi = new Set<string>();
+    for (const fips in mod.fipsToHsa) {
+      const st = fips.slice(0, 2);
+      if (st === "02" || st === "15") akHi.add(mod.fipsToHsa[fips]);
+    }
+    return (id) => akHi.has(id);
+  }
+  const pad = props.geoType === "counties" ? 5 : 2;
+  return (id) => {
+    const st = id.padStart(pad, "0").slice(0, 2);
+    return st === "02" || st === "15";
+  };
+});
+
+// The national fit target with Alaska and Hawaii removed, so the projection
+// can be re-fit to just the contiguous US. Null when the crop is off, in
+// single-state mode, before the AK/HI predicate is ready, or when nothing was
+// removed — the projection then uses the plain full fit.
 const conusFeaturesGeo = computed(() => {
   if (tightFitAmount.value <= 0 || stateFips.value) return null;
-  if (props.geoType === "hsas") return null;
+  const isAkHi = isAkHiFeature.value;
+  if (!isAkHi) return null;
   const fc = featuresGeo.value;
-  const pad = props.geoType === "counties" ? 5 : 2;
-  const kept = fc.features.filter((f) => {
-    const st = String(f.id).padStart(pad, "0").slice(0, 2);
-    return st !== "02" && st !== "15";
-  });
+  const kept = fc.features.filter((f) => !isAkHi(String(f.id)));
   if (kept.length === fc.features.length) return null;
   return { type: "FeatureCollection" as const, features: kept };
 });

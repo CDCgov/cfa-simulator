@@ -374,7 +374,7 @@ before and after zooming in.
 
 The Albers USA projection places Alaska and Hawaii in the bottom-left corner, and by default the whole composite is fit into view — so Alaska's western tail pushes the contiguous US in from the edges. Set `tight-fit` to crop that overhang and let the lower-48 fill more of the frame: Alaska's tail (and Hawaii) clip into the lower-left corner. Pass a number in `0`–`1` (e.g. `:tight-fit="0.5"`) to crop only partway.
 
-Only affects the national (multi-state) view — it's a no-op in single-state mode and on national HSA maps (HSA ids aren't FIPS codes, so Alaska/Hawaii can't be split out).
+Works on national state, county, and HSA maps — it's a no-op only in single-state mode. (County features are split by FIPS prefix; HSAs, whose ids are HSA codes rather than FIPS, are identified through the built-in FIPS-to-HSA table.)
 
 <ComponentDemo>
   <ChoroplethMap

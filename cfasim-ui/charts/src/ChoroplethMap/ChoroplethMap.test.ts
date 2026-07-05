@@ -1364,6 +1364,16 @@ describe("ChoroplethMap", () => {
         .find((p) => p.attributes("data-feat-id") === "02")!;
       return minPathX(ak.attributes("d")!);
     };
+    // Smallest x across every rendered feature (works for any geoType, so it
+    // catches Alaska clipping without needing to know its feature id).
+    const globalMinX = (wrapper: ReturnType<typeof mount>): number => {
+      let min = Infinity;
+      for (const p of wrapper.findAll(".state-path")) {
+        const d = p.attributes("d");
+        if (d) min = Math.min(min, minPathX(d));
+      }
+      return min;
+    };
 
     it("tightFit crops Alaska's western overhang past the left edge", async () => {
       const base = mount(ChoroplethMap, {
@@ -1419,6 +1429,43 @@ describe("ChoroplethMap", () => {
       await flushPromises();
       // Single-state fit ignores tightFit: the state is fit to its own inset.
       expect(alaskaMinX(tight)).toBeCloseTo(baseX, 1);
+      tight.unmount();
+    });
+
+    it("tightFit crops Alaska on a national county map", async () => {
+      const base = mount(ChoroplethMap, {
+        props: { topology: countiesTopo, geoType: "counties" },
+      });
+      await flushPromises();
+      expect(globalMinX(base)).toBeGreaterThan(-1);
+      base.unmount();
+
+      const tight = mount(ChoroplethMap, {
+        props: { topology: countiesTopo, geoType: "counties", tightFit: true },
+      });
+      await flushPromises();
+      // Alaska counties clip off the left once CONUS fills the frame.
+      expect(globalMinX(tight)).toBeLessThan(-1);
+      tight.unmount();
+    });
+
+    it("tightFit crops Alaska on a national HSA map", async () => {
+      // HSA ids aren't FIPS, so AK/HI HSAs are identified via the (lazily
+      // loaded) fipsToHsa table — the crop kicks in once that chunk resolves.
+      const base = mount(ChoroplethMap, {
+        props: { topology: countiesTopo, geoType: "hsas" },
+      });
+      await flushDynamicImports();
+      await flushDynamicImports();
+      expect(globalMinX(base)).toBeGreaterThan(-1);
+      base.unmount();
+
+      const tight = mount(ChoroplethMap, {
+        props: { topology: countiesTopo, geoType: "hsas", tightFit: true },
+      });
+      await flushDynamicImports();
+      await flushDynamicImports();
+      expect(globalMinX(tight)).toBeLessThan(-1);
       tight.unmount();
     });
   });
