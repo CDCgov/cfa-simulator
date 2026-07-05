@@ -1,6 +1,16 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.7.6] - 2026-07-05
+
+### Bug Fixes
+
+- **charts:** Choropleth tooltip flip/clamp on move + guard non-cancelable touchend
+
+### Features
+
+- **charts:** TightFit prop for ChoroplethMap to crop Alaska overhang
+
 ## [0.7.5] - 2026-07-05
 
 ### Bug Fixes
