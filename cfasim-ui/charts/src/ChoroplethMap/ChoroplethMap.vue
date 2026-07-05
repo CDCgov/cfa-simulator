@@ -30,8 +30,10 @@ import {
   buildScene,
   buildPicking,
   drawScene,
+  drawHoverHighlight,
   pickIndexAt,
   type CanvasScene,
+  type CanvasDrawState,
   type CanvasOverlayItem,
   type CanvasHighlightItem,
 } from "./canvasLayer.js";
@@ -432,12 +434,6 @@ let canvasHoveredId: string | null = null;
 const canvasFocused = new Map<string, CanvasHighlightItem>();
 let canvasOverlays: CanvasOverlayItem[] = [];
 let redrawFrame = 0;
-let pendingFullRedraw = false;
-// Snapshot of the last crisp render + the view it was rendered at.
-// Gesture frames reproject it with a single drawImage — a full geometry
-// pass costs >100ms on county-scale maps in WebKit's canvas2D.
-let baseCanvas: HTMLCanvasElement | null = null;
-let baseView: CanvasViewState | null = null;
 // xMidYMid-meet letterbox offsets (CSS px) inside the svg/canvas box,
 // tracked by the resize observer alongside viewScale.
 let meetOffsetX = 0;
@@ -670,8 +666,8 @@ function setupZoom() {
       // map actually moves under the cursor.
       clearHover();
       if (isCanvas.value) {
-        // Gesture frames blit the snapshot; the "end" handler sharpens.
-        requestRedraw(false);
+        // Frames blit + progressively sharpen via the render pipeline.
+        requestRedraw();
       } else if (mapGroupRef.value) {
         mapGroupRef.value.setAttribute("transform", event.transform);
       }
@@ -683,8 +679,8 @@ function setupZoom() {
     })
     .on("end", () => {
       isZooming = false;
-      // Sharpen after gestures: the in-gesture blits scale the snapshot.
-      if (isCanvas.value) requestRedraw(true);
+      // Sharpen after gestures: an idle-view frame starts a base refresh.
+      if (isCanvas.value) requestRedraw();
     });
 
   // Dynamic filter deciding which pointer gestures d3-zoom may handle —
@@ -1811,83 +1807,121 @@ function currentCanvasView(): CanvasViewState {
   };
 }
 
-function drawNow(full: boolean) {
-  const canvas = canvasRef.value;
-  const svgEl = svgRef.value;
-  if (!canvas || !svgEl || !scene) return;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  const view = currentCanvasView();
-
-  if (
-    !full &&
-    baseCanvas &&
-    baseView &&
-    baseCanvas.width === canvas.width &&
-    baseCanvas.height === canvas.height &&
-    typeof ctx.drawImage === "function"
-  ) {
-    // Gesture frame: reproject the snapshot. Blurry while zooming in past
-    // the snapshot's scale; the gesture-end full redraw sharpens it.
-    const sBase = baseView.dpr * baseView.meetScale * baseView.zoom.k;
-    const sCur = view.dpr * view.meetScale * view.zoom.k;
-    const r = sCur / sBase;
-    const off = (v: CanvasViewState, axis: "x" | "y") =>
-      v.dpr *
-      ((axis === "x" ? v.offsetX : v.offsetY) +
-        v.meetScale * (axis === "x" ? v.zoom.x : v.zoom.y));
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.setTransform(
-      r,
-      0,
-      0,
-      r,
-      off(view, "x") - r * off(baseView, "x"),
-      off(view, "y") - r * off(baseView, "y"),
-    );
-    ctx.drawImage(baseCanvas, 0, 0);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    return;
-  }
-
-  drawScene(ctx, scene, view, {
+function canvasDrawState(): CanvasDrawState {
+  return {
     strokeColor: props.strokeColor,
     strokeWidth: effectiveStrokeWidth.value,
     highlightStroke: canvasHighlightColor(),
     hoveredId: canvasHoveredId,
     focused: canvasFocused,
     overlays: canvasOverlays,
-  });
+  };
+}
 
-  // Snapshot for gesture blits.
-  if (typeof document === "undefined") return;
-  if (!baseCanvas) baseCanvas = document.createElement("canvas");
-  if (baseCanvas.width !== canvas.width) baseCanvas.width = canvas.width;
-  if (baseCanvas.height !== canvas.height) baseCanvas.height = canvas.height;
-  const bctx = baseCanvas.getContext("2d");
-  if (bctx && typeof bctx.drawImage === "function") {
-    bctx.setTransform(1, 0, 0, 1, 0, 0);
-    bctx.clearRect(0, 0, baseCanvas.width, baseCanvas.height);
-    bctx.drawImage(canvas, 0, 0);
-    baseView = view;
+// Direct rendering with an adaptive buffered fallback. With the canvas on
+// its own compositor layer and feature outlines stroked as one path, a
+// full county-scale pass rasters in single-digit milliseconds, so every
+// frame renders the whole scene crisply. If a device proves slower (two
+// consecutive full draws over SLOW_FRAME_MS), gesture frames fall back to
+// blitting the last crisp render, refreshed at least every
+// GESTURE_REFRESH_MS, and always sharpened at rest.
+const SLOW_FRAME_MS = 24;
+const GESTURE_REFRESH_MS = 350;
+let slowDrawStreak = 0;
+let rendererIsSlow = false;
+let snapshotCanvas: HTMLCanvasElement | null = null;
+let snapshotView: CanvasViewState | null = null;
+let lastFullDrawAt = 0;
+
+function blitSnapshot(
+  ctx: CanvasRenderingContext2D,
+  view: CanvasViewState,
+  img: HTMLCanvasElement,
+  imgView: CanvasViewState,
+) {
+  const off = (v: CanvasViewState, axis: "x" | "y") =>
+    v.dpr *
+    ((axis === "x" ? v.offsetX : v.offsetY) +
+      v.meetScale * (axis === "x" ? v.zoom.x : v.zoom.y));
+  const r =
+    (view.dpr * view.meetScale * view.zoom.k) /
+    (imgView.dpr * imgView.meetScale * imgView.zoom.k);
+  ctx.setTransform(
+    r,
+    0,
+    0,
+    r,
+    off(view, "x") - r * off(imgView, "x"),
+    off(view, "y") - r * off(imgView, "y"),
+  );
+  ctx.drawImage(img, 0, 0);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+function drawNow() {
+  const display = canvasRef.value;
+  if (!display) return;
+  const ctx = display.getContext("2d");
+  if (!ctx) return;
+  const now = () =>
+    typeof performance !== "undefined" ? performance.now() : 0;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, display.width, display.height);
+  if (!scene) return;
+  const view = currentCanvasView();
+
+  // Slow-device fallback: blit between throttled crisp refreshes while a
+  // gesture is live.
+  if (
+    rendererIsSlow &&
+    isZooming &&
+    snapshotCanvas &&
+    snapshotView &&
+    typeof ctx.drawImage === "function" &&
+    now() - lastFullDrawAt < GESTURE_REFRESH_MS
+  ) {
+    blitSnapshot(ctx, view, snapshotCanvas, snapshotView);
+    if (canvasHoveredId) {
+      drawHoverHighlight(ctx, scene, view, canvasDrawState(), canvasHoveredId);
+    }
+    return;
+  }
+
+  const t0 = now();
+  drawScene(ctx, scene, view, canvasDrawState());
+  const dt = now() - t0;
+  lastFullDrawAt = t0 + dt;
+  if (dt > SLOW_FRAME_MS) {
+    if (++slowDrawStreak >= 2) rendererIsSlow = true;
   } else {
-    baseView = null;
+    slowDrawStreak = 0;
+  }
+  if (!rendererIsSlow || typeof document === "undefined") return;
+  // Keep a snapshot current for the fallback's gesture blits.
+  if (!snapshotCanvas) snapshotCanvas = document.createElement("canvas");
+  if (snapshotCanvas.width !== display.width) {
+    snapshotCanvas.width = display.width;
+  }
+  if (snapshotCanvas.height !== display.height) {
+    snapshotCanvas.height = display.height;
+  }
+  const sctx = snapshotCanvas.getContext("2d");
+  if (sctx && typeof sctx.drawImage === "function") {
+    sctx.setTransform(1, 0, 0, 1, 0, 0);
+    sctx.clearRect(0, 0, snapshotCanvas.width, snapshotCanvas.height);
+    sctx.drawImage(display, 0, 0);
+    snapshotView = view;
+  } else {
+    snapshotView = null;
   }
 }
 
-// rAF-coalesced: gesture zooms can emit several events per frame. A
-// `full` request re-renders the geometry (and refreshes the snapshot);
-// gesture frames pass `false` to blit the snapshot instead.
-function requestRedraw(full = true) {
-  if (!isCanvas.value) return;
-  pendingFullRedraw = pendingFullRedraw || full;
-  if (redrawFrame) return;
+// rAF-coalesced: gesture zooms can emit several events per frame.
+function requestRedraw() {
+  if (!isCanvas.value || redrawFrame) return;
   redrawFrame = requestAnimationFrame(() => {
     redrawFrame = 0;
-    const f = pendingFullRedraw;
-    pendingFullRedraw = false;
-    drawNow(f);
+    drawNow();
   });
 }
 
@@ -2000,10 +2034,9 @@ function clearHover() {
   if (isCanvas.value) {
     if (canvasHoveredId != null) {
       canvasHoveredId = null;
-      // Mid-gesture the stale highlight rides along in the snapshot blit
-      // and the gesture-end full redraw drops it — a full pass per
-      // gesture frame is exactly what the blit path exists to avoid.
-      requestRedraw(!isZooming);
+      // The hover highlight lives on the display layer, so dropping it
+      // is just another cheap composite frame.
+      requestRedraw();
       emit("stateHover", null);
     }
     hideTooltip();
@@ -2295,6 +2328,7 @@ function rebuildPaths() {
   if (features.length === 0) {
     scene = null;
     pickingCtx = null;
+    snapshotView = null;
     requestRedraw();
     return;
   }
@@ -2402,7 +2436,7 @@ function updateFills() {
 
 function updateStrokes() {
   if (isCanvas.value) {
-    // Stroke params are read at draw time.
+    // Stroke params are read at render time — refresh both buffers.
     requestRedraw();
     return;
   }

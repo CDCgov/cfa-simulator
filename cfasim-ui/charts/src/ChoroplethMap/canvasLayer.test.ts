@@ -140,14 +140,14 @@ describe("drawScene", () => {
       "fill:M2:#f2",
       "stroke:M0M1M2:#fff@0.25",
     ]);
-    // Overlay before highlights, highlights at the very end, focused item
-    // with custom stroke/width (3 CSS px → 1.5 map units) and hovered item
-    // with the default highlight color (0.5+1 → 0.75).
+    // Focused highlight (custom stroke, 3 CSS px → 1.5 map units) sits
+    // under the overlay (SVG z-order: overlays above focus-raised paths);
+    // the live hover (default color, 0.5+1 → 0.75) draws last of all.
+    const focusIdx = order.indexOf("stroke:M2:red@1.5");
     const ovIdx = order.indexOf("stroke:Mov:#666@1");
-    expect(ovIdx).toBeGreaterThan(-1);
+    expect(focusIdx).toBeGreaterThan(-1);
+    expect(ovIdx).toBeGreaterThan(focusIdx);
     expect(order.at(-1)).toBe("stroke:M1:#000@0.75");
-    expect(order.at(-3)).toBe("stroke:M2:red@1.5");
-    expect(order.indexOf("stroke:M2:red@1.5")).toBeGreaterThan(ovIdx);
   });
 });
 

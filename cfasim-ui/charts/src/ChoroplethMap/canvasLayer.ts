@@ -49,15 +49,55 @@ export interface CanvasHighlightItem {
   style?: CanvasDashStyle;
 }
 
-export interface CanvasDrawState {
+export interface CanvasBaseState {
   strokeColor: string;
   /** Base feature stroke width in CSS px (effectiveStrokeWidth). */
   strokeWidth: number;
   /** Resolved highlight color (light-dark() can't paint on canvas). */
   highlightStroke: string;
-  hoveredId: string | null;
   focused: Map<string, CanvasHighlightItem>;
   overlays: CanvasOverlayItem[];
+}
+
+export interface CanvasDrawState extends CanvasBaseState {
+  hoveredId: string | null;
+}
+
+function applyViewTransform(
+  ctx: CanvasRenderingContext2D,
+  view: CanvasView,
+): void {
+  const s = view.dpr * view.meetScale * view.zoom.k;
+  ctx.setTransform(
+    s,
+    0,
+    0,
+    s,
+    view.dpr * (view.offsetX + view.meetScale * view.zoom.x),
+    view.dpr * (view.offsetY + view.meetScale * view.zoom.y),
+  );
+}
+
+/** Line width (map units) rendering as `css` CSS px on screen. */
+function lwFor(view: CanvasView): (css: number) => number {
+  return (css) => css / (view.meetScale * view.zoom.k || 1);
+}
+
+function applyLineDash(
+  ctx: CanvasRenderingContext2D,
+  lw: (css: number) => number,
+  style: CanvasDashStyle | undefined,
+): void {
+  if (style === "dashed") {
+    ctx.setLineDash([lw(8), lw(4)]);
+    ctx.lineCap = "butt";
+  } else if (style === "dotted") {
+    ctx.setLineDash([0, lw(5)]);
+    ctx.lineCap = "round";
+  } else {
+    ctx.setLineDash([]);
+    ctx.lineCap = "butt";
+  }
 }
 
 export function buildScene(
@@ -90,53 +130,70 @@ export function buildScene(
   };
 }
 
+function highlightOne(
+  ctx: CanvasRenderingContext2D,
+  scene: CanvasScene,
+  lw: (css: number) => number,
+  state: CanvasBaseState,
+  id: string,
+  item?: CanvasHighlightItem,
+): void {
+  const idx = scene.indexById.get(id);
+  if (idx == null) return;
+  const it = scene.items[idx];
+  // Re-filling first covers neighbors' strokes — the canvas equivalent of
+  // the SVG renderer's appendChild raise.
+  ctx.fillStyle = it.fill;
+  ctx.fill(it.path);
+  ctx.strokeStyle = item?.stroke ?? state.highlightStroke;
+  ctx.lineWidth = lw(item?.strokeWidth ?? state.strokeWidth + 1);
+  applyLineDash(ctx, lw, item?.style);
+  ctx.stroke(it.path);
+}
+
 /**
- * Full repaint. The transform maps canonical viewBox coordinates to device
- * pixels: `device = dpr · (letterboxOffset + meetScale · zoom(point))`.
- * Stroke widths are compensated so a visual width `w` CSS px stays
- * constant at any zoom, mirroring the SVG renderer's `strokeDivisor`.
+ * Base pass internals composed by drawScene. The transform maps canonical
+ * viewBox coordinates to device pixels:
+ * `device = dpr · (letterboxOffset + meetScale · zoom(point))`. Stroke
+ * widths are compensated so a visual width `w` CSS px stays constant at
+ * any zoom, mirroring the SVG renderer's `strokeDivisor`.
  */
-export function drawScene(
+function beginBasePass(ctx: CanvasRenderingContext2D, view: CanvasView): void {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  applyViewTransform(ctx, view);
+  ctx.lineJoin = "round";
+  ctx.setLineDash([]);
+}
+
+/** Fills items [from, to); returns the next index. The ctx keeps the
+ * transform beginBasePass applied, so slices can span multiple frames. */
+function drawFillSlice(
+  ctx: CanvasRenderingContext2D,
+  scene: CanvasScene,
+  from: number,
+  to: number,
+): number {
+  const end = Math.min(to, scene.items.length);
+  for (let i = from; i < end; i++) {
+    ctx.fillStyle = scene.items[i].fill;
+    ctx.fill(scene.items[i].path);
+  }
+  return end;
+}
+
+/** Outlines, borders, focus highlights, and overlays — everything but the
+ * transient hover, which the display frame draws live on top of blits. */
+function finishBasePass(
   ctx: CanvasRenderingContext2D,
   scene: CanvasScene,
   view: CanvasView,
-  state: CanvasDrawState,
+  state: CanvasBaseState,
 ): void {
-  const { dpr, meetScale, offsetX, offsetY, zoom } = view;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-  const s = dpr * meetScale * zoom.k;
-  ctx.setTransform(
-    s,
-    0,
-    0,
-    s,
-    dpr * (offsetX + meetScale * zoom.x),
-    dpr * (offsetY + meetScale * zoom.y),
-  );
-  /** Line width (map units) rendering as `css` CSS px on screen. */
-  const lw = (css: number) => css / (meetScale * zoom.k || 1);
-  const dash = (style: CanvasDashStyle | undefined) => {
-    if (style === "dashed") {
-      ctx.setLineDash([lw(8), lw(4)]);
-      ctx.lineCap = "butt";
-    } else if (style === "dotted") {
-      ctx.setLineDash([0, lw(5)]);
-      ctx.lineCap = "round";
-    } else {
-      ctx.setLineDash([]);
-      ctx.lineCap = "butt";
-    }
-  };
-
-  ctx.lineJoin = "round";
+  const lw = lwFor(view);
   ctx.setLineDash([]);
   ctx.lineWidth = lw(state.strokeWidth);
   ctx.strokeStyle = state.strokeColor;
-  for (const item of scene.items) {
-    ctx.fillStyle = item.fill;
-    ctx.fill(item.path);
-  }
   if (scene.outlines) {
     ctx.stroke(scene.outlines);
   } else {
@@ -148,32 +205,48 @@ export function drawScene(
     ctx.stroke(scene.borders);
   }
 
+  for (const [id, item] of state.focused) {
+    highlightOne(ctx, scene, lw, state, id, item);
+  }
+
+  // Overlays above the focus highlights, matching the SVG z-order.
   for (const o of state.overlays) {
     ctx.strokeStyle = o.stroke;
     ctx.lineWidth = lw(o.strokeWidth ?? state.strokeWidth + 1.5);
-    dash(o.style);
+    applyLineDash(ctx, lw, o.style);
     ctx.stroke(o.path);
   }
-
-  // Highlights last so their thicker outline isn't painted over —
-  // the canvas equivalent of the SVG renderer's appendChild raise.
-  // Re-filling first covers neighbors' strokes like the raise did.
-  const highlight = (id: string, item?: CanvasHighlightItem) => {
-    const idx = scene.indexById.get(id);
-    if (idx == null) return;
-    const it = scene.items[idx];
-    ctx.fillStyle = it.fill;
-    ctx.fill(it.path);
-    ctx.strokeStyle = item?.stroke ?? state.highlightStroke;
-    ctx.lineWidth = lw(item?.strokeWidth ?? state.strokeWidth + 1);
-    dash(item?.style);
-    ctx.stroke(it.path);
-  };
-  for (const [id, item] of state.focused) highlight(id, item);
-  if (state.hoveredId && !state.focused.has(state.hoveredId)) {
-    highlight(state.hoveredId);
-  }
   ctx.setLineDash([]);
+}
+
+/** Live hover highlight, drawn by the display frame on top of the blitted
+ * base (focused features are already highlighted in the base itself). */
+export function drawHoverHighlight(
+  ctx: CanvasRenderingContext2D,
+  scene: CanvasScene,
+  view: CanvasView,
+  state: CanvasBaseState,
+  hoveredId: string | null,
+): void {
+  if (!hoveredId || state.focused.has(hoveredId)) return;
+  applyViewTransform(ctx, view);
+  ctx.lineJoin = "round";
+  highlightOne(ctx, scene, lwFor(view), state, hoveredId);
+  ctx.setLineDash([]);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+/** One-shot full repaint (composition of the passes above). */
+export function drawScene(
+  ctx: CanvasRenderingContext2D,
+  scene: CanvasScene,
+  view: CanvasView,
+  state: CanvasDrawState,
+): void {
+  beginBasePass(ctx, view);
+  drawFillSlice(ctx, scene, 0, scene.items.length);
+  finishBasePass(ctx, scene, view, state);
+  drawHoverHighlight(ctx, scene, view, state, state.hoveredId);
 }
 
 /** Unique fill color for feature index `i` on the picking canvas. */

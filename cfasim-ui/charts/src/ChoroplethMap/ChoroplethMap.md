@@ -607,6 +607,7 @@ on top with a `FocusItem`.
     geo-type="counties"
     data-geo-type="hsas"
     zoom
+    renderer="canvas"
     :touch-expand="false"
     :data="[
       { id: '060737', value: 80 },
@@ -634,6 +635,7 @@ on top with a `FocusItem`.
   geo-type="counties"
   data-geo-type="hsas"
   zoom
+  renderer="canvas"
   :touch-expand="false"
   :data="hsaData"
   :focus="[{ id: '06043' }, { id: '060737', geoType: 'hsas', style: 'dashed' }]"
