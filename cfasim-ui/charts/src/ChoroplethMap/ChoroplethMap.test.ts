@@ -2159,6 +2159,50 @@ describe("ChoroplethMap canvas renderer", () => {
     wrapper.unmount();
   });
 
+  it("resizes the backing store when devicePixelRatio changes", async () => {
+    const listeners: Array<() => void> = [];
+    const queries: string[] = [];
+    vi.spyOn(window, "matchMedia").mockImplementation((q: string) => {
+      queries.push(q);
+      return {
+        matches: true,
+        media: q,
+        addEventListener: (_type: string, cb: () => void) => listeners.push(cb),
+        removeEventListener: vi.fn(),
+      } as unknown as MediaQueryList;
+    });
+    Object.defineProperty(window, "devicePixelRatio", {
+      value: 1,
+      configurable: true,
+    });
+    try {
+      const wrapper = mountCanvas();
+      await flushPromises();
+      expect(queries.at(-1)).toContain("1dppx");
+      // happy-dom rects are zero — give the svg a concrete box.
+      const svgEl = mapSurface(wrapper).element as SVGSVGElement;
+      svgEl.getBoundingClientRect = () =>
+        ({ width: 500, height: 312, top: 0, left: 0 }) as DOMRect;
+      Object.defineProperty(window, "devicePixelRatio", {
+        value: 2,
+        configurable: true,
+      });
+      listeners.at(-1)!();
+      const canvas = wrapper.find("canvas.choropleth-canvas")
+        .element as HTMLCanvasElement;
+      expect(canvas.width).toBe(1000);
+      expect(canvas.height).toBe(624);
+      // Re-armed against the new DPR.
+      expect(queries.at(-1)).toContain("2dppx");
+      wrapper.unmount();
+    } finally {
+      Object.defineProperty(window, "devicePixelRatio", {
+        value: 1,
+        configurable: true,
+      });
+    }
+  });
+
   it("menu offers Fullscreen and Save as PNG only", () => {
     const wrapper = mountCanvas();
     const labels = wrapper

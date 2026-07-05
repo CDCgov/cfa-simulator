@@ -624,6 +624,7 @@ onMounted(() => {
     });
     svgResizeObserver.observe(svgRef.value);
   }
+  if (isCanvas.value) armDprListener();
   window.addEventListener("scroll", dismissOnViewportChange, {
     passive: true,
     capture: true,
@@ -634,6 +635,7 @@ onMounted(() => {
 onUnmounted(() => {
   tooltipObserver?.disconnect();
   svgResizeObserver?.disconnect();
+  dprQuery?.removeEventListener("change", onDprChange);
   if (pendingMoveFrame) cancelAnimationFrame(pendingMoveFrame);
   if (redrawFrame) cancelAnimationFrame(redrawFrame);
   window.clearTimeout(pendingSelectTimer);
@@ -1830,6 +1832,41 @@ const GESTURE_REFRESH_MS = 350;
 let slowDrawStreak = 0;
 let fastDrawStreak = 0;
 let rendererIsSlow = false;
+// Canvas backing stores are sized in device pixels, and ResizeObserver
+// doesn't fire when the window moves to a display with a different
+// devicePixelRatio. Watch a resolution media query instead — it matches
+// only the current DPR, so each change re-arms a fresh query (the
+// standard trick), resizes the backing store, and redraws.
+let dprQuery: MediaQueryList | null = null;
+
+function armDprListener() {
+  if (
+    typeof window === "undefined" ||
+    typeof window.matchMedia !== "function"
+  ) {
+    return;
+  }
+  dprQuery?.removeEventListener("change", onDprChange);
+  dprQuery = window.matchMedia(
+    `(resolution: ${window.devicePixelRatio || 1}dppx)`,
+  );
+  dprQuery.addEventListener("change", onDprChange);
+}
+
+function onDprChange() {
+  armDprListener();
+  const canvas = canvasRef.value;
+  const svgEl = svgRef.value;
+  if (!isCanvas.value || !canvas || !svgEl) return;
+  const rect = svgEl.getBoundingClientRect();
+  if (rect.width) {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.round(rect.width * dpr));
+    canvas.height = Math.max(1, Math.round(rect.height * dpr));
+  }
+  requestRedraw();
+}
+
 let snapshotCanvas: HTMLCanvasElement | null = null;
 let snapshotView: CanvasViewState | null = null;
 let lastFullDrawAt = 0;
