@@ -1828,6 +1828,7 @@ function canvasDrawState(): CanvasDrawState {
 const SLOW_FRAME_MS = 24;
 const GESTURE_REFRESH_MS = 350;
 let slowDrawStreak = 0;
+let fastDrawStreak = 0;
 let rendererIsSlow = false;
 let snapshotCanvas: HTMLCanvasElement | null = null;
 let snapshotView: CanvasViewState | null = null;
@@ -1891,10 +1892,16 @@ function drawNow() {
   drawScene(ctx, scene, view, canvasDrawState());
   const dt = now() - t0;
   lastFullDrawAt = t0 + dt;
+  // Symmetric hysteresis: two consecutive slow full draws engage the
+  // fallback, two consecutive fast ones release it — so a cold-start
+  // hiccup (JIT warmup, first-paint contention) can't lock a fast device
+  // into blurry gesture blits forever.
   if (dt > SLOW_FRAME_MS) {
+    fastDrawStreak = 0;
     if (++slowDrawStreak >= 2) rendererIsSlow = true;
   } else {
     slowDrawStreak = 0;
+    if (++fastDrawStreak >= 2) rendererIsSlow = false;
   }
   if (!rendererIsSlow || typeof document === "undefined") return;
   // Keep a snapshot current for the fallback's gesture blits.
