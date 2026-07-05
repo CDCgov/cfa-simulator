@@ -104,6 +104,17 @@ export function savePng(svg: SVGSVGElement, filename: string) {
   img.src = url;
 }
 
+/**
+ * Downloads a rendering canvas's current contents as a PNG — no SVG
+ * round-trip. The canvas backing store is already sized at
+ * devicePixelRatio, so the export is naturally high-resolution.
+ */
+export function saveCanvasPng(canvas: HTMLCanvasElement, filename: string) {
+  canvas.toBlob((blob) => {
+    if (blob) downloadBlob(blob, `${filename}.png`);
+  }, "image/png");
+}
+
 export function downloadCsv(csv: string, filename: string) {
   downloadBlob(new Blob([csv], { type: "text/csv" }), `${filename}.csv`);
 }

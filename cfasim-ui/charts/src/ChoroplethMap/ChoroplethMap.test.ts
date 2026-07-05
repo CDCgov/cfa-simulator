@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { isTouchDevice } from "../_shared/touch.js";
 
@@ -2024,6 +2024,165 @@ describe("ChoroplethMap touch zoom", () => {
     const root = document.querySelector(".choropleth-wrapper");
     expect(root?.classList.contains("is-fullscreen")).toBe(false);
     expect(wrapper.emitted("stateClick")).toHaveLength(1);
+    wrapper.unmount();
+  });
+});
+
+describe("ChoroplethMap canvas renderer", () => {
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  let drawCtx: any;
+  let pickCtx: any;
+  let pickColor: number[];
+
+  beforeEach(() => {
+    pickColor = [0, 0, 0, 0];
+    vi.stubGlobal(
+      "Path2D",
+      class {
+        d?: string;
+        constructor(d?: string) {
+          this.d = d;
+        }
+      },
+    );
+    drawCtx = {
+      canvas: { width: 0, height: 0 },
+      lineWidth: 0,
+      lineJoin: "",
+      lineCap: "",
+      fillStyle: "",
+      strokeStyle: "",
+      setTransform: vi.fn(),
+      clearRect: vi.fn(),
+      fill: vi.fn(),
+      stroke: vi.fn(),
+      setLineDash: vi.fn(),
+    };
+    pickCtx = {
+      canvas: { width: 0, height: 0 },
+      imageSmoothingEnabled: true,
+      fillStyle: "",
+      setTransform: vi.fn(),
+      clearRect: vi.fn(),
+      fill: vi.fn(),
+      getImageData: vi.fn(() => ({ data: pickColor })),
+      isPointInPath: vi.fn(() => true),
+    };
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+      function (this: HTMLCanvasElement, _type: string, opts?: unknown) {
+        const ctx = (opts as { willReadFrequently?: boolean })
+          ?.willReadFrequently
+          ? pickCtx
+          : drawCtx;
+        ctx.canvas = this;
+        return ctx;
+      } as never,
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const mountCanvas = (extra: Record<string, unknown> = {}) =>
+    mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        renderer: "canvas" as const,
+        ...extra,
+      },
+    });
+
+  // The interaction surface is the wrapper's direct-child svg (menu and
+  // control icons are svgs too, nested deeper).
+  const mapSurface = (wrapper: ReturnType<typeof mountCanvas>) =>
+    wrapper.find(".choropleth-wrapper > svg");
+
+  it("renders a canvas and no per-feature DOM, and draws the scene", async () => {
+    const wrapper = mountCanvas();
+    expect(wrapper.find("canvas.choropleth-canvas").exists()).toBe(true);
+    expect(wrapper.findAll(".state-path").length).toBe(0);
+    await new Promise((r) => setTimeout(r, 50));
+    // One fill per feature (56 state geometries) on the first frame.
+    expect(drawCtx.fill.mock.calls.length).toBeGreaterThanOrEqual(50);
+    wrapper.unmount();
+  });
+
+  it("clicks resolve through the picking canvas", async () => {
+    const wrapper = mountCanvas({ zoom: false });
+    await flushPromises();
+    pickColor = [0, 0, 1, 255]; // feature index 0
+    mapSurface(wrapper).element.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, clientX: 100, clientY: 100 }),
+    );
+    const click = wrapper.emitted("stateClick");
+    expect(click).toHaveLength(1);
+    expect((click![0][0] as { id: string }).id).toBeTruthy();
+    wrapper.unmount();
+  });
+
+  it("hover picks per mousemove: highlight redraw + tooltip + stateHover", async () => {
+    const wrapper = mountCanvas({
+      zoom: false,
+      tooltipTrigger: "hover",
+      data: [{ id: "06", value: 42 }],
+    });
+    await new Promise((r) => setTimeout(r, 50));
+    const fillsBefore = drawCtx.fill.mock.calls.length;
+    pickColor = [0, 0, 1, 255];
+    mapSurface(wrapper).element.dispatchEvent(
+      new MouseEvent("mousemove", {
+        bubbles: true,
+        clientX: 100,
+        clientY: 100,
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    expect(wrapper.emitted("stateHover")).toHaveLength(1);
+    // Highlight triggered a repaint.
+    expect(drawCtx.fill.mock.calls.length).toBeGreaterThan(fillsBefore);
+    const tip = document.body.querySelector<HTMLElement>(
+      ".chart-tooltip-content",
+    )!;
+    expect(tip.style.visibility).toBe("visible");
+    // Leaving the surface clears hover + tooltip.
+    mapSurface(wrapper).element.dispatchEvent(
+      new MouseEvent("mouseleave", { bubbles: false }),
+    );
+    await flushPromises();
+    expect(tip.style.visibility).toBe("hidden");
+    expect(wrapper.emitted("stateHover")?.at(-1)?.[0]).toBeNull();
+    wrapper.unmount();
+  });
+
+  it("menu offers Fullscreen and Save as PNG only", () => {
+    const wrapper = mountCanvas();
+    const labels = wrapper
+      .findComponent(ChartMenu)
+      .props("items")
+      .map((i) => i.label);
+    expect(labels).toEqual(["Fullscreen", "Save as PNG"]);
+    wrapper.unmount();
+  });
+
+  it("focus highlights and zooms without any path DOM", async () => {
+    const wrapper = mountCanvas({ zoom: true });
+    await flushPromises();
+    const fillsBefore = drawCtx.fill.mock.calls.length;
+    await wrapper.setProps({ focus: "06" });
+    await flushPromises();
+    await new Promise((r) => setTimeout(r, 550));
+    // The zoom transform applied (controls report a zoomed state)...
+    expect(
+      wrapper.find('[aria-label="Reset view"]').attributes("disabled"),
+    ).toBeUndefined();
+    // ...and the focus repaint happened on canvas, not via DOM paths.
+    expect(drawCtx.fill.mock.calls.length).toBeGreaterThan(fillsBefore);
+    expect(wrapper.findAll(".state-path").length).toBe(0);
     wrapper.unmount();
   });
 });

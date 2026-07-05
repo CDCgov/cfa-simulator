@@ -25,7 +25,16 @@ import type { Topology, GeometryCollection } from "topojson-specification";
 import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
-import { saveSvg, savePng } from "../ChartMenu/download.js";
+import { saveSvg, savePng, saveCanvasPng } from "../ChartMenu/download.js";
+import {
+  buildScene,
+  buildPicking,
+  drawScene,
+  pickIndexAt,
+  type CanvasScene,
+  type CanvasOverlayItem,
+  type CanvasHighlightItem,
+} from "./canvasLayer.js";
 import {
   useChartFullscreen,
   isTouchDevice,
@@ -256,6 +265,16 @@ const props = withDefaults(
      */
     focusZoom?: boolean;
     /**
+     * Rendering backend, fixed at mount. `"svg"` (default) keeps one DOM
+     * path per feature — full assistive-tech fallback (per-feature
+     * `<title>`) and SVG export. `"canvas"` paints every feature into a
+     * single canvas: much faster for dense maps (counties, HSAs) and on
+     * mobile WebKit, with identical interactions. In canvas mode the menu
+     * offers PNG export only, and there is no per-feature fallback for
+     * assistive tech — configure an interactive tooltip.
+     */
+    renderer?: "svg" | "canvas";
+    /**
      * Where to teleport the map while expanded (the Expand menu item). A
      * CSS selector or element; defaults to `body`. Moving it to the
      * document root keeps `position: fixed` resolving against the viewport
@@ -273,6 +292,7 @@ const props = withDefaults(
     menu: true,
     legend: true,
     zoom: false,
+    renderer: "svg",
     zoomMode: "activate",
     touchExpand: true,
     zoomHint: true,
@@ -398,6 +418,38 @@ const overlayPathEls = new Map<
   string,
   { el: SVGPathElement; strokeWidth?: number }
 >();
+
+// ─── Canvas renderer state (renderer="canvas") ───────────────────────────
+// The svg stays as the transparent interaction/zoom surface; the canvas
+// underneath paints the scene. Plain module state, mutated imperatively —
+// same rationale as the path maps above.
+const isCanvas = computed(() => props.renderer === "canvas");
+const canvasRef = ref<HTMLCanvasElement | null>(null);
+let scene: CanvasScene | null = null;
+let pickingCanvas: HTMLCanvasElement | null = null;
+let pickingCtx: CanvasRenderingContext2D | null = null;
+let canvasHoveredId: string | null = null;
+const canvasFocused = new Map<string, CanvasHighlightItem>();
+let canvasOverlays: CanvasOverlayItem[] = [];
+let redrawFrame = 0;
+let pendingFullRedraw = false;
+// Snapshot of the last crisp render + the view it was rendered at.
+// Gesture frames reproject it with a single drawImage — a full geometry
+// pass costs >100ms on county-scale maps in WebKit's canvas2D.
+let baseCanvas: HTMLCanvasElement | null = null;
+let baseView: CanvasViewState | null = null;
+// xMidYMid-meet letterbox offsets (CSS px) inside the svg/canvas box,
+// tracked by the resize observer alongside viewScale.
+let meetOffsetX = 0;
+let meetOffsetY = 0;
+
+interface CanvasViewState {
+  dpr: number;
+  meetScale: number;
+  offsetX: number;
+  offsetY: number;
+  zoom: { k: number; x: number; y: number };
+}
 let isZooming = false;
 let tooltipObserver: ResizeObserver | null = null;
 const lastTooltipSize = { width: 0, height: 0 };
@@ -483,6 +535,14 @@ function setupInteraction() {
   // degrades zoom/pan); taps provide the one-shot hover + tooltip instead
   // (see touchHover).
   if (isTouchDevice()) return;
+  if (isCanvas.value) {
+    // No per-feature elements to delegate to — clicks resolve through the
+    // picking canvas and hover through per-mousemove picking on the svg.
+    svg.addEventListener("click", onDelegatedEvent);
+    svg.addEventListener("mousemove", onCanvasMouseMove);
+    svg.addEventListener("mouseleave", onCanvasMouseLeave);
+    return;
+  }
   g.addEventListener("click", onDelegatedEvent);
   g.addEventListener("mouseover", onDelegatedEvent);
   g.addEventListener("mousemove", onDelegatedMouseMove);
@@ -496,6 +556,9 @@ function teardownInteraction() {
     svg.removeEventListener("touchstart", onTouchStart);
     svg.removeEventListener("touchend", onTouchEnd);
     svg.removeEventListener("touchcancel", onTouchCancel);
+    svg.removeEventListener("click", onDelegatedEvent);
+    svg.removeEventListener("mousemove", onCanvasMouseMove);
+    svg.removeEventListener("mouseleave", onCanvasMouseLeave);
   }
   if (!g) return;
   g.removeEventListener("click", onDelegatedEvent);
@@ -529,10 +592,39 @@ onMounted(() => {
   attachTooltipObserver();
   if (svgRef.value && typeof ResizeObserver !== "undefined") {
     svgResizeObserver = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width;
-      if (!w) return;
-      viewScale.value = w / CANONICAL_WIDTH;
-      applyStrokeScale();
+      const rect = entries[0]?.contentRect;
+      if (!rect?.width) return;
+      // Replicate preserveAspectRatio="xMidYMid meet": a uniform scale to
+      // fit, centered — the letterbox offsets matter in fullscreen, where
+      // the svg box no longer matches the viewBox aspect ratio.
+      const s = rect.height
+        ? Math.min(rect.width / width.value, rect.height / height.value)
+        : rect.width / width.value;
+      viewScale.value = s;
+      meetOffsetX = (rect.width - s * width.value) / 2;
+      meetOffsetY = rect.height ? (rect.height - s * height.value) / 2 : 0;
+      if (isCanvas.value) {
+        const canvas = canvasRef.value;
+        const svgEl = svgRef.value;
+        if (canvas && svgEl) {
+          // Pin the canvas over the svg box (the wrapper also contains the
+          // in-flow header above the map). SVG elements have no offsetTop,
+          // so derive the offset from the two bounding rects.
+          const wrapRect = containerRef.value?.getBoundingClientRect();
+          const svgRect = svgEl.getBoundingClientRect();
+          canvas.style.top = `${svgRect.top - (wrapRect?.top ?? 0)}px`;
+          canvas.style.left = `${svgRect.left - (wrapRect?.left ?? 0)}px`;
+          canvas.style.width = `${rect.width}px`;
+          canvas.style.height = `${rect.height}px`;
+          const dpr =
+            (typeof window !== "undefined" && window.devicePixelRatio) || 1;
+          canvas.width = Math.max(1, Math.round(rect.width * dpr));
+          canvas.height = Math.max(1, Math.round(rect.height * dpr));
+        }
+        requestRedraw();
+      } else {
+        applyStrokeScale();
+      }
     });
     svgResizeObserver.observe(svgRef.value);
   }
@@ -547,6 +639,7 @@ onUnmounted(() => {
   tooltipObserver?.disconnect();
   svgResizeObserver?.disconnect();
   if (pendingMoveFrame) cancelAnimationFrame(pendingMoveFrame);
+  if (redrawFrame) cancelAnimationFrame(redrawFrame);
   window.clearTimeout(pendingSelectTimer);
   teardownZoom();
   teardownInteraction();
@@ -576,7 +669,10 @@ function setupZoom() {
       // click press felt broken. The tooltip only needs to go once the
       // map actually moves under the cursor.
       clearHover();
-      if (mapGroupRef.value) {
+      if (isCanvas.value) {
+        // Gesture frames blit the snapshot; the "end" handler sharpens.
+        requestRedraw(false);
+      } else if (mapGroupRef.value) {
         mapGroupRef.value.setAttribute("transform", event.transform);
       }
       const t = event.transform;
@@ -587,6 +683,8 @@ function setupZoom() {
     })
     .on("end", () => {
       isZooming = false;
+      // Sharpen after gestures: the in-gesture blits scale the snapshot.
+      if (isCanvas.value) requestRedraw(true);
     });
 
   // Dynamic filter deciding which pointer gestures d3-zoom may handle —
@@ -700,33 +798,55 @@ function applyFocus() {
   const baseResolved = resolved.filter((r) => r.geoType === props.geoType);
   const overlayResolved = resolved.filter((r) => r.geoType !== props.geoType);
 
-  // Diff base-geoType highlights, keyed by path element so we can
-  // restyle on style change without churning unrelated paths.
-  const nextBaseStyles = new Map<SVGPathElement, FocusItem>();
-  for (const r of baseResolved) {
-    const p = pathsByFeatureId.get(String(r.feature.id));
-    if (p) nextBaseStyles.set(p, r.item);
-  }
-  for (const [p] of focusedPathStyles) {
-    if (nextBaseStyles.has(p) || p === hoveredEl) continue;
-    restoreDefaultStroke(p);
-  }
-  for (const [p, item] of nextBaseStyles) {
-    const prev = focusedPathStyles.get(p);
-    const unchanged =
-      prev != null &&
-      prev.style === item.style &&
-      prev.stroke === item.stroke &&
-      prev.strokeWidth === item.strokeWidth;
-    if (unchanged && p !== hoveredEl) continue; // already styled
-    if (p !== hoveredEl) applyHighlightStroke(p, item);
-  }
-  focusedPathStyles.clear();
-  for (const [p, item] of nextBaseStyles) focusedPathStyles.set(p, item);
+  if (isCanvas.value) {
+    // Canvas backend: highlights and overlays are just draw state.
+    canvasFocused.clear();
+    for (const r of baseResolved) {
+      canvasFocused.set(String(r.feature.id), r.item);
+    }
+    const generator = pathGenerator.value;
+    canvasOverlays = overlayResolved.flatMap((r) => {
+      const d = generator(r.feature);
+      if (!d) return [];
+      return [
+        {
+          path: new Path2D(d),
+          stroke: r.item.stroke ?? "#fff",
+          strokeWidth: r.item.strokeWidth,
+          style: r.item.style,
+        },
+      ];
+    });
+    requestRedraw();
+  } else {
+    // Diff base-geoType highlights, keyed by path element so we can
+    // restyle on style change without churning unrelated paths.
+    const nextBaseStyles = new Map<SVGPathElement, FocusItem>();
+    for (const r of baseResolved) {
+      const p = pathsByFeatureId.get(String(r.feature.id));
+      if (p) nextBaseStyles.set(p, r.item);
+    }
+    for (const [p] of focusedPathStyles) {
+      if (nextBaseStyles.has(p) || p === hoveredEl) continue;
+      restoreDefaultStroke(p);
+    }
+    for (const [p, item] of nextBaseStyles) {
+      const prev = focusedPathStyles.get(p);
+      const unchanged =
+        prev != null &&
+        prev.style === item.style &&
+        prev.stroke === item.stroke &&
+        prev.strokeWidth === item.strokeWidth;
+      if (unchanged && p !== hoveredEl) continue; // already styled
+      if (p !== hoveredEl) applyHighlightStroke(p, item);
+    }
+    focusedPathStyles.clear();
+    for (const [p, item] of nextBaseStyles) focusedPathStyles.set(p, item);
 
-  // Cross-geoType outlines render as non-interactive paths on top of
-  // the base layer.
-  syncOverlayPaths(overlayResolved);
+    // Cross-geoType outlines render as non-interactive paths on top of
+    // the base layer.
+    syncOverlayPaths(overlayResolved);
+  }
 
   // Clearing focus doesn't touch the zoom transform — the user keeps
   // whatever pan/zoom they had. Only the reset button snaps back to
@@ -773,10 +893,15 @@ function applyFocus() {
   const showFocusTooltip = () => {
     if (!hasInteractiveTooltip.value || !tooltipTarget) return;
     const firstId = String(tooltipTarget.id);
+    // Read positions *after* the transform commits so the tooltip lands
+    // at the focused feature's on-screen position.
+    if (isCanvas.value) {
+      const anchor = featureClientAnchor(firstId);
+      if (anchor) showTooltip(firstId, anchor.x, anchor.y);
+      return;
+    }
     const pathEl = pathsByFeatureId.get(firstId);
     if (!pathEl) return;
-    // Read the rect *after* the transform commits so the tooltip lands at
-    // the focused feature's on-screen position.
     const rect = pathEl.getBoundingClientRect();
     showTooltip(
       firstId,
@@ -963,13 +1088,16 @@ function zoomBy(factor: number) {
 // Zoom level a tap zooms to (expanding or in place).
 const TAP_ZOOM_SCALE = 2;
 
-// Target transform for a tap: TAP_ZOOM_SCALE× centered on the tapped
-// point. Falls back to the map center when the CTM is unavailable (jsdom).
-function tapZoomTransform(clientX: number, clientY: number): ZoomTransform {
-  const svgEl = svgRef.value!;
-  const k = TAP_ZOOM_SCALE;
-  let mx = width.value / 2;
-  let my = height.value / 2;
+// client → canonical viewBox coordinates via the svg's CTM (which covers
+// viewBox scaling, letterboxing, and pinch-zoom quirks). Falls back to a
+// rect-proportional mapping when the CTM is unavailable (non-rendering
+// test DOMs).
+function clientToViewBox(
+  clientX: number,
+  clientY: number,
+): [number, number] | null {
+  const svgEl = svgRef.value;
+  if (!svgEl) return null;
   let ctm: DOMMatrix | null = null;
   try {
     ctm = svgEl.getScreenCTM();
@@ -977,13 +1105,27 @@ function tapZoomTransform(clientX: number, clientY: number): ZoomTransform {
     ctm = null;
   }
   if (ctm) {
-    // client → viewBox coords (the svg CTM covers viewBox scaling and
-    // letterboxing), then unwind the current zoom transform.
     const inv = ctm.inverse();
-    const px = inv.a * clientX + inv.c * clientY + inv.e;
-    const py = inv.b * clientX + inv.d * clientY + inv.f;
-    [mx, my] = zoomTransform(svgEl).invert([px, py]);
+    return [
+      inv.a * clientX + inv.c * clientY + inv.e,
+      inv.b * clientX + inv.d * clientY + inv.f,
+    ];
   }
+  const rect = svgEl.getBoundingClientRect();
+  const sx = rect.width ? width.value / rect.width : 1;
+  const sy = rect.height ? height.value / rect.height : 1;
+  return [(clientX - rect.left) * sx, (clientY - rect.top) * sy];
+}
+
+// Target transform for a tap: TAP_ZOOM_SCALE× centered on the tapped
+// point. Falls back to the map center when the point can't be resolved.
+function tapZoomTransform(clientX: number, clientY: number): ZoomTransform {
+  const svgEl = svgRef.value!;
+  const k = TAP_ZOOM_SCALE;
+  let mx = width.value / 2;
+  let my = height.value / 2;
+  const p = clientToViewBox(clientX, clientY);
+  if (p) [mx, my] = zoomTransform(svgEl).invert(p);
   return zoomIdentity
     .translate(width.value / 2 - k * mx, height.value / 2 - k * my)
     .scale(k);
@@ -1647,7 +1789,144 @@ function highlightWidthFor(item?: FocusItem): number {
   return item?.strokeWidth ?? effectiveStrokeWidth.value + 1;
 }
 
+// ─── Canvas renderer: redraw, picking, tooltip anchors ───────────────────
+
+function canvasHighlightColor(): string {
+  // light-dark() isn't paintable on a canvas context; resolve it through
+  // the shared probe. (Cached by input — a mid-session theme flip keeps
+  // the first resolution until remount, same tradeoff as resolveColorToRgb
+  // elsewhere.)
+  const rgb = resolveColorToRgb(HIGHLIGHT_STROKE);
+  return rgb ? `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` : "#000";
+}
+
+function currentCanvasView(): CanvasViewState {
+  const t = zoomTransform(svgRef.value!);
+  return {
+    dpr: (typeof window !== "undefined" && window.devicePixelRatio) || 1,
+    meetScale: viewScale.value,
+    offsetX: meetOffsetX,
+    offsetY: meetOffsetY,
+    zoom: { k: t.k, x: t.x, y: t.y },
+  };
+}
+
+function drawNow(full: boolean) {
+  const canvas = canvasRef.value;
+  const svgEl = svgRef.value;
+  if (!canvas || !svgEl || !scene) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const view = currentCanvasView();
+
+  if (
+    !full &&
+    baseCanvas &&
+    baseView &&
+    baseCanvas.width === canvas.width &&
+    baseCanvas.height === canvas.height &&
+    typeof ctx.drawImage === "function"
+  ) {
+    // Gesture frame: reproject the snapshot. Blurry while zooming in past
+    // the snapshot's scale; the gesture-end full redraw sharpens it.
+    const sBase = baseView.dpr * baseView.meetScale * baseView.zoom.k;
+    const sCur = view.dpr * view.meetScale * view.zoom.k;
+    const r = sCur / sBase;
+    const off = (v: CanvasViewState, axis: "x" | "y") =>
+      v.dpr *
+      ((axis === "x" ? v.offsetX : v.offsetY) +
+        v.meetScale * (axis === "x" ? v.zoom.x : v.zoom.y));
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(
+      r,
+      0,
+      0,
+      r,
+      off(view, "x") - r * off(baseView, "x"),
+      off(view, "y") - r * off(baseView, "y"),
+    );
+    ctx.drawImage(baseCanvas, 0, 0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    return;
+  }
+
+  drawScene(ctx, scene, view, {
+    strokeColor: props.strokeColor,
+    strokeWidth: effectiveStrokeWidth.value,
+    highlightStroke: canvasHighlightColor(),
+    hoveredId: canvasHoveredId,
+    focused: canvasFocused,
+    overlays: canvasOverlays,
+  });
+
+  // Snapshot for gesture blits.
+  if (typeof document === "undefined") return;
+  if (!baseCanvas) baseCanvas = document.createElement("canvas");
+  if (baseCanvas.width !== canvas.width) baseCanvas.width = canvas.width;
+  if (baseCanvas.height !== canvas.height) baseCanvas.height = canvas.height;
+  const bctx = baseCanvas.getContext("2d");
+  if (bctx && typeof bctx.drawImage === "function") {
+    bctx.setTransform(1, 0, 0, 1, 0, 0);
+    bctx.clearRect(0, 0, baseCanvas.width, baseCanvas.height);
+    bctx.drawImage(canvas, 0, 0);
+    baseView = view;
+  } else {
+    baseView = null;
+  }
+}
+
+// rAF-coalesced: gesture zooms can emit several events per frame. A
+// `full` request re-renders the geometry (and refreshes the snapshot);
+// gesture frames pass `false` to blit the snapshot instead.
+function requestRedraw(full = true) {
+  if (!isCanvas.value) return;
+  pendingFullRedraw = pendingFullRedraw || full;
+  if (redrawFrame) return;
+  redrawFrame = requestAnimationFrame(() => {
+    redrawFrame = 0;
+    const f = pendingFullRedraw;
+    pendingFullRedraw = false;
+    drawNow(f);
+  });
+}
+
+// Feature under a client point via the picking canvas — O(1) per query
+// regardless of feature count. The zoom transform is unwound here; the
+// picking bitmap itself is only rebuilt on geometry changes.
+function pickFeatureAt(clientX: number, clientY: number): string | null {
+  const svgEl = svgRef.value;
+  if (!svgEl || !scene || !pickingCtx) return null;
+  const p = clientToViewBox(clientX, clientY);
+  if (!p) return null;
+  const [mx, my] = zoomTransform(svgEl).invert(p);
+  const idx = pickIndexAt(pickingCtx, scene, mx, my);
+  return idx == null ? null : scene.items[idx].id;
+}
+
+// Client-coordinate center of a feature — the canvas-mode stand-in for a
+// path element's getBoundingClientRect (tooltip anchoring).
+function featureClientAnchor(featId: string): { x: number; y: number } | null {
+  const svgEl = svgRef.value;
+  const f = featuresById.value.get(featId);
+  if (!svgEl || !f) return null;
+  const [[x0, y0], [x1, y1]] = pathGenerator.value.bounds(f);
+  const [vx, vy] = zoomTransform(svgEl).apply([(x0 + x1) / 2, (y0 + y1) / 2]);
+  let ctm: DOMMatrix | null = null;
+  try {
+    ctm = svgEl.getScreenCTM();
+  } catch {
+    ctm = null;
+  }
+  if (!ctm) return null;
+  return {
+    x: ctm.a * vx + ctm.c * vy + ctm.e,
+    y: ctm.b * vx + ctm.d * vy + ctm.f,
+  };
+}
+
 function applyStrokeScale() {
+  if (isCanvas.value) return; // stroke widths are computed at draw time
   const d = strokeDivisor();
   const eff = effectiveStrokeWidth.value;
   baseGroupRef.value?.setAttribute("stroke-width", String(eff / d));
@@ -1704,7 +1983,32 @@ function setHover(pathEl: SVGPathElement) {
   applyHighlightStroke(pathEl, focusedPathStyles.get(pathEl));
 }
 
+// Renderer-agnostic hover entry point: canvas mode tracks an id and
+// repaints; svg mode restyles the path element.
+function setHoverId(featId: string) {
+  if (isCanvas.value) {
+    if (canvasHoveredId === featId) return;
+    canvasHoveredId = featId;
+    requestRedraw();
+    return;
+  }
+  const p = pathsByFeatureId.get(featId);
+  if (p) setHover(p);
+}
+
 function clearHover() {
+  if (isCanvas.value) {
+    if (canvasHoveredId != null) {
+      canvasHoveredId = null;
+      // Mid-gesture the stale highlight rides along in the snapshot blit
+      // and the gesture-end full redraw drops it — a full pass per
+      // gesture frame is exactly what the blit path exists to avoid.
+      requestRedraw(!isZooming);
+      emit("stateHover", null);
+    }
+    hideTooltip();
+    return;
+  }
   if (hoveredEl) {
     const focusItem = focusedPathStyles.get(hoveredEl);
     if (focusItem == null) {
@@ -1746,7 +2050,7 @@ function onDelegatedEvent(event: Event) {
   // already swallows genuine post-drag clicks via clickDistance.
   if (event.type === "mouseover" && isZooming) return;
   const me = event as MouseEvent;
-  const featId = eventToFeatureId(me.target);
+  const featId = featureIdFromEvent(me.target, me.clientX, me.clientY);
   if (!featId) return;
   const data = tooltipDataById.get(featId);
   if (!data) return;
@@ -1767,7 +2071,7 @@ function onDelegatedEvent(event: Event) {
       emitSelection(data);
     }
   } else if (event.type === "mouseover") {
-    setHover(pathsByFeatureId.get(featId)!);
+    setHoverId(featId);
     if (hasInteractiveTooltip.value)
       showTooltip(featId, me.clientX, me.clientY);
     emit("stateHover", payload);
@@ -1785,6 +2089,44 @@ function onDelegatedMouseOut(event: MouseEvent) {
   clearHover();
 }
 
+// Canvas mode has no per-feature elements to delegate mouseover to —
+// hover is resolved by picking on every mousemove instead (a 1px read
+// from a CPU canvas; cheap even at mousemove rates).
+function onCanvasMouseMove(event: MouseEvent) {
+  if (isZooming) return;
+  const featId = pickFeatureAt(event.clientX, event.clientY);
+  if (featId === canvasHoveredId) {
+    if (featId) moveTooltip(event.clientX, event.clientY);
+    return;
+  }
+  if (!featId) {
+    clearHover();
+    return;
+  }
+  const data = tooltipDataById.get(featId);
+  if (!data) return;
+  setHoverId(featId);
+  emit("stateHover", { id: data.id, name: data.name, value: data.value });
+  if (hasInteractiveTooltip.value) {
+    showTooltip(featId, event.clientX, event.clientY);
+  }
+}
+
+function onCanvasMouseLeave() {
+  clearHover();
+}
+
+// Renderer-agnostic feature resolution for pointer events.
+function featureIdFromEvent(
+  target: EventTarget | null,
+  clientX: number,
+  clientY: number,
+): string | null {
+  return isCanvas.value
+    ? pickFeatureAt(clientX, clientY)
+    : eventToFeatureId(target);
+}
+
 function onTouchStart(event: TouchEvent) {
   // Single-finger only — a second touch is a pinch-zoom, not a selection.
   if (event.touches.length !== 1) {
@@ -1796,7 +2138,7 @@ function onTouchStart(event: TouchEvent) {
     x: t.clientX,
     y: t.clientY,
     time: event.timeStamp,
-    featId: eventToFeatureId(event.target),
+    featId: featureIdFromEvent(event.target, t.clientX, t.clientY),
   };
 }
 
@@ -1879,16 +2221,22 @@ function onTouchEnd(event: TouchEvent) {
 // *tracking* stays off on touch — see setupInteraction — this is the
 // one-shot equivalent.)
 function touchHover(data: TooltipPayload, clientX: number, clientY: number) {
-  const pathEl = pathsByFeatureId.get(data.id);
-  if (pathEl) setHover(pathEl);
+  setHoverId(data.id);
   emit("stateHover", { id: data.id, name: data.name, value: data.value });
   if (!hasInteractiveTooltip.value) return;
+  // Anchor to the feature, not the finger: element rects and fixed
+  // positioning share the layout-viewport coordinate space, so this
+  // stays put when the page itself is pinch-zoomed — Safari reports
+  // touch client coords in *visual*-viewport space, which would skew a
+  // finger-anchored tooltip. Also keeps it out from under the finger.
+  if (isCanvas.value) {
+    const anchor = featureClientAnchor(data.id);
+    if (anchor) showTooltip(data.id, anchor.x, anchor.y);
+    else showTooltip(data.id, clientX, clientY);
+    return;
+  }
+  const pathEl = pathsByFeatureId.get(data.id);
   if (pathEl) {
-    // Anchor to the feature, not the finger: element rects and fixed
-    // positioning share the layout-viewport coordinate space, so this
-    // stays put when the page itself is pinch-zoomed — Safari reports
-    // touch client coords in *visual*-viewport space, which would skew a
-    // finger-anchored tooltip. Also keeps it out from under the finger.
     const rect = pathEl.getBoundingClientRect();
     showTooltip(
       data.id,
@@ -1934,6 +2282,9 @@ function rebuildPaths() {
   // applyFocus can re-resolve against the new path tree.
   focusedPathStyles.clear();
   overlayPathEls.clear();
+  canvasHoveredId = null;
+  canvasFocused.clear();
+  canvasOverlays = [];
 
   const path = pathGenerator.value;
   const features = featuresGeo.value.features;
@@ -1941,7 +2292,42 @@ function rebuildPaths() {
   // means the projection was fitted to an empty collection and yields NaN
   // coordinates — skip drawing entirely, including the state-borders mesh,
   // until real features arrive and re-trigger a rebuild.
-  if (features.length === 0) return;
+  if (features.length === 0) {
+    scene = null;
+    pickingCtx = null;
+    requestRedraw();
+    return;
+  }
+
+  if (isCanvas.value) {
+    // Canvas backend: no DOM per feature — build the scene + picking
+    // bitmap, and keep the tooltip payload cache exactly as svg mode does.
+    for (const feat of features) {
+      const id = String(feat.id);
+      tooltipDataById.set(id, {
+        id,
+        name: featureName(feat),
+        value: valueFor(id),
+        feature: feat as ChoroplethFeature,
+      });
+    }
+    const borders = stateBordersPath.value;
+    scene = buildScene(
+      features as Array<{ id?: string | number | null }>,
+      path as (feature: never) => string | null,
+      colorFor,
+      borders ? path(borders) : null,
+    );
+    if (!pickingCanvas && typeof document !== "undefined") {
+      pickingCanvas = document.createElement("canvas");
+    }
+    pickingCtx = pickingCanvas
+      ? buildPicking(scene, width.value, height.value, pickingCanvas)
+      : null;
+    requestRedraw();
+    return;
+  }
+
   const stroke = props.strokeColor;
   const wantsTitleFallback = !hasInteractiveTooltip.value;
 
@@ -1989,6 +2375,14 @@ function rebuildPaths() {
 }
 
 function updateFills() {
+  if (isCanvas.value) {
+    if (scene) {
+      for (const item of scene.items) item.fill = colorFor(item.id);
+    }
+    for (const [id, entry] of tooltipDataById) entry.value = valueFor(id);
+    requestRedraw();
+    return;
+  }
   const refreshTitle = !hasInteractiveTooltip.value;
   for (const [id, p] of pathsByFeatureId) {
     const value = valueFor(id);
@@ -2007,6 +2401,11 @@ function updateFills() {
 }
 
 function updateStrokes() {
+  if (isCanvas.value) {
+    // Stroke params are read at draw time.
+    requestRedraw();
+    return;
+  }
   for (const p of pathsByFeatureId.values()) {
     // Highlighted paths (hover / focus) keep their #555 + thicker stroke.
     if (p === hoveredEl || focusedPathStyles.has(p)) continue;
@@ -2102,6 +2501,19 @@ const fullscreen = useChartFullscreen({
 
 const menuItems = computed<ChartMenuItem[]>(() => {
   const fname = menuFilename();
+  if (isCanvas.value) {
+    // No SVG DOM to serialize in canvas mode; PNG exports straight off
+    // the rendering canvas (already devicePixelRatio-sized).
+    return [
+      fullscreen.menuItem.value,
+      {
+        label: "Save as PNG",
+        action: () => {
+          if (canvasRef.value) saveCanvasPng(canvasRef.value, fname);
+        },
+      },
+    ];
+  }
   return [
     fullscreen.menuItem.value,
     {
@@ -2263,6 +2675,17 @@ watch(
       <div v-if="showZoomHint" class="choropleth-zoom-hint">
         {{ zoomHintText }}
       </div>
+      <!-- Canvas backend paints here; the (empty) svg after it stays the
+      interaction/zoom surface. pointer-events: none lets every event fall
+      through to the svg even though the positioned canvas paints above
+      the transparent svg. Position/size are pinned to the svg box by the
+      resize observer. -->
+      <canvas
+        v-if="isCanvas"
+        ref="canvasRef"
+        class="choropleth-canvas"
+        aria-hidden="true"
+      />
       <svg
         ref="svgRef"
         :viewBox="`0 0 ${width} ${height}`"
@@ -2356,6 +2779,18 @@ watch(
 
 .state-path {
   cursor: pointer;
+}
+
+.choropleth-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  /* Own compositor layer: without it WebKit repaints the surrounding
+     page layer on every canvas frame (the same >100ms/frame pathology
+     the svg renderer hit). Canvas mode implies interactivity, so the
+     layer is always warranted. */
+  will-change: transform;
 }
 
 /* Overlays the top of the map: absolutely positioned with no `top`, the

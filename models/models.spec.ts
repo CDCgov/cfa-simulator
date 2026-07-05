@@ -138,6 +138,27 @@ test("fetch-example map is static until double-click activates zoom", async ({
   await expect(page.locator(".chart-zoom-controls")).toBeVisible();
 });
 
+test("fetch-example canvas renderer: no path DOM, zoom and hover work", async ({
+  page,
+}) => {
+  await page.goto("/fetch-example?renderer=canvas");
+  const canvas = page.locator("canvas.choropleth-canvas");
+  await expect(canvas).toBeVisible();
+  await expect(page.locator(".state-path")).toHaveCount(0);
+  const box = (await canvas.boundingBox())!;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  // Double-click zooms (interactions run on the transparent svg surface).
+  await page.mouse.dblclick(cx, cy);
+  await expect(page.getByRole("button", { name: "Reset view" })).toBeEnabled();
+  // Wait out the zoom animation (hover stays suppressed mid-gesture),
+  // then hover: picking resolves the feature and the tooltip appears.
+  await page.waitForTimeout(400);
+  await page.mouse.move(cx + 40, cy + 25);
+  await page.mouse.move(cx + 42, cy + 27);
+  await expect(page.locator(".chart-tooltip-content")).toBeVisible();
+});
+
 test.describe("choropleth touch zoom", () => {
   test.use({ hasTouch: true, viewport: { width: 390, height: 664 } });
 
@@ -192,6 +213,27 @@ test.describe("choropleth touch zoom", () => {
       svgBox.y + svgBox.height / 2,
     );
     // Expanded touch view presents the tooltip as a bottom sheet.
+    await expect(page.locator(".chart-tooltip-sheet")).toHaveClass(/is-open/);
+  });
+
+  test("canvas renderer: double tap expands and taps show the sheet", async ({
+    page,
+  }) => {
+    await page.goto("/fetch-example?renderer=canvas");
+    const canvas = page.locator("canvas.choropleth-canvas");
+    await canvas.waitFor();
+    const box = (await canvas.boundingBox())!;
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    await page.touchscreen.tap(cx, cy);
+    await page.touchscreen.tap(cx, cy);
+    await expect(
+      page.locator(".choropleth-wrapper.is-fullscreen"),
+    ).toBeVisible();
+    await page.waitForTimeout(700);
+    const fsCanvas = page.locator(".choropleth-wrapper.is-fullscreen canvas");
+    const b2 = (await fsCanvas.boundingBox())!;
+    await page.touchscreen.tap(b2.x + b2.width / 2, b2.y + b2.height / 2);
     await expect(page.locator(".chart-tooltip-sheet")).toHaveClass(/is-open/);
   });
 });

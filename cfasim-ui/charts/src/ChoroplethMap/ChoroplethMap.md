@@ -759,9 +759,31 @@ Pass `tooltip-value-format` to format numeric values shown in the tooltip
   </template>
 </ComponentDemo>
 
+### Canvas rendering (`renderer="canvas"`)
+
+For dense maps — every US county, HSAs, or anything that feels sluggish on
+mobile — set `renderer="canvas"`. Instead of one DOM path per feature, the
+whole map paints into a single `<canvas>`: zooming, panning, and hover/tap
+highlights redraw in a few milliseconds regardless of feature count, and
+DOM memory stays flat. Interactions are identical (hover, click/tap
+selection, `focus`, every zoom mode and touch flow); hit-testing runs
+through an offscreen picking bitmap, so it stays pixel-accurate.
+
+Differences from the default SVG renderer:
+
+- The menu offers **Fullscreen** and **Save as PNG** only (there is no SVG
+  DOM to serialize; the PNG exports straight off the rendering canvas).
+- There is no per-feature `<title>` fallback or per-feature DOM for
+  assistive tech — configure an interactive tooltip (`tooltip-trigger` or
+  the `#tooltip` slot), or stay on SVG where that fallback matters.
+- `renderer` is fixed at mount.
+
+The dense county demo below uses it.
+
 ### Dense county map
 
-Renders every US county with a value and a custom tooltip slot.
+Renders every US county with a value and a custom tooltip slot, on the
+canvas backend.
 
 <ComponentDemo>
   <ChoroplethMap
@@ -769,6 +791,7 @@ Renders every US county with a value and a custom tooltip slot.
     geo-type="counties"
     :data="denseCountyData"
     zoom
+    renderer="canvas"
     :color-scale="{ min: '#f0f5ff', max: '#08306b' }"
     title="All US counties — tooltip perf demo"
     :height="500"
@@ -793,7 +816,13 @@ const data = countiesTopo.objects.counties.geometries.map((g, i) => ({
 }));
 </script>
 
-<ChoroplethMap :topology="countiesTopo" geo-type="counties" :data="data" zoom>
+<ChoroplethMap
+  :topology="countiesTopo"
+  geo-type="counties"
+  :data="data"
+  zoom
+  renderer="canvas"
+>
   <template #tooltip="{ id, name, value }">
     <div style="font-weight: 600">{{ name }}</div>
     <div style="opacity: 0.7; font-size: 0.85em">FIPS {{ id }}</div>

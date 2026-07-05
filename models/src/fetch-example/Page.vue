@@ -21,6 +21,8 @@ const defaults = {
   metric: "covid" as Metric,
   countyLevel: true,
   selectedWeek: "",
+  // ?renderer=canvas exercises the canvas backend (also used by e2e).
+  renderer: "svg" as "svg" | "canvas",
 };
 const { params, reset } = useModelParams(defaults);
 
@@ -146,6 +148,7 @@ function formatTooltip(data: {
     :geo-type="geoType"
     :title="title"
     zoom
+    :renderer="params.renderer"
     legend-title="% visits"
     tooltip-trigger="hover"
     :tooltip-format="formatTooltip"
