@@ -4,6 +4,10 @@ import { SelectBox, Button, ToggleGroup } from "@cfasim-ui/components";
 import { ChoroplethMap } from "@cfasim-ui/charts";
 import type { StateData, GeoType, FocusValue } from "@cfasim-ui/charts";
 import { fipsToHsa, hsaNames } from "@cfasim-ui/charts/hsa-mapping";
+import {
+  nationalCityMarkers,
+  stateCityMarkers,
+} from "@cfasim-ui/charts/us-cities";
 import { useModelParams } from "../useModelParams";
 import usCounties from "us-atlas/counties-10m.json";
 import type { Topology } from "topojson-specification";
@@ -32,15 +36,17 @@ const nameToFips = new Map(
     String(g.id).padStart(2, "0"),
   ]),
 );
+const fipsToStateName = new Map(
+  objects.states.geometries.map((g) => [
+    String(g.id).padStart(2, "0"),
+    g.properties.name,
+  ]),
+);
 
 // Deterministic synthetic values so each map has something to color.
 const pseudo = (id: string | number): number =>
   parseInt(String(id).slice(-3) || "0", 10) % 100;
 
-const stateData: StateData[] = objects.states.geometries.map((g) => ({
-  id: String(g.id).padStart(2, "0"),
-  value: pseudo(g.id),
-}));
 const countyData: StateData[] = objects.counties.geometries.map((g) => ({
   id: String(g.id).padStart(5, "0"),
   value: pseudo(g.id),
@@ -55,6 +61,8 @@ const defaults = {
   geoType: "counties" as GeoType,
   // National-view framing: "tight" crops Alaska's overhang so CONUS fills more.
   fit: "full" as "full" | "tight",
+  // Overlay the capital (starred) + most-populous cities.
+  cities: "off" as "off" | "on",
 };
 const { params } = useModelParams(defaults);
 
@@ -70,19 +78,30 @@ watch(
   },
 );
 
-// National view shows clickable states; a state view shows its counties/HSAs.
+// National view shows all US counties (canvas-rendered); a state view shows
+// that state's counties or HSAs.
 const mapGeoType = computed<GeoType>(() =>
-  params.selectedState ? params.geoType : "states",
+  params.selectedState ? params.geoType : "counties",
 );
-const mapData = computed(() => {
-  if (!params.selectedState) return stateData;
-  return params.geoType === "hsas" ? hsaData : countyData;
+const mapData = computed(() =>
+  params.selectedState && params.geoType === "hsas" ? hsaData : countyData,
+);
+
+// City overlay: national top-100 (+ DC) or, in a state view, that state's
+// capital + top cities. Undefined when the toggle is off.
+const cityMarkers = computed(() => {
+  if (params.cities !== "on") return undefined;
+  return params.selectedState && stateFips.value
+    ? stateCityMarkers(stateFips.value)
+    : nationalCityMarkers();
 });
 
 function onMapClick(payload: { id: string; name: string }) {
   if (!params.selectedState) {
-    // National view: drill into the clicked state.
-    params.selectedState = payload.name;
+    // National county view: drill into the clicked county's state.
+    const stateFips = String(payload.id).padStart(5, "0").slice(0, 2);
+    const stateName = fipsToStateName.get(stateFips);
+    if (stateName) params.selectedState = stateName;
     return;
   }
   // State view: update the info panel and highlight on the map (no zoom).
@@ -133,7 +152,7 @@ const heading = computed(() =>
 const subtitle = computed(() =>
   params.selectedState
     ? "Counties or HSAs within the state. Click one to see its details."
-    : "Click a state to zoom into its counties or HSAs.",
+    : "US counties (canvas renderer). Click one to drill into its state.",
 );
 </script>
 
@@ -165,6 +184,15 @@ const subtitle = computed(() =>
         { value: 'tight', label: 'Tight' },
       ]"
     />
+    <ToggleGroup
+      v-model="params.cities"
+      label="Cities"
+      hint="Overlay the capital and biggest cities; zoom in to reveal more (level-of-detail). Colliding labels are dropped."
+      :options="[
+        { value: 'off', label: 'Off' },
+        { value: 'on', label: 'On' },
+      ]"
+    />
   </Teleport>
 
   <div class="state-map-page">
@@ -177,8 +205,11 @@ const subtitle = computed(() =>
           :state="params.selectedState"
           :geo-type="mapGeoType"
           :data="mapData"
+          renderer="canvas"
           :focus="focus"
           :focus-zoom="false"
+          :cities="cityMarkers"
+          :zoom="params.cities === 'on'"
           :tight-fit="params.fit === 'tight'"
           :legend="false"
           :menu="false"

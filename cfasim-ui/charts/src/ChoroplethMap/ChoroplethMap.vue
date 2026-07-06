@@ -50,6 +50,8 @@ import {
 } from "../_shared/index.js";
 import { placeTooltip } from "../tooltip-position.js";
 import ChoroplethTooltip from "./ChoroplethTooltip.vue";
+import { layoutCities } from "./cityLayout.js";
+import type { CityMarker } from "./cityLayout.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -295,6 +297,28 @@ const props = withDefaults(
      * doesn't mount at the document root.
      */
     fullscreenTarget?: string | HTMLElement;
+    /**
+     * Optional decorative overlay of city markers, each `{ name,
+     * coordinates: [lng, lat], capital? }`. Every city is a dot; `capital`
+     * cities take first pick when labels would collide and are never dropped
+     * (their label is lightly emphasized). Any non-capital label that can't be
+     * placed without overlapping is dropped (its dot stays). Purely visual:
+     * the markers don't capture pointer events, so the choropleth's own
+     * hover/click is unaffected. The `@cfasim-ui/charts/us-cities` subpath
+     * ships a ready-made US dataset with `nationalCityMarkers()` /
+     * `stateCityMarkers()` helpers.
+     */
+    cities?: CityMarker[];
+    /**
+     * Default minimum zoom scale for `cities` that don't set their own
+     * `minZoom`, so they act as a zoom-in detail layer. Default `2` (one zoom
+     * level = 2×): such markers stay hidden until the user zooms in one level.
+     * Set to `1` to show them from the start. Per-city `minZoom` overrides this
+     * (level-of-detail: reveal more cities as you zoom in). Only applies when
+     * `zoom` is enabled — a static map has no way to zoom, so its `cities`
+     * always show.
+     */
+    citiesMinZoom?: number;
   }>(),
   {
     geoType: "states",
@@ -312,6 +336,7 @@ const props = withDefaults(
     focusZoomLevel: 4,
     focusZoom: true,
     tightFit: false,
+    citiesMinZoom: 2,
   },
 );
 
@@ -373,6 +398,12 @@ const svgRef = ref<SVGSVGElement | null>(null);
 const mapGroupRef = ref<SVGGElement | null>(null);
 const baseGroupRef = ref<SVGGElement | null>(null);
 const overlayGroupRef = ref<SVGGElement | null>(null);
+// City overlay lives OUTSIDE mapGroupRef: it's positioned by applying the zoom
+// transform in JS (renderCityLayer), so it works identically in svg and canvas
+// mode (where mapGroupRef stays at identity) and keeps a constant on-screen
+// marker/label size under zoom.
+const cityLayerRef = ref<SVGGElement | null>(null);
+const cityOverlayRef = ref<SVGSVGElement | null>(null);
 const tooltipChildRef = ref<InstanceType<typeof ChoroplethTooltip> | null>(
   null,
 );
@@ -445,6 +476,7 @@ let canvasHoveredId: string | null = null;
 const canvasFocused = new Map<string, CanvasHighlightItem>();
 let canvasOverlays: CanvasOverlayItem[] = [];
 let redrawFrame = 0;
+let cityLayoutFrame = 0;
 // xMidYMid-meet letterbox offsets (CSS px) inside the svg/canvas box,
 // tracked by the resize observer alongside viewScale.
 let meetOffsetX = 0;
@@ -596,6 +628,7 @@ onMounted(() => {
   setupZoom();
   rebuildPaths();
   applyFocus();
+  scheduleCityLayout();
   attachTooltipObserver();
   if (svgRef.value && typeof ResizeObserver !== "undefined") {
     svgResizeObserver = new ResizeObserver((entries) => {
@@ -612,17 +645,10 @@ onMounted(() => {
       meetOffsetY = rect.height ? (rect.height - s * height.value) / 2 : 0;
       if (isCanvas.value) {
         const canvas = canvasRef.value;
-        const svgEl = svgRef.value;
-        if (canvas && svgEl) {
-          // Pin the canvas over the svg box (the wrapper also contains the
-          // in-flow header above the map). SVG elements have no offsetTop,
-          // so derive the offset from the two bounding rects.
-          const wrapRect = containerRef.value?.getBoundingClientRect();
-          const svgRect = svgEl.getBoundingClientRect();
-          canvas.style.top = `${svgRect.top - (wrapRect?.top ?? 0)}px`;
-          canvas.style.left = `${svgRect.left - (wrapRect?.left ?? 0)}px`;
-          canvas.style.width = `${rect.width}px`;
-          canvas.style.height = `${rect.height}px`;
+        if (canvas) {
+          // Pin the canvas over the svg box, then size its backing store in
+          // device pixels.
+          pinToSvgBox(canvas);
           const dpr =
             (typeof window !== "undefined" && window.devicePixelRatio) || 1;
           canvas.width = Math.max(1, Math.round(rect.width * dpr));
@@ -649,6 +675,7 @@ onUnmounted(() => {
   dprQuery?.removeEventListener("change", onDprChange);
   if (pendingMoveFrame) cancelAnimationFrame(pendingMoveFrame);
   if (redrawFrame) cancelAnimationFrame(redrawFrame);
+  if (cityLayoutFrame) cancelAnimationFrame(cityLayoutFrame);
   window.clearTimeout(pendingSelectTimer);
   teardownZoom();
   teardownInteraction();
@@ -687,6 +714,9 @@ function setupZoom() {
       const t = event.transform;
       scaleK.value = t.k;
       applyStrokeScale();
+      // City markers live outside the zoomed group, so re-place them against
+      // the new transform (constant on-screen size, labels re-decluttered).
+      if (props.cities?.length) scheduleCityLayout();
       isZoomed.value = t.k !== 1 || t.x !== 0 || t.y !== 0;
       if (isZoomed.value) hasZoomed.value = true;
     })
@@ -2419,6 +2449,120 @@ function makePath(d: string | null): SVGPathElement {
   return p;
 }
 
+// ─── City markers overlay ────────────────────────────────────────────────
+const CITY_LABEL_PX = 11;
+const CITY_DOT_PX = 2.4;
+const CITY_LABEL_GAP_PX = 3;
+// Halo widths (px). Set as attributes, not CSS, so they scale with viewScale
+// like font-size and stay a constant on-screen thickness under any map size.
+const CITY_MARKER_HALO_PX = 0.9;
+const CITY_LABEL_HALO_PX = 2.6;
+
+// Pin an absolutely-positioned overlay (the canvas backend, or the city svg)
+// exactly over the interaction svg's box. The wrapper can include an in-flow
+// header (title/legend) above the map, so the svg doesn't start at the wrapper
+// top; derive the offset from the two rects (svg elements have no offsetTop).
+function pinToSvgBox(el: HTMLElement | SVGElement | null): void {
+  const svgEl = svgRef.value;
+  const wrapRect = containerRef.value?.getBoundingClientRect();
+  if (!el || !svgEl || !wrapRect) return;
+  const svgRect = svgEl.getBoundingClientRect();
+  el.style.top = `${svgRect.top - wrapRect.top}px`;
+  el.style.left = `${svgRect.left - wrapRect.left}px`;
+  el.style.width = `${svgRect.width}px`;
+  el.style.height = `${svgRect.height}px`;
+}
+
+// Project + place city markers and paint them into cityLayerRef. Runs in JS
+// (not via the mapGroup transform) so it's identical across svg/canvas mode.
+// rAF-coalesced through scheduleCityLayout — safe to call on every zoom frame.
+function renderCityLayer() {
+  const g = cityLayerRef.value;
+  if (!g) return;
+
+  const cities = props.cities;
+  const proj = projection.value;
+  if (!cities || cities.length === 0 || !proj) {
+    while (g.firstChild) g.removeChild(g.firstChild);
+    return;
+  }
+
+  // Pin the overlay to the map svg box BEFORE clearing the layer below, so
+  // getBoundingClientRect reads the settled layout instead of the one the
+  // removeChild loop would dirty (which would force a synchronous reflow every
+  // zoom frame). The box only changes on resize / header toggle.
+  pinToSvgBox(cityOverlayRef.value);
+  while (g.firstChild) g.removeChild(g.firstChild);
+
+  const t = svgRef.value ? zoomTransform(svgRef.value) : { k: 1, x: 0, y: 0 };
+  // Level-of-detail: on a zoomable map, each city shows only once zoomed to its
+  // `minZoom` (falling back to the `citiesMinZoom` prop), so bigger cities can
+  // appear first and more reveal as you zoom in. A static map (zoom off) can't
+  // zoom, so all its cities always show. (The layer was already cleared above.)
+  const visible = props.zoom
+    ? cities.filter((c) => t.k >= (c.minZoom ?? props.citiesMinZoom))
+    : cities;
+  if (visible.length === 0) return;
+  const placed = layoutCities(
+    visible,
+    (coord) => proj(coord),
+    { k: t.k, x: t.x, y: t.y },
+    {
+      width: width.value,
+      height: height.value,
+      viewScale: viewScale.value,
+      labelPx: CITY_LABEL_PX,
+      dotPx: CITY_DOT_PX,
+      gapPx: CITY_LABEL_GAP_PX,
+      margin: 4,
+    },
+  );
+
+  const vs = viewScale.value || 1;
+  const font = CITY_LABEL_PX / vs;
+  const markerHalo = CITY_MARKER_HALO_PX / vs;
+  const labelHalo = CITY_LABEL_HALO_PX / vs;
+  const frag = document.createDocumentFragment();
+  for (const c of placed) {
+    const marker = document.createElementNS(SVG_NS, "circle");
+    marker.setAttribute("cx", String(c.x));
+    marker.setAttribute("cy", String(c.y));
+    marker.setAttribute("r", String(c.radius));
+    marker.setAttribute("class", "choropleth-city-dot");
+    marker.setAttribute("stroke-width", String(markerHalo));
+    frag.appendChild(marker);
+
+    if (c.label) {
+      const text = document.createElementNS(SVG_NS, "text");
+      text.setAttribute("x", String(c.label.x));
+      text.setAttribute("y", String(c.label.y));
+      text.setAttribute("text-anchor", c.label.anchor);
+      text.setAttribute("dominant-baseline", "central");
+      text.setAttribute("font-size", String(font));
+      text.setAttribute("stroke-width", String(labelHalo));
+      text.setAttribute(
+        "class",
+        c.capital
+          ? "choropleth-city-label choropleth-city-label-capital"
+          : "choropleth-city-label",
+      );
+      text.textContent = c.name;
+      frag.appendChild(text);
+    }
+  }
+  g.appendChild(frag);
+}
+
+// rAF-coalesced: zoom/pan can fire several events per frame, and the v-if `<g>`
+// isn't in the DOM until after Vue's patch, which rAF defers past.
+function scheduleCityLayout() {
+  if (cityLayoutFrame) return;
+  cityLayoutFrame = requestAnimationFrame(() => {
+    cityLayoutFrame = 0;
+    renderCityLayer();
+  });
+}
+
 function rebuildPaths() {
   const baseG = baseGroupRef.value;
   const overlayG = overlayGroupRef.value;
@@ -2734,6 +2878,26 @@ watch(
   { flush: "post" },
 );
 
+// City overlay → re-place markers. Fires on data change, projection refit
+// (state/geoType/tightFit), and container resize (viewScale). `flush: "post"`
+// so the v-if `<g>` exists before we paint into it.
+watch(
+  () => [
+    props.cities,
+    projection.value,
+    viewScale.value,
+    props.citiesMinZoom,
+    props.zoom,
+    // Title/legend form an in-flow header above the map; toggling it moves the
+    // map svg, so re-pin the overlay to match.
+    props.title,
+    props.legend,
+    props.legendTitle,
+  ],
+  () => scheduleCityLayout(),
+  { flush: "post" },
+);
+
 // Exiting the expanded touch view (✕, Escape) returns to the static inline
 // map at full extent — the inline map has no pan gestures, so a preserved
 // transform would strand the user off-center. Any toggle also drops the
@@ -2862,6 +3026,26 @@ watch(
           <g ref="overlayGroupRef" />
         </g>
       </svg>
+      <!--
+      City markers overlay in its OWN svg, layered above the interaction svg —
+      and, crucially, above the canvas backend, which paints over the (empty)
+      interaction svg (see the canvas comment above). Same viewBox + meet as the
+      interaction svg and pinned to the same box (position: absolute; inset 0),
+      so canonical coordinates map identically; renderCityLayer() applies the
+      zoom transform per-point in JS, keeping it aligned with both the svg-mode
+      map (mapGroupRef transform) and the canvas-mode map (canvas draws the
+      zoom). pointer-events: none lets hover/click fall through to the map.
+      -->
+      <svg
+        v-if="cities && cities.length"
+        ref="cityOverlayRef"
+        class="choropleth-city-overlay"
+        :viewBox="`0 0 ${width} ${height}`"
+        preserveAspectRatio="xMidYMid meet"
+        aria-hidden="true"
+      >
+        <g ref="cityLayerRef" class="choropleth-cities" />
+      </svg>
       <ChartZoomControls
         v-if="showZoomControls"
         :can-zoom-in="scaleK < maxScale"
@@ -2935,6 +3119,45 @@ watch(
 
 .state-path {
   cursor: pointer;
+}
+
+/* City overlay svg: its top/left/width/height are pinned to the interaction
+   svg's box in JS (renderCityLayer), matching the canvas backend — the wrapper
+   may have an in-flow header above the map, so the map svg isn't at top:0.
+   Painted above the map + canvas; non-interactive so hover/click pass through. */
+.choropleth-city-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+/* City markers overlay. Colors follow the theme's color-scheme via
+   light-dark(); override per instance with the custom properties below.
+   Marker/label sizes are set in JS (canonical units) so they stay a constant
+   on-screen size under zoom. */
+.choropleth-cities {
+  --choropleth-city-marker: light-dark(#1a1a1a, #f2f2f2);
+  --choropleth-city-halo: light-dark(#ffffff, #0a0a0a);
+  --choropleth-city-label-color: light-dark(#1a1a1a, #f2f2f2);
+  font-family: var(--font-family, system-ui, sans-serif);
+}
+
+.choropleth-city-dot {
+  fill: var(--choropleth-city-marker);
+  stroke: var(--choropleth-city-halo);
+}
+
+.choropleth-city-label {
+  fill: var(--choropleth-city-label-color);
+  stroke: var(--choropleth-city-halo);
+  paint-order: stroke fill;
+  stroke-linejoin: round;
+  font-weight: 500;
+}
+
+.choropleth-city-label-capital {
+  font-weight: 700;
 }
 
 .choropleth-canvas {

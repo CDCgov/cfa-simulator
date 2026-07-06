@@ -58,28 +58,53 @@ test("fetch example renders", async ({ page }) => {
   await expect(page.locator("h1")).toContainText("NSSP Emergency Department");
 });
 
-const mapHasNaN = (page: import("@playwright/test").Page) =>
-  page.evaluate(() =>
-    Array.from(document.querySelectorAll("svg path")).some((p) =>
-      (p.getAttribute("d") ?? "").includes("NaN"),
-    ),
-  );
+// The demo uses the canvas renderer, so there are no per-feature DOM paths —
+// the (transparent) interaction svg is the click surface and canvas
+// hit-testing resolves the feature. Clicking its center lands on a feature
+// near the middle of the fitted region (contiguous-US center for the national
+// view, mid-state for a single-state view) — always over land.
+const clickMapCenter = (page: import("@playwright/test").Page) =>
+  page
+    .locator(".choropleth-wrapper > svg:not(.choropleth-city-overlay)")
+    .click();
 
-test("state-map starts national and drills into a clicked state", async ({
+// Count painted (non-transparent) canvas pixels. Real maps paint hundreds of
+// thousands; a fully-broken (all-NaN) projection paints ~0 and a degenerate one
+// (e.g. a Mercator fallback that collapses to a point) paints only a handful —
+// so a healthy floor catches both. It can't catch a NaN in a *few* of the ~3000
+// counties (the rest still paint); that partial-projection case is covered by
+// the component's SVG-renderer unit tests, where per-path `d` can be inspected.
+const canvasPaintedPixels = (page: import("@playwright/test").Page) =>
+  page.evaluate(() => {
+    const c = document.querySelector(
+      "canvas.choropleth-canvas",
+    ) as HTMLCanvasElement | null;
+    if (!c) return 0;
+    const ctx = c.getContext("2d");
+    if (!ctx) return 0;
+    const { data } = ctx.getImageData(0, 0, c.width, c.height);
+    let painted = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] !== 0) painted++;
+    return painted;
+  });
+// Well below any real map, well above a blank/collapsed one.
+const MIN_PAINTED = 2000;
+
+test("state-map starts national (canvas counties) and drills into a clicked county's state", async ({
   page,
 }) => {
   await page.goto("/state-map");
-  await expect(page.locator(".subtitle")).toContainText("Click a state");
-  await expect(page.locator("svg path").first()).toBeVisible();
-  expect(await mapHasNaN(page)).toBe(false);
+  await expect(page.locator(".subtitle")).toContainText("counties");
+  await expect(page.locator("canvas.choropleth-canvas")).toBeVisible();
+  expect(await canvasPaintedPixels(page)).toBeGreaterThan(MIN_PAINTED);
   // No info panel at the national level.
   await expect(page.locator(".info-panel")).toHaveCount(0);
 
-  // Click a state → transition into its single-state map.
-  await page.locator(".state-path").first().click();
+  // Click a county → drill into its state's single-state map.
+  await clickMapCenter(page);
   await expect(page.getByRole("button", { name: "Back to US" })).toBeVisible();
   await expect(page.locator(".info-panel")).toBeVisible();
-  expect(await mapHasNaN(page)).toBe(false);
+  expect(await canvasPaintedPixels(page)).toBeGreaterThan(MIN_PAINTED);
 });
 
 test("state-map back button returns to the national view", async ({ page }) => {
@@ -87,29 +112,94 @@ test("state-map back button returns to the national view", async ({ page }) => {
   await expect(page.locator(".info-panel h2")).toHaveText("California");
   await page.getByRole("button", { name: "Back to US" }).click();
   await expect(page.locator(".info-panel")).toHaveCount(0);
-  await expect(page.locator(".subtitle")).toContainText("Click a state");
+  await expect(page.locator(".subtitle")).toContainText("counties");
 });
 
 test("state-map renders an island territory via the Mercator fallback", async ({
   page,
 }) => {
   // geoAlbersUsa can't project Puerto Rico; the component must fall back to
-  // geoMercator instead of emitting NaN path data.
+  // geoMercator instead of emitting NaN (which would leave the canvas blank).
   await page.goto("/state-map?selectedState=Puerto%20Rico");
-  await expect(page.locator("svg path").first()).toBeVisible();
-  expect(await mapHasNaN(page)).toBe(false);
+  await expect(page.locator("canvas.choropleth-canvas")).toBeVisible();
+  expect(await canvasPaintedPixels(page)).toBeGreaterThan(MIN_PAINTED);
 });
 
 test("state-map shows county details and highlights without zooming", async ({
   page,
 }) => {
   await page.goto("/state-map?selectedState=California");
-  await expect(page.locator(".state-path").first()).toBeVisible();
-  await page.locator(".state-path").first().click();
+  await expect(page.locator("canvas.choropleth-canvas")).toBeVisible();
+  await clickMapCenter(page);
   // Clicking updates the info panel...
   await expect(page.locator(".info-panel .info-selection")).toBeVisible();
-  // ...and highlights on the map without zooming (no zoom controls).
+  // ...and highlights on the map without zooming (cities off ⇒ no zoom, no
+  // zoom controls).
   await expect(page.locator(".chart-zoom-controls")).toHaveCount(0);
+});
+
+test("state-map shows cities with level-of-detail, without overlapping labels", async ({
+  page,
+}) => {
+  await page.goto("/state-map?cities=on");
+  // Tiered markers: the biggest cities (and the capital) show at the base
+  // overview, more reveal as you zoom in.
+  await expect(page.locator(".choropleth-city-dot").first()).toBeVisible();
+  await expect(page.locator(".choropleth-city-star")).toHaveCount(0);
+  await expect(
+    page.locator(".choropleth-city-label", { hasText: "Washington" }),
+  ).toHaveCount(1);
+  // Level-of-detail keeps the base overview uncluttered — only the top tier,
+  // far fewer than the full ~100-city set.
+  const baseCount = await page.locator(".choropleth-city-dot").count();
+  expect(baseCount).toBeGreaterThan(0);
+  expect(baseCount).toBeLessThan(15);
+  expect(await canvasPaintedPixels(page)).toBeGreaterThan(MIN_PAINTED);
+
+  // The collision pass must keep rendered labels apart. Compare label boxes
+  // shrunk by the halo stroke so the anti-collision guarantee (on the text
+  // fill) isn't masked by the decorative outline.
+  const collided = await page.evaluate(() => {
+    const INSET = 3;
+    const rects = [...document.querySelectorAll(".choropleth-city-label")].map(
+      (n) => {
+        const r = (n as SVGGraphicsElement).getBoundingClientRect();
+        return {
+          left: r.left + INSET,
+          right: r.right - INSET,
+          top: r.top + INSET,
+          bottom: r.bottom - INSET,
+        };
+      },
+    );
+    for (let i = 0; i < rects.length; i++) {
+      for (let j = i + 1; j < rects.length; j++) {
+        const a = rects[i];
+        const b = rects[j];
+        const disjoint =
+          a.right <= b.left ||
+          a.left >= b.right ||
+          a.bottom <= b.top ||
+          a.top >= b.bottom;
+        if (!disjoint) return true;
+      }
+    }
+    return false;
+  });
+  expect(collided).toBe(false);
+});
+
+test("state-map cities overlay follows a drilled-in state's capital", async ({
+  page,
+}) => {
+  await page.goto("/state-map?selectedState=Texas&cities=on");
+  // Austin is the Texas capital → emphasized label, no star glyph (visible at
+  // load since the demo uses cities-min-zoom=0).
+  await expect(page.locator(".choropleth-city-star")).toHaveCount(0);
+  await expect(
+    page.locator(".choropleth-city-label-capital", { hasText: "Austin" }),
+  ).toHaveCount(1);
+  expect(await canvasPaintedPixels(page)).toBeGreaterThan(MIN_PAINTED);
 });
 
 test("fetch-example map is static until double-click activates zoom", async ({

@@ -2691,3 +2691,186 @@ describe("ChoroplethMap accessibility", () => {
     );
   });
 });
+
+describe("ChoroplethMap city overlay", () => {
+  // The overlay is painted in a requestAnimationFrame callback; let it run.
+  async function flushCityLayout() {
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => resolve()),
+    );
+    await flushPromises();
+  }
+
+  const CITIES = [
+    {
+      name: "Austin",
+      coordinates: [-97.75, 30.28] as [number, number],
+      capital: true,
+    },
+    { name: "Houston", coordinates: [-95.36, 29.76] as [number, number] },
+    { name: "New York", coordinates: [-74.0, 40.71] as [number, number] },
+  ];
+
+  function layerOf(wrapper: ReturnType<typeof mount>) {
+    return wrapper.find(".choropleth-cities");
+  }
+
+  it("renders a dot per city (including capitals, no star)", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 800, height: 500, cities: CITIES },
+    });
+    await flushCityLayout();
+    const layer = layerOf(wrapper);
+    expect(layer.exists()).toBe(true);
+    const el = layer.element;
+    // Capitals are plain dots now — every city is a dot, no <polygon> stars.
+    expect(el.querySelectorAll(".choropleth-city-dot")).toHaveLength(3);
+    expect(el.querySelectorAll("polygon")).toHaveLength(0);
+  });
+
+  it("labels cities, emphasizes the capital, and includes its name", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 800, height: 500, cities: CITIES },
+    });
+    await flushCityLayout();
+    const el = layerOf(wrapper).element;
+    const labels = [...el.querySelectorAll(".choropleth-city-label")].map(
+      (n) => n.textContent,
+    );
+    expect(labels.length).toBeGreaterThanOrEqual(1);
+    expect(labels).toContain("Austin");
+    // The capital's label carries the emphasis class.
+    const capitalLabels = [
+      ...el.querySelectorAll(".choropleth-city-label-capital"),
+    ].map((n) => n.textContent);
+    expect(capitalLabels).toContain("Austin");
+  });
+
+  it("renders nothing when cities is undefined", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 800, height: 500 },
+    });
+    expect(layerOf(wrapper).exists()).toBe(false);
+  });
+
+  it("adds markers reactively when cities is supplied later", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 800, height: 500 },
+    });
+    expect(layerOf(wrapper).exists()).toBe(false);
+    await wrapper.setProps({ cities: CITIES });
+    await flushCityLayout();
+    expect(
+      layerOf(wrapper).element.querySelectorAll(".choropleth-city-dot"),
+    ).toHaveLength(3);
+  });
+
+  it("puts the city layer in its own overlay svg (so it paints above the canvas backend)", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 800, height: 500, cities: CITIES },
+    });
+    await flushCityLayout();
+    const overlay = wrapper.find(".choropleth-city-overlay");
+    expect(overlay.exists()).toBe(true);
+    expect(overlay.element.tagName.toLowerCase()).toBe("svg");
+    expect(
+      overlay.element.querySelectorAll(".choropleth-city-dot"),
+    ).toHaveLength(3);
+    // The city <g>'s nearest svg is the overlay, NOT the interaction/map svg —
+    // that separation is what lets it sit above the opaque canvas backend
+    // (which paints over the interaction svg). Verified visually for the
+    // canvas renderer; happy-dom can't mount canvas mode (no Path2D).
+    const g = overlay.element.querySelector(".choropleth-cities");
+    expect(g?.closest("svg")).toBe(overlay.element);
+  });
+
+  it("pins the overlay svg's box in JS (so a title/legend header doesn't offset it)", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 800,
+        height: 500,
+        cities: CITIES,
+        title: "Cities",
+      },
+    });
+    await flushCityLayout();
+    const overlay = wrapper.find(".choropleth-city-overlay");
+    expect(overlay.exists()).toBe(true);
+    // renderCityLayer sets top/left/width/height inline to match the map svg's
+    // box (which the in-flow header pushes down) — not the wrapper's top:0.
+    const style = (overlay.element as SVGSVGElement).style;
+    expect(style.width).not.toBe("");
+    expect(style.height).not.toBe("");
+    expect(style.top).not.toBe("");
+    expect(style.left).not.toBe("");
+  });
+
+  it("hides cities on a zoomable map until zoomed past citiesMinZoom", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 800,
+        height: 500,
+        cities: CITIES,
+        zoom: true,
+      },
+    });
+    await flushCityLayout();
+    // At base zoom (k=1 < default citiesMinZoom of 2) nothing is drawn yet.
+    expect(
+      layerOf(wrapper).element.querySelectorAll(".choropleth-city-dot"),
+    ).toHaveLength(0);
+  });
+
+  it("shows cities on a zoomable map when citiesMinZoom is 1", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 800,
+        height: 500,
+        cities: CITIES,
+        zoom: true,
+        citiesMinZoom: 1,
+      },
+    });
+    await flushCityLayout();
+    expect(
+      layerOf(wrapper).element.querySelectorAll(".choropleth-city-dot").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("reveals cities by their own minZoom (level-of-detail)", async () => {
+    const tiered = [
+      {
+        name: "Big",
+        coordinates: [-74, 40.71] as [number, number],
+        minZoom: 1,
+      },
+      {
+        name: "Small",
+        coordinates: [-118, 34] as [number, number],
+        minZoom: 5,
+      },
+    ];
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 800,
+        height: 500,
+        cities: tiered,
+        zoom: true,
+      },
+    });
+    await flushCityLayout();
+    // At base zoom (k=1): the minZoom-1 city shows, the minZoom-5 one doesn't.
+    const labels = [
+      ...layerOf(wrapper).element.querySelectorAll(".choropleth-city-label"),
+    ].map((n) => n.textContent);
+    expect(
+      layerOf(wrapper).element.querySelectorAll(".choropleth-city-dot"),
+    ).toHaveLength(1);
+    expect(labels).toContain("Big");
+    expect(labels).not.toContain("Small");
+  });
+});

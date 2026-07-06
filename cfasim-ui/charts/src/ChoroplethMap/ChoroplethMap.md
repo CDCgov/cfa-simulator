@@ -2,6 +2,12 @@
 import { computed, ref } from "vue";
 import countiesTopoForPerf from "us-atlas/counties-10m.json";
 import { fipsToHsa } from "@cfasim-ui/charts/hsa-mapping";
+import { nationalCityMarkers, stateCityMarkers } from "@cfasim-ui/charts/us-cities";
+
+// Capital + 100 most-populous US cities for the national demo, and
+// California's capital + top cities for the single-state demo.
+const nationalCities = nationalCityMarkers();
+const californiaCities = stateCityMarkers("06");
 
 // Build one row per county (~3,143) with a deterministic-ish value so the
 // perf example can render every region with a custom tooltip.
@@ -404,6 +410,90 @@ Works on national state, county, and HSA maps — it's a no-op only in single-st
 
   </template>
 </ComponentDemo>
+
+### City markers (`cities`)
+
+Pass a `cities` array to overlay decorative point markers with name labels. Each entry is `{ name, coordinates: [lng, lat], capital?, minZoom? }`. Every city is a dot; `capital` cities are labeled first (with a lightly emphasized label) and never dropped, while any other label that can't be placed without overlapping is dropped (its dot stays), so labels never collide. The overlay is non-interactive — the choropleth's own hover/click is unaffected — and the markers pan/zoom with the map while staying a constant on-screen size. It works with both the SVG and canvas (`renderer`) backends.
+
+**Level-of-detail:** on a zoomable map (`zoom`), each city has a `minZoom` and shows only once the map is zoomed to `scaleK >= minZoom`, so you can reveal the biggest cities first and progressively add more as the user zooms in. `nationalCityMarkers()` / `stateCityMarkers()` assign these tiers by population automatically (the capital always shows). A city without its own `minZoom` falls back to the `cities-min-zoom` prop (default `2`) — set that to `1` for a flat "always visible" layer, or pass `{ tiered: false }` to the selectors. **The overview below shows the biggest cities; double-click to zoom in and reveal more:**
+
+<ComponentDemo>
+  <ChoroplethMap
+    :topology="statesTopo"
+    :cities="nationalCities"
+    zoom
+    title="100 most-populous US cities and the capital"
+    :legend="false"
+    :height="440"
+  />
+
+<template #code>
+
+```vue
+<script setup>
+import { ChoroplethMap } from "@cfasim-ui/charts";
+import { nationalCityMarkers } from "@cfasim-ui/charts/us-cities";
+import statesTopo from "us-atlas/states-10m.json";
+
+// Washington, DC (emphasized) + the 100 most-populous US cities.
+const cities = nationalCityMarkers();
+</script>
+
+<!-- zoom in one level to reveal the cities -->
+<ChoroplethMap :topology="statesTopo" :cities="cities" zoom />
+```
+
+  </template>
+</ComponentDemo>
+
+In a single-state map, pass that state's cities so its capital and top cities show:
+
+<ComponentDemo>
+  <ChoroplethMap
+    :topology="countiesTopo"
+    state="California"
+    geo-type="counties"
+    :cities="californiaCities"
+    zoom
+    :legend="false"
+    :height="440"
+  />
+
+<template #code>
+
+```vue
+<!-- Sacramento (capital) + California's most-populous cities -->
+<ChoroplethMap
+  :topology="countiesTopo"
+  state="California"
+  geo-type="counties"
+  :cities="stateCityMarkers('06')"
+  zoom
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+#### Bundled US city data (`@cfasim-ui/charts/us-cities`)
+
+`nationalCityMarkers()` and `stateCityMarkers()` come from the `@cfasim-ui/charts/us-cities` subpath — a ~5 KB gzipped dataset (Natural Earth, public domain) of the 100 most-populous US cities plus every state capital and DC. It's a separate entry point, so consumers who don't use it never pull it into their bundle.
+
+```js
+import {
+  usCities,
+  nationalCityMarkers,
+  stateCityMarkers,
+} from "@cfasim-ui/charts/us-cities";
+
+nationalCityMarkers(); //=> DC (capital) + top 100 cities, tiered by population
+nationalCityMarkers({ limit: 25 }); //=> DC + top 25
+nationalCityMarkers({ tiered: false }); //=> flat layer, no per-city minZoom
+stateCityMarkers("48"); //=> Austin (capital) + top Texas cities
+usCities; //=> the raw UsCity[] to build your own selection
+```
+
+Only the national capital is flagged on the national map; a state's own capital is flagged in its single-state view. A flagged capital's label is emphasized and never dropped for collisions — the marker itself is a plain dot like any other city. Override the marker/label colors per instance with CSS custom properties on `.choropleth-cities`: `--choropleth-city-marker`, `--choropleth-city-label-color`, and `--choropleth-city-halo`.
 
 ### HSA-level map
 
