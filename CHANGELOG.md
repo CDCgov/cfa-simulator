@@ -1,6 +1,18 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.7.7] - 2026-07-07
+
+### Bug Fixes
+
+- **charts:** Default tooltip clamp to window and fix flipped tooltip overlap
+
+### Features
+
+- **charts:** Extend tightFit to national county and HSA maps
+- **charts:** Add city markers overlay to ChoroplethMap
+- **charts:** Add support for legend in areas
+
 ## [0.7.6] - 2026-07-05
 
 ### Bug Fixes
