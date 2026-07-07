@@ -249,8 +249,8 @@ const props = withDefaults(
     tooltipValueFormat?: NumberFormat;
     /**
      * Boundary for tooltip flip/clamp. `"none"` always places to the right of
-     * the pointer with no clamping. `"chart"` (default) uses the map
-     * container's bounding box. `"window"` uses the viewport.
+     * the pointer with no clamping. `"chart"` uses the map container's
+     * bounding box. `"window"` (default) uses the viewport.
      */
     tooltipClamp?: "none" | "chart" | "window";
     /**
@@ -332,7 +332,7 @@ const props = withDefaults(
     zoomMode: "activate",
     touchExpand: true,
     zoomHint: true,
-    tooltipClamp: "chart",
+    tooltipClamp: "window",
     focusZoomLevel: 4,
     focusZoom: true,
     tightFit: false,
@@ -1734,22 +1734,21 @@ function attachTooltipObserver() {
   const el = tooltipChildRef.value?.getEl();
   if (!el) return;
   tooltipObserver?.disconnect();
-  // First measurement bootstraps placement (the very first hover used the
-  // 0×0 fallback). After that we just silently refresh the cached size —
-  // every hover uses whatever was measured on the previous render, so
-  // switching between hover targets never causes the tooltip to re-flip
-  // mid-hover.
-  let primed = false;
   tooltipObserver = new ResizeObserver((entries) => {
-    const r = entries[0]?.contentRect;
-    if (!r) return;
-    lastTooltipSize.width = r.width;
-    lastTooltipSize.height = r.height;
-    if (!primed && tooltipVisible && lastPointer) {
-      primed = true;
+    const entry = entries[0];
+    if (!entry) return;
+    // Cache the border-box size: `.chart-tooltip-content` carries padding
+    // and a border, so contentRect under-measures by ~23px — enough to put
+    // a left-flipped tooltip on top of the cursor instead of GAP away.
+    const box = entry.borderBoxSize?.[0];
+    lastTooltipSize.width = box ? box.inlineSize : entry.contentRect.width;
+    lastTooltipSize.height = box ? box.blockSize : entry.contentRect.height;
+    // Re-apply with the just-measured size. The hover positioned the
+    // tooltip with the previous feature's size; when the new content is
+    // wider, a left-flipped tooltip sits under the cursor (and can poke
+    // past the clamp boundary) until corrected here.
+    if (tooltipVisible && lastPointer) {
       applyTooltipPosition(lastPointer.x, lastPointer.y);
-    } else {
-      primed = true;
     }
   });
   tooltipObserver.observe(el);

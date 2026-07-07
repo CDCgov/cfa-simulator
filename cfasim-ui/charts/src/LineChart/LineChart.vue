@@ -236,7 +236,7 @@ interface LineChartProps extends ChartCommonProps {
 const props = withDefaults(defineProps<LineChartProps>(), {
   lineOpacity: 1,
   menu: true,
-  tooltipClamp: "chart",
+  tooltipClamp: "window",
   yScaleType: "linear",
 });
 

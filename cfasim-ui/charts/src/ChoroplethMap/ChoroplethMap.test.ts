@@ -1648,6 +1648,153 @@ describe("ChoroplethMap", () => {
     }
   });
 
+  it("flips using the tooltip's border-box size, keeping clearance from the cursor", async () => {
+    // Regression: the size cache read contentRect, which excludes
+    // .chart-tooltip-content's padding + border, so a left-flipped tooltip
+    // sat ~23px further right than intended — overlapping the cursor.
+    const observers: {
+      cb: ResizeObserverCallback;
+      targets: Element[];
+    }[] = [];
+    class FakeRO {
+      cb: ResizeObserverCallback;
+      targets: Element[] = [];
+      constructor(cb: ResizeObserverCallback) {
+        this.cb = cb;
+        observers.push(this);
+      }
+      observe(t: Element) {
+        this.targets.push(t);
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", FakeRO);
+    vi.stubGlobal("innerWidth", 1000);
+    vi.stubGlobal("innerHeight", 800);
+    try {
+      const wrapper = mount(ChoroplethMap, {
+        attachTo: document.body,
+        props: {
+          topology: statesTopo,
+          width: 600,
+          height: 400,
+          tooltipTrigger: "hover",
+          tooltipClamp: "window",
+          data: [{ id: "06", value: 42 }],
+        },
+      });
+      await flushPromises();
+      const tip = document.body.querySelector<HTMLElement>(
+        ".chart-tooltip-content",
+      )!;
+      const tipRO = observers.find((o) => o.targets.includes(tip))!;
+      // Border box 300×40, content box 277×17 (padding + border), as a real
+      // browser reports them.
+      const borderW = 300;
+      tipRO.cb(
+        [
+          {
+            borderBoxSize: [{ inlineSize: borderW, blockSize: 40 }],
+            contentRect: { width: 277, height: 17 },
+          } as unknown as ResizeObserverEntry,
+        ],
+        tipRO as unknown as ResizeObserver,
+      );
+
+      const california = wrapper
+        .findAll(".state-path")
+        .find((p) => p.attributes("data-feat-id") === "06")!;
+      await california.trigger("mouseover", { clientX: 950, clientY: 200 });
+      const x = Number(
+        /translate3d\((-?[\d.]+)px/.exec(tip.style.transform)?.[1] ?? "NaN",
+      );
+      // The flipped tooltip's right edge must clear the cursor by the 16px
+      // gap. With the contentRect size this was 957 (7px past the cursor).
+      expect(x + borderW).toBeLessThanOrEqual(950 - 16);
+
+      wrapper.unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("re-applies the position when the tooltip resizes while visible", async () => {
+    // Regression: hovering feature B places its tooltip with feature A's
+    // cached size; the ResizeObserver then only refreshed the cache, so a
+    // tooltip wider than its predecessor stayed too far right — sitting on
+    // top of the cursor (and past the clamp edge) until the next mousemove.
+    const observers: {
+      cb: ResizeObserverCallback;
+      targets: Element[];
+    }[] = [];
+    class FakeRO {
+      cb: ResizeObserverCallback;
+      targets: Element[] = [];
+      constructor(cb: ResizeObserverCallback) {
+        this.cb = cb;
+        observers.push(this);
+      }
+      observe(t: Element) {
+        this.targets.push(t);
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", FakeRO);
+    vi.stubGlobal("innerWidth", 1000);
+    vi.stubGlobal("innerHeight", 800);
+    try {
+      const wrapper = mount(ChoroplethMap, {
+        attachTo: document.body,
+        props: {
+          topology: statesTopo,
+          width: 600,
+          height: 400,
+          tooltipTrigger: "hover",
+          tooltipClamp: "window",
+          data: [{ id: "06", value: 42 }],
+        },
+      });
+      await flushPromises();
+      const tip = document.body.querySelector<HTMLElement>(
+        ".chart-tooltip-content",
+      )!;
+      const tipRO = observers.find((o) => o.targets.includes(tip))!;
+      const measure = (w: number, h: number) =>
+        tipRO.cb(
+          [
+            {
+              borderBoxSize: [{ inlineSize: w, blockSize: h }],
+              contentRect: { width: w - 23, height: h - 23 },
+            } as unknown as ResizeObserverEntry,
+          ],
+          tipRO as unknown as ResizeObserver,
+        );
+      const parseX = () =>
+        Number(
+          /translate3d\((-?[\d.]+)px/.exec(tip.style.transform)?.[1] ?? "NaN",
+        );
+
+      // Hover with a narrow cached size → flips left based on 60px.
+      measure(60, 40);
+      const california = wrapper
+        .findAll(".state-path")
+        .find((p) => p.attributes("data-feat-id") === "06")!;
+      await california.trigger("mouseover", { clientX: 950, clientY: 200 });
+      expect(parseX()).toBeCloseTo(950 - 16 - 60);
+
+      // The committed content is actually 300px wide → the observer fires
+      // and must re-place the tooltip so it still clears the cursor.
+      measure(300, 40);
+      expect(parseX()).toBeCloseTo(950 - 16 - 300);
+
+      wrapper.unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("keeps the tooltip through a plain click once drag-pan is live", async () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,

@@ -121,7 +121,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
   } = useChartTooltip({
     enabled: opts.hasTooltipSlot,
     trigger: opts.tooltipTrigger,
-    clamp: () => opts.tooltipClamp() ?? "chart",
+    clamp: () => opts.tooltipClamp() ?? "window",
     pointerToIndex: opts.pointerToIndex,
     containerRef,
     scrubAxis: opts.scrubAxis,

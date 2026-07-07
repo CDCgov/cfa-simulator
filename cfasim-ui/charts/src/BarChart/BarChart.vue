@@ -280,7 +280,7 @@ const props = withDefaults(defineProps<BarChartProps>(), {
   barPadding: 0.2,
   groupGap: 1,
   menu: true,
-  tooltipClamp: "chart",
+  tooltipClamp: "window",
   valueGrid: true,
   valueScaleType: "linear",
   valueAxis: true,

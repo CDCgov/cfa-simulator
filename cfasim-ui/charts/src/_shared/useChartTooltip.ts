@@ -86,7 +86,7 @@ export function useChartTooltip(opts: ChartTooltipOptions) {
       if (!el || !container) return;
       const rect = container.getBoundingClientRect();
       const offset = isTouching.value ? TOUCH_Y_OFFSET : 0;
-      const clamp = opts.clamp?.() ?? "chart";
+      const clamp = opts.clamp?.() ?? "window";
       const { left, top } = placeTooltip(
         pointer.value.clientX,
         pointer.value.clientY - offset,

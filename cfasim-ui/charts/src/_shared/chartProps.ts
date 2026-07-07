@@ -135,7 +135,7 @@ export interface ChartCommonProps {
   tooltipData?: ArrayLike<unknown>;
   /** Tooltip activation mode. */
   tooltipTrigger?: "hover" | "click";
-  /** Boundary for tooltip flip/clamp. Default: `"chart"`. */
+  /** Boundary for tooltip flip/clamp. Default: `"window"`. */
   tooltipClamp?: "none" | "chart" | "window";
   /**
    * Formatter for numeric values shown in the default tooltip. Accepts a
