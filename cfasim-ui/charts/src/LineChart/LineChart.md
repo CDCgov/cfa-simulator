@@ -694,7 +694,9 @@ inverts. The white `outline`, if any, is unaffected.
 Use the `areas` prop to fill a band between two y-series — useful for
 confidence intervals or min/max envelopes around a mean line. Each `Area`
 takes parallel `upper` and `lower` arrays (and an optional `x` array, just
-like `Series`). Set `blendMode` on an `Area` to apply a CSS
+like `Series`). Set `legend` on an `Area` to include the band in the inline
+legend; use `showInLegend: false` to hide a legend label without removing
+the field from shared config. Set `blendMode` on an `Area` to apply a CSS
 `mix-blend-mode` to its fill so overlapping bands combine their colors
 (e.g. `"multiply"`) instead of the later one obscuring the earlier.
 
@@ -707,6 +709,7 @@ like `Series`). Set `blendMode` on an `Area` to apply a CSS
         lower: [0, 1, 3, 9, 15, 22, 21, 13, 6, 1, 0],
         color: '#0057b7',
         opacity: 0.15,
+        legend: '95% interval',
       },
     ]"
     :height="220"
@@ -726,6 +729,7 @@ like `Series`). Set `blendMode` on an `Area` to apply a CSS
       lower: ci95Lo,
       color: '#0057b7',
       opacity: 0.15,
+      legend: '95% interval',
     },
   ]"
   :height="220"
@@ -1197,6 +1201,8 @@ interface Area {
   x?: LineChartData; // optional parallel x-values
   color?: string;
   opacity?: number;
+  legend?: string; // inline legend label
+  showInLegend?: boolean; // default true when legend is set
   blendMode?: BlendMode; // CSS mix-blend-mode for the fill
 }
 ```

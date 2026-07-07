@@ -1058,6 +1058,59 @@ describe("LineChart", () => {
       expect(texts).not.toContain("Reference");
     });
 
+    it("renders an area legend entry with a filled swatch", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1, 2, 3],
+          areas: [
+            {
+              upper: [2, 3, 4],
+              lower: [0, 1, 2],
+              color: "#0057b7",
+              opacity: 0.15,
+              legend: "95% interval",
+            },
+          ],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const texts = wrapper.findAll("text").map((t) => t.text());
+      expect(texts).toContain("95% interval");
+      const swatch = wrapper
+        .findAll("rect")
+        .find(
+          (r) =>
+            r.attributes("fill") === "#0057b7" &&
+            r.attributes("fill-opacity") === "0.15" &&
+            r.attributes("width") === "12" &&
+            r.attributes("height") === "8",
+        );
+      expect(swatch).toBeTruthy();
+    });
+
+    it("hides an area legend entry when showInLegend is false", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1, 2, 3],
+          areas: [
+            {
+              upper: [2, 3, 4],
+              lower: [0, 1, 2],
+              legend: "Hidden interval",
+              showInLegend: false,
+            },
+          ],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const texts = wrapper.findAll("text").map((t) => t.text());
+      expect(texts).not.toContain("Hidden interval");
+    });
+
     it("wraps inline legend items to multiple rows when they overflow width", () => {
       const series = Array.from({ length: 10 }, (_, i) => ({
         data: [i + 1, i + 2, i + 3],

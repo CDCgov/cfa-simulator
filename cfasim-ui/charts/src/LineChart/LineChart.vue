@@ -114,6 +114,13 @@ export interface Area {
   x?: LineChartXInput;
   color?: string;
   opacity?: number;
+  /** Label shown in the inline legend. */
+  legend?: string;
+  /**
+   * Whether this area appears in the inline legend. Defaults to true.
+   * Has no effect when `legend` is unset.
+   */
+  showInLegend?: boolean;
   /**
    * CSS `mix-blend-mode` applied to the area fill. Lets overlapping
    * areas (e.g. confidence bands) combine their colors instead of one
@@ -672,7 +679,7 @@ const sectionLabels = computed<{
 interface InlineLegendItem {
   label: string;
   color: string;
-  type: "series" | "section";
+  type: "series" | "area" | "section";
   dashed?: boolean;
   fillOpacity?: number;
 }
@@ -686,6 +693,15 @@ const inlineLegendItems = computed<InlineLegendItem[]>(() => {
       color: s.color ?? "currentColor",
       type: "series",
       dashed: s.dashed,
+    });
+  }
+  for (const a of allAreas.value) {
+    if (!a.legend || a.showInLegend === false) continue;
+    items.push({
+      label: a.legend,
+      color: a.color ?? "currentColor",
+      type: "area",
+      fillOpacity: a.opacity ?? 0.2,
     });
   }
   const sections = props.areaSections;
@@ -1110,6 +1126,18 @@ const positionedLegendItems = computed(() => {
               :stroke="item.color"
               stroke-width="2"
               :stroke-dasharray="item.dashed ? '4 2' : undefined"
+            />
+            <!-- area indicator: filled swatch -->
+            <rect
+              v-else-if="item.type === 'area'"
+              :x="item.x"
+              :y="item.y - 4"
+              width="12"
+              height="8"
+              :fill="item.color"
+              :fill-opacity="item.fillOpacity"
+              :stroke="item.color"
+              stroke-width="1.5"
             />
             <!-- section indicator: filled circle -->
             <circle
