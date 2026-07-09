@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.7.8] - 2026-07-09
+
+### Performance
+
+- **charts:** Cache canvas base render for smooth hover and resize
+
 ## [0.7.7] - 2026-07-07
 
 ### Bug Fixes
