@@ -23,7 +23,9 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
           cache: pnpm
-      - run: npm install -g npm@latest
+      # Pin to npm 11.x: npm 12.0.0 ships a broken provenance path
+      # ("Cannot find module 'sigstore'"). Drop the pin once 12.x is fixed.
+      - run: npm install -g npm@11
       - run: pnpm install
       - run: plz build
       - run: pnpm publish -r --access public --no-git-checks
