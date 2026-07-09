@@ -63,6 +63,9 @@ const defaults = {
   fit: "full" as "full" | "tight",
   // Overlay the capital (starred) + most-populous cities.
   cities: "off" as "off" | "on",
+  // Rendering backend. Canvas scales to thousands of counties; svg keeps
+  // per-feature DOM. Fixed at mount, so the map is keyed on it to remount.
+  renderer: "canvas" as "canvas" | "svg",
 };
 const { params } = useModelParams(defaults);
 
@@ -152,7 +155,7 @@ const heading = computed(() =>
 const subtitle = computed(() =>
   params.selectedState
     ? "Counties or HSAs within the state. Click one to see its details."
-    : "US counties (canvas renderer). Click one to drill into its state.",
+    : `US counties (${params.renderer} renderer). Click one to drill into its state.`,
 );
 </script>
 
@@ -193,6 +196,15 @@ const subtitle = computed(() =>
         { value: 'on', label: 'On' },
       ]"
     />
+    <ToggleGroup
+      v-model="params.renderer"
+      label="Renderer"
+      hint="Canvas rasterizes the whole map (scales to thousands of counties); SVG keeps a DOM node per feature. Switching remounts the map."
+      :options="[
+        { value: 'canvas', label: 'Canvas' },
+        { value: 'svg', label: 'SVG' },
+      ]"
+    />
   </Teleport>
 
   <div class="state-map-page">
@@ -201,11 +213,12 @@ const subtitle = computed(() =>
     <div class="layout" :class="{ 'is-state': params.selectedState }">
       <div class="map-container">
         <ChoroplethMap
+          :key="params.renderer"
           :topology="topology"
           :state="params.selectedState"
           :geo-type="mapGeoType"
           :data="mapData"
-          renderer="canvas"
+          :renderer="params.renderer"
           :focus="focus"
           :focus-zoom="false"
           :cities="cityMarkers"

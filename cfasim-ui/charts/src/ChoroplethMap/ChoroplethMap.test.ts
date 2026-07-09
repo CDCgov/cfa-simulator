@@ -2512,6 +2512,53 @@ describe("ChoroplethMap canvas renderer", () => {
     wrapper.unmount();
   });
 
+  it("blits the cached base on a hover-only change instead of re-filling", async () => {
+    // A hover transition changes only the 1-feature highlight, so it should
+    // blit the cached base (drawImage) + draw one highlight — NOT re-fill all
+    // 56 state geometries. Give the fake ctx a drawImage so the fast path (and
+    // the offscreen snapshot capture) can engage.
+    drawCtx.drawImage = vi.fn();
+    const wrapper = mountCanvas({
+      zoom: false,
+      tooltipTrigger: "hover",
+      data: [{ id: "06", value: 42 }],
+    });
+    await new Promise((r) => setTimeout(r, 50));
+    const fillsBefore = drawCtx.fill.mock.calls.length;
+    const blitsBefore = drawCtx.drawImage.mock.calls.length;
+    pickColor = [0, 0, 1, 255];
+    mapSurface(wrapper).element.dispatchEvent(
+      new MouseEvent("mousemove", {
+        bubbles: true,
+        clientX: 100,
+        clientY: 100,
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    // Blitted the base…
+    expect(drawCtx.drawImage.mock.calls.length).toBeGreaterThan(blitsBefore);
+    // …and only the single hover highlight re-filled (not the whole scene).
+    expect(drawCtx.fill.mock.calls.length - fillsBefore).toBeLessThan(5);
+    wrapper.unmount();
+  });
+
+  it("re-renders the full base (not a stale blit) when data changes", async () => {
+    drawCtx.drawImage = vi.fn();
+    const wrapper = mountCanvas({ data: [{ id: "06", value: 1 }] });
+    await new Promise((r) => setTimeout(r, 50));
+    const fillsBefore = drawCtx.fill.mock.calls.length;
+    await wrapper.setProps({
+      data: [
+        { id: "06", value: 99 },
+        { id: "48", value: 5 },
+      ],
+    });
+    await new Promise((r) => setTimeout(r, 50));
+    // markBaseDirty forced a full re-fill of every feature, not a 1-feature blit.
+    expect(drawCtx.fill.mock.calls.length - fillsBefore).toBeGreaterThan(20);
+    wrapper.unmount();
+  });
+
   it("resizes the backing store when devicePixelRatio changes", async () => {
     const listeners: Array<() => void> = [];
     const queries: string[] = [];
@@ -2554,6 +2601,44 @@ describe("ChoroplethMap canvas renderer", () => {
         configurable: true,
       });
     }
+  });
+
+  it("repaints synchronously on container resize (no blank frame)", async () => {
+    // Resizing the backing store clears it. If the redraw were deferred to a
+    // rAF, the just-cleared canvas would paint blank for a frame, so a
+    // drag-resize flashes in and out. The resize handler must draw right away.
+    const observers: { cb: ResizeObserverCallback; targets: Element[] }[] = [];
+    class FakeRO {
+      cb: ResizeObserverCallback;
+      targets: Element[] = [];
+      constructor(cb: ResizeObserverCallback) {
+        this.cb = cb;
+        observers.push(this);
+      }
+      observe(t: Element) {
+        this.targets.push(t);
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", FakeRO);
+    const wrapper = mountCanvas();
+    await new Promise((r) => setTimeout(r, 50));
+    const svgEl = mapSurface(wrapper).element as SVGSVGElement;
+    const canvas = wrapper.find("canvas.choropleth-canvas")
+      .element as HTMLCanvasElement;
+    const ro = observers.find((o) => o.targets.includes(svgEl))!;
+
+    const fillsBefore = drawCtx.fill.mock.calls.length;
+    ro.cb(
+      [{ contentRect: { width: 500, height: 312 } } as ResizeObserverEntry],
+      ro as unknown as ResizeObserver,
+    );
+    // Synchronous, with no rAF/flush: the backing store was resized AND the
+    // scene repainted within the same tick.
+    expect(canvas.width).toBe(500);
+    expect(drawCtx.fill.mock.calls.length).toBeGreaterThan(fillsBefore);
+    wrapper.unmount();
   });
 
   it("menu offers Fullscreen and Save as PNG only", () => {

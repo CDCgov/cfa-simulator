@@ -236,8 +236,13 @@ export function drawHoverHighlight(
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
-/** One-shot full repaint (composition of the passes above). */
-export function drawScene(
+/**
+ * Everything but the transient hover: clear, fills, outlines, borders, focus
+ * highlights, overlays. Split out so the component can cache this to an
+ * offscreen canvas and, on a hover-only change, blit it back + redraw the one
+ * highlight instead of re-filling every feature.
+ */
+export function drawBase(
   ctx: CanvasRenderingContext2D,
   scene: CanvasScene,
   view: CanvasView,
@@ -246,6 +251,16 @@ export function drawScene(
   beginBasePass(ctx, view);
   drawFillSlice(ctx, scene, 0, scene.items.length);
   finishBasePass(ctx, scene, view, state);
+}
+
+/** One-shot full repaint: the base pass plus the hover highlight on top. */
+export function drawScene(
+  ctx: CanvasRenderingContext2D,
+  scene: CanvasScene,
+  view: CanvasView,
+  state: CanvasDrawState,
+): void {
+  drawBase(ctx, scene, view, state);
   drawHoverHighlight(ctx, scene, view, state, state.hoveredId);
 }
 

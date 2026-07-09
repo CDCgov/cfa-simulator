@@ -29,7 +29,7 @@ import { saveSvg, savePng, saveCanvasPng } from "../ChartMenu/download.js";
 import {
   buildScene,
   buildPicking,
-  drawScene,
+  drawBase,
   drawHoverHighlight,
   pickIndexAt,
   type CanvasScene,
@@ -644,17 +644,7 @@ onMounted(() => {
       meetOffsetX = (rect.width - s * width.value) / 2;
       meetOffsetY = rect.height ? (rect.height - s * height.value) / 2 : 0;
       if (isCanvas.value) {
-        const canvas = canvasRef.value;
-        if (canvas) {
-          // Pin the canvas over the svg box, then size its backing store in
-          // device pixels.
-          pinToSvgBox(canvas);
-          const dpr =
-            (typeof window !== "undefined" && window.devicePixelRatio) || 1;
-          canvas.width = Math.max(1, Math.round(rect.width * dpr));
-          canvas.height = Math.max(1, Math.round(rect.height * dpr));
-        }
-        requestRedraw();
+        resizeCanvasSurface(rect.width, rect.height);
       } else {
         applyStrokeScale();
       }
@@ -677,6 +667,7 @@ onUnmounted(() => {
   if (redrawFrame) cancelAnimationFrame(redrawFrame);
   if (cityLayoutFrame) cancelAnimationFrame(cityLayoutFrame);
   window.clearTimeout(pendingSelectTimer);
+  if (crispResizeTimer) window.clearTimeout(crispResizeTimer);
   teardownZoom();
   teardownInteraction();
   window.removeEventListener("scroll", dismissOnViewportChange, {
@@ -856,6 +847,7 @@ function applyFocus() {
         },
       ];
     });
+    markBaseDirty();
     requestRedraw();
   } else {
     // Diff base-geoType highlights, keyed by path element so we can
@@ -1967,12 +1959,44 @@ function onDprChange() {
     canvas.width = Math.max(1, Math.round(rect.width * dpr));
     canvas.height = Math.max(1, Math.round(rect.height * dpr));
   }
-  requestRedraw();
+  // Synchronous: resizing the backing store above cleared it, so redraw now
+  // rather than leaving it blank until the next frame.
+  redrawNow();
 }
 
+// The last full base render (fills + outlines + borders + focus + overlays,
+// but NOT the transient hover) is cached to this offscreen canvas along with
+// the view it was rendered at. It backs two fast paths in drawNow: an exact
+// blit when only the hover changed (base + view identical), and a scaled blit
+// during slow-device gestures / resizes (base identical, view moving).
 let snapshotCanvas: HTMLCanvasElement | null = null;
 let snapshotView: CanvasViewState | null = null;
 let lastFullDrawAt = 0;
+// The base content (colors, geometry, focus, overlays, strokes) changed since
+// the cached snapshot, so it can't be reused — force a full render. Hover,
+// zoom, and resize do NOT dirty the base (only the hover-on-top or the view).
+let baseDirty = true;
+// Debounced crisp redraw after a slow-device resize settles.
+const RESIZE_SETTLE_MS = 120;
+let crispResizeTimer = 0;
+
+/** Base content changed → the snapshot is stale; the next draw must be full. */
+function markBaseDirty() {
+  baseDirty = true;
+}
+
+/** Two views map canonical coords to device pixels identically. */
+function sameCanvasView(a: CanvasViewState, b: CanvasViewState): boolean {
+  return (
+    a.dpr === b.dpr &&
+    a.meetScale === b.meetScale &&
+    a.offsetX === b.offsetX &&
+    a.offsetY === b.offsetY &&
+    a.zoom.k === b.zoom.k &&
+    a.zoom.x === b.zoom.x &&
+    a.zoom.y === b.zoom.y
+  );
+}
 
 function blitSnapshot(
   ctx: CanvasRenderingContext2D,
@@ -1999,52 +2023,17 @@ function blitSnapshot(
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
-function drawNow() {
-  const display = canvasRef.value;
-  if (!display) return;
-  const ctx = display.getContext("2d");
-  if (!ctx) return;
-  const now = () =>
-    typeof performance !== "undefined" ? performance.now() : 0;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, display.width, display.height);
-  if (!scene) return;
-  const view = currentCanvasView();
-
-  // Slow-device fallback: blit between throttled crisp refreshes while a
-  // gesture is live.
-  if (
-    rendererIsSlow &&
-    isZooming &&
-    snapshotCanvas &&
-    snapshotView &&
-    typeof ctx.drawImage === "function" &&
-    now() - lastFullDrawAt < GESTURE_REFRESH_MS
-  ) {
-    blitSnapshot(ctx, view, snapshotCanvas, snapshotView);
-    if (canvasHoveredId) {
-      drawHoverHighlight(ctx, scene, view, canvasDrawState(), canvasHoveredId);
-    }
+// Copy the just-drawn base (hover NOT yet applied) into the offscreen cache,
+// tagged with the view it was rendered at. Must be called after drawBase but
+// before drawHoverHighlight so the cache stays hover-free.
+function captureBaseSnapshot(
+  display: HTMLCanvasElement,
+  view: CanvasViewState,
+) {
+  if (typeof document === "undefined") {
+    snapshotView = null;
     return;
   }
-
-  const t0 = now();
-  drawScene(ctx, scene, view, canvasDrawState());
-  const dt = now() - t0;
-  lastFullDrawAt = t0 + dt;
-  // Symmetric hysteresis: two consecutive slow full draws engage the
-  // fallback, two consecutive fast ones release it — so a cold-start
-  // hiccup (JIT warmup, first-paint contention) can't lock a fast device
-  // into blurry gesture blits forever.
-  if (dt > SLOW_FRAME_MS) {
-    fastDrawStreak = 0;
-    if (++slowDrawStreak >= 2) rendererIsSlow = true;
-  } else {
-    slowDrawStreak = 0;
-    if (++fastDrawStreak >= 2) rendererIsSlow = false;
-  }
-  if (!rendererIsSlow || typeof document === "undefined") return;
-  // Keep a snapshot current for the fallback's gesture blits.
   if (!snapshotCanvas) snapshotCanvas = document.createElement("canvas");
   if (snapshotCanvas.width !== display.width) {
     snapshotCanvas.width = display.width;
@@ -2063,6 +2052,89 @@ function drawNow() {
   }
 }
 
+function drawNow() {
+  const display = canvasRef.value;
+  if (!display) return;
+  const ctx = display.getContext("2d");
+  if (!ctx) return;
+  const now = () =>
+    typeof performance !== "undefined" ? performance.now() : 0;
+  if (!scene) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, display.width, display.height);
+    return;
+  }
+  const view = currentCanvasView();
+  const canBlit = typeof ctx.drawImage === "function";
+
+  // Fast hover path: only the hover highlight changed — the base content and
+  // the view match the cache — so blit the cached base and redraw the single
+  // highlight instead of re-filling every feature. Falls through to a full
+  // render whenever the cache can't be trusted, so a miss is never wrong,
+  // only slower.
+  if (
+    !baseDirty &&
+    canBlit &&
+    snapshotCanvas &&
+    snapshotView &&
+    snapshotCanvas.width === display.width &&
+    snapshotCanvas.height === display.height &&
+    sameCanvasView(view, snapshotView)
+  ) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, display.width, display.height);
+    ctx.drawImage(snapshotCanvas, 0, 0);
+    if (canvasHoveredId) {
+      drawHoverHighlight(ctx, scene, view, canvasDrawState(), canvasHoveredId);
+    }
+    return;
+  }
+
+  // Slow-device gesture fallback: the base is unchanged but the view is moving
+  // (a live zoom), so blit it scaled between throttled crisp refreshes.
+  if (
+    !baseDirty &&
+    rendererIsSlow &&
+    isZooming &&
+    canBlit &&
+    snapshotCanvas &&
+    snapshotView &&
+    now() - lastFullDrawAt < GESTURE_REFRESH_MS
+  ) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, display.width, display.height);
+    blitSnapshot(ctx, view, snapshotCanvas, snapshotView);
+    if (canvasHoveredId) {
+      drawHoverHighlight(ctx, scene, view, canvasDrawState(), canvasHoveredId);
+    }
+    return;
+  }
+
+  // Full render: base pass (clears), then cache it, then hover on top.
+  const t0 = now();
+  drawBase(ctx, scene, view, canvasDrawState());
+  const dt = now() - t0;
+  lastFullDrawAt = t0 + dt;
+  baseDirty = false;
+  // Symmetric hysteresis: two consecutive slow full draws engage the
+  // fallback, two consecutive fast ones release it — so a cold-start
+  // hiccup (JIT warmup, first-paint contention) can't lock a fast device
+  // into blurry gesture blits forever.
+  if (dt > SLOW_FRAME_MS) {
+    fastDrawStreak = 0;
+    if (++slowDrawStreak >= 2) rendererIsSlow = true;
+  } else {
+    slowDrawStreak = 0;
+    if (++fastDrawStreak >= 2) rendererIsSlow = false;
+  }
+  // Cache the hover-free base for the fast paths above (all devices — the
+  // hover reuse needs it even on fast renderers), then draw hover on top.
+  captureBaseSnapshot(display, view);
+  if (canvasHoveredId) {
+    drawHoverHighlight(ctx, scene, view, canvasDrawState(), canvasHoveredId);
+  }
+}
+
 // rAF-coalesced: gesture zooms can emit several events per frame.
 function requestRedraw() {
   if (!isCanvas.value || redrawFrame) return;
@@ -2070,6 +2142,74 @@ function requestRedraw() {
     redrawFrame = 0;
     drawNow();
   });
+}
+
+// Synchronous repaint for resize / DPR changes: those handlers resize the
+// backing store (which clears it), so a deferred rAF redraw would leave the
+// canvas blank for a frame — a drag-resize flashes in and out. Drawing now
+// (and dropping any pending rAF so it can't double-draw) keeps it filled.
+function redrawNow() {
+  if (!isCanvas.value) return;
+  if (redrawFrame) {
+    cancelAnimationFrame(redrawFrame);
+    redrawFrame = 0;
+  }
+  drawNow();
+}
+
+// After a slow-device resize drag stops, repaint crisply once.
+function scheduleCrispResize() {
+  if (typeof window === "undefined") return;
+  if (crispResizeTimer) window.clearTimeout(crispResizeTimer);
+  crispResizeTimer = window.setTimeout(() => {
+    crispResizeTimer = 0;
+    requestRedraw();
+  }, RESIZE_SETTLE_MS);
+}
+
+// Resize the canvas backing store to the new svg box and repaint. The resize
+// clears the backing store, so we always repaint in the same tick to avoid a
+// blank frame. On a renderer measured as slow, a full redraw every drag tick
+// would lag, so instead blit the cached base scaled to the new box (smooth,
+// slightly soft) and defer one crisp redraw until the drag settles. Fast
+// renderers (or before we've measured one as slow) just repaint crisply now.
+function resizeCanvasSurface(rectWidth: number, rectHeight: number) {
+  const canvas = canvasRef.value;
+  if (!canvas) return;
+  // Pin the canvas over the svg box, then size its backing store in device px.
+  pinToSvgBox(canvas);
+  const dpr = (typeof window !== "undefined" && window.devicePixelRatio) || 1;
+  canvas.width = Math.max(1, Math.round(rectWidth * dpr));
+  canvas.height = Math.max(1, Math.round(rectHeight * dpr));
+
+  if (
+    rendererIsSlow &&
+    !baseDirty &&
+    scene &&
+    snapshotCanvas &&
+    snapshotView &&
+    typeof document !== "undefined"
+  ) {
+    const ctx = canvas.getContext("2d");
+    if (ctx && typeof ctx.drawImage === "function") {
+      const view = currentCanvasView();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      blitSnapshot(ctx, view, snapshotCanvas, snapshotView);
+      if (canvasHoveredId) {
+        drawHoverHighlight(
+          ctx,
+          scene,
+          view,
+          canvasDrawState(),
+          canvasHoveredId,
+        );
+      }
+      scheduleCrispResize();
+      return;
+    }
+  }
+  redrawNow();
 }
 
 // Feature under a client point via the picking canvas — O(1) per query
@@ -2594,6 +2734,7 @@ function rebuildPaths() {
     scene = null;
     pickingCtx = null;
     snapshotView = null;
+    markBaseDirty();
     requestRedraw();
     return;
   }
@@ -2623,6 +2764,7 @@ function rebuildPaths() {
     pickingCtx = pickingCanvas
       ? buildPicking(scene, width.value, height.value, pickingCanvas)
       : null;
+    markBaseDirty();
     requestRedraw();
     return;
   }
@@ -2679,6 +2821,7 @@ function updateFills() {
       for (const item of scene.items) item.fill = colorFor(item.id);
     }
     for (const [id, entry] of tooltipDataById) entry.value = valueFor(id);
+    markBaseDirty();
     requestRedraw();
     return;
   }
@@ -2701,7 +2844,9 @@ function updateFills() {
 
 function updateStrokes() {
   if (isCanvas.value) {
-    // Stroke params are read at render time — refresh both buffers.
+    // Stroke params are read at render time; the base outlines change, so the
+    // cache is stale.
+    markBaseDirty();
     requestRedraw();
     return;
   }
