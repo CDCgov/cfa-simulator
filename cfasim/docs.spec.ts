@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -55,11 +56,18 @@ test.describe("cfasim docs --json against installed @cfasim-ui packages", () => 
     // resolve them through the umbrella.
     consumerDir = resolve(tmpRoot, "consumer");
     mkdirSync(consumerDir);
+    // packageManager pinned to the repo's version: an unpinned project makes
+    // CI's corepack shim resolve latest pnpm and die on its non-interactive
+    // download prompt; the repo's version is already cached there.
+    const { packageManager } = JSON.parse(
+      readFileSync(resolve(ROOT, "package.json"), "utf-8"),
+    );
     writeFileSync(
       resolve(consumerDir, "package.json"),
       JSON.stringify({
         name: "cfasim-docs-consumer",
         private: true,
+        packageManager,
         dependencies: {
           "cfasim-ui": `file:${resolve(ROOT, "cfasim-ui/cfasim-ui")}`,
           vue: "^3.5.35",
