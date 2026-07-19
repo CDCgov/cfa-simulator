@@ -1,5 +1,5 @@
 {
-  "name": "@cfasim-ui/docs",
+  "name": "@cfasim-ui/docs-site",
   "private": true,
   "type": "module",
   "dependencies": {

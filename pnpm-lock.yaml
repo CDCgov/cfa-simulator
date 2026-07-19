@@ -41,9 +41,6 @@ importers:
       '@cfasim-ui/components':
         specifier: workspace:*
         version: link:../components
-      '@cfasim-ui/docs':
-        specifier: workspace:*
-        version: link:../docs
       '@cfasim-ui/pyodide':
         specifier: workspace:*
         version: link:../pyodide
@@ -184,8 +181,6 @@ importers:
       vitest:
         specifier: ^4.1.0
         version: 4.1.0(@types/node@25.5.0)(happy-dom@20.8.9)(vite@8.0.14(@types/node@25.5.0)(esbuild@0.27.4)(yaml@2.9.0))
-
-  cfasim-ui/docs: {}
 
   cfasim-ui/pyodide:
     dependencies:

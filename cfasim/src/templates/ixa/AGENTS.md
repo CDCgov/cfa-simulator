@@ -6,7 +6,7 @@ Instructions for AI agents working on this project.
 
 The frontend code for this repository is written in the cfasim-ui framework. You should check `cfasim docs --json` (or `uvx cfasim docs --json` if the user has not installed the `cfasim` command line tool) to look up docs.
 
-The JSON output gives every component's `name`, `slug`, `keywords`, and absolute paths to its markdown docs and `.vue` source. Read those files directly for API details, examples, and props before reaching for a custom implementation.
+The JSON output gives every component's `name`, `slug`, `keywords`, and absolute paths to its markdown docs and `.vue` source. Read those files directly for API details, examples, and props before reaching for a custom implementation. The docs and source ship inside the installed `@cfasim-ui/components` and `@cfasim-ui/charts` packages (their `docs/` and `src/` directories) — the paths from `cfasim docs --json` point into them, wherever pnpm has installed them.
 
 ## What this project is
 

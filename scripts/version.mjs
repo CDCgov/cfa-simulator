@@ -25,7 +25,6 @@ const PACKAGE_JSONS = [
   "cfasim-ui/wasm/package.json",
   "cfasim-ui/pyodide/package.json",
   "cfasim-ui/shared/package.json",
-  "cfasim-ui/docs/package.json",
   "cfasim-ui/cfasim-ui/package.json",
 ];
 
