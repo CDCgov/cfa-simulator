@@ -317,14 +317,14 @@ describe("ChoroplethMap", () => {
     expect(california!.find("title").text()).toContain("high");
   });
 
-  it("uses noDataColor for states without data", () => {
+  it("uses the theme's base fill for states without data", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         topology: statesTopo,
         width: 600,
         height: 400,
         data: [{ id: "06", value: 50 }],
-        noDataColor: "#eee",
+        theme: { fill: "#eee" },
       },
     });
     const ny = wrapper
@@ -865,7 +865,7 @@ describe("ChoroplethMap", () => {
       .find((p) => p.attributes("data-feat-id") === "06")!;
     // Theme-following default: pure black (light) / white (dark), applied
     // as inline style so light-dark() resolves.
-    expect(strokeStyle(california)).toContain("light-dark");
+    expect(strokeStyle(california)).toContain("choropleth-highlight");
     // Pick any other state and confirm it kept the default stroke.
     const other = wrapper
       .findAll(".state-path")
@@ -1085,7 +1085,7 @@ describe("ChoroplethMap", () => {
     const california = wrapper
       .findAll(".state-path")
       .find((p) => p.attributes("data-feat-id") === "06")!;
-    expect(strokeStyle(california)).toContain("light-dark");
+    expect(strokeStyle(california)).toContain("choropleth-highlight");
     expect(california.attributes("stroke-dasharray")).toBe("8 4");
     wrapper.unmount();
   });
@@ -1162,7 +1162,7 @@ describe("ChoroplethMap", () => {
     const california = wrapper
       .findAll(".state-path")
       .find((p) => p.attributes("data-feat-id") === "06")!;
-    expect(strokeStyle(california)).toContain("light-dark");
+    expect(strokeStyle(california)).toContain("choropleth-highlight");
     // ...but the map didn't pan/zoom — no transform was ever applied.
     expect(wrapper.find("g").attributes("transform")).toBeUndefined();
     wrapper.unmount();
@@ -2156,7 +2156,7 @@ describe("ChoroplethMap touch zoom", () => {
     tap(california.element);
     await flushPromises();
     // Hover-style highlight and tooltip respond instantly...
-    expect(strokeStyle(california)).toContain("light-dark");
+    expect(strokeStyle(california)).toContain("choropleth-highlight");
     expect(wrapper.emitted("stateHover")?.[0]?.[0]).toMatchObject({
       id: "06",
       value: 42,
@@ -2408,6 +2408,7 @@ describe("ChoroplethMap canvas renderer", () => {
       setTransform: vi.fn(),
       clearRect: vi.fn(),
       fill: vi.fn(),
+      fillRect: vi.fn(),
       stroke: vi.fn(),
       setLineDash: vi.fn(),
     };
@@ -2462,6 +2463,21 @@ describe("ChoroplethMap canvas renderer", () => {
     await new Promise((r) => setTimeout(r, 50));
     // One fill per feature (56 state geometries) on the first frame.
     expect(drawCtx.fill.mock.calls.length).toBeGreaterThanOrEqual(50);
+    wrapper.unmount();
+  });
+
+  it("paints the theme background and exterior outline", async () => {
+    // Capture paint styles at call time (the ctx properties mutate).
+    const backgrounds: string[] = [];
+    drawCtx.fillRect = vi.fn(() => backgrounds.push(drawCtx.fillStyle));
+    const strokes: string[] = [];
+    drawCtx.stroke = vi.fn(() => strokes.push(drawCtx.strokeStyle));
+    const wrapper = mountCanvas({
+      theme: { background: "#123", outline: "#0a0" },
+    });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(backgrounds).toContain("#123");
+    expect(strokes).toContain("#0a0");
     wrapper.unmount();
   });
 
@@ -3104,5 +3120,223 @@ describe("ChoroplethMap city overlay", () => {
     ).toHaveLength(1);
     expect(labels).toContain("Big");
     expect(labels).not.toContain("Small");
+  });
+});
+
+describe("ChoroplethMap theming", () => {
+  const mapSvg = (wrapper: ReturnType<typeof mount>) =>
+    wrapper.find(".choropleth-wrapper > svg");
+
+  // The state-borders mesh path: fill="none", not the outline or an overlay.
+  const bordersPath = (wrapper: ReturnType<typeof mount>) =>
+    mapSvg(wrapper)
+      .findAll("path")
+      .find(
+        (p) =>
+          p.attributes("fill") === "none" &&
+          !p.classes("choropleth-outline") &&
+          !p.classes("focus-overlay"),
+      );
+
+  it("applies theme.stroke to feature paths", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        theme: { stroke: "#333" },
+      },
+    });
+    for (const p of wrapper.findAll(".state-path")) {
+      expect(p.attributes("stroke")).toBe("#333");
+    }
+  });
+
+  it("defaults feature strokes to the light constant in test DOMs", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 600, height: 400 },
+    });
+    expect(wrapper.find(".state-path").attributes("stroke")).toBe("#fff");
+  });
+
+  it("borders mesh follows theme.stroke until theme.borders overrides", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 600,
+        height: 400,
+        theme: { stroke: "#333" },
+      },
+    });
+    expect(bordersPath(wrapper)!.attributes("stroke")).toBe("#333");
+    await wrapper.setProps({ theme: { stroke: "#333", borders: "#900" } });
+    expect(bordersPath(wrapper)!.attributes("stroke")).toBe("#900");
+    expect(wrapper.find(".state-path").attributes("stroke")).toBe("#333");
+  });
+
+  it("renders the exterior outline when theme.outline is set", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        theme: { outline: "#0a0", outlineWidth: 2 },
+      },
+    });
+    const outline = wrapper.find(".choropleth-outline");
+    expect(outline.exists()).toBe(true);
+    expect(outline.attributes("stroke")).toBe("#0a0");
+    expect(outline.attributes("stroke-width")).toBe("2");
+    expect(outline.attributes("fill")).toBe("none");
+    expect(outline.attributes("pointer-events")).toBe("none");
+    expect(outline.attributes("d")).toBeTruthy();
+  });
+
+  it("renders no exterior outline by default", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 600, height: 400 },
+    });
+    expect(wrapper.find(".choropleth-outline").exists()).toBe(false);
+  });
+
+  it("removes the outline when the theme drops it", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        theme: { outline: "#0a0" },
+      },
+    });
+    expect(wrapper.find(".choropleth-outline").exists()).toBe(true);
+    await wrapper.setProps({ theme: {} });
+    expect(wrapper.find(".choropleth-outline").exists()).toBe(false);
+  });
+
+  it("defers the HSA-map outline until the lazy module resolves", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "hsas" as const,
+        width: 600,
+        height: 400,
+        theme: { outline: "#0a0" },
+      },
+    });
+    // Pre-module: no features, so no outline path (a NaN-fitted projection
+    // must not leak a "MNaN…" path).
+    expect(wrapper.find(".choropleth-outline").exists()).toBe(false);
+    await flushDynamicImports();
+    const outline = wrapper.find(".choropleth-outline");
+    expect(outline.exists()).toBe(true);
+    expect(outline.attributes("d")).not.toContain("NaN");
+  });
+
+  it("scopes the outline to the selected state in single-state mode", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        state: "California",
+        width: 600,
+        height: 400,
+        theme: { outline: "#0a0" },
+      },
+    });
+    const outline = wrapper.find(".choropleth-outline");
+    expect(outline.exists()).toBe(true);
+    expect(outline.attributes("d")).toBeTruthy();
+  });
+
+  it("paints a background rect when theme.background is set", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        theme: { background: "#123" },
+      },
+    });
+    const rect = wrapper.find("rect.choropleth-map-background");
+    expect(rect.exists()).toBe(true);
+    expect(rect.attributes("fill")).toBe("#123");
+    await wrapper.setProps({ theme: {} });
+    expect(wrapper.find("rect.choropleth-map-background").exists()).toBe(false);
+  });
+
+  it("theme.strokeWidth applies as-is on county maps", () => {
+    const explicit = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 600,
+        height: 400,
+        theme: { strokeWidth: 2 },
+      },
+    });
+    // svg > mapGroup > [baseGroup, overlayGroup]
+    expect(mapSvg(explicit).findAll("g")[1].attributes("stroke-width")).toBe(
+      "2",
+    );
+    const dflt = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 600,
+        height: 400,
+      },
+    });
+    expect(mapSvg(dflt).findAll("g")[1].attributes("stroke-width")).toBe(
+      "0.25",
+    );
+  });
+
+  it("lowers a hover-raised path back below the exterior outline", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        theme: { outline: "#0a0" },
+      },
+    });
+    const baseG = mapSvg(wrapper).findAll("g")[1].element;
+    expect(
+      baseG.lastElementChild?.classList.contains("choropleth-outline"),
+    ).toBe(true);
+    const path = wrapper.find(".state-path");
+    await path.trigger("mouseover");
+    // Raised above the outline while highlighted...
+    expect(baseG.lastElementChild).toBe(path.element);
+    await path.trigger("mouseout");
+    // ...and lowered back below it on un-hover, so the outline isn't left
+    // occluded along this feature's edges.
+    expect(
+      baseG.lastElementChild?.classList.contains("choropleth-outline"),
+    ).toBe(true);
+  });
+
+  it("hover highlight uses theme.highlight", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        theme: { highlight: "#f0f" },
+      },
+    });
+    const path = wrapper.find(".state-path");
+    await path.trigger("mouseover");
+    expect(strokeStyle(path)).toBe("#f0f");
+  });
+
+  it("repaints fills when theme.fill changes", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 600, height: 400 },
+    });
+    expect(wrapper.find(".state-path").attributes("fill")).toBe("#ddd");
+    await wrapper.setProps({ theme: { fill: "#eee" } });
+    expect(wrapper.find(".state-path").attributes("fill")).toBe("#eee");
   });
 });

@@ -32,5 +32,10 @@ export {
   type ColumnWidth,
 } from "./DataTable/DataTable.vue";
 export type { CityMarker, PlacedCity } from "./ChoroplethMap/cityLayout.js";
+export {
+  mapThemeDefaults,
+  type MapTheme,
+  type ResolvedMapTheme,
+} from "./_shared/mapTheme.js";
 export type { ChartAnnotation } from "./_shared/annotations.js";
 export type { BlendMode, LineMarkStyle } from "./_shared/chartProps.js";

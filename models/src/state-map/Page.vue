@@ -66,8 +66,17 @@ const defaults = {
   // Rendering backend. Canvas scales to thousands of counties; svg keeps
   // per-feature DOM. Fixed at mount, so the map is keyed on it to remount.
   renderer: "canvas" as "canvas" | "svg",
+  // Exterior outline (theme.outline) around the rendered geography.
+  outline: "off" as "off" | "on",
 };
 const { params } = useModelParams(defaults);
+
+// Theme demo: the exterior outline adapts to the page theme via light-dark().
+const mapTheme = computed(() =>
+  params.outline === "on"
+    ? { outline: "light-dark(#1e293b, #cbd5e1)", outlineWidth: 1.5 }
+    : undefined,
+);
 
 const lastClicked = ref<{ id: string; name: string } | null>(null);
 const focus = ref<FocusValue>(null);
@@ -197,6 +206,15 @@ const subtitle = computed(() =>
       ]"
     />
     <ToggleGroup
+      v-model="params.outline"
+      label="Outline"
+      hint="Draw the exterior boundary (theme.outline) on top of interior borders — the national outline, or the state boundary in a state view."
+      :options="[
+        { value: 'off', label: 'Off' },
+        { value: 'on', label: 'On' },
+      ]"
+    />
+    <ToggleGroup
       v-model="params.renderer"
       label="Renderer"
       hint="Canvas rasterizes the whole map (scales to thousands of counties); SVG keeps a DOM node per feature. Switching remounts the map."
@@ -222,6 +240,7 @@ const subtitle = computed(() =>
           :focus="focus"
           :focus-zoom="false"
           :cities="cityMarkers"
+          :theme="mapTheme"
           :zoom="params.cities === 'on'"
           :tight-fit="params.fit === 'tight'"
           :legend="false"

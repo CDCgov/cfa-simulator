@@ -41,10 +41,14 @@ import {
   useChartFullscreen,
   isTouchDevice,
   ChartZoomControls,
-  resolveColorToRgb,
+  parseRgb,
+  useMapTheme,
+  mapThemeDefaults,
+  LIGHT_HIGHLIGHT,
   TITLE_FONT_SIZE,
   TITLE_LINE_HEIGHT,
   TITLE_FONT_WEIGHT,
+  type MapTheme,
   type TitleStyle,
   type LabelStyle,
 } from "../_shared/index.js";
@@ -64,15 +68,19 @@ export interface StateData {
 }
 
 export interface ChoroplethColorScale {
-  /** Minimum color (CSS color string). Default: "#e5f0fa" */
+  /**
+   * Minimum color. Any CSS color, including `var()` and `light-dark()`,
+   * resolved against the map's container. Default: "#e5f0fa"
+   */
   min?: string;
-  /** Maximum color (CSS color string). Default: "#08519c" */
+  /** Maximum color (any CSS color, as `min`). Default: "#08519c" */
   max?: string;
 }
 
 export interface ThresholdStop {
   /** Lower bound (inclusive). Values at or above this threshold get this color. */
   min: number;
+  /** Any CSS color, including `var()` and `light-dark()`. */
   color: string;
   /** Optional label for the legend (defaults to the min value) */
   label?: string;
@@ -81,7 +89,7 @@ export interface ThresholdStop {
 export interface CategoricalStop {
   /** The categorical value to match */
   value: string;
-  /** CSS color string */
+  /** Any CSS color, including `var()` and `light-dark()`. */
   color: string;
 }
 
@@ -104,8 +112,8 @@ export interface FocusItem {
    * useful when stacking multiple outlines of different geoTypes. */
   style?: FocusStyle;
   /** Stroke color for the outline. In-place highlights (items in the
-   * base geoType) default to pure black/white following the theme
-   * (`light-dark(#000, #fff)`); cross-geoType overlay paths default to
+   * base geoType) default to the theme's `highlight` (pure black/white
+   * following the color scheme); cross-geoType overlay paths default to
    * `"#fff"`. */
   stroke?: string;
   /** Outline width in CSS px. Defaults to the map's stroke width + 1
@@ -179,9 +187,17 @@ const props = withDefaults(
     ariaLabel?: string;
     /** Styling for the legend (title, swatch labels, and continuous-scale ticks). */
     legendStyle?: LabelStyle;
-    noDataColor?: string;
-    strokeColor?: string;
-    strokeWidth?: number;
+    /**
+     * Map paint styling: base fill for features without data, feature
+     * strokes, the state-borders mesh, an exterior outline, a background
+     * wash, and the hover/focus highlight. Every color accepts any CSS
+     * color (`var()`, `light-dark()`, `color-mix()`), resolved against
+     * the map's container and re-applied automatically when the page
+     * theme changes. Defaults route through `--choropleth-*` custom
+     * properties (e.g. `--choropleth-outline` enables the exterior
+     * outline), so a stylesheet alone can theme every map. See `MapTheme`.
+     */
+    theme?: MapTheme;
     menu?: boolean | string;
     /** Show legend. Default: true */
     legend?: boolean;
@@ -322,9 +338,6 @@ const props = withDefaults(
   }>(),
   {
     geoType: "states",
-    noDataColor: "#ddd",
-    strokeColor: "#fff",
-    strokeWidth: 0.5,
     menu: true,
     legend: true,
     zoom: false,
@@ -389,6 +402,14 @@ const narrowSlotProps = (
 ): TooltipPayload => raw as TooltipPayload;
 
 const containerRef = ref<HTMLElement | null>(null);
+
+// ─── Map theme ────────────────────────────────────────────────────────────
+// All paint styling resolves through a hidden probe in the wrapper (see
+// _shared/mapTheme.ts): any CSS color works on both backends, and a page
+// theme flip re-resolves + repaints via the reactive `resolvedTheme`.
+const mapTheme = useMapTheme(containerRef, () => props.theme);
+const resolvedTheme = mapTheme.resolved;
+
 const svgRef = ref<SVGSVGElement | null>(null);
 // `mapGroupRef` is the zoom target. Inside it we split into two layers:
 // `baseGroupRef` holds feature paths + the state-borders mesh and absorbs
@@ -446,6 +467,8 @@ const titleInlineStyle = computed(() => {
 const pathsByFeatureId = new Map<string, SVGPathElement>();
 const tooltipDataById = new Map<string, TooltipPayload>();
 let bordersPathEl: SVGPathElement | null = null;
+// Exterior outline path (theme.outline), managed by syncOutlinePath.
+let outlinePathEl: SVGPathElement | null = null;
 let hoveredEl: SVGPathElement | null = null;
 // Paths currently styled as focused. Tracked separately from hover so the
 // two states compose: hovering a focused path keeps the highlight on
@@ -643,6 +666,9 @@ onMounted(() => {
       viewScale.value = s;
       meetOffsetX = (rect.width - s * width.value) / 2;
       meetOffsetY = rect.height ? (rect.height - s * height.value) / 2 : 0;
+      // A map mounted without layout (hidden tab/panel) resolved its theme
+      // to constants; the first real layout is the moment to retry.
+      mapTheme.ensureResolved();
       if (isCanvas.value) {
         resizeCanvasSurface(rect.width, rect.height);
       } else {
@@ -1386,6 +1412,35 @@ const stateBordersPath = computed(() => {
   return mesh(topo, topo.objects.states, (a, b) => a !== b);
 });
 
+// Exterior boundary of the rendered geography (theme.outline): the nation
+// outline on national maps, the selected state's boundary in single-state
+// mode. Meshed from arcs used by exactly one feature (a === b), over the
+// counties object for county/HSA maps (an HSA union shares the counties'
+// exterior). Lazy: the arc pass only runs once a visible outline color
+// resolves, so maps without an outline never pay for it.
+const outlineMesh = computed<GeoJSON.MultiLineString | null>(() => {
+  if (!resolvedTheme.value.outline) return null;
+  const topo = toRaw(props.topology) as unknown as {
+    objects?: { states?: NamedGeometry; counties?: NamedGeometry };
+  };
+  const useCounties = props.geoType === "counties" || props.geoType === "hsas";
+  const obj = useCounties ? topo.objects?.counties : topo.objects?.states;
+  if (!obj) return null;
+  const scope = stateFips.value;
+  if (!scope) {
+    return mesh(topo as unknown as Topology, obj, (a, b) => a === b);
+  }
+  const pad = useCounties ? 5 : 2;
+  const geometries = obj.geometries.filter(
+    (g) => String(g.id).padStart(pad, "0").slice(0, 2) === scope,
+  );
+  return mesh(
+    topo as unknown as Topology,
+    { type: "GeometryCollection", geometries } as NamedGeometry,
+    (a, b) => a === b,
+  );
+});
+
 // Breathing room (canonical px) around a single state so its outline isn't
 // flush against the SVG edge. Only applied in single-state mode.
 const STATE_FIT_INSET = 12;
@@ -1479,10 +1534,19 @@ const projection = computed(() => {
 
 const pathGenerator = computed(() => geoPath(projection.value));
 
-const effectiveStrokeWidth = computed(() =>
-  props.geoType === "counties" || props.geoType === "hsas"
-    ? props.strokeWidth * 0.5
-    : props.strokeWidth,
+// Default feature stroke width is halved on dense maps (counties/hsas);
+// an explicit theme.strokeWidth applies as-is on every geoType.
+const effectiveStrokeWidth = computed(() => {
+  const w = resolvedTheme.value.strokeWidth;
+  if (w != null) return w;
+  return props.geoType === "counties" || props.geoType === "hsas" ? 0.25 : 0.5;
+});
+
+const effectiveBordersWidth = computed(
+  () => resolvedTheme.value.bordersWidth ?? 1,
+);
+const effectiveOutlineWidth = computed(
+  () => resolvedTheme.value.outlineWidth ?? 1,
 );
 
 // Per-geoType name → id index, mirroring featuresByGeoType. Drives the
@@ -1629,26 +1693,21 @@ const isThreshold = computed(
   () => Array.isArray(props.colorScale) && !isCategorical.value,
 );
 
+const DEFAULT_MIN_COLOR = "#e5f0fa";
+const DEFAULT_MAX_COLOR = "#08519c";
+
 const minColor = computed(() =>
   !isThreshold.value
-    ? ((props.colorScale as ChoroplethColorScale | undefined)?.min ?? "#e5f0fa")
+    ? ((props.colorScale as ChoroplethColorScale | undefined)?.min ??
+      DEFAULT_MIN_COLOR)
     : "",
 );
 const maxColor = computed(() =>
   !isThreshold.value
-    ? ((props.colorScale as ChoroplethColorScale | undefined)?.max ?? "#08519c")
+    ? ((props.colorScale as ChoroplethColorScale | undefined)?.max ??
+      DEFAULT_MAX_COLOR)
     : "",
 );
-
-// Unresolvable endpoint colors fall back to the default scale endpoints.
-function interpolateColor(t: number): string {
-  const [r1, g1, b1] = resolveColorToRgb(minColor.value) ?? [229, 240, 250];
-  const [r2, g2, b2] = resolveColorToRgb(maxColor.value) ?? [8, 81, 156];
-  const r = Math.round(r1 + (r2 - r1) * t);
-  const g = Math.round(g1 + (g2 - g1) * t);
-  const b = Math.round(b1 + (b2 - b1) * t);
-  return `rgb(${r},${g},${b})`;
-}
 
 // Sorted high-to-low so the first match wins (highest threshold ≤ value).
 // Cached so we don't re-sort 3k+ times during a rebuild.
@@ -1660,11 +1719,43 @@ const thresholdStopsDesc = computed(() =>
     : null,
 );
 
+// Every colorScale color routed through the theme probe, so var() /
+// light-dark() endpoints and stop colors paint on both backends and
+// re-resolve on page theme flips. Order matches the mode's source array.
+// Raw colors double as their own fallbacks: a plain color still paints
+// where computed styles are unavailable.
+const scaleColorInputs = computed<string[]>(() => {
+  if (isCategorical.value) {
+    return (props.colorScale as CategoricalStop[]).map((s) => s.color);
+  }
+  const thresholds = thresholdStopsDesc.value;
+  if (thresholds) return thresholds.map((s) => s.color);
+  return [minColor.value, maxColor.value];
+});
+
+const resolvedScaleColors = computed(() => {
+  const colors = scaleColorInputs.value;
+  return mapTheme.resolvePalette(colors, colors);
+});
+
+// Unresolvable endpoint colors fall back to the default scale endpoints.
+function interpolateColor(t: number): string {
+  const resolved = resolvedScaleColors.value;
+  const [r1, g1, b1] = parseRgb(resolved[0] ?? "") ?? [229, 240, 250];
+  const [r2, g2, b2] = parseRgb(resolved[1] ?? "") ?? [8, 81, 156];
+  const r = Math.round(r1 + (r2 - r1) * t);
+  const g = Math.round(g1 + (g2 - g1) * t);
+  const b = Math.round(b1 + (b2 - b1) * t);
+  return `rgb(${r},${g},${b})`;
+}
+
 const categoricalByValue = computed(() => {
   if (!isCategorical.value) return null;
+  const resolved = resolvedScaleColors.value;
   const m = new Map<string, string>();
-  for (const s of props.colorScale as CategoricalStop[])
-    m.set(s.value, s.color);
+  (props.colorScale as CategoricalStop[]).forEach((s, i) =>
+    m.set(s.value, resolved[i] ?? s.color),
+  );
   return m;
 });
 
@@ -1674,17 +1765,20 @@ function valueFor(baseId: string): number | string | undefined {
   return dataId == null ? undefined : dataMap.value.get(dataId);
 }
 
-/** Single color-resolution path. Returns the noData color for missing rows. */
+/** Single color-resolution path. Missing rows get the theme's base fill. */
 function colorFor(id: string): string {
   const value = valueFor(id);
-  const noData = props.noDataColor!;
+  const noData = resolvedTheme.value.fill;
   if (value == null) return noData;
   const cat = categoricalByValue.value;
   if (cat) return cat.get(String(value)) ?? noData;
   const thresholds = thresholdStopsDesc.value;
   if (thresholds) {
+    const resolved = resolvedScaleColors.value;
     const n = value as number;
-    for (const stop of thresholds) if (n >= stop.min) return stop.color;
+    for (let i = 0; i < thresholds.length; i++) {
+      if (n >= thresholds[i].min) return resolved[i] ?? thresholds[i].color;
+    }
     return noData;
   }
   const { min, max } = extent.value;
@@ -1871,11 +1965,25 @@ function strokeDivisor(): number {
   return scaleK.value * viewScale.value || 1;
 }
 
-// Highlight (hover + focus) outline color: pure black on light, pure
-// white on dark, following the theme's color-scheme (the same
-// light-dark() mechanism the theme tokens use). Applied via inline style
-// — SVG presentation attributes don't parse CSS functions.
-const HIGHLIGHT_STROKE = "light-dark(#000, #fff)";
+// Highlight (hover + focus) outline color for the SVG backend: the RAW
+// theme value (default `var(--choropleth-highlight, light-dark(#000,
+// #fff))`), applied via inline style so the browser resolves it live —
+// SVG presentation attributes don't parse CSS functions. The canvas
+// backend paints the probe-resolved `resolvedTheme.highlight` instead.
+// On browsers without light-dark() the var()'s fallback is invalid at
+// computed-value time and the stroke would compute to `none`, erasing
+// the highlight; degrade to the light constant there, mirroring the
+// resolver's adaptive gate.
+const supportsLightDark =
+  typeof CSS !== "undefined" &&
+  typeof CSS.supports === "function" &&
+  CSS.supports("color", "light-dark(#fff, #000)");
+const highlightInlineStroke = computed(() => {
+  if (props.theme?.highlight) return props.theme.highlight;
+  return supportsLightDark
+    ? mapThemeDefaults.highlight
+    : `var(--choropleth-highlight, ${LIGHT_HIGHLIGHT})`;
+});
 
 /** Visual outline width for an in-place highlight (hover or focus). */
 function highlightWidthFor(item?: FocusItem): number {
@@ -1883,15 +1991,6 @@ function highlightWidthFor(item?: FocusItem): number {
 }
 
 // ─── Canvas renderer: redraw, picking, tooltip anchors ───────────────────
-
-function canvasHighlightColor(): string {
-  // light-dark() isn't paintable on a canvas context; resolve it through
-  // the shared probe. (Cached by input — a mid-session theme flip keeps
-  // the first resolution until remount, same tradeoff as resolveColorToRgb
-  // elsewhere.)
-  const rgb = resolveColorToRgb(HIGHLIGHT_STROKE);
-  return rgb ? `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` : "#000";
-}
 
 function currentCanvasView(): CanvasViewState {
   const t = zoomTransform(svgRef.value!);
@@ -1905,10 +2004,16 @@ function currentCanvasView(): CanvasViewState {
 }
 
 function canvasDrawState(): CanvasDrawState {
+  const t = resolvedTheme.value;
   return {
-    strokeColor: props.strokeColor,
+    strokeColor: t.stroke,
     strokeWidth: effectiveStrokeWidth.value,
-    highlightStroke: canvasHighlightColor(),
+    bordersColor: t.borders,
+    bordersWidth: effectiveBordersWidth.value,
+    outlineColor: t.outline,
+    outlineWidth: effectiveOutlineWidth.value,
+    background: t.background,
+    highlightStroke: t.highlight,
     hoveredId: canvasHoveredId,
     focused: canvasFocused,
     overlays: canvasOverlays,
@@ -2251,7 +2356,14 @@ function applyStrokeScale() {
   const d = strokeDivisor();
   const eff = effectiveStrokeWidth.value;
   baseGroupRef.value?.setAttribute("stroke-width", String(eff / d));
-  bordersPathEl?.setAttribute("stroke-width", String(1 / d));
+  bordersPathEl?.setAttribute(
+    "stroke-width",
+    String(effectiveBordersWidth.value / d),
+  );
+  outlinePathEl?.setAttribute(
+    "stroke-width",
+    String(effectiveOutlineWidth.value / d),
+  );
   overlayGroupRef.value?.setAttribute("stroke-width", String((eff + 1.5) / d));
   for (const { el, strokeWidth } of overlayPathEls.values()) {
     if (strokeWidth != null) {
@@ -2277,7 +2389,7 @@ function applyHighlightStroke(pathEl: SVGPathElement, item?: FocusItem) {
     "stroke-width",
     String(highlightWidthFor(item) / strokeDivisor()),
   );
-  pathEl.style.stroke = item?.stroke ?? HIGHLIGHT_STROKE;
+  pathEl.style.stroke = item?.stroke ?? highlightInlineStroke.value;
   applyDasharray(pathEl, item?.style);
 }
 
@@ -2286,9 +2398,23 @@ function restoreDefaultStroke(pathEl: SVGPathElement) {
   // from the base group again.
   pathEl.removeAttribute("stroke-width");
   pathEl.style.stroke = "";
-  pathEl.setAttribute("stroke", props.strokeColor);
+  pathEl.setAttribute("stroke", resolvedTheme.value.stroke);
   pathEl.removeAttribute("stroke-dasharray");
   pathEl.removeAttribute("stroke-linecap");
+  // applyHighlightStroke raised the path above the borders mesh and the
+  // exterior outline; lower it back so those layers aren't left occluded
+  // along this feature's edges. Order among feature paths doesn't matter
+  // (they only meet at shared edges), so any slot before the anchor works.
+  // The position check keeps bulk restores (updateStrokes) from moving
+  // paths that were never raised.
+  const anchor = bordersPathEl ?? outlinePathEl;
+  if (
+    anchor?.parentNode &&
+    anchor.parentNode === pathEl.parentNode &&
+    anchor.compareDocumentPosition(pathEl) & Node.DOCUMENT_POSITION_FOLLOWING
+  ) {
+    anchor.parentNode.insertBefore(pathEl, anchor);
+  }
 }
 
 function setHover(pathEl: SVGPathElement) {
@@ -2715,6 +2841,7 @@ function rebuildPaths() {
   pathsByFeatureId.clear();
   tooltipDataById.clear();
   bordersPathEl = null;
+  outlinePathEl = null;
   hoveredEl = null;
   // Old focused / overlay paths are about to be detached — drop refs so
   // applyFocus can re-resolve against the new path tree.
@@ -2758,6 +2885,7 @@ function rebuildPaths() {
       colorFor,
       borders ? path(borders) : null,
     );
+    syncOutlinePath();
     if (!pickingCanvas && typeof document !== "undefined") {
       pickingCanvas = document.createElement("canvas");
     }
@@ -2769,7 +2897,7 @@ function rebuildPaths() {
     return;
   }
 
-  const stroke = props.strokeColor;
+  const stroke = resolvedTheme.value.stroke;
   const wantsTitleFallback = !hasInteractiveTooltip.value;
 
   // Single DocumentFragment append → one layout flush for the whole batch.
@@ -2805,13 +2933,54 @@ function rebuildPaths() {
   if (borders) {
     const b = makePath(path(borders));
     b.setAttribute("fill", "none");
-    b.setAttribute("stroke", stroke);
+    b.setAttribute("stroke", resolvedTheme.value.borders);
     b.setAttribute("stroke-linejoin", "round");
     b.setAttribute("pointer-events", "none");
     frag.appendChild(b);
     bordersPathEl = b;
   }
   baseG.appendChild(frag);
+  syncOutlinePath();
+  applyStrokeScale();
+}
+
+// Create / update / remove the exterior outline (theme.outline). Kept
+// separate from rebuildPaths so the outline can appear or disappear (a
+// `--choropleth-outline` flip) without rebuilding the feature tree. SVG:
+// a path appended after the borders mesh (hover-raised features go above
+// it, matching the borders behavior). Canvas: scene state for
+// finishBasePass.
+function syncOutlinePath() {
+  // With no features (e.g. hsas before the lazy module resolves) the
+  // projection was fitted to an empty collection and yields NaN paths;
+  // treat the outline as absent until rebuildPaths runs with real data.
+  const m = featuresGeo.value.features.length ? outlineMesh.value : null;
+  const d = m ? pathGenerator.value(m) : null;
+  if (isCanvas.value) {
+    if (!scene) return;
+    scene.exterior = d ? new Path2D(d) : null;
+    markBaseDirty();
+    requestRedraw();
+    return;
+  }
+  const baseG = baseGroupRef.value;
+  if (!baseG) return;
+  if (!d) {
+    outlinePathEl?.remove();
+    outlinePathEl = null;
+    return;
+  }
+  if (!outlinePathEl) {
+    const el = document.createElementNS(SVG_NS, "path") as SVGPathElement;
+    el.setAttribute("fill", "none");
+    el.setAttribute("stroke-linejoin", "round");
+    el.setAttribute("pointer-events", "none");
+    el.setAttribute("class", "choropleth-outline");
+    baseG.appendChild(el);
+    outlinePathEl = el;
+  }
+  outlinePathEl.setAttribute("d", d);
+  outlinePathEl.setAttribute("stroke", resolvedTheme.value.outline!);
   applyStrokeScale();
 }
 
@@ -2844,19 +3013,26 @@ function updateFills() {
 
 function updateStrokes() {
   if (isCanvas.value) {
-    // Stroke params are read at render time; the base outlines change, so the
+    // Stroke params are read at render time; the base strokes change, so the
     // cache is stale.
     markBaseDirty();
     requestRedraw();
     return;
   }
   for (const p of pathsByFeatureId.values()) {
-    // Highlighted paths (hover / focus) keep their #555 + thicker stroke.
     if (p === hoveredEl || focusedPathStyles.has(p)) continue;
     restoreDefaultStroke(p);
   }
-  if (bordersPathEl) bordersPathEl.setAttribute("stroke", props.strokeColor);
-  // Group-level widths track effectiveStrokeWidth.
+  // Re-apply highlight styling so a theme change restyles hovered/focused
+  // paths too (their stroke may come from theme.highlight).
+  for (const [p, item] of focusedPathStyles) applyHighlightStroke(p, item);
+  if (hoveredEl && !focusedPathStyles.has(hoveredEl)) {
+    applyHighlightStroke(hoveredEl);
+  }
+  if (bordersPathEl) {
+    bordersPathEl.setAttribute("stroke", resolvedTheme.value.borders);
+  }
+  // Group-level widths track the effective theme widths.
   applyStrokeScale();
 }
 
@@ -2991,22 +3167,39 @@ watch(
 // Data or scale → repaint fills (and refresh fallback <title>s). Reading
 // `props.dataGeoType` directly so a change to the parent-mapping mode
 // re-evaluates every county's color even when `dataMap` itself
-// (data-id keyed) is unchanged.
+// (data-id keyed) is unchanged. `resolvedScaleColors` and the theme's
+// base fill make a page theme flip repaint both backends.
 watch(
   () =>
     [
       dataMap.value,
       props.colorScale,
-      props.noDataColor,
       props.dataGeoType,
+      resolvedScaleColors.value,
+      resolvedTheme.value.fill,
     ] as const,
   () => updateFills(),
 );
 
-// Stroke styling → refresh stroke attrs (skipping the currently hovered path).
+// Stroke styling → refresh stroke attrs.
 watch(
-  () => [props.strokeColor, effectiveStrokeWidth.value],
+  () =>
+    [
+      resolvedTheme.value.stroke,
+      resolvedTheme.value.borders,
+      resolvedTheme.value.highlight,
+      effectiveStrokeWidth.value,
+      effectiveBordersWidth.value,
+      effectiveOutlineWidth.value,
+    ] as const,
   () => updateStrokes(),
+);
+
+// Exterior outline → create/update/remove its path (or canvas scene state).
+// Also fires when the projection refits, re-deriving the `d`.
+watch(
+  () => [outlineMesh.value, resolvedTheme.value.outline] as const,
+  () => syncOutlinePath(),
 );
 
 // Focus or projection changed → re-apply the focus transform imperatively.
@@ -3165,6 +3358,16 @@ watch(
         focus-overlay layer (separate group so hover-raised base paths
         can't cover an overlay).
       -->
+        <!-- Background wash (theme.background). Outside the zoomed group so
+        it always covers the viewport; canvas mode paints it in drawBase. -->
+        <rect
+          v-if="!isCanvas && resolvedTheme.background"
+          class="choropleth-map-background"
+          :width="width"
+          :height="height"
+          :fill="resolvedTheme.background"
+          pointer-events="none"
+        />
         <g ref="mapGroupRef">
           <g ref="baseGroupRef" />
           <g ref="overlayGroupRef" />

@@ -138,6 +138,23 @@ test("state-map shows county details and highlights without zooming", async ({
   await expect(page.locator(".chart-zoom-controls")).toHaveCount(0);
 });
 
+test("state-map outline toggle draws the exterior boundary", async ({
+  page,
+}) => {
+  // SVG renderer so the outline is a real DOM path we can assert on.
+  await page.goto("/state-map?renderer=svg&outline=on");
+  const outline = page.locator(".choropleth-outline");
+  await expect(outline).toHaveCount(1);
+  await expect(outline).toHaveAttribute("stroke", /.+/);
+  await expect(outline).toHaveAttribute("d", /.+/);
+  // Toggling off removes the path entirely (the mesh is lazy).
+  await page
+    .getByRole("group", { name: "Outline" })
+    .getByRole("button", { name: "Off" })
+    .click();
+  await expect(outline).toHaveCount(0);
+});
+
 test("state-map shows cities with level-of-detail, without overlapping labels", async ({
   page,
 }) => {

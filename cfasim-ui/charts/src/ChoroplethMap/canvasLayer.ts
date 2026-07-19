@@ -17,13 +17,19 @@ export interface CanvasScene {
   items: SceneItem[];
   indexById: Map<string, number>;
   /**
-   * Every feature outline concatenated into one path — features share a
+   * Every feature stroke concatenated into one path — features share a
    * stroke color, and one native stroke call beats thousands (WebKit's
    * canvas2D especially).
    */
-  outlines: Path2D | null;
+  featureStrokes: Path2D | null;
   /** State-borders mesh (counties / hsas mode). */
   borders: Path2D | null;
+  /**
+   * Exterior boundary of the rendered geography (theme.outline). Built
+   * lazily by the component when the outline resolves visible, so it is
+   * mutable scene state rather than a buildScene input.
+   */
+  exterior: Path2D | null;
 }
 
 export interface CanvasView {
@@ -53,6 +59,16 @@ export interface CanvasBaseState {
   strokeColor: string;
   /** Base feature stroke width in CSS px (effectiveStrokeWidth). */
   strokeWidth: number;
+  /** State-borders mesh color (resolved theme.borders). */
+  bordersColor: string;
+  /** State-borders mesh width in CSS px; 0 disables. */
+  bordersWidth: number;
+  /** Exterior outline color; undefined = off (resolved theme.outline). */
+  outlineColor: string | undefined;
+  /** Exterior outline width in CSS px; 0 disables. */
+  outlineWidth: number;
+  /** Background wash painted before fills; undefined = off. */
+  background: string | undefined;
   /** Resolved highlight color (light-dark() can't paint on canvas). */
   highlightStroke: string;
   focused: Map<string, CanvasHighlightItem>;
@@ -108,8 +124,8 @@ export function buildScene(
 ): CanvasScene {
   const items: SceneItem[] = [];
   const indexById = new Map<string, number>();
-  const outlines = new Path2D();
-  let outlineCount = 0;
+  const featureStrokes = new Path2D();
+  let strokeCount = 0;
   for (const feat of features) {
     const d = pathFor(feat as never);
     if (!d) continue;
@@ -117,16 +133,17 @@ export function buildScene(
     const path = new Path2D(d);
     indexById.set(id, items.length);
     items.push({ id, path, fill: colorFor(id) });
-    if (typeof outlines.addPath === "function") {
-      outlines.addPath(path);
-      outlineCount++;
+    if (typeof featureStrokes.addPath === "function") {
+      featureStrokes.addPath(path);
+      strokeCount++;
     }
   }
   return {
     items,
     indexById,
-    outlines: outlineCount ? outlines : null,
+    featureStrokes: strokeCount ? featureStrokes : null,
     borders: bordersD ? new Path2D(bordersD) : null,
+    exterior: null,
   };
 }
 
@@ -158,9 +175,17 @@ function highlightOne(
  * widths are compensated so a visual width `w` CSS px stays constant at
  * any zoom, mirroring the SVG renderer's `strokeDivisor`.
  */
-function beginBasePass(ctx: CanvasRenderingContext2D, view: CanvasView): void {
+function beginBasePass(
+  ctx: CanvasRenderingContext2D,
+  view: CanvasView,
+  background?: string,
+): void {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  if (background) {
+    ctx.fillStyle = background;
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  }
   applyViewTransform(ctx, view);
   ctx.lineJoin = "round";
   ctx.setLineDash([]);
@@ -182,8 +207,9 @@ function drawFillSlice(
   return end;
 }
 
-/** Outlines, borders, focus highlights, and overlays — everything but the
- * transient hover, which the display frame draws live on top of blits. */
+/** Feature strokes, borders, the exterior outline, focus highlights, and
+ * overlays — everything but the transient hover, which the display frame
+ * draws live on top of blits. */
 function finishBasePass(
   ctx: CanvasRenderingContext2D,
   scene: CanvasScene,
@@ -192,17 +218,29 @@ function finishBasePass(
 ): void {
   const lw = lwFor(view);
   ctx.setLineDash([]);
-  ctx.lineWidth = lw(state.strokeWidth);
-  ctx.strokeStyle = state.strokeColor;
-  if (scene.outlines) {
-    ctx.stroke(scene.outlines);
-  } else {
-    for (const item of scene.items) ctx.stroke(item.path);
+  // A zero width disables a stroke layer entirely: canvas ignores
+  // `lineWidth = 0` (keeping the previous width), so skip explicitly.
+  if (state.strokeWidth > 0) {
+    ctx.lineWidth = lw(state.strokeWidth);
+    ctx.strokeStyle = state.strokeColor;
+    if (scene.featureStrokes) {
+      ctx.stroke(scene.featureStrokes);
+    } else {
+      for (const item of scene.items) ctx.stroke(item.path);
+    }
   }
 
-  if (scene.borders) {
-    ctx.lineWidth = lw(1);
+  if (scene.borders && state.bordersWidth > 0) {
+    ctx.lineWidth = lw(state.bordersWidth);
+    ctx.strokeStyle = state.bordersColor;
     ctx.stroke(scene.borders);
+  }
+
+  // Exterior outline paints above interior borders, below highlights.
+  if (scene.exterior && state.outlineColor && state.outlineWidth > 0) {
+    ctx.lineWidth = lw(state.outlineWidth);
+    ctx.strokeStyle = state.outlineColor;
+    ctx.stroke(scene.exterior);
   }
 
   for (const [id, item] of state.focused) {
@@ -237,10 +275,11 @@ export function drawHoverHighlight(
 }
 
 /**
- * Everything but the transient hover: clear, fills, outlines, borders, focus
- * highlights, overlays. Split out so the component can cache this to an
- * offscreen canvas and, on a hover-only change, blit it back + redraw the one
- * highlight instead of re-filling every feature.
+ * Everything but the transient hover: clear, background, fills, feature
+ * strokes, borders, exterior outline, focus highlights, overlays. Split out
+ * so the component can cache this to an offscreen canvas and, on a
+ * hover-only change, blit it back + redraw the one highlight instead of
+ * re-filling every feature.
  */
 export function drawBase(
   ctx: CanvasRenderingContext2D,
@@ -248,7 +287,7 @@ export function drawBase(
   view: CanvasView,
   state: CanvasDrawState,
 ): void {
-  beginBasePass(ctx, view);
+  beginBasePass(ctx, view, state.background);
   drawFillSlice(ctx, scene, 0, scene.items.length);
   finishBasePass(ctx, scene, view, state);
 }

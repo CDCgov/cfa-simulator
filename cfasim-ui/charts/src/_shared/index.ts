@@ -49,7 +49,21 @@ export type {
   BlendMode,
   LineMarkStyle,
 } from "./chartProps.js";
-export { resolveColorToRgb, pickContrastColor, type Rgb } from "./contrast.js";
+export {
+  parseRgb,
+  resolveColorToRgb,
+  pickContrastColor,
+  type Rgb,
+} from "./contrast.js";
+export {
+  useMapTheme,
+  createMapThemeResolver,
+  mapThemeDefaults,
+  LIGHT_HIGHLIGHT,
+  type MapTheme,
+  type ResolvedMapTheme,
+  type MapThemeResolver,
+} from "./mapTheme.js";
 export {
   parseDate,
   isDateLike,

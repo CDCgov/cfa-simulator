@@ -160,6 +160,88 @@ import statesTopo from "us-atlas/states-10m.json";
   </template>
 </ComponentDemo>
 
+### Theming (`theme`)
+
+All map paint styling lives in one `theme` prop: the base `fill` for features without data, the feature `stroke` (+ `strokeWidth`), the state-`borders` mesh over county/HSA maps (+ `bordersWidth`), an exterior `outline` (+ `outlineWidth`), a `background` wash, and the hover/focus `highlight`. Every color accepts any CSS color the page can express, including `var()`, `light-dark()`, and `color-mix()`, resolved against the map container's cascade. When the effective values change (a site light/dark toggle, an OS scheme flip, a custom-property redefinition), the map repaints on its own — in both the SVG and canvas renderers. `colorScale` colors resolve the same way, so theme tokens work there too.
+
+The `outline` is the exterior boundary of the rendered geography — the national outline, or the selected state's boundary in single-state mode — drawn on top of interior borders with its own color and width. It's off by default and turns on when a visible color resolves.
+
+<ComponentDemo>
+  <ChoroplethMap
+    :topology="statesTopo"
+    :data="[
+      { id: 'California', value: 100 },
+      { id: 'Texas', value: 85 },
+      { id: 'Florida', value: 70 },
+      { id: 'New York', value: 90 },
+      { id: 'Illinois', value: 60 },
+      { id: 'Ohio', value: 40 },
+    ]"
+    :theme="{
+      fill: 'light-dark(#e2e8f0, #334155)',
+      stroke: 'light-dark(#f8fafc, #0f172a)',
+      outline: 'light-dark(#334155, #cbd5e1)',
+      outlineWidth: 1.5,
+    }"
+    title="Themed map with an exterior outline"
+    :legend-title="'Cases'"
+    :height="400"
+  />
+
+<template #code>
+
+```vue
+<ChoroplethMap
+  :topology="statesTopo"
+  :data="stateData"
+  :theme="{
+    fill: 'light-dark(#e2e8f0, #334155)',
+    stroke: 'light-dark(#f8fafc, #0f172a)',
+    outline: 'light-dark(#334155, #cbd5e1)',
+    outlineWidth: 1.5,
+  }"
+  title="Themed map with an exterior outline"
+  :legend-title="'Cases'"
+  :height="400"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+Every channel's default routes through a `--choropleth-*` custom property, so a stylesheet alone can theme every map on a page — JS `theme` values always win:
+
+```css
+:root {
+  color-scheme: light dark; /* required for light-dark() to engage */
+  --choropleth-fill: light-dark(#dbe4d7, #24332a);
+  --choropleth-stroke: light-dark(#f4f7f2, #131e17);
+  --choropleth-outline: light-dark(#3f5245, #93ac9b); /* enables the outline */
+  --choropleth-background: light-dark(
+    #f4f7f2,
+    #131e17
+  ); /* enables a background */
+  --choropleth-highlight: light-dark(#000, #fff);
+  --choropleth-borders: transparent; /* falls back to the stroke color */
+}
+```
+
+| Theme key      | Default                                               | Notes                                                                                |
+| -------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `fill`         | `var(--choropleth-fill, light-dark(#ddd, #3f3f46))`   | Fill for features without a data value                                               |
+| `stroke`       | `var(--choropleth-stroke, light-dark(#fff, #18181b))` | Interior feature borders                                                             |
+| `strokeWidth`  | `0.5` (halved on county/HSA maps)                     | Explicit values apply as-is on every geoType; `0` disables                           |
+| `borders`      | `var(--choropleth-borders, transparent)`              | State mesh over county/HSA maps; falls back to `stroke`; hide with `bordersWidth: 0` |
+| `bordersWidth` | `1`                                                   | `0` disables                                                                         |
+| `outline`      | `var(--choropleth-outline, transparent)`              | Exterior boundary; off until a visible color resolves                                |
+| `outlineWidth` | `1`                                                   | `0` disables                                                                         |
+| `background`   | `var(--choropleth-background, transparent)`           | Wash behind the map; off until a visible color resolves                              |
+| `highlight`    | `var(--choropleth-highlight, light-dark(#000, #fff))` | Hover/focus stroke; per-item `FocusItem.stroke` wins                                 |
+
+::: warning Breaking change
+`theme` replaces the former `noDataColor`, `strokeColor`, and `strokeWidth` props: use `theme.fill`, `theme.stroke`, and `theme.strokeWidth` instead.
+:::
+
 ### Threshold color scale
 
 Use an array of `ThresholdStop` objects instead of a linear scale. Each stop defines a `min` threshold — values at or above that threshold get the stop's color. The highest matching stop wins.
@@ -1046,11 +1128,13 @@ interface StateData {
 
 ### ChoroplethColorScale
 
+Any CSS color works, including `var()` and `light-dark()` — scale colors resolve against the map's container and re-resolve on page theme changes.
+
 ```ts
 interface ChoroplethColorScale {
-  /** Minimum color (CSS color string). Default: "#e5f0fa" */
+  /** Minimum color (any CSS color). Default: "#e5f0fa" */
   min?: string;
-  /** Maximum color (CSS color string). Default: "#08519c" */
+  /** Maximum color (any CSS color). Default: "#08519c" */
   max?: string;
 }
 ```
@@ -1071,7 +1155,7 @@ interface ThresholdStop {
 
 ### CategoricalStop
 
-Pass an array of `CategoricalStop` as `colorScale` to map string values to colors. States whose `value` matches a stop's `value` get that color; unmatched values get `noDataColor`.
+Pass an array of `CategoricalStop` as `colorScale` to map string values to colors. States whose `value` matches a stop's `value` get that color; unmatched values get the theme's base `fill`.
 
 ```ts
 interface CategoricalStop {
@@ -1079,6 +1163,33 @@ interface CategoricalStop {
   value: string;
   /** CSS color string */
   color: string;
+}
+```
+
+### MapTheme
+
+All keys are optional; unset keys fall back to their `--choropleth-*` custom property (see [Theming](#theming-theme)).
+
+```ts
+interface MapTheme {
+  /** Base fill for features without a data value (any CSS color). */
+  fill?: string;
+  /** Interior feature borders (any CSS color). */
+  stroke?: string;
+  /** Feature border width in CSS px, constant at any zoom. 0 disables. */
+  strokeWidth?: number;
+  /** State-boundary mesh over county/HSA maps. Falls back to `stroke`. */
+  borders?: string;
+  /** State-borders mesh width in CSS px. Default 1; 0 disables. */
+  bordersWidth?: number;
+  /** Exterior boundary, drawn on top of interior borders. Off by default. */
+  outline?: string;
+  /** Exterior outline width in CSS px. Default 1; 0 disables. */
+  outlineWidth?: number;
+  /** Background wash behind the map features. Off by default. */
+  background?: string;
+  /** Hover/focus highlight stroke. */
+  highlight?: string;
 }
 ```
 
