@@ -221,8 +221,7 @@ function setAtSegments(
       (cur as Record<string, unknown>)[p] = Array.isArray(defNext) ? [] : {};
     }
     cur = (cur as Record<string, unknown>)[p] as
-      | Record<string, unknown>
-      | unknown[];
+      Record<string, unknown> | unknown[];
     defCur = defNext;
   }
   (cur as Record<string, unknown>)[segments[segments.length - 1]] = value;

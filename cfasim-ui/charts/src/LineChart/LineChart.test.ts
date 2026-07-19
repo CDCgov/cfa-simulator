@@ -1550,8 +1550,8 @@ describe("LineChart", () => {
       });
       expect(labelGroups.length).toBe(2);
       // They should have different y positions for their text
-      const labelTexts = labelGroups.map(
-        (g) => g.find("text").attributes("y")!,
+      const labelTexts = labelGroups.map((g) =>
+        g.find("text").attributes("y")!,
       );
       expect(labelTexts[0]).not.toBe(labelTexts[1]);
     });

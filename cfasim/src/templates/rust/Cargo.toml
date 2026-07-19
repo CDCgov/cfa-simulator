@@ -7,6 +7,6 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-wasm-bindgen = "0.2"
-cfasim-model = "0.1"
-console_error_panic_hook = "0.1"
+wasm-bindgen = "0.2.126"
+cfasim-model = "{{ cfasim_version }}"
+console_error_panic_hook = "0.1.7"

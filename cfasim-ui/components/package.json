@@ -37,27 +37,27 @@
   },
   "dependencies": {
     "@cfasim-ui/shared": "workspace:*",
-    "@codemirror/lang-json": "^6.0.2",
-    "@codemirror/lang-yaml": "^6.1.3",
-    "@codemirror/language": "^6.11.3",
-    "@codemirror/legacy-modes": "^6.5.3",
-    "@codemirror/view": "^6.39.2",
-    "codemirror": "^6.0.2",
-    "reka-ui": "^2.9.2",
-    "smol-toml": "^1.6.1",
-    "vue-codemirror": "^6.1.1",
-    "yaml": "^2.9.0"
+    "@codemirror/lang-json": "6.0.2",
+    "@codemirror/lang-yaml": "6.1.3",
+    "@codemirror/language": "6.12.4",
+    "@codemirror/legacy-modes": "6.5.3",
+    "@codemirror/view": "6.43.6",
+    "codemirror": "6.0.2",
+    "reka-ui": "2.10.1",
+    "smol-toml": "1.7.0",
+    "vue-codemirror": "6.1.1",
+    "yaml": "2.9.0"
   },
   "peerDependencies": {
     "vue": "^3.5.0"
   },
   "devDependencies": {
-    "@material-symbols/svg-400": "^0.44.10",
-    "@vitejs/plugin-vue": "^6.0.5",
-    "@vue/test-utils": "^2.4.6",
-    "happy-dom": "^20.8.9",
-    "vite-plugin-dts": "^4.5.4",
-    "vite-svg-loader": "^5.1.1",
-    "vitest": "^4.1.0"
+    "@material-symbols/svg-400": "0.45.8",
+    "@vitejs/plugin-vue": "6.0.8",
+    "@vue/test-utils": "2.4.11",
+    "happy-dom": "20.10.6",
+    "vite-plugin-dts": "5.0.3",
+    "vite-svg-loader": "5.1.1",
+    "vitest": "4.1.10"
   }
 }

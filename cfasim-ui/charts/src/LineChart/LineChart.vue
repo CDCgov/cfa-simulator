@@ -215,9 +215,7 @@ interface LineChartProps extends ChartCommonProps {
    * a `DateFormat` instead — see the `dateAxis` module.
    */
   xTickFormat?:
-    | NumberFormat
-    | ((value: number, index: number) => string)
-    | DateFormat;
+    NumberFormat | ((value: number, index: number) => string) | DateFormat;
   /**
    * Timezone used when parsing offset-less ISO strings and rendering
    * date-axis tick labels. `"utc"` (default) keeps visuals consistent

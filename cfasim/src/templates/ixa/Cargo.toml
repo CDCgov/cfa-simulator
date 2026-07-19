@@ -11,9 +11,11 @@ crate-type = ["cdylib"]
 # wasm32 (the crate emits a compile_error in that combo). Keep the `logging`
 # feature so the WASM-specific bits (wasm-bindgen, web-sys) referenced by
 # ixa's execution_stats / logging modules are pulled in.
-ixa = { version = "2.0.0-beta2.3", default-features = false, features = ["logging"] }
-wasm-bindgen = "0.2"
-cfasim-model = "0.1"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-rand_distr = "0.5"
+ixa = { version = "2.2.0", default-features = false, features = ["logging"] }
+wasm-bindgen = "0.2.126"
+cfasim-model = "{{ cfasim_version }}"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.150"
+# rand_distr stays on the 0.5 line: ixa depends on rand 0.9, and 0.6 pairs
+# with rand 0.10 (mismatched sampling traits).
+rand_distr = "0.5.1"

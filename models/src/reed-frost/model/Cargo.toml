@@ -7,11 +7,11 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-wasm-bindgen = "0.2"
+wasm-bindgen = "0.2.126"
 cfasim-model = { path = "../../../../cfasim-model" }
-rand = { version = "0.9", default-features = false, features = ["small_rng"] }
-rand_distr = { version = "0.5", default-features = false }
-ordered-float = "5.1.0"
+rand = { version = "0.10.2", default-features = false }
+rand_distr = { version = "0.6.0", default-features = false }
+ordered-float = "5.3.0"
 probability = "0.20.3"
 memoize = "0.6.0"
 

@@ -17,13 +17,7 @@
  */
 
 export type DateTickUnit =
-  | "year"
-  | "month"
-  | "week"
-  | "day"
-  | "hour"
-  | "minute"
-  | "second";
+  "year" | "month" | "week" | "day" | "hour" | "minute" | "second";
 
 export type DateTimezone = "utc" | "local";
 

@@ -14,12 +14,7 @@ import { sprintf } from "sprintf-js";
  * `"percent:1"` → `"12.3%"`, `"localized:2"` → `"1,234.50"`.
  */
 export type NumberFormatPreset =
-  | "plain"
-  | "localized"
-  | "percent"
-  | "compact"
-  | "scientific"
-  | "engineering";
+  "plain" | "localized" | "percent" | "compact" | "scientific" | "engineering";
 
 /**
  * A number format specifier:
@@ -33,9 +28,7 @@ export type NumberFormatPreset =
  * time, so typos surface immediately instead of silently rendering wrong.
  */
 export type NumberFormat =
-  | NumberFormatPreset
-  | string
-  | ((value: number) => string);
+  NumberFormatPreset | string | ((value: number) => string);
 
 const PRESET_NAMES = new Set<NumberFormatPreset>([
   "plain",

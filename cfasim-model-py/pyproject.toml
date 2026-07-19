@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68.0"]
+requires = ["setuptools==83.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,4 +8,6 @@ version = "0.7.8"
 description = "Base model class for CFA simulations"
 requires-python = ">=3.11"
 license = "Apache-2.0"
-dependencies = ["numpy"]
+# Left as a floor rather than pinned: Pyodide supplies its own bundled numpy,
+# and an exact pin would make micropip reject the already-loaded copy.
+dependencies = ["numpy>=1.26"]

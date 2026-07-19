@@ -7,7 +7,13 @@ packages:
 # (>=3.2.13) otherwise resolves a second copy, which breaks reka-ui at runtime
 # (duplicate @vue/runtime-core).
 overrides:
-  vue: "3.5.35"
+  vue: "3.5.40"
+
+# Supply-chain policy: refuse versions published less than 24h ago, so a
+# compromised release has time to be pulled from the registry. This matches
+# pnpm 11's default; set explicitly so it survives a change in that default.
+# Prefer an older version over adding a minimumReleaseAgeExclude entry.
+minimumReleaseAge: 1440
 
 # Build-script policy: don't run these packages' install scripts.
 strictDepBuilds: false

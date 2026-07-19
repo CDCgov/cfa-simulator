@@ -13,14 +13,14 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "vue": "^3.5.35",
-    "cfasim-ui": "^{{ cfasim_version }}"
+    "vue": "3.5.40",
+    "cfasim-ui": "{{ cfasim_version }}"
   },
   "devDependencies": {
-    "@playwright/test": "^1.60.0",
-    "@vitejs/plugin-vue": "^6.0.7",
-    "typescript": "^6.0.3",
-    "vite": "^8.0.14",
-    "vue-tsc": "^3.3.2"
+    "@playwright/test": "1.61.1",
+    "@vitejs/plugin-vue": "6.0.8",
+    "typescript": "6.0.3",
+    "vite": "8.1.5",
+    "vue-tsc": "3.3.7"
   }
 }

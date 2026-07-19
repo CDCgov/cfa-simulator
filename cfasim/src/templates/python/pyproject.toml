@@ -1,15 +1,15 @@
 [build-system]
-requires = ["setuptools>=68.0"]
+requires = ["setuptools==83.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "{{ module_name }}"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["cfasim-model"]
+dependencies = ["cfasim-model=={{ cfasim_version }}"]
 
 [dependency-groups]
-dev = ["pytest>=8.0", "ruff>=0.9"]
+dev = ["pytest==9.1.1", "ruff==0.15.22"]
 
 [tool.pytest.ini_options]
 testpaths = ["src"]

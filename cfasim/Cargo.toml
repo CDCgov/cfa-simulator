@@ -8,22 +8,22 @@ license = "Apache-2.0"
 repository = "https://github.com/CDCgov/cfa-simulator"
 
 [dependencies]
-anyhow = "1"
+anyhow = "1.0.104"
 axoupdater = { version = "0.10.0", features = ["blocking"] }
-clap = { version = "4", features = ["derive"] }
-cliclack = "0.3"
-flate2 = "1"
-home = "0.5"
-include_dir = "0.7"
-is_ci = "1"
-minijinja = "2"
-semver = "1"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tar = "0.4"
-tokio = { version = "1", features = ["rt", "time", "net"] }
-toml_edit = "0.22"
-ureq = "3"
+clap = { version = "4.6.2", features = ["derive"] }
+cliclack = "0.5.5"
+flate2 = "1.1.9"
+home = "0.5.12"
+include_dir = "0.7.4"
+is_ci = "1.2.0"
+minijinja = "2.21.0"
+semver = "1.0.28"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.150"
+tar = "0.4.46"
+tokio = { version = "1.53.0", features = ["rt", "time", "net"] }
+toml_edit = "0.25.13"
+ureq = "3.3.0"
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = "3.27.0"

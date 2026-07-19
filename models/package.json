@@ -13,13 +13,13 @@
     "@cfasim-ui/shared": "workspace:*",
     "@cfasim-ui/theme": "workspace:*",
     "@cfasim-ui/wasm": "workspace:*",
-    "reka-ui": "^2.9.2",
-    "us-atlas": "^3.0.1",
-    "vue": "^3.5.30",
-    "vue-router": "^4.5.1"
+    "reka-ui": "2.10.1",
+    "us-atlas": "3.0.1",
+    "vue": "3.5.40",
+    "vue-router": "5.2.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^6.0.5",
-    "typescript": "^5.9.3"
+    "@vitejs/plugin-vue": "6.0.8",
+    "typescript": "6.0.3"
   }
 }
