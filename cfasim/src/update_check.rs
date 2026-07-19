@@ -81,6 +81,11 @@ pub fn maybe_print_update_hint() {
     if is_ci::cached() {
         return;
     }
+    // uvx runs are ephemeral: uv picks the version and `cfasim update` would
+    // target uv's cached binary, so the hint doesn't apply.
+    if settings::is_spawned_by_uv() {
+        return;
+    }
 
     let s = settings::load();
     if !s.check_for_updates {
