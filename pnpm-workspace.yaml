@@ -9,12 +9,8 @@ packages:
 overrides:
   vue: "3.5.35"
 
-# Build-script policy. pnpm 10 uses ignoredBuiltDependencies; pnpm 11 replaced
-# it with allowBuilds + strictDepBuilds. Both are listed so either version
-# installs cleanly without prompting or erroring.
+# Build-script policy: don't run these packages' install scripts.
 strictDepBuilds: false
 allowBuilds:
   esbuild: false
   vue-demi: false
-ignoredBuiltDependencies:
-  - vue-demi
