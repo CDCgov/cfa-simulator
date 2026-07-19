@@ -1,14 +1,10 @@
 # pnpm reads project settings here (pnpm 11 no longer reads the "pnpm" field
-# in package.json). This file works with both pnpm 10 and 11.
+# in package.json).
 #
-# Build-script policy for vue-demi: pnpm 10 uses ignoredBuiltDependencies;
-# pnpm 11 replaced it with allowBuilds + strictDepBuilds. Both are listed so
-# either version installs without prompting or erroring.
+# Build-script policy: don't run vue-demi's install script.
 strictDepBuilds: false
 allowBuilds:
   vue-demi: false
-ignoredBuiltDependencies:
-  - vue-demi
 {% if local_ui_dir %}
 # e2e only: link the local working-tree cfasim-ui packages instead of the
 # published ones, so typecheck/render tests exercise the current source.

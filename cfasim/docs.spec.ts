@@ -78,8 +78,12 @@ test.describe("cfasim docs --json against installed @cfasim-ui packages", () => 
       resolve(consumerDir, "pnpm-workspace.yaml"),
       // nodeLinker pinned: a machine-global node-linker=hoisted would flatten
       // node_modules and mask the virtual-store resolution path this consumer
-      // exists to test.
-      "nodeLinker: isolated\noverrides:\n" +
+      // exists to test. The vue-demi build policy mirrors the scaffold
+      // template; without it pnpm 11 fails on ERR_PNPM_IGNORED_BUILDS.
+      "nodeLinker: isolated\n" +
+        "strictDepBuilds: false\n" +
+        "allowBuilds:\n  vue-demi: false\n" +
+        "overrides:\n" +
         Object.entries(overrides)
           .map(([name, spec]) => `  "${name}": "${spec}"\n`)
           .join(""),
