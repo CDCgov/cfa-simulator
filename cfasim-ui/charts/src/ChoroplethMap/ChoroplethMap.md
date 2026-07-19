@@ -226,17 +226,21 @@ Every channel's default routes through a `--choropleth-*` custom property, so a 
 }
 ```
 
-| Theme key      | Default                                               | Notes                                                                                |
-| -------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `fill`         | `var(--choropleth-fill, light-dark(#ddd, #3f3f46))`   | Fill for features without a data value                                               |
-| `stroke`       | `var(--choropleth-stroke, light-dark(#fff, #18181b))` | Interior feature borders                                                             |
-| `strokeWidth`  | `0.5` (halved on county/HSA maps)                     | Explicit values apply as-is on every geoType; `0` disables                           |
-| `borders`      | `var(--choropleth-borders, transparent)`              | State mesh over county/HSA maps; falls back to `stroke`; hide with `bordersWidth: 0` |
-| `bordersWidth` | `1`                                                   | `0` disables                                                                         |
-| `outline`      | `var(--choropleth-outline, transparent)`              | Exterior boundary; off until a visible color resolves                                |
-| `outlineWidth` | `1`                                                   | `0` disables                                                                         |
-| `background`   | `var(--choropleth-background, transparent)`           | Wash behind the map; off until a visible color resolves                              |
-| `highlight`    | `var(--choropleth-highlight, light-dark(#000, #fff))` | Hover/focus stroke; per-item `FocusItem.stroke` wins                                 |
+| Theme key         | Default                                               | Notes                                                                                |
+| ----------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `fill`            | `var(--choropleth-fill, light-dark(#ddd, #3f3f46))`   | Fill for features without a data value                                               |
+| `stroke`          | `var(--choropleth-stroke, light-dark(#fff, #18181b))` | Interior feature borders                                                             |
+| `strokeWidth`     | `0.5` (halved on county/HSA maps)                     | Explicit values apply as-is on every geoType; `0` disables                           |
+| `borders`         | `var(--choropleth-borders, transparent)`              | State mesh over county/HSA maps; falls back to `stroke`; hide with `bordersWidth: 0` |
+| `bordersWidth`    | `1`                                                   | `0` disables                                                                         |
+| `outline`         | `var(--choropleth-outline, transparent)`              | Exterior boundary; off until a visible color resolves                                |
+| `outlineWidth`    | `1`                                                   | `0` disables                                                                         |
+| `background`      | `var(--choropleth-background, transparent)`           | Wash behind the map; off until a visible color resolves                              |
+| `highlight`       | `var(--choropleth-highlight, light-dark(#000, #fff))` | Hover/focus stroke; per-item `FocusItem.stroke` wins                                 |
+| `markerColor`     | `--choropleth-city-marker` / `-label-color` vars      | `cities` overlay dot + label color                                                   |
+| `markerHalo`      | `--choropleth-city-halo` var                          | Halo around marker dots and labels                                                   |
+| `markerHaloWidth` | `0.9`                                                 | Dot halo width in CSS px; `0` disables                                               |
+| `markerOpacity`   | `1`                                                   | Opacity of the whole marker layer                                                    |
 
 ::: warning Breaking change
 `theme` replaces the former `noDataColor`, `strokeColor`, and `strokeWidth` props: use `theme.fill`, `theme.stroke`, and `theme.strokeWidth` instead.
@@ -575,7 +579,9 @@ stateCityMarkers("48"); //=> Austin (capital) + top Texas cities
 usCities; //=> the raw UsCity[] to build your own selection
 ```
 
-Only the national capital is flagged on the national map; a state's own capital is flagged in its single-state view. A flagged capital's label is emphasized and never dropped for collisions — the marker itself is a plain dot like any other city. Override the marker/label colors per instance with CSS custom properties on `.choropleth-cities`: `--choropleth-city-marker`, `--choropleth-city-label-color`, and `--choropleth-city-halo`.
+Only the national capital is flagged on the national map; a state's own capital is flagged in its single-state view. A flagged capital's label is emphasized and never dropped for collisions — the marker itself is a plain dot like any other city.
+
+**Styling:** the default marker style is dark dots and labels with a thin white halo, which reads over any map fill in either color scheme. The `theme` prop's marker keys configure the layer — `markerColor` (dots + labels), `markerHalo` (the halo around both), `markerHaloWidth` (dot halo width in CSS px), and `markerOpacity` (the whole layer). Any CSS color works. A stylesheet can alternatively set the CSS custom properties on `.choropleth-cities` (`--choropleth-city-marker`, `--choropleth-city-label-color`, `--choropleth-city-halo`); theme keys win when both are set.
 
 ### HSA-level map
 
@@ -1190,6 +1196,14 @@ interface MapTheme {
   background?: string;
   /** Hover/focus highlight stroke. */
   highlight?: string;
+  /** Marker overlay (`cities` prop): dot + label color. */
+  markerColor?: string;
+  /** Marker overlay: halo color around dots and labels. */
+  markerHalo?: string;
+  /** Dot halo width in CSS px. Default 0.9; 0 disables. */
+  markerHaloWidth?: number;
+  /** Opacity of the whole marker layer. Default 1. */
+  markerOpacity?: number;
 }
 ```
 

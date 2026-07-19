@@ -206,6 +206,35 @@ test("state-map shows cities with level-of-detail, without overlapping labels", 
   expect(collided).toBe(false);
 });
 
+test("city markers get the white halo and features the pointer cursor", async ({
+  page,
+}) => {
+  // Guards the :deep() scoped-style fix: dots/labels/feature paths are
+  // created imperatively (no data-v attribute), so plain scoped child
+  // rules silently stop matching.
+  await page.goto("/state-map?cities=on&renderer=svg");
+  const dot = page.locator(".choropleth-city-dot").first();
+  await dot.waitFor();
+  const dotStyles = await dot.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return { fill: cs.fill, stroke: cs.stroke };
+  });
+  expect(dotStyles.fill).toBe("rgb(26, 26, 26)");
+  expect(dotStyles.stroke).toBe("rgb(255, 255, 255)");
+  const label = page.locator(".choropleth-city-label").first();
+  const labelStyles = await label.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return { stroke: cs.stroke, paintOrder: cs.paintOrder };
+  });
+  expect(labelStyles.stroke).toBe("rgb(255, 255, 255)");
+  expect(labelStyles.paintOrder).toBe("stroke");
+  const cursor = await page
+    .locator(".state-path")
+    .first()
+    .evaluate((el) => getComputedStyle(el).cursor);
+  expect(cursor).toBe("pointer");
+});
+
 test("state-map cities overlay follows a drilled-in state's capital", async ({
   page,
 }) => {

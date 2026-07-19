@@ -63,6 +63,28 @@ export interface MapTheme {
    * `FocusItem.stroke` still wins for individual focus outlines.
    */
   highlight?: string;
+  /**
+   * Marker overlay (the `cities` prop layer): dot and label color (any
+   * CSS color). Sets both `--choropleth-city-marker` and
+   * `--choropleth-city-label-color`; default `#1a1a1a` (dark markers
+   * with a thin white halo read over any fill in either scheme). The
+   * marker layer is SVG in both renderers, so these four keys resolve
+   * in CSS directly (no probe) and follow theme flips on their own.
+   */
+  markerColor?: string;
+  /**
+   * Marker overlay: halo color around dots and labels (sets
+   * `--choropleth-city-halo`). Default `#fff`.
+   */
+  markerHalo?: string;
+  /**
+   * Halo width around each marker dot, in CSS px (constant on screen at
+   * any zoom). Default 0.9; 0 disables the dot halo. The label halo is
+   * unaffected.
+   */
+  markerHaloWidth?: number;
+  /** Opacity of the whole marker layer (dots, labels, halos). Default 1. */
+  markerOpacity?: number;
 }
 
 /** Theme values resolved to canvas-paintable colors. */
@@ -117,7 +139,11 @@ export function themeEquals(
     Object.is(a?.outline, b?.outline) &&
     Object.is(a?.outlineWidth, b?.outlineWidth) &&
     Object.is(a?.background, b?.background) &&
-    Object.is(a?.highlight, b?.highlight)
+    Object.is(a?.highlight, b?.highlight) &&
+    Object.is(a?.markerColor, b?.markerColor) &&
+    Object.is(a?.markerHalo, b?.markerHalo) &&
+    Object.is(a?.markerHaloWidth, b?.markerHaloWidth) &&
+    Object.is(a?.markerOpacity, b?.markerOpacity)
   );
 }
 

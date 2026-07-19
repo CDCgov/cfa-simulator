@@ -3001,6 +3001,55 @@ describe("ChoroplethMap city overlay", () => {
     expect(layerOf(wrapper).exists()).toBe(false);
   });
 
+  it("applies marker theme keys: colors, halo width, and opacity", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 800,
+        height: 500,
+        cities: CITIES,
+        theme: {
+          markerColor: "#123456",
+          markerHalo: "#654321",
+          markerHaloWidth: 2,
+          markerOpacity: 0.5,
+        },
+      },
+    });
+    await flushCityLayout();
+    const layer = layerOf(wrapper).element as SVGGElement;
+    expect(layer.style.getPropertyValue("--choropleth-city-marker")).toBe(
+      "#123456",
+    );
+    expect(layer.style.getPropertyValue("--choropleth-city-label-color")).toBe(
+      "#123456",
+    );
+    expect(layer.style.getPropertyValue("--choropleth-city-halo")).toBe(
+      "#654321",
+    );
+    expect(layer.style.opacity).toBe("0.5");
+    // Halo width is written as a per-dot attribute (compensated by
+    // viewScale, which is 1 here).
+    const dot = layer.querySelector(".choropleth-city-dot")!;
+    expect(dot.getAttribute("stroke-width")).toBe("2");
+  });
+
+  it("leaves marker styling to the CSS custom properties when unset", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 800,
+        height: 500,
+        cities: CITIES,
+        theme: { outline: "#0a0" },
+      },
+    });
+    await flushCityLayout();
+    const layer = layerOf(wrapper).element as SVGGElement;
+    expect(layer.style.getPropertyValue("--choropleth-city-marker")).toBe("");
+    expect(layer.style.opacity).toBe("");
+  });
+
   it("adds markers reactively when cities is supplied later", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: { topology: statesTopo, width: 800, height: 500 },

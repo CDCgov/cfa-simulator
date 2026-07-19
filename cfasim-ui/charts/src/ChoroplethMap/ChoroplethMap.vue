@@ -2723,6 +2723,24 @@ const CITY_LABEL_GAP_PX = 3;
 const CITY_MARKER_HALO_PX = 0.9;
 const CITY_LABEL_HALO_PX = 2.6;
 
+// Marker-layer theme styling. The layer is SVG in both renderers, so
+// colors apply as inline CSS custom properties (the browser resolves
+// var() / light-dark() and follows theme flips on its own — no probe
+// involved); opacity goes on the group. JS values override any
+// stylesheet-level `--choropleth-city-*` override, matching the rest of
+// the theme.
+const cityLayerStyle = computed(() => {
+  const t = props.theme;
+  const style: Record<string, string> = {};
+  if (t?.markerColor) {
+    style["--choropleth-city-marker"] = t.markerColor;
+    style["--choropleth-city-label-color"] = t.markerColor;
+  }
+  if (t?.markerHalo) style["--choropleth-city-halo"] = t.markerHalo;
+  if (t?.markerOpacity != null) style.opacity = String(t.markerOpacity);
+  return style;
+});
+
 // Pin an absolutely-positioned overlay (the canvas backend, or the city svg)
 // exactly over the interaction svg's box. The wrapper can include an in-flow
 // header (title/legend) above the map, so the svg doesn't start at the wrapper
@@ -2785,7 +2803,7 @@ function renderCityLayer() {
 
   const vs = viewScale.value || 1;
   const font = CITY_LABEL_PX / vs;
-  const markerHalo = CITY_MARKER_HALO_PX / vs;
+  const markerHalo = (props.theme?.markerHaloWidth ?? CITY_MARKER_HALO_PX) / vs;
   const labelHalo = CITY_LABEL_HALO_PX / vs;
   const frag = document.createDocumentFragment();
   for (const c of placed) {
@@ -3225,6 +3243,9 @@ watch(
     viewScale.value,
     props.citiesMinZoom,
     props.zoom,
+    // Halo width is written as an attribute inside renderCityLayer, so a
+    // theme change needs a re-render (colors/opacity are style-bound).
+    props.theme?.markerHaloWidth,
     // Title/legend form an in-flow header above the map; toggling it moves the
     // map svg, so re-pin the overlay to match.
     props.title,
@@ -3391,7 +3412,11 @@ watch(
         preserveAspectRatio="xMidYMid meet"
         aria-hidden="true"
       >
-        <g ref="cityLayerRef" class="choropleth-cities" />
+        <g
+          ref="cityLayerRef"
+          class="choropleth-cities"
+          :style="cityLayerStyle"
+        />
       </svg>
       <ChartZoomControls
         v-if="showZoomControls"
@@ -3464,7 +3489,9 @@ watch(
   cursor: grabbing;
 }
 
-.state-path {
+/* Feature paths are created imperatively (rebuildPaths), so they carry no
+   scoped data-v attribute — child rules for them need :deep() to match. */
+.choropleth-wrapper :deep(.state-path) {
   cursor: pointer;
 }
 
@@ -3479,23 +3506,29 @@ watch(
   pointer-events: none;
 }
 
-/* City markers overlay. Colors follow the theme's color-scheme via
-   light-dark(); override per instance with the custom properties below.
-   Marker/label sizes are set in JS (canonical units) so they stay a constant
-   on-screen size under zoom. */
+/* City markers overlay. Default style is scheme-independent: dark dots and
+   labels with a thin white halo read over any map fill, light or dark (a
+   scheme-following halo left dark-mode labels haloed in near-black, barely
+   separating them from dark fills). Override per instance with the custom
+   properties below or the theme's marker keys. Marker/label sizes are set
+   in JS (canonical units) so they stay a constant on-screen size under
+   zoom. */
 .choropleth-cities {
-  --choropleth-city-marker: light-dark(#1a1a1a, #f2f2f2);
-  --choropleth-city-halo: light-dark(#ffffff, #0a0a0a);
-  --choropleth-city-label-color: light-dark(#1a1a1a, #f2f2f2);
+  --choropleth-city-marker: #1a1a1a;
+  --choropleth-city-halo: #fff;
+  --choropleth-city-label-color: #1a1a1a;
   font-family: var(--font-family, system-ui, sans-serif);
 }
 
-.choropleth-city-dot {
+/* The dots/labels are created imperatively (renderCityLayer) and carry no
+   scoped data-v attribute, so these rules need :deep() anchored on the
+   templated group to match them. */
+.choropleth-cities :deep(.choropleth-city-dot) {
   fill: var(--choropleth-city-marker);
   stroke: var(--choropleth-city-halo);
 }
 
-.choropleth-city-label {
+.choropleth-cities :deep(.choropleth-city-label) {
   fill: var(--choropleth-city-label-color);
   stroke: var(--choropleth-city-halo);
   paint-order: stroke fill;
@@ -3503,7 +3536,7 @@ watch(
   font-weight: 500;
 }
 
-.choropleth-city-label-capital {
+.choropleth-cities :deep(.choropleth-city-label-capital) {
   font-weight: 700;
 }
 
