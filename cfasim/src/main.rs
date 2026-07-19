@@ -69,7 +69,9 @@ enum Commands {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let is_init = matches!(cli.command, Commands::Init { .. });
-    if !matches!(cli.command, Commands::Update) {
+    // First-run prompt only on the human-facing setup commands: docs/test/run
+    // must stay non-interactive so agents and sandboxes can call them safely.
+    if is_init || matches!(cli.command, Commands::Tools { .. }) {
         settings::prompt_for_updates_if_first_run();
     }
     let result = match cli.command {
