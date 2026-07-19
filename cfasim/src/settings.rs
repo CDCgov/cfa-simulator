@@ -50,7 +50,7 @@ fn save(settings: &Settings) -> std::io::Result<()> {
 
 /// True when uv (via `uvx`, `uv run`, or `uv tool run`) spawned this process.
 /// Documented: uv sets `UV` to its own binary path in every subprocess it spawns.
-fn is_spawned_by_uv() -> bool {
+pub(crate) fn is_spawned_by_uv() -> bool {
     std::env::var_os("UV").is_some()
 }
 
