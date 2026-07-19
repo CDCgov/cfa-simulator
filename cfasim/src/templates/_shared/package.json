@@ -17,7 +17,6 @@
     "cfasim-ui": "^{{ cfasim_version }}"
   },
   "devDependencies": {
-    "@cfasim-ui/docs": "^{{ cfasim_version }}",
     "@playwright/test": "^1.60.0",
     "@vitejs/plugin-vue": "^6.0.7",
     "typescript": "^6.0.3",

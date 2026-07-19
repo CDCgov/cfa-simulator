@@ -100,6 +100,11 @@ test.describe("cfasim init", () => {
       { cwd: ROOT, stdio: "pipe" },
     );
 
+    // Generate the bundled package docs. `file:` directory links don't run
+    // prepack, so the docs/ dirs must exist on disk before `pnpm install`
+    // copies the packages (exercised by the `cfasim docs` test below).
+    execSync("node scripts/generate_docs.mjs", { cwd: ROOT, stdio: "pipe" });
+
     // Scaffold and install each project
     for (const p of projects) {
       scaffoldProject(p.name, p.template);
@@ -139,6 +144,19 @@ test.describe("cfasim init", () => {
       await new Promise((r) => setTimeout(r, 1000));
       rmSync(TMP_DIR, { recursive: true, force: true });
     }
+  });
+
+  test("scaffolded project resolves cfasim docs", () => {
+    // Scaffolded projects depend only on the cfasim-ui umbrella, so the CLI
+    // must find the bundled docs through pnpm's virtual store.
+    const raw = execSync(`${CLI} docs --json`, {
+      cwd: resolve(TMP_DIR, projects[0].name),
+    }).toString();
+    const parsed = JSON.parse(raw);
+    expect(parsed.content.components.length).toBeGreaterThan(0);
+    expect(parsed.content.charts.length).toBeGreaterThan(0);
+    expect(existsSync(parsed.content.components[0].docs)).toBe(true);
+    expect(existsSync(parsed.content.components[0].source)).toBe(true);
   });
 
   for (const p of projects) {

@@ -13,7 +13,11 @@
     "access": "public"
   },
   "files": [
-    "dist"
+    "dist",
+    "docs",
+    "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.spec.ts"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -28,7 +32,8 @@
     "*.css"
   ],
   "scripts": {
-    "build": "vite build"
+    "build": "vite build",
+    "prepack": "node ../../scripts/generate_docs.mjs"
   },
   "dependencies": {
     "@cfasim-ui/shared": "workspace:*",

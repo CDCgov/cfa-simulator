@@ -1,5 +1,8 @@
 /**
- * Generates cfasim-ui component documentation into docs/cfasim-ui/.
+ * Generates cfasim-ui component documentation into docs/cfasim-ui/ (the
+ * VitePress site) and into cfasim-ui/{components,charts}/docs/ (the bundled
+ * docs shipped inside each npm package: docs/index.json + a self-contained
+ * .md per component with the API table inlined).
  *
  * 1. Copies hand-written .md files from next to each component source
  * 2. Extracts props/models/emits from Vue SFCs and generates API tables
@@ -17,7 +20,6 @@
  */
 
 import {
-  cpSync,
   existsSync,
   readFileSync,
   readdirSync,
@@ -31,22 +33,10 @@ import matter from "gray-matter";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const DOCS_ROOT = resolve(ROOT, "docs/cfasim-ui");
-const PACKAGE_ROOT = resolve(ROOT, "cfasim-ui/docs");
 const INCLUDE_RE = /<!--\s*@include:\s*\.\/_api\/[^>]*-->/;
 
-// Workspace packages whose src/ trees get shipped (minus tests) in @cfasim-ui/docs.
-const WORKSPACE_PACKAGES = [
-  "components",
-  "charts",
-  "shared",
-  "pyodide",
-  "wasm",
-  "theme",
-];
-
-function isTestFile(path) {
-  return path.endsWith(".test.ts") || path.endsWith(".spec.ts");
-}
+// Packages that ship bundled docs (docs/index.json + built .md per component).
+const DOCS_PACKAGES = ["components", "charts"];
 
 // PascalCase component names per package. Everything else — the docs slug
 // (kebab-case) and the .vue/.md source paths — is derived below, so adding
@@ -380,9 +370,10 @@ function generateMarkdown(meta) {
  * and by the dev-mode Vite plugin when a source .md or .vue changes.
  *
  * @param entry  One row from `components`
- * @param opts.updatePackage  When true, also rewrites the @cfasim-ui/docs
- *                            package output (full CLI run). Skipped in dev.
- * @returns      Per-component metadata for the @cfasim-ui/docs index.json
+ * @param opts.updatePackage  When true, also rewrites the bundled docs
+ *                            inside the component's own package (full CLI
+ *                            run). Skipped in dev.
+ * @returns      Per-component metadata for the package docs/index.json
  */
 export function regenerateComponent(entry, { updatePackage } = {}) {
   const [slug, outDir, vuePath, docPath] = entry;
@@ -405,11 +396,12 @@ export function regenerateComponent(entry, { updatePackage } = {}) {
     : [];
 
   if (updatePackage) {
-    // @cfasim-ui/docs: the component's src tree was already copied;
-    // overwrite the src .md with the self-contained built version.
-    const pkgComponentDir = resolve(PACKAGE_ROOT, outDir, name);
+    // Bundled package docs: a self-contained .md (API table inlined) in the
+    // package's docs/ dir, shipped in the npm tarball next to src/.
+    const pkgDocsDir = resolve(ROOT, `cfasim-ui/${outDir}/docs`);
+    mkdirSync(pkgDocsDir, { recursive: true });
     const builtMd = parsed.content.replace(INCLUDE_RE, apiMd).trimStart();
-    writeFileSync(resolve(pkgComponentDir, `${name}.md`), builtMd);
+    writeFileSync(resolve(pkgDocsDir, `${name}.md`), builtMd);
   }
 
   return { name, slug, outDir, keywords, meta };
@@ -456,53 +448,59 @@ function pruneOrphanedDocs() {
 }
 
 /**
- * Full rebuild: refresh the @cfasim-ui/docs package src trees + regenerate
- * every component's docs and write the package index.json.
+ * Full rebuild: regenerate every component's docs and write each package's
+ * bundled docs/ dir (built .md per component + docs/index.json).
  */
 export function generateAll() {
   pruneOrphanedDocs();
 
-  const packageVersion = JSON.parse(
-    readFileSync(resolve(PACKAGE_ROOT, "package.json"), "utf-8"),
-  ).version;
+  for (const pkg of DOCS_PACKAGES) {
+    const docsDir = resolve(ROOT, `cfasim-ui/${pkg}/docs`);
+    mkdirSync(docsDir, { recursive: true });
+    const version = JSON.parse(
+      readFileSync(resolve(ROOT, `cfasim-ui/${pkg}/package.json`), "utf-8"),
+    ).version;
 
-  for (const pkg of WORKSPACE_PACKAGES) {
-    const srcDir = resolve(ROOT, `cfasim-ui/${pkg}/src`);
-    const destDir = resolve(PACKAGE_ROOT, pkg);
-    rmSync(destDir, { recursive: true, force: true });
-    cpSync(srcDir, destDir, {
-      recursive: true,
-      filter: (path) => !isTestFile(path),
-    });
-  }
+    const entries = [];
+    for (const entry of components.filter(([, outDir]) => outDir === pkg)) {
+      const result = regenerateComponent(entry, { updatePackage: true });
+      entries.push({
+        name: result.name,
+        slug: result.slug,
+        docs: `docs/${result.name}.md`,
+        source: `src/${result.name}/${result.name}.vue`,
+        keywords: result.keywords,
+      });
+      console.log(
+        `  ${pkg}/${result.slug}.md (${result.meta.props.length} props, ${result.meta.models.length} models, ${result.meta.emits.length} emits, ${result.keywords.length} keywords)`,
+      );
+    }
 
-  const index = {
-    version: packageVersion,
-    package: "@cfasim-ui/docs",
-    content: { components: [], charts: [] },
-  };
-
-  for (const entry of components) {
-    const result = regenerateComponent(entry, { updatePackage: true });
-    index.content[result.outDir].push({
-      name: result.name,
-      slug: result.slug,
-      docs: `${result.outDir}/${result.name}/${result.name}.md`,
-      source: `${result.outDir}/${result.name}/${result.name}.vue`,
-      keywords: result.keywords,
-    });
-    console.log(
-      `  ${result.outDir}/${result.slug}.md (${result.meta.props.length} props, ${result.meta.models.length} models, ${result.meta.emits.length} emits, ${result.keywords.length} keywords)`,
+    writeFileSync(
+      resolve(docsDir, "index.json"),
+      JSON.stringify(
+        { version, package: `@cfasim-ui/${pkg}`, content: { [pkg]: entries } },
+        null,
+        2,
+      ) + "\n",
     );
-  }
 
-  writeFileSync(
-    resolve(PACKAGE_ROOT, "index.json"),
-    JSON.stringify(index, null, 2) + "\n",
-  );
+    // Prune stale files in place rather than clearing docs/ up front:
+    // prepack runs this in both packages during publish, and an emptied
+    // dir could get tarred if packs ever overlap.
+    const expected = new Set([
+      "index.json",
+      ...entries.map((e) => `${e.name}.md`),
+    ]);
+    for (const name of readdirSync(docsDir)) {
+      if (expected.has(name)) continue;
+      rmSync(resolve(docsDir, name), { recursive: true, force: true });
+      console.log(`  pruned orphan cfasim-ui/${pkg}/docs/${name}`);
+    }
+  }
 
   console.log(
-    `\nGenerated docs for ${components.length} components into docs/cfasim-ui/ and cfasim-ui/docs/`,
+    `\nGenerated docs for ${components.length} components into docs/cfasim-ui/ and cfasim-ui/{components,charts}/docs/`,
   );
 }
 
