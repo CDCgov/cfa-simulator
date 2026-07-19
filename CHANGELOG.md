@@ -1,6 +1,24 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.0] - 2026-07-19
+
+### Bug Fixes
+
+- Keep cfasim docs non-interactive for sandboxed use
+- Skip update check when run via uvx
+- Pin consumer pnpm version in docs e2e for corepack
+
+### Chores
+
+- **deps:** Upgrade dependencies and pin all versions exactly
+
+### Features
+
+- Bundle docs and source in ui packages, deprecate @cfasim-ui/docs
+- **charts:** Add ChoroplethMap theme API with exterior outline support
+- **charts:** Add marker theme keys and fix city marker styling
+
 ## [0.7.8] - 2026-07-09
 
 ### Performance
