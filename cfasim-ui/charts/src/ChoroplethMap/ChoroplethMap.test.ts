@@ -2976,7 +2976,7 @@ describe("ChoroplethMap city overlay", () => {
     expect(el.querySelectorAll("polygon")).toHaveLength(0);
   });
 
-  it("labels cities, emphasizes the capital, and includes its name", async () => {
+  it("labels cities, marks the capital, and includes its name", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: { topology: statesTopo, width: 800, height: 500, cities: CITIES },
     });
@@ -2987,7 +2987,7 @@ describe("ChoroplethMap city overlay", () => {
     );
     expect(labels.length).toBeGreaterThanOrEqual(1);
     expect(labels).toContain("Austin");
-    // The capital's label carries the emphasis class.
+    // The capital's label carries the capital class (styling hook only).
     const capitalLabels = [
       ...el.querySelectorAll(".choropleth-city-label-capital"),
     ].map((n) => n.textContent);

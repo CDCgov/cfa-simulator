@@ -3536,10 +3536,6 @@ watch(
   font-weight: 500;
 }
 
-.choropleth-cities :deep(.choropleth-city-label-capital) {
-  font-weight: 700;
-}
-
 .choropleth-canvas {
   position: absolute;
   top: 0;
