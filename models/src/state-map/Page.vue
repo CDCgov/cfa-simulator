@@ -68,6 +68,9 @@ const defaults = {
   renderer: "canvas" as "canvas" | "svg",
   // Exterior outline (theme.outline) around the rendered geography.
   outline: "off" as "off" | "on",
+  // Mix levels: report a couple of states as one whole-state estimate on the
+  // otherwise county-level national map.
+  mixed: "off" as "off" | "on",
 };
 const { params } = useModelParams(defaults);
 
@@ -95,9 +98,22 @@ watch(
 const mapGeoType = computed<GeoType>(() =>
   params.selectedState ? params.geoType : "counties",
 );
-const mapData = computed(() =>
-  params.selectedState && params.geoType === "hsas" ? hsaData : countyData,
-);
+// States reported as a single whole-state estimate instead of county detail.
+const MIXED_STATES = ["06", "48"];
+const mixedData: StateData[] = [
+  ...countyData,
+  ...MIXED_STATES.map((fips) => ({
+    id: fips,
+    value: pseudo(fips + "7"),
+    geoType: "states" as GeoType,
+  })),
+];
+
+const mapData = computed(() => {
+  if (params.selectedState)
+    return params.geoType === "hsas" ? hsaData : countyData;
+  return params.mixed === "on" ? mixedData : countyData;
+});
 
 // City overlay: national top-100 (+ DC) or, in a state view, that state's
 // capital + top cities. Undefined when the toggle is off.
@@ -110,8 +126,11 @@ const cityMarkers = computed(() => {
 
 function onMapClick(payload: { id: string; name: string }) {
   if (!params.selectedState) {
-    // National county view: drill into the clicked county's state.
-    const stateFips = String(payload.id).padStart(5, "0").slice(0, 2);
+    // National county view: drill into the clicked county's state. A mixed-in
+    // whole-state feature already carries the 2-digit FIPS.
+    const id = String(payload.id);
+    const stateFips =
+      id.length <= 2 ? id.padStart(2, "0") : id.padStart(5, "0").slice(0, 2);
     const stateName = fipsToStateName.get(stateFips);
     if (stateName) params.selectedState = stateName;
     return;
@@ -194,6 +213,16 @@ const subtitle = computed(() =>
       :options="[
         { value: 'full', label: 'Full' },
         { value: 'tight', label: 'Tight' },
+      ]"
+    />
+    <ToggleGroup
+      v-if="!params.selectedState"
+      v-model="params.mixed"
+      label="Levels"
+      hint="“Mixed” reports California and Texas as one whole-state estimate (data[].geoType) while the rest of the map stays county-level."
+      :options="[
+        { value: 'off', label: 'Counties' },
+        { value: 'on', label: 'Mixed' },
       ]"
     />
     <ToggleGroup

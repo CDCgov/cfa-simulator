@@ -56,6 +56,14 @@ import { placeTooltip } from "../tooltip-position.js";
 import ChoroplethTooltip from "./ChoroplethTooltip.vue";
 import { layoutCities } from "./cityLayout.js";
 import type { CityMarker } from "./cityLayout.js";
+import {
+  resolveGeoOverrides,
+  serializeOverrides,
+  parseOverrides,
+  mixFeatures,
+  stateOfId,
+  type LevelLookup,
+} from "./mixedGeo.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -65,6 +73,16 @@ export interface StateData {
   /** FIPS code (e.g. "06" for California, "04015" for a county) or name */
   id: string;
   value: number | string;
+  /**
+   * Geographic level of *this row*, when it differs from the map's `geoType`.
+   * The state the row belongs to is then re-tiled at this level: on a county
+   * map, `{ id: "06", geoType: "states" }` draws California as one merged
+   * shape carrying this value; on a state map, `{ id: "36061", geoType:
+   * "counties" }` breaks New York out into its counties. Rows at the base
+   * level (the common case) leave `geoType` unset. Ignores `dataGeoType` —
+   * an off-level row is looked up by its own id.
+   */
+  geoType?: GeoType;
 }
 
 export interface ChoroplethColorScale {
@@ -138,7 +156,10 @@ const props = withDefaults(
      * with its parent HSA's value) or by state values, without changing
      * the rendered/interactive geometry. Supported combinations:
      * `counties` ← `hsas`, `counties` ← `states`, `hsas` ← `states`.
-     * When unset, data ids must match the base `geoType`.
+     * When unset, data ids must match the base `geoType`. Re-keys the whole
+     * dataset — to mix levels on one map (a county map where California
+     * reports one statewide value), set `geoType` on the individual rows
+     * instead.
      */
     dataGeoType?: GeoType;
     /**
@@ -1333,6 +1354,9 @@ function loadHsaModule() {
 watch(
   () => {
     if (props.geoType === "hsas" || props.dataGeoType === "hsas") return true;
+    // A mixed-level row can pull HSAs in (`data[].geoType`), and any state
+    // override on an HSA base map needs the table to place its features.
+    if (props.data?.some((d) => d.geoType === "hsas")) return true;
     const focus = props.focus;
     if (!focus) return false;
     const items = Array.isArray(focus) ? focus : [focus];
@@ -1349,7 +1373,10 @@ const hsaFeaturesGeo = computed(() => {
   if (!mod) return { type: "FeatureCollection" as const, features: [] };
   const { fipsToHsa, hsaNames } = mod;
   const topo = toRaw(props.topology) as unknown as CountiesTopo;
-  const countyGeometries = topo.objects.counties.geometries;
+  // HSAs are unions of counties: a states-only topology can't build them.
+  const countyGeometries = topo.objects?.counties?.geometries;
+  if (!countyGeometries)
+    return { type: "FeatureCollection" as const, features: [] };
   const scopeFips = stateFips.value;
   const groups = new Map<string, typeof countyGeometries>();
 
@@ -1377,31 +1404,139 @@ const hsaFeaturesGeo = computed(() => {
   return { type: "FeatureCollection" as const, features };
 });
 
-const featuresGeo = computed(() => {
+// Every county in the topology, unscoped. Split out of `baseFeaturesGeo` so
+// the mixed-level code can index counties without depending on the base
+// geoType (and without re-running topojson's `feature()` per consumer).
+const countiesFeatures = computed<ChoroplethFeature[]>(() => {
+  const topo = toRaw(props.topology) as unknown as {
+    objects?: { counties?: NamedGeometry };
+  };
+  const obj = topo?.objects?.counties;
+  if (!obj) return [];
+  const fc = feature(topo as unknown as Topology, obj);
+  return (
+    fc.type === "FeatureCollection" ? fc.features : [fc]
+  ) as ChoroplethFeature[];
+});
+
+// Features at the base `geoType`, scoped by the `state` prop — the map before
+// any per-state level overrides (`data[].geoType`) are mixed in.
+const baseFeaturesGeo = computed<ChoroplethFeature[]>(() => {
   // hsaFeaturesGeo already honors `state` (it scopes the source counties).
-  if (props.geoType === "hsas") return hsaFeaturesGeo.value;
+  if (props.geoType === "hsas")
+    return hsaFeaturesGeo.value.features as ChoroplethFeature[];
   const scopeFips = stateFips.value;
   if (props.geoType === "counties") {
-    const topo = toRaw(props.topology) as unknown as CountiesTopo;
-    const fc = feature(topo, topo.objects.counties);
+    const fc = countiesFeatures.value;
     if (!scopeFips) return fc;
-    return {
-      type: "FeatureCollection" as const,
-      features: fc.features.filter(
-        (f) => String(f.id).padStart(5, "0").slice(0, 2) === scopeFips,
-      ),
-    };
+    return fc.filter(
+      (f) => String(f.id).padStart(5, "0").slice(0, 2) === scopeFips,
+    );
   }
-  const topo = toRaw(props.topology) as unknown as StatesTopo;
-  const fc = feature(topo, topo.objects.states);
+  const fc = statesFeatures.value as ChoroplethFeature[];
   if (!scopeFips) return fc;
+  return fc.filter((f) => String(f.id).padStart(2, "0") === scopeFips);
+});
+
+// ─── Mixed geographic levels (`data[].geoType`) ──────────────────────────
+//
+// A data row that declares a level other than the base `geoType` re-tiles its
+// whole state at that level: a state row merges a county map's counties into
+// one shape, a county row splits a state map's state into counties. See
+// `mixedGeo.ts` for the substitution itself.
+
+// HSA code → 2-digit state FIPS, inverted from the lazy FIPS→HSA table. HSA
+// codes aren't state-prefixed, so this is the only way to place one.
+const hsaToState = computed<Map<string, string> | null>(() => {
+  const mod = hsaModule.value;
+  if (!mod) return null;
+  const m = new Map<string, string>();
+  for (const fips in mod.fipsToHsa)
+    m.set(mod.fipsToHsa[fips], fips.slice(0, 2));
+  return m;
+});
+
+const levelLookups = computed(() => {
+  const build = (
+    features: ChoroplethFeature[],
+  ): LevelLookup<ChoroplethFeature> => {
+    const byId = new Map<string, ChoroplethFeature>();
+    const byName = new Map<string, string>();
+    for (const f of features) {
+      if (f.id == null) continue;
+      const id = String(f.id);
+      byId.set(id, f);
+      if (f.properties?.name != null) byName.set(f.properties.name, id);
+    }
+    return { byId, byName };
+  };
+  // Getters, so indexing a level only happens if a row actually references it.
   return {
-    type: "FeatureCollection" as const,
-    features: fc.features.filter(
-      (f) => String(f.id).padStart(2, "0") === scopeFips,
-    ),
+    states: () => build(statesFeatures.value as ChoroplethFeature[]),
+    counties: () => build(countiesFeatures.value),
+    hsas: () => build(hsaFeaturesGeo.value.features as ChoroplethFeature[]),
   };
 });
+
+function levelLookup(level: GeoType): LevelLookup<ChoroplethFeature> | null {
+  const lookup = levelLookups.value[level]();
+  return lookup.byId.size ? lookup : null;
+}
+
+const overrideResolution = computed(() =>
+  resolveGeoOverrides(props.data, props.geoType, levelLookup, hsaToState.value),
+);
+
+// Serialized first so the override map's *identity* only changes when the set
+// of overrides does. `featuresGeo` hangs off it, and rebuilding every path on
+// each `data` update (the animation case) would be a real cost.
+const geoOverrideKey = computed(() =>
+  serializeOverrides(overrideResolution.value.overrides),
+);
+const geoOverrides = computed(() => parseOverrides(geoOverrideKey.value));
+
+const mixedFeatures = computed(() =>
+  mixFeatures(
+    baseFeaturesGeo.value,
+    props.geoType,
+    geoOverrides.value,
+    levelLookup,
+    hsaToState.value,
+    stateFips.value,
+  ),
+);
+
+/** Feature id → level, for features substituted by a `data[].geoType` row. */
+const featureLevelById = computed(() => mixedFeatures.value.levelById);
+
+/** The level a rendered feature is drawn at. */
+function levelOf(featureId: string): GeoType {
+  return featureLevelById.value.get(featureId) ?? props.geoType;
+}
+
+const featuresGeo = computed(() => ({
+  type: "FeatureCollection" as const,
+  features: mixedFeatures.value.features,
+}));
+
+watch(
+  () => overrideResolution.value,
+  ({ unresolved, conflicts }) => {
+    if (unresolved.length) {
+      console.warn(
+        `[ChoroplethMap] data rows with a geoType that resolved to no state: ${unresolved.join(", ")}. ` +
+          `Use a FIPS/HSA code or feature name available in that geoType.`,
+      );
+    }
+    if (conflicts.length) {
+      console.warn(
+        `[ChoroplethMap] data rows claiming an already-mixed state at a different geoType: ${conflicts.join(", ")}. ` +
+          `A state renders at one level; the first row wins.`,
+      );
+    }
+  },
+  { immediate: true },
+);
 
 const stateBordersPath = computed(() => {
   if (props.geoType !== "counties" && props.geoType !== "hsas") return null;
@@ -1455,23 +1590,18 @@ const tightFitAmount = computed(() => {
 
 // Predicate marking a feature id as Alaska (FIPS 02) or Hawaii (15), so the
 // projection can re-fit to just the contiguous US. States/counties key off
-// the FIPS prefix directly; HSA ids are HSA codes, so an HSA counts as AK/HI
-// when any of its member counties is — derived from the `fipsToHsa` table
-// (null until that lazy chunk loads, so the crop kicks in once it's ready).
+// the FIPS prefix directly; HSA ids are HSA codes, so an HSA has to be placed
+// through the `fipsToHsa` table (null until that lazy chunk loads, so the crop
+// kicks in once it's ready). Each id is read at the level it renders at, which
+// mixed-level maps make per-feature.
 const isAkHiFeature = computed<((id: string) => boolean) | null>(() => {
-  if (props.geoType === "hsas") {
-    const mod = hsaModule.value;
-    if (!mod) return null;
-    const akHi = new Set<string>();
-    for (const fips in mod.fipsToHsa) {
-      const st = fips.slice(0, 2);
-      if (st === "02" || st === "15") akHi.add(mod.fipsToHsa[fips]);
-    }
-    return (id) => akHi.has(id);
-  }
-  const pad = props.geoType === "counties" ? 5 : 2;
+  const hsaStates = hsaToState.value;
+  const usesHsas =
+    props.geoType === "hsas" ||
+    [...featureLevelById.value.values()].includes("hsas");
+  if (usesHsas && !hsaStates) return null;
   return (id) => {
-    const st = id.padStart(pad, "0").slice(0, 2);
+    const st = stateOfId(levelOf(id), id, hsaStates);
     return st === "02" || st === "15";
   };
 });
@@ -1611,44 +1741,13 @@ const normalizedFocus = computed<FocusItem[]>(() => {
 // resolveFocusItems so a single focus call can mix geoTypes.
 const featuresByGeoType = computed(() => {
   const map = new Map<GeoType, Map<string, ChoroplethFeature>>();
-  // The base geoType is always represented — reuse the existing lookup.
+  // The base geoType is always represented by what's actually rendered (which
+  // on a mixed-level map includes the substituted features).
   map.set(props.geoType, featuresById.value);
-
-  const topo = toRaw(props.topology) as unknown as {
-    objects?: { states?: NamedGeometry; counties?: NamedGeometry };
-  };
-  const objs = topo?.objects;
-  if (!objs) return map;
-
-  type AnyFeature = GeoJSON.Feature<GeoJSON.Geometry | null>;
-  const indexFeatures = (feats: AnyFeature[]) => {
-    const m = new Map<string, ChoroplethFeature>();
-    for (const f of feats) {
-      if (f.id != null) m.set(String(f.id), f as ChoroplethFeature);
-    }
-    return m;
-  };
-
-  if (!map.has("states") && objs.states) {
-    const fc = feature(topo as unknown as Topology, objs.states);
-    map.set(
-      "states",
-      indexFeatures(
-        (fc as GeoJSON.FeatureCollection<GeoJSON.Geometry | null>).features,
-      ),
-    );
-  }
-  if (!map.has("counties") && objs.counties) {
-    const fc = feature(topo as unknown as Topology, objs.counties);
-    map.set(
-      "counties",
-      indexFeatures(
-        (fc as GeoJSON.FeatureCollection<GeoJSON.Geometry | null>).features,
-      ),
-    );
-  }
-  if (!map.has("hsas") && objs.counties) {
-    map.set("hsas", indexFeatures(hsaFeaturesGeo.value.features));
+  for (const gt of ["states", "counties", "hsas"] as GeoType[]) {
+    if (map.has(gt)) continue;
+    const lookup = levelLookup(gt);
+    if (lookup) map.set(gt, lookup.byId);
   }
   return map;
 });
@@ -1656,12 +1755,13 @@ const featuresByGeoType = computed(() => {
 const dataMap = computed(() => {
   const map = new Map<string, number | string>();
   if (!props.data) return map;
-  // Name fallback resolves in whichever geoType the data is keyed by.
+  // Name fallback resolves in whichever geoType the data is keyed by — the
+  // row's own `geoType` when it declares one (mixed-level maps), else the
+  // map-wide `dataGeoType`.
   const dataGt = props.dataGeoType ?? props.geoType;
-  const nameIdx = nameToIdByGeoType.value.get(dataGt);
   for (const d of props.data) {
     map.set(d.id, d.value);
-    const fid = nameIdx?.get(d.id);
+    const fid = nameToIdByGeoType.value.get(d.geoType ?? dataGt)?.get(d.id);
     if (fid) map.set(fid, d.value);
   }
   return map;
@@ -1759,9 +1859,15 @@ const categoricalByValue = computed(() => {
   return m;
 });
 
-/** Looks up the data value for a base feature id, honoring `dataGeoType`. */
-function valueFor(baseId: string): number | string | undefined {
-  const dataId = baseToDataId(baseId);
+/**
+ * Looks up the data value for a rendered feature id, honoring `dataGeoType`.
+ * Features substituted by a mixed-level row carry their own level, so they're
+ * keyed by their own id and skip the `dataGeoType` remapping entirely.
+ */
+function valueFor(featureId: string): number | string | undefined {
+  if (featureLevelById.value.has(featureId))
+    return dataMap.value.get(featureId);
+  const dataId = baseToDataId(featureId);
   return dataId == null ? undefined : dataMap.value.get(dataId);
 }
 

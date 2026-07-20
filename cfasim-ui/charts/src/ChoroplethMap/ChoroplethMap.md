@@ -27,6 +27,28 @@ const focused = ref(null);
 // "Outline a focused feature's parent" demo: focus is a county id;
 // we derive the parent HSA and add it to the focus array as a dashed
 // overlay so clicking a county also outlines its HSA.
+// "Mixing levels" demo: county data everywhere except California and Texas,
+// which report one whole-state estimate each (`geoType: "states"`).
+const MERGED_STATES = ["06", "48"];
+const mixedLevelData = computed(() => [
+  ...denseCountyData.value.filter(
+    (d) => !MERGED_STATES.includes(d.id.slice(0, 2)),
+  ),
+  { id: "06", value: 85, geoType: "states" },
+  { id: "48", value: 15, geoType: "states" },
+]);
+
+// The other direction: a state map where New York alone is broken out into
+// its counties.
+const splitStateData = computed(() => [
+  { id: "06", value: 70 },
+  { id: "48", value: 30 },
+  { id: "12", value: 55 },
+  ...denseCountyData.value
+    .filter((d) => d.id.slice(0, 2) === "36")
+    .map((d) => ({ ...d, geoType: "counties" })),
+]);
+
 const focusedCounty = ref(null);
 const parentFocus = computed(() => {
   const fips = focusedCounty.value;
@@ -859,6 +881,106 @@ on top with a `FocusItem`.
   </template>
 </ComponentDemo>
 
+### Mixing levels on one map (`data[].geoType`)
+
+`dataGeoType` re-keys _all_ the data at once. When only some regions report at
+a different level — most of the country has county estimates, but California
+only published a statewide number — give those rows their own `geoType`
+instead. The state is then drawn at that level: one merged California shape
+carrying the state value, with every other state still split into counties.
+
+```vue
+<ChoroplethMap
+  :topology="countiesTopo"
+  geo-type="counties"
+  :data="[
+    { id: '36061', value: 12 }, // county rows as usual
+    { id: '06', value: 85, geoType: 'states' }, // …and California as a whole
+  ]"
+/>
+```
+
+The substituted region is a normal feature: it fills from its own row, hovers
+and clicks as one unit, reports its own name (`California`) in the tooltip, and
+can be focused by its id.
+
+<ComponentDemo>
+  <ChoroplethMap
+    :topology="countiesTopo"
+    geo-type="counties"
+    renderer="canvas"
+    :data="mixedLevelData"
+    title="County estimates, with California and Texas reported statewide"
+    legend-title="Rate"
+    :height="420"
+  />
+
+<template #code>
+
+```vue
+<ChoroplethMap
+  :topology="countiesTopo"
+  geo-type="counties"
+  renderer="canvas"
+  :data="[
+    ...countyRows,
+    { id: '06', value: 85, geoType: 'states' },
+    { id: '48', value: 15, geoType: 'states' },
+  ]"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+It works in the other direction too — a state-level map where one state is
+broken out into counties. The whole state is re-tiled, so its counties without
+a row of their own render as no-data:
+
+<ComponentDemo>
+  <ChoroplethMap
+    :topology="countiesTopo"
+    geo-type="states"
+    :data="splitStateData"
+    title="State estimates, with New York broken out by county"
+    legend-title="Rate"
+    :height="420"
+  />
+
+<template #code>
+
+```vue
+<ChoroplethMap
+  :topology="countiesTopo"
+  geo-type="states"
+  :data="[
+    { id: '06', value: 70 },
+    { id: '48', value: 30 },
+    ...newYorkCountyRows.map((r) => ({ ...r, geoType: 'counties' })),
+  ]"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+Rules to keep in mind:
+
+- **A whole state is the unit.** One off-level row re-tiles its entire state, so
+  a single county row on a state map splits all of that state's counties out.
+- **Any pair of levels works** (`states` / `counties` / `hsas`), in either
+  direction, as long as the topology can supply them — splitting a state into
+  counties or HSAs needs `counties-10m.json`, not `states-10m.json`. HSA
+  substitution waits for the lazily-loaded FIPS→HSA table and leaves the base
+  map untouched until it arrives.
+- **Off-level rows ignore `dataGeoType`.** They're looked up by their own id, so
+  a map can use `dataGeoType` for its base features and still mix.
+- **One level per state.** If two rows claim the same state at different levels,
+  the first wins and a warning is logged. A row whose id resolves to no state
+  is ignored (also with a warning) and the base map renders as usual.
+- Ids can be codes or feature names (`"06"` or `"California"`), resolved in the
+  row's own `geoType`.
+
 ### Outline a focused feature's parent
 
 Use `v-model:focus` together with a computed that derives a parent
@@ -1129,6 +1251,11 @@ interface StateData {
   /** FIPS code (e.g. "06" for California, "06037" for LA County) or name */
   id: string;
   value: number | string;
+  /**
+   * Level of *this row*, when it differs from the map's `geoType`. The row's
+   * state is re-tiled at this level — see "Mixing levels on one map".
+   */
+  geoType?: GeoType;
 }
 ```
 

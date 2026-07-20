@@ -14,8 +14,9 @@ export interface CityMarker {
   coordinates: [number, number];
   /**
    * Mark as a capital: the label gets first pick during placement and is never
-   * dropped for collisions (rendered slightly emphasized). The marker itself is
-   * a plain dot, same as any other city.
+   * dropped for collisions. It renders like any other label (with a
+   * `choropleth-city-label-capital` class to style if you want), and the marker
+   * is a plain dot, same as any other city.
    */
   capital?: boolean;
   /**

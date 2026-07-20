@@ -155,6 +155,58 @@ test("state-map outline toggle draws the exterior boundary", async ({
   await expect(outline).toHaveCount(0);
 });
 
+test("state-map mixed levels draw a state as one feature with one tooltip", async ({
+  page,
+}) => {
+  // SVG renderer so the substituted features are real DOM paths.
+  await page.goto("/state-map?renderer=svg&mixed=on");
+  const california = page.locator('.state-path[data-feat-id="06"]');
+  await expect(california).toHaveCount(1);
+  // California's 58 counties are gone — the state is the only "06…" feature.
+  await expect(page.locator('.state-path[data-feat-id^="06"]')).toHaveCount(1);
+  await expect(page.locator('.state-path[data-feat-id^="48"]')).toHaveCount(1);
+  // Colored from its own state-level row, not left as no-data.
+  await expect(california).not.toHaveAttribute("fill", "#ddd");
+  // The whole state hovers (and tooltips) as one unit.
+  await california.hover();
+  const tooltip = page.locator(".chart-tooltip-content");
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText("California");
+
+  // Back to counties: the merged feature is replaced by county detail.
+  await page
+    .getByRole("group", { name: "Levels" })
+    .getByRole("button", { name: "Counties" })
+    .click();
+  await expect(california).toHaveCount(0);
+  await expect(page.locator('.state-path[data-feat-id="06037"]')).toHaveCount(
+    1,
+  );
+});
+
+test("state-map mixed levels pick and tooltip on the canvas renderer", async ({
+  page,
+}) => {
+  // Take California's screen position from the SVG rendering (same
+  // projection, same box) so the canvas hover has a point to aim at.
+  await page.goto("/state-map?renderer=svg&mixed=on");
+  const box = (await page
+    .locator('.state-path[data-feat-id="06"]')
+    .boundingBox())!;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+
+  await page.goto("/state-map?renderer=canvas&mixed=on");
+  await expect(page.locator("canvas.choropleth-canvas")).toBeVisible();
+  await expect(page.locator(".state-path")).toHaveCount(0);
+  // Index-color picking must resolve the merged state, not a stale county.
+  await page.mouse.move(cx, cy);
+  await page.mouse.move(cx + 1, cy + 1);
+  await expect(page.locator(".chart-tooltip-content")).toContainText(
+    "California",
+  );
+});
+
 test("state-map shows cities with level-of-detail, without overlapping labels", async ({
   page,
 }) => {

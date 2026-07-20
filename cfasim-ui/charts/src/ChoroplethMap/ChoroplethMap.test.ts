@@ -2685,6 +2685,260 @@ describe("ChoroplethMap canvas renderer", () => {
   });
 });
 
+describe("ChoroplethMap mixed geographic levels", () => {
+  const ids = (wrapper: {
+    findAll: (s: string) => { attributes: (a: string) => string | undefined }[];
+  }) =>
+    wrapper.findAll(".state-path").map((p) => p.attributes("data-feat-id")!);
+
+  it("draws a state-level row as one merged shape on a county map", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 600,
+        height: 400,
+        data: [
+          { id: "36061", value: 10 },
+          { id: "06", value: 90, geoType: "states" as const },
+        ],
+      },
+    });
+    const rendered = ids(wrapper);
+    // California collapses to a single feature; its counties are gone.
+    expect(rendered).toContain("06");
+    expect(rendered.filter((id) => id.startsWith("06") && id !== "06")).toEqual(
+      [],
+    );
+    // Every other state still renders as counties.
+    expect(rendered).toContain("36061");
+    expect(rendered.filter((id) => id.startsWith("36")).length).toBeGreaterThan(
+      1,
+    );
+    wrapper.unmount();
+  });
+
+  it("colors the merged state from its own row", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 600,
+        height: 400,
+        colorScale: { min: "#ffffff", max: "#ff0000" },
+        data: [
+          { id: "36061", value: 0 },
+          { id: "06", value: 100, geoType: "states" as const },
+        ],
+      },
+    });
+    const path = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06")!;
+    expect(path.attributes("fill")).toBe("rgb(255,0,0)");
+    wrapper.unmount();
+  });
+
+  it("names the merged state in the tooltip payload", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 600,
+        height: 400,
+        data: [{ id: "06", value: 42, geoType: "states" as const }],
+      },
+      slots: {
+        tooltip: `<template #tooltip="{ name, value }">
+          <div class="mixed-tip">{{ name }} :: {{ value }}</div>
+        </template>`,
+      },
+    });
+    const california = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06")!;
+    await california.trigger("mouseover");
+    await flushPromises();
+    expect(document.body.querySelector(".mixed-tip")!.textContent).toContain(
+      "California :: 42",
+    );
+    // Hover emits carry the state, not a county.
+    expect(wrapper.emitted("stateHover")![0][0]).toMatchObject({
+      id: "06",
+      name: "California",
+      value: 42,
+    });
+    wrapper.unmount();
+  });
+
+  it("falls back to the <title> for a merged state with no interactive tooltip", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 600,
+        height: 400,
+        data: [{ id: "06", value: 42, geoType: "states" as const }],
+      },
+    });
+    const path = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06")!;
+    expect(path.find("title").text()).toBe("California: 42");
+    wrapper.unmount();
+  });
+
+  it("splits one state into counties on a state map", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "states" as const,
+        width: 600,
+        height: 400,
+        data: [{ id: "36061", value: 5, geoType: "counties" as const }],
+      },
+    });
+    const rendered = ids(wrapper);
+    expect(rendered).not.toContain("36");
+    expect(rendered).toContain("36061");
+    // 62 New York counties replace the one state feature.
+    expect(rendered.filter((id) => id.startsWith("36")).length).toBe(62);
+    // Other states stay whole.
+    expect(rendered).toContain("06");
+    // Counties without a row of their own read as no-data.
+    const sibling = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "36047")!;
+    expect(sibling.attributes("fill")).toBe("#ddd");
+    wrapper.unmount();
+  });
+
+  it("resolves an off-level row by feature name", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 600,
+        height: 400,
+        data: [{ id: "California", value: 7, geoType: "states" as const }],
+      },
+    });
+    const path = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06")!;
+    expect(path).toBeDefined();
+    expect(path.attributes("fill")).not.toBe("#ddd");
+    wrapper.unmount();
+  });
+
+  it("looks an off-level row up by its own id, ignoring dataGeoType", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        // Base counties read their value from their parent state...
+        dataGeoType: "states" as const,
+        width: 600,
+        height: 400,
+        data: [
+          { id: "36", value: 10 },
+          // ...while this row is keyed at its own level.
+          { id: "06", value: 90, geoType: "states" as const },
+        ],
+      },
+    });
+    const merged = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06")!;
+    const nyCounty = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "36061")!;
+    expect(merged.attributes("fill")).not.toBe("#ddd");
+    expect(nyCounty.attributes("fill")).not.toBe("#ddd");
+    expect(merged.attributes("fill")).not.toBe(nyCounty.attributes("fill"));
+    wrapper.unmount();
+  });
+
+  it("substitutes HSAs for one state once the mapping loads", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 600,
+        height: 400,
+        // HSA 060723 is in California.
+        data: [{ id: "060723", value: 3, geoType: "hsas" as const }],
+      },
+    });
+    await flushDynamicImports();
+    const rendered = ids(wrapper);
+    expect(rendered).toContain("060723");
+    expect(rendered.some((id) => /^06\d{3}$/.test(id))).toBe(false);
+    expect(rendered).toContain("36061");
+    wrapper.unmount();
+  });
+
+  it("keeps the feature tree when only values change", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 600,
+        height: 400,
+        data: [{ id: "06", value: 1, geoType: "states" as const }],
+      },
+    });
+    const before = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06")!.element;
+    await wrapper.setProps({
+      data: [{ id: "06", value: 2, geoType: "states" as const }],
+    });
+    const after = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06")!.element;
+    // Same element: a value update repaints, it doesn't rebuild the map.
+    expect(after).toBe(before);
+    wrapper.unmount();
+  });
+
+  it("re-mixes when a row's geoType changes", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 600,
+        height: 400,
+        data: [{ id: "06", value: 1, geoType: "states" as const }],
+      },
+    });
+    expect(ids(wrapper)).toContain("06");
+    await wrapper.setProps({ data: [{ id: "06037", value: 1 }] });
+    const rendered = ids(wrapper);
+    expect(rendered).not.toContain("06");
+    expect(rendered).toContain("06037");
+    wrapper.unmount();
+  });
+
+  it("warns and renders the plain base map for an unresolvable row", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 600,
+        height: 400,
+        data: [{ id: "Atlantis", value: 1, geoType: "states" as const }],
+      },
+    });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("Atlantis"));
+    expect(ids(wrapper)).toContain("06037");
+    warn.mockRestore();
+    wrapper.unmount();
+  });
+});
+
 describe("ChoroplethMap single-state mode", () => {
   it("scopes counties to a single state by name", () => {
     const wrapper = mount(ChoroplethMap, {
