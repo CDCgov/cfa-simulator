@@ -9,5 +9,5 @@ import { cfasimWasm } from "cfasim-ui/wasm/vite";
 export default defineConfig({
   root: "interactive",
   build: { outDir: "../dist", emptyOutDir: true },
-  plugins: [vue(), {% if runtime == "python" %}cfasimPyodide({ model: ".." }){% else %}cfasimWasm({ model: "..", name: "{{ module_name }}" }){% endif %}],
+  plugins: [vue(), {% if runtime == "python" %}cfasimPyodide({ model: ".."{% if local_ui_dir %}, localDeps: ["{{ local_ui_dir }}/cfasim-model-py"]{% endif %} }){% else %}cfasimWasm({ model: "..", name: "{{ module_name }}" }){% endif %}],
 });

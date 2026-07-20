@@ -10,3 +10,10 @@ crate-type = ["cdylib"]
 wasm-bindgen = "0.2.126"
 cfasim-model = "{{ cfasim_version }}"
 console_error_panic_hook = "0.1.7"
+{% if local_ui_dir %}
+# e2e only: resolve cfasim-model from the local working tree instead of
+# crates.io, so tests never depend on the current version being published
+# (during a release, the version bump lands before the registry does).
+[patch.crates-io]
+cfasim-model = { path = "{{ local_ui_dir }}/cfasim-model" }
+{% endif %}

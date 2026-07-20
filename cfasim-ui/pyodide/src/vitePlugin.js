@@ -6,6 +6,7 @@ import { resolve } from "node:path";
  * @typedef {object} CfasimPyodideOptions
  * @property {string} [model] Path to the Python model directory (default: "model")
  * @property {string[]} [pypiDeps] PyPI packages to download at build time and serve locally
+ * @property {string[]} [localDeps] Local package directories built into wheels (via `uv build`) and served alongside the model wheel. Lets a dependency resolve from a working tree instead of PyPI, e.g. cfasim's own e2e tests during a release window.
  * @property {string[]} [pyodidePackages] Pyodide built-in packages to preload in the worker (e.g. "scipy", "pandas"). See https://pyodide.org/en/stable/usage/packages-in-pyodide.html. `micropip` and `numpy` are always included.
  * @property {string} [pipCommand] Command used to invoke pip for downloading `pypiDeps` (default: "uvx pip"). Override with e.g. "pip" or "uv run pip".
  * @property {string} [pythonVersion] Python version passed to pip's --python-version flag when downloading `pypiDeps` (default: "3.12"). Should match the Python shipped by your Pyodide runtime.
@@ -47,6 +48,12 @@ export function cfasimPyodide(options) {
         `${pipCommand} download ${dep} --dest public --no-deps --python-version ${pythonVersion} --platform any`,
         { cwd: root, stdio: "pipe" },
       );
+    }
+    for (const dep of options?.localDeps ?? []) {
+      execSync(`uv build ${dep} --wheel --out-dir public`, {
+        cwd: root,
+        stdio: "pipe",
+      });
     }
     execSync(`uv build ${modelDir} --wheel --out-dir public`, {
       cwd: root,

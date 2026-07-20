@@ -19,3 +19,10 @@ serde_json = "1.0.150"
 # rand_distr stays on the 0.5 line: ixa depends on rand 0.9, and 0.6 pairs
 # with rand 0.10 (mismatched sampling traits).
 rand_distr = "0.5.1"
+{% if local_ui_dir %}
+# e2e only: resolve cfasim-model from the local working tree instead of
+# crates.io, so tests never depend on the current version being published
+# (during a release, the version bump lands before the registry does).
+[patch.crates-io]
+cfasim-model = { path = "{{ local_ui_dir }}/cfasim-model" }
+{% endif %}
