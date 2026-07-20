@@ -1,6 +1,17 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.1] - 2026-07-20
+
+### Bug Fixes
+
+- **cli:** Resolve local cfasim-model in e2e so releases aren't blocked by unpublished versions
+- **charts:** Stop bolding capital city labels on ChoroplethMap
+
+### Features
+
+- **charts:** Mix geographic levels on one ChoroplethMap via data[].geoType
+
 ## [0.8.0] - 2026-07-19
 
 ### Bug Fixes
