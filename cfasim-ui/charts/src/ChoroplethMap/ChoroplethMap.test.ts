@@ -3462,6 +3462,24 @@ describe("ChoroplethMap theming", () => {
     expect(wrapper.find(".state-path").attributes("stroke")).toBe("#fff");
   });
 
+  it("does not repaint every feature again once the probe mounts", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        data: [{ id: "06", value: 50 }],
+      },
+    });
+    // The theme resolver attaches its probe on mount. Where that changes
+    // nothing (a DOM without computed styles), the fill/stroke watchers
+    // must stay put — on a county map a spurious repaint is ~3k attribute
+    // writes per mount.
+    const spy = vi.spyOn(wrapper.find(".state-path").element, "setAttribute");
+    await flushPromises();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it("borders mesh follows theme.stroke until theme.borders overrides", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {

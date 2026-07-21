@@ -147,6 +147,21 @@ export function themeEquals(
   );
 }
 
+/** Per-key equality over a resolved theme. */
+function resolvedEquals(a: ResolvedMapTheme, b: ResolvedMapTheme): boolean {
+  return (
+    a.fill === b.fill &&
+    a.stroke === b.stroke &&
+    a.strokeWidth === b.strokeWidth &&
+    a.borders === b.borders &&
+    a.bordersWidth === b.bordersWidth &&
+    a.outline === b.outline &&
+    a.outlineWidth === b.outlineWidth &&
+    a.background === b.background &&
+    a.highlight === b.highlight
+  );
+}
+
 // zero-alpha in any computed serialization: the legacy comma forms put
 // alpha as the 4th rgba()/hsla() argument, modern forms after a slash
 const ALPHA_ZERO =
@@ -187,6 +202,11 @@ export interface MapThemeResolver {
   ): readonly string[];
   /** Force a re-read on the next resolve (env may have changed unobserved) */
   invalidate(): void;
+  /**
+   * True when the probe is readable, i.e. a resolve here would produce
+   * cascade-resolved colors rather than falling back to constants.
+   */
+  readable(): boolean;
   /**
    * Compare probe reads against the cache and notify if anything changed.
    * Transitions don't run in non-rendered subtrees, so a map hidden with
@@ -465,6 +485,9 @@ export function createMapThemeResolver(
       fresh = false;
       paletteFresh = false;
     },
+    readable() {
+      return read(fillEl) !== "";
+    },
     recheck,
     unresolved() {
       return !fresh;
@@ -507,22 +530,32 @@ export function useMapTheme(
 ) {
   const version = ref(0);
   let resolver: MapThemeResolver | null = null;
+  // last value handed out by the `resolved` computed
+  let emitted: ResolvedMapTheme | null = null;
 
   onMounted(() => {
     if (!container.value) return;
     resolver = createMapThemeResolver(container.value, () => {
       version.value++;
     });
-    version.value++;
+    // Bump only when the probe actually changes the answer. Pre-mount reads
+    // resolve without a probe, and where they already match (a DOM without
+    // computed styles, or plain theme colors) an unconditional bump would
+    // invalidate every dependent and repaint the whole map for nothing.
+    if (!emitted || !resolvedEquals(resolver.resolve(theme()), emitted)) {
+      version.value++;
+    }
   });
   onUnmounted(() => {
     resolver?.destroy();
     resolver = null;
+    emitted = null;
   });
 
   const resolved = computed<ResolvedMapTheme>(() => {
     void version.value;
-    return resolver ? resolver.resolve(theme()) : resolveWithoutDom(theme());
+    emitted = resolver ? resolver.resolve(theme()) : resolveWithoutDom(theme());
+    return emitted;
   });
 
   function resolvePalette(
@@ -543,8 +576,12 @@ export function useMapTheme(
    */
   function ensureResolved() {
     if (!resolver) return;
-    if (resolver.unresolved()) version.value++;
-    else resolver.recheck();
+    // A retry is only worth a repaint once the probe is actually readable —
+    // in a DOM without computed styles it never is, and bumping on every
+    // resize would repaint every feature each tick.
+    if (resolver.unresolved()) {
+      if (resolver.readable()) version.value++;
+    } else resolver.recheck();
   }
 
   return { resolved, resolvePalette, ensureResolved };
