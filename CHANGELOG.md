@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.2] - 2026-07-22
+
+### Bug Fixes
+
+- **charts:** Stop repainting every ChoroplethMap feature twice on mount
+- **charts:** Repaint ChoroplethMap features only when their paint inputs actually change
+
 ## [0.8.1] - 2026-07-20
 
 ### Bug Fixes
