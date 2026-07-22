@@ -3480,6 +3480,24 @@ describe("ChoroplethMap theming", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
+  it("restyles only the highlighted paths when theme.highlight changes", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        data: [{ id: "06", value: 50 }],
+        theme: { highlight: "#111" },
+      },
+    });
+    // `resolvedTheme` invalidates as a whole, so without a per-value guard
+    // a highlight tweak repaints every feature's fill and stroke — ~6k
+    // wasted attribute writes on a county map.
+    const spy = vi.spyOn(wrapper.find(".state-path").element, "setAttribute");
+    await wrapper.setProps({ theme: { highlight: "#222" } });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it("borders mesh follows theme.stroke until theme.borders overrides", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {

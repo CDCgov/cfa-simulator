@@ -3017,6 +3017,7 @@ function rebuildPaths() {
       ? buildPicking(scene, width.value, height.value, pickingCanvas)
       : null;
     markBaseDirty();
+    markPainted();
     requestRedraw();
     return;
   }
@@ -3066,6 +3067,7 @@ function rebuildPaths() {
   baseG.appendChild(frag);
   syncOutlinePath();
   applyStrokeScale();
+  markPainted();
 }
 
 // Create / update / remove the exterior outline (theme.outline). Kept
@@ -3108,6 +3110,45 @@ function syncOutlinePath() {
   applyStrokeScale();
 }
 
+// Inputs of each imperative repaint, and the values the tree was last
+// painted from. `rebuildPaths` paints all three from scratch, so it marks
+// them satisfied — otherwise the watchers below would repaint everything a
+// second time in the same flush.
+const fillDeps = () =>
+  [
+    dataMap.value,
+    props.colorScale,
+    props.dataGeoType,
+    resolvedScaleColors.value,
+    resolvedTheme.value.fill,
+  ] as const;
+const strokeDeps = () =>
+  [
+    resolvedTheme.value.stroke,
+    resolvedTheme.value.borders,
+    effectiveStrokeWidth.value,
+    effectiveBordersWidth.value,
+    effectiveOutlineWidth.value,
+  ] as const;
+const highlightDeps = () => [resolvedTheme.value.highlight] as const;
+const outlineDeps = () =>
+  [outlineMesh.value, resolvedTheme.value.outline] as const;
+
+let paintedFillDeps: readonly unknown[] | null = null;
+let paintedStrokeDeps: readonly unknown[] | null = null;
+let paintedHighlightDeps: readonly unknown[] | null = null;
+let paintedOutlineDeps: readonly unknown[] | null = null;
+
+const samePaint = (a: readonly unknown[], b: readonly unknown[] | null) =>
+  b !== null && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
+
+function markPainted() {
+  paintedFillDeps = fillDeps();
+  paintedStrokeDeps = strokeDeps();
+  paintedHighlightDeps = highlightDeps();
+  paintedOutlineDeps = outlineDeps();
+}
+
 function updateFills() {
   if (isCanvas.value) {
     if (scene) {
@@ -3147,17 +3188,30 @@ function updateStrokes() {
     if (p === hoveredEl || focusedPathStyles.has(p)) continue;
     restoreDefaultStroke(p);
   }
-  // Re-apply highlight styling so a theme change restyles hovered/focused
-  // paths too (their stroke may come from theme.highlight).
-  for (const [p, item] of focusedPathStyles) applyHighlightStroke(p, item);
-  if (hoveredEl && !focusedPathStyles.has(hoveredEl)) {
-    applyHighlightStroke(hoveredEl);
-  }
+  refreshHighlights();
   if (bordersPathEl) {
     bordersPathEl.setAttribute("stroke", resolvedTheme.value.borders);
   }
   // Group-level widths track the effective theme widths.
   applyStrokeScale();
+}
+
+// Re-apply highlight styling so a theme change restyles hovered/focused
+// paths too (their stroke may come from theme.highlight). Split out of
+// updateStrokes because `highlight` only ever affects these few paths —
+// running the bulk restore loop for it would rewrite every feature's
+// stroke to the value it already has.
+function refreshHighlights() {
+  if (isCanvas.value) {
+    // Highlights are draw state, repainted from the theme each frame.
+    markBaseDirty();
+    requestRedraw();
+    return;
+  }
+  for (const [p, item] of focusedPathStyles) applyHighlightStroke(p, item);
+  if (hoveredEl && !focusedPathStyles.has(hoveredEl)) {
+    applyHighlightStroke(hoveredEl);
+  }
 }
 
 function menuFilename() {
@@ -3288,43 +3342,46 @@ watch(
   () => rebuildPaths(),
 );
 
+// Each repaint below costs one DOM write per feature (~3k on a county
+// map), so they run only when a watched value actually moved. Two things
+// would otherwise trigger them for nothing: `watch` on an array getter
+// re-runs whenever any dependency invalidates, even if every element is
+// identical, and `resolvedTheme` invalidates as a whole when any single
+// channel changes — so a `theme.highlight` tweak, which only restyles the
+// hovered path, repainted every fill and stroke on the map.
+//
 // Data or scale → repaint fills (and refresh fallback <title>s). Reading
 // `props.dataGeoType` directly so a change to the parent-mapping mode
 // re-evaluates every county's color even when `dataMap` itself
 // (data-id keyed) is unchanged. `resolvedScaleColors` and the theme's
 // base fill make a page theme flip repaint both backends.
-watch(
-  () =>
-    [
-      dataMap.value,
-      props.colorScale,
-      props.dataGeoType,
-      resolvedScaleColors.value,
-      resolvedTheme.value.fill,
-    ] as const,
-  () => updateFills(),
-);
+watch(fillDeps, (deps) => {
+  if (samePaint(deps, paintedFillDeps)) return;
+  paintedFillDeps = deps;
+  updateFills();
+});
 
 // Stroke styling → refresh stroke attrs.
-watch(
-  () =>
-    [
-      resolvedTheme.value.stroke,
-      resolvedTheme.value.borders,
-      resolvedTheme.value.highlight,
-      effectiveStrokeWidth.value,
-      effectiveBordersWidth.value,
-      effectiveOutlineWidth.value,
-    ] as const,
-  () => updateStrokes(),
-);
+watch(strokeDeps, (deps) => {
+  if (samePaint(deps, paintedStrokeDeps)) return;
+  paintedStrokeDeps = deps;
+  updateStrokes();
+});
+
+// Highlight color → restyle only the hovered / focused paths.
+watch(highlightDeps, (deps) => {
+  if (samePaint(deps, paintedHighlightDeps)) return;
+  paintedHighlightDeps = deps;
+  refreshHighlights();
+});
 
 // Exterior outline → create/update/remove its path (or canvas scene state).
 // Also fires when the projection refits, re-deriving the `d`.
-watch(
-  () => [outlineMesh.value, resolvedTheme.value.outline] as const,
-  () => syncOutlinePath(),
-);
+watch(outlineDeps, (deps) => {
+  if (samePaint(deps, paintedOutlineDeps)) return;
+  paintedOutlineDeps = deps;
+  syncOutlinePath();
+});
 
 // Focus or projection changed → re-apply the focus transform imperatively.
 // `flush: "post"` so any pending path rebuild from the watcher above has
