@@ -10,17 +10,16 @@ import {
   scaleFraction,
   clampExtentForScale,
   seriesToCsv,
+  resolveCsvOverride,
   useChartFoundation,
+  useChartCommon,
   makeTooltipValueFormatter,
   ChartAnnotations,
-  INLINE_LEGEND_ROW_HEIGHT,
+  ChartAxisLabels,
+  positionLegendItems,
   TITLE_LINE_HEIGHT,
   TITLE_FONT_SIZE,
   TITLE_FONT_WEIGHT,
-  AXIS_LABEL_FONT_SIZE,
-  TICK_LABEL_FONT_SIZE,
-  TICK_LABEL_OPACITY,
-  LEGEND_FONT_SIZE,
   resolveLabelStyle,
   parseDate,
   isAllDates,
@@ -245,15 +244,14 @@ const props = withDefaults(defineProps<LineChartProps>(), {
   yScaleType: "linear",
 });
 
-// Accessible name for the chart; falls back to the visible title.
-const chartAriaLabel = computed(() => props.ariaLabel ?? props.title);
-// Expose the <svg> as a single labeled image so screen readers announce the
-// name instead of wandering through the individual marks. The menu/download
-// controls live outside the <svg>, so they stay reachable. An explicit `role`
-// prop always wins.
-const chartRole = computed(
-  () => props.role ?? (chartAriaLabel.value ? "img" : undefined),
-);
+const {
+  chartAriaLabel,
+  chartRole,
+  axisLabelResolved,
+  tickLabelResolved,
+  legendResolved,
+  hasTooltipSlot,
+} = useChartCommon(props);
 
 // The template root is a <Teleport>, so fallthrough attrs (class, style,
 // data-*, id…) can't auto-inherit — forward them onto the wrapper manually.
@@ -851,14 +849,8 @@ const xTickItems = computed(() => {
 });
 
 function toCsv(): string {
-  if (typeof props.csv === "function") return props.csv();
-  if (typeof props.csv === "string") return props.csv;
-  return seriesToCsv(allSeries.value);
+  return resolveCsvOverride(props.csv) ?? seriesToCsv(allSeries.value);
 }
-
-const hasTooltipSlot = computed(
-  () => !!props.tooltipData || !!props.tooltipTrigger,
-);
 
 /** Data-space x of the hovered point (via the first series). */
 const hoverDataX = computed(() => {
@@ -1005,22 +997,6 @@ const {
   extraBelowHeight: () => sectionLabels.value.extraHeight,
 });
 
-/** Resolved style for the x/y axis labels. */
-const axisLabelResolved = computed(() =>
-  resolveLabelStyle(props.axisLabelStyle, { fontSize: AXIS_LABEL_FONT_SIZE }),
-);
-/** Resolved style for the axis tick labels. */
-const tickLabelResolved = computed(() =>
-  resolveLabelStyle(props.tickLabelStyle, {
-    fontSize: TICK_LABEL_FONT_SIZE,
-    fillOpacity: TICK_LABEL_OPACITY,
-  }),
-);
-/** Resolved style for inline legend item labels. */
-const legendResolved = computed(() =>
-  resolveLabelStyle(props.legendStyle, { fontSize: LEGEND_FONT_SIZE }),
-);
-
 /** Resolved title style with defaults applied. */
 const titleResolved = computed(() => {
   const s = props.titleStyle;
@@ -1045,23 +1021,14 @@ const titleResolved = computed(() => {
   };
 });
 
-/**
- * Legend items joined with their wrapped pixel positions. `x` is the
- * left edge of the indicator; `y` is the center of the row.
- */
-const positionedLegendItems = computed(() => {
-  const positions = inlineLegendLayout.value.positions;
-  const pad = padding.value.left;
-  const baseY = legendY.value;
-  return inlineLegendItems.value.map((item, i) => {
-    const pos = positions[i];
-    return {
-      ...item,
-      x: pad + pos.x,
-      y: baseY + pos.row * INLINE_LEGEND_ROW_HEIGHT,
-    };
-  });
-});
+const positionedLegendItems = computed(() =>
+  positionLegendItems(
+    inlineLegendItems.value,
+    inlineLegendLayout.value.positions,
+    padding.value.left,
+    legendY.value,
+  ),
+);
 </script>
 
 <template>
@@ -1218,19 +1185,15 @@ const positionedLegendItems = computed(() => {
         >
           {{ tick.value }}
         </text>
-        <!-- y axis label -->
-        <text
-          v-if="yLabel"
-          :x="0"
-          :y="0"
-          :transform="`translate(14, ${padding.top + innerH / 2}) rotate(-90)`"
-          text-anchor="middle"
-          :font-size="axisLabelResolved.fontSize"
-          :fill="axisLabelResolved.fill"
-          :font-weight="axisLabelResolved.fontWeight"
-        >
-          {{ yLabel }}
-        </text>
+        <ChartAxisLabels
+          :x-label="xLabel"
+          :y-label="yLabel"
+          :padding="padding"
+          :inner-w="innerW"
+          :inner-h="innerH"
+          :height="height"
+          :label-style="axisLabelResolved"
+        />
         <!-- x tick labels -->
         <text
           v-for="(tick, i) in xTickItems"
@@ -1245,18 +1208,6 @@ const positionedLegendItems = computed(() => {
           :fill-opacity="tickLabelResolved.fillOpacity"
         >
           {{ tick.value }}
-        </text>
-        <!-- x axis label -->
-        <text
-          v-if="xLabel"
-          :x="padding.left + innerW / 2"
-          :y="height - 4"
-          text-anchor="middle"
-          :font-size="axisLabelResolved.fontSize"
-          :fill="axisLabelResolved.fill"
-          :font-weight="axisLabelResolved.fontWeight"
-        >
-          {{ xLabel }}
         </text>
         <!-- areas -->
         <path

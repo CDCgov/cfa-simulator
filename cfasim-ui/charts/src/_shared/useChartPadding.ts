@@ -92,6 +92,27 @@ export interface PositionedLegendItem {
   row: number;
 }
 
+/**
+ * Join legend items with their wrapped pixel positions (from
+ * `inlineLegendLayout`). `x` is the left edge of the indicator anchored
+ * at `padLeft`; `y` is the center of the row starting at `baseY`.
+ */
+export function positionLegendItems<T extends object>(
+  items: readonly T[],
+  positions: readonly PositionedLegendItem[],
+  padLeft: number,
+  baseY: number,
+): (T & { x: number; y: number })[] {
+  return items.map((item, i) => {
+    const pos = positions[i];
+    return {
+      ...item,
+      x: padLeft + pos.x,
+      y: baseY + pos.row * INLINE_LEGEND_ROW_HEIGHT,
+    };
+  });
+}
+
 function resolvePadding(p: ChartPadding | undefined) {
   if (p == null) return { top: 0, right: 0, bottom: 0, left: 0 };
   if (typeof p === "number") return { top: p, right: p, bottom: p, left: p };

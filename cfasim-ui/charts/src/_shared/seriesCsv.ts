@@ -1,5 +1,17 @@
 import type { ChartData } from "./axes.js";
 
+/**
+ * Resolve the `csv` prop override shared by the chart components: a
+ * function is called, a string passes through, anything else returns
+ * null so the chart falls back to generating CSV from its series.
+ */
+export function resolveCsvOverride(
+  csv: string | (() => string) | undefined,
+): string | null {
+  if (typeof csv === "function") return csv();
+  return typeof csv === "string" ? csv : null;
+}
+
 export interface CsvSeries {
   data: ChartData;
   /** Optional parallel x-values; when all series share the same x, an `x` column is used. */

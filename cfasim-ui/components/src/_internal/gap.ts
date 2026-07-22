@@ -7,11 +7,8 @@ const GAP_TOKENS: Record<GapToken, string> = {
   large: "var(--space-6)",
 };
 
-export function resolveGap(
-  gap: GapToken | string | undefined,
-  fallback: GapToken = "medium",
-): string {
-  if (gap == null) return GAP_TOKENS[fallback];
+export function resolveGap(gap: GapToken | string | undefined): string {
+  if (gap == null) return GAP_TOKENS.medium;
   if (gap in GAP_TOKENS) return GAP_TOKENS[gap as GapToken];
   return gap;
 }

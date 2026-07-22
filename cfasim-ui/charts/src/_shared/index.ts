@@ -10,6 +10,7 @@ export { useChartSize, type ChartSizeOptions } from "./useChartSize.js";
 export {
   useChartPadding,
   resolveLabelStyle,
+  positionLegendItems,
   INLINE_LEGEND_ROW_HEIGHT,
   TITLE_LINE_HEIGHT,
   TITLE_FONT_SIZE,
@@ -31,8 +32,15 @@ export { useChartMenu, type ChartMenuOptions } from "./useChartMenu.js";
 export { useChartFullscreen } from "./useChartFullscreen.js";
 export { isTouchDevice } from "./touch.js";
 export { default as ChartZoomControls } from "./ChartZoomControls.vue";
-export { seriesToCsv, categoricalToCsv, type CsvSeries } from "./seriesCsv.js";
+export {
+  seriesToCsv,
+  categoricalToCsv,
+  resolveCsvOverride,
+  type CsvSeries,
+} from "./seriesCsv.js";
 export { default as ChartAnnotations } from "./ChartAnnotations.vue";
+export { default as ChartAxisLabels } from "./ChartAxisLabels.vue";
+export { useChartCommon } from "./useChartCommon.js";
 export type { ChartAnnotation } from "./annotations.js";
 export {
   useChartFoundation,
@@ -66,7 +74,6 @@ export {
 } from "./mapTheme.js";
 export {
   parseDate,
-  isDateLike,
   isAllDates,
   pickDateTicks,
   formatDate,

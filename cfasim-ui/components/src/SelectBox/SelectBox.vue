@@ -82,7 +82,7 @@ function displayValue(value: string) {
       </ComboboxAnchor>
       <ComboboxPortal>
         <ComboboxContent
-          class="cfasim-listbox-content select-content-autocomplete"
+          class="cfasim-listbox-content cfasim-listbox-content-combobox"
           position="popper"
           :side-offset="4"
           :body-lock="false"
@@ -246,15 +246,10 @@ function displayValue(value: string) {
 </style>
 
 <style>
-/* Sizing only — the dropdown skin lives in _internal/listbox.css. */
+/* Sizing only — the dropdown skin (and Combobox sizing) lives in
+ * _internal/listbox.css. */
 .select-content {
   min-width: var(--reka-select-trigger-width);
   max-height: var(--reka-select-content-available-height);
-}
-
-/* Combobox exposes the anchor width under its own custom property. */
-.select-content-autocomplete {
-  width: var(--reka-combobox-trigger-width);
-  max-height: var(--reka-combobox-content-available-height);
 }
 </style>

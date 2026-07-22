@@ -23,8 +23,12 @@ const props = defineProps<Props>();
 </script>
 
 <template>
-  <label v-if="props.label" class="cfasim-input-label">
+  <component
+    :is="props.label ? 'label' : 'div'"
+    :class="props.label ? 'cfasim-input-label' : undefined"
+  >
     <span
+      v-if="props.label"
       class="cfasim-input-label-row"
       :class="{ 'visually-hidden': props.hideLabel }"
     >
@@ -36,19 +40,9 @@ const props = defineProps<Props>();
       class="cfasim-input"
       v-model="local"
       :placeholder="props.placeholder"
+      :aria-label="!props.label ? props.ariaLabel : undefined"
       @blur="commit"
       @keydown.enter="commit"
     />
-  </label>
-  <div v-else>
-    <input
-      type="text"
-      class="cfasim-input"
-      v-model="local"
-      :placeholder="props.placeholder"
-      :aria-label="props.ariaLabel"
-      @blur="commit"
-      @keydown.enter="commit"
-    />
-  </div>
+  </component>
 </template>

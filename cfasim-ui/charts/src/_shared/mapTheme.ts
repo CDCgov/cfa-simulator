@@ -125,41 +125,39 @@ export const mapThemeDefaults = {
   highlight: `var(--choropleth-highlight, light-dark(${LIGHT_HIGHLIGHT}, ${DARK_HIGHLIGHT}))`,
 } as const;
 
+/** Keys of `ResolvedMapTheme` (the probe-resolved channels). */
+const RESOLVED_KEYS: readonly (keyof ResolvedMapTheme)[] = [
+  "fill",
+  "stroke",
+  "strokeWidth",
+  "borders",
+  "bordersWidth",
+  "outline",
+  "outlineWidth",
+  "background",
+  "highlight",
+];
+
+/** Every `MapTheme` key: the resolved channels plus the marker overlay. */
+const THEME_KEYS: readonly (keyof MapTheme)[] = [
+  ...RESOLVED_KEYS,
+  "markerColor",
+  "markerHalo",
+  "markerHaloWidth",
+  "markerOpacity",
+];
+
 /** Shallow per-key equality; undefined and {} compare equal. */
 export function themeEquals(
   a: MapTheme | undefined,
   b: MapTheme | undefined,
 ): boolean {
-  return (
-    Object.is(a?.fill, b?.fill) &&
-    Object.is(a?.stroke, b?.stroke) &&
-    Object.is(a?.strokeWidth, b?.strokeWidth) &&
-    Object.is(a?.borders, b?.borders) &&
-    Object.is(a?.bordersWidth, b?.bordersWidth) &&
-    Object.is(a?.outline, b?.outline) &&
-    Object.is(a?.outlineWidth, b?.outlineWidth) &&
-    Object.is(a?.background, b?.background) &&
-    Object.is(a?.highlight, b?.highlight) &&
-    Object.is(a?.markerColor, b?.markerColor) &&
-    Object.is(a?.markerHalo, b?.markerHalo) &&
-    Object.is(a?.markerHaloWidth, b?.markerHaloWidth) &&
-    Object.is(a?.markerOpacity, b?.markerOpacity)
-  );
+  return THEME_KEYS.every((k) => Object.is(a?.[k], b?.[k]));
 }
 
 /** Per-key equality over a resolved theme. */
 function resolvedEquals(a: ResolvedMapTheme, b: ResolvedMapTheme): boolean {
-  return (
-    a.fill === b.fill &&
-    a.stroke === b.stroke &&
-    a.strokeWidth === b.strokeWidth &&
-    a.borders === b.borders &&
-    a.bordersWidth === b.bordersWidth &&
-    a.outline === b.outline &&
-    a.outlineWidth === b.outlineWidth &&
-    a.background === b.background &&
-    a.highlight === b.highlight
-  );
+  return RESOLVED_KEYS.every((k) => a[k] === b[k]);
 }
 
 // zero-alpha in any computed serialization: the legacy comma forms put
@@ -348,16 +346,7 @@ export function createMapThemeResolver(
       // unavailable, so paint plain theme colors (or constants) now and
       // retry on the next resolve
       fresh = false;
-      const stroke = plain(theme?.stroke) ?? LIGHT_STROKE;
-      cached = {
-        fill: plain(theme?.fill) ?? LIGHT_FILL,
-        stroke,
-        borders: plain(theme?.borders) ?? stroke,
-        outline: plain(theme?.outline),
-        background: plain(theme?.background),
-        highlight: plain(theme?.highlight) ?? LIGHT_HIGHLIGHT,
-        ...widthsFrom(theme),
-      };
+      cached = resolveWithoutDom(theme);
       return cached;
     }
     const stroke = read(strokeEl);

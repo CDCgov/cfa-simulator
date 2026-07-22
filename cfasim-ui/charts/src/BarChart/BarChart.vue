@@ -10,19 +10,18 @@ import {
   scaleFraction,
   clampExtentForScale,
   categoricalToCsv,
+  resolveCsvOverride,
   useChartFoundation,
+  useChartCommon,
   makeTooltipValueFormatter,
   ChartAnnotations,
-  INLINE_LEGEND_ROW_HEIGHT,
+  ChartAxisLabels,
+  positionLegendItems,
   TITLE_LINE_HEIGHT,
   TITLE_FONT_SIZE,
   TITLE_FONT_WEIGHT,
-  AXIS_LABEL_FONT_SIZE,
   TICK_LABEL_FONT_SIZE,
-  TICK_LABEL_OPACITY,
-  LEGEND_FONT_SIZE,
   pickContrastColor,
-  resolveLabelStyle,
   parseDate,
   isAllDates,
   pickDateTicks,
@@ -286,15 +285,14 @@ const props = withDefaults(defineProps<BarChartProps>(), {
   valueAxis: true,
 });
 
-// Accessible name for the chart; falls back to the visible title.
-const chartAriaLabel = computed(() => props.ariaLabel ?? props.title);
-// Expose the <svg> as a single labeled image so screen readers announce the
-// name instead of wandering through the individual bars. The menu/download
-// controls live outside the <svg>, so they stay reachable. An explicit `role`
-// prop always wins.
-const chartRole = computed(
-  () => props.role ?? (chartAriaLabel.value ? "img" : undefined),
-);
+const {
+  chartAriaLabel,
+  chartRole,
+  axisLabelResolved,
+  tickLabelResolved,
+  legendResolved,
+  hasTooltipSlot,
+} = useChartCommon(props);
 
 // The template root is a <Teleport>, so fallthrough attrs (class, style,
 // data-*, id…) can't auto-inherit — forward them onto the wrapper manually.
@@ -937,18 +935,14 @@ const inlineLegendLabels = computed(() =>
 );
 
 function toCsv(): string {
-  if (typeof props.csv === "function") return props.csv();
-  if (typeof props.csv === "string") return props.csv;
+  const override = resolveCsvOverride(props.csv);
+  if (override !== null) return override;
   const namedSeries = allSeries.value.map((s) => ({
     label: s.legend,
     data: s.data,
   }));
   return categoricalToCsv(categoryLabels.value, namedSeries);
 }
-
-const hasTooltipSlot = computed(
-  () => !!props.tooltipData || !!props.tooltipTrigger,
-);
 
 function projectAnnotation(
   x: number,
@@ -1047,22 +1041,6 @@ const {
   onHover: (payload) => emit("hover", payload),
 });
 
-/** Resolved style for the x/y axis labels. */
-const axisLabelResolved = computed(() =>
-  resolveLabelStyle(props.axisLabelStyle, { fontSize: AXIS_LABEL_FONT_SIZE }),
-);
-/** Resolved style for the axis tick labels. */
-const tickLabelResolved = computed(() =>
-  resolveLabelStyle(props.tickLabelStyle, {
-    fontSize: TICK_LABEL_FONT_SIZE,
-    fillOpacity: TICK_LABEL_OPACITY,
-  }),
-);
-/** Resolved style for inline legend item labels. */
-const legendResolved = computed(() =>
-  resolveLabelStyle(props.legendStyle, { fontSize: LEGEND_FONT_SIZE }),
-);
-
 /** Small inset from the chart's left edge for start-aligned category labels. */
 const CATEGORY_LABEL_INSET = 2;
 
@@ -1158,23 +1136,14 @@ const hoverBand = computed(() => {
   };
 });
 
-/**
- * Legend items joined with their wrapped pixel positions. `x` is the
- * left edge of the indicator; `y` is the center of the row.
- */
-const positionedLegendItems = computed(() => {
-  const positions = inlineLegendLayout.value.positions;
-  const pad = headerLeftX.value;
-  const baseY = legendY.value;
-  return inlineLegendItems.value.map((item, i) => {
-    const pos = positions[i];
-    return {
-      ...item,
-      x: pad + pos.x,
-      y: baseY + pos.row * INLINE_LEGEND_ROW_HEIGHT,
-    };
-  });
-});
+const positionedLegendItems = computed(() =>
+  positionLegendItems(
+    inlineLegendItems.value,
+    inlineLegendLayout.value.positions,
+    headerLeftX.value,
+    legendY.value,
+  ),
+);
 
 const BAR_LABEL_FONT_SIZE = 11;
 /** Estimated glyph width as a fraction of font size (matches axis logic). */
@@ -1647,19 +1616,15 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
             {{ tick.value }}
           </text>
         </template>
-        <!-- y axis label -->
-        <text
-          v-if="yLabel"
-          :x="0"
-          :y="0"
-          :transform="`translate(14, ${padding.top + innerH / 2}) rotate(-90)`"
-          text-anchor="middle"
-          :font-size="axisLabelResolved.fontSize"
-          :fill="axisLabelResolved.fill"
-          :font-weight="axisLabelResolved.fontWeight"
-        >
-          {{ yLabel }}
-        </text>
+        <ChartAxisLabels
+          :x-label="xLabel"
+          :y-label="yLabel"
+          :padding="padding"
+          :inner-w="innerW"
+          :inner-h="innerH"
+          :height="height"
+          :label-style="axisLabelResolved"
+        />
         <!-- category tick labels -->
         <template v-if="isVertical">
           <text
@@ -1694,18 +1659,6 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
             {{ tick.label }}
           </text>
         </template>
-        <!-- x axis label -->
-        <text
-          v-if="xLabel"
-          :x="padding.left + innerW / 2"
-          :y="height - 4"
-          text-anchor="middle"
-          :font-size="axisLabelResolved.fontSize"
-          :fill="axisLabelResolved.fill"
-          :font-weight="axisLabelResolved.fontWeight"
-        >
-          {{ xLabel }}
-        </text>
         <!-- bars -->
         <rect
           v-for="(bar, i) in bars"

@@ -119,7 +119,7 @@ function onInputKeydown(event: KeyboardEvent) {
       </ComboboxAnchor>
       <ComboboxPortal>
         <ComboboxContent
-          class="cfasim-listbox-content multi-select-content"
+          class="cfasim-listbox-content cfasim-listbox-content-combobox"
           position="popper"
           :side-offset="4"
           :body-lock="false"
@@ -267,13 +267,5 @@ function onInputKeydown(event: KeyboardEvent) {
 .multi-select-icon {
   display: flex;
   align-items: center;
-}
-</style>
-
-<style>
-/* Sizing only — the dropdown skin lives in _internal/listbox.css. */
-.multi-select-content {
-  width: var(--reka-combobox-trigger-width);
-  max-height: var(--reka-combobox-content-available-height);
 }
 </style>

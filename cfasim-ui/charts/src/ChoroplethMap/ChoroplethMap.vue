@@ -36,6 +36,7 @@ import {
   type CanvasDrawState,
   type CanvasOverlayItem,
   type CanvasHighlightItem,
+  type CanvasView,
 } from "./canvasLayer.js";
 import {
   useChartFullscreen,
@@ -526,13 +527,6 @@ let cityLayoutFrame = 0;
 let meetOffsetX = 0;
 let meetOffsetY = 0;
 
-interface CanvasViewState {
-  dpr: number;
-  meetScale: number;
-  offsetX: number;
-  offsetY: number;
-  zoom: { k: number; x: number; y: number };
-}
 let isZooming = false;
 let tooltipObserver: ResizeObserver | null = null;
 const lastTooltipSize = { width: 0, height: 0 };
@@ -2098,7 +2092,7 @@ function highlightWidthFor(item?: FocusItem): number {
 
 // ─── Canvas renderer: redraw, picking, tooltip anchors ───────────────────
 
-function currentCanvasView(): CanvasViewState {
+function currentCanvasView(): CanvasView {
   const t = zoomTransform(svgRef.value!);
   return {
     dpr: (typeof window !== "undefined" && window.devicePixelRatio) || 1,
@@ -2181,7 +2175,7 @@ function onDprChange() {
 // blit when only the hover changed (base + view identical), and a scaled blit
 // during slow-device gestures / resizes (base identical, view moving).
 let snapshotCanvas: HTMLCanvasElement | null = null;
-let snapshotView: CanvasViewState | null = null;
+let snapshotView: CanvasView | null = null;
 let lastFullDrawAt = 0;
 // The base content (colors, geometry, focus, overlays, strokes) changed since
 // the cached snapshot, so it can't be reused — force a full render. Hover,
@@ -2197,7 +2191,7 @@ function markBaseDirty() {
 }
 
 /** Two views map canonical coords to device pixels identically. */
-function sameCanvasView(a: CanvasViewState, b: CanvasViewState): boolean {
+function sameCanvasView(a: CanvasView, b: CanvasView): boolean {
   return (
     a.dpr === b.dpr &&
     a.meetScale === b.meetScale &&
@@ -2211,11 +2205,11 @@ function sameCanvasView(a: CanvasViewState, b: CanvasViewState): boolean {
 
 function blitSnapshot(
   ctx: CanvasRenderingContext2D,
-  view: CanvasViewState,
+  view: CanvasView,
   img: HTMLCanvasElement,
-  imgView: CanvasViewState,
+  imgView: CanvasView,
 ) {
-  const off = (v: CanvasViewState, axis: "x" | "y") =>
+  const off = (v: CanvasView, axis: "x" | "y") =>
     v.dpr *
     ((axis === "x" ? v.offsetX : v.offsetY) +
       v.meetScale * (axis === "x" ? v.zoom.x : v.zoom.y));
@@ -2237,10 +2231,7 @@ function blitSnapshot(
 // Copy the just-drawn base (hover NOT yet applied) into the offscreen cache,
 // tagged with the view it was rendered at. Must be called after drawBase but
 // before drawHoverHighlight so the cache stays hover-free.
-function captureBaseSnapshot(
-  display: HTMLCanvasElement,
-  view: CanvasViewState,
-) {
+function captureBaseSnapshot(display: HTMLCanvasElement, view: CanvasView) {
   if (typeof document === "undefined") {
     snapshotView = null;
     return;
@@ -3227,17 +3218,16 @@ const sortedThresholdStops = computed(() =>
   (props.colorScale as ThresholdStop[]).slice().sort((a, b) => a.min - b.min),
 );
 
-const gradientStops = computed(() => {
+// Linear-gradient CSS for the continuous legend bar, sampled from the
+// resolved color scale.
+const gradientCss = computed(() => {
   const steps = 10;
-  const result: { offset: string; color: string }[] = [];
+  const stops: string[] = [];
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    result.push({
-      offset: `${(t * 100).toFixed(0)}%`,
-      color: interpolateColor(t),
-    });
+    stops.push(`${interpolateColor(t)} ${(t * 100).toFixed(0)}%`);
   }
-  return result;
+  return `linear-gradient(to right, ${stops.join(", ")})`;
 });
 
 // Compact formatter so legend ticks for large ranges (e.g. populations in
@@ -3282,15 +3272,6 @@ const discreteLegendItems = computed(() => {
     }
   }
   return items;
-});
-
-// Linear-gradient CSS for the continuous legend bar, derived from the same
-// stops the SVG version used.
-const gradientCss = computed(() => {
-  const stops = gradientStops.value
-    .map((s) => `${s.color} ${s.offset}`)
-    .join(", ");
-  return `linear-gradient(to right, ${stops})`;
 });
 
 const fullscreen = useChartFullscreen({
