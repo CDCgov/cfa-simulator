@@ -49,3 +49,42 @@ test("Expand fills the viewport even under a transformed ancestor", async ({
     0,
   );
 });
+
+test("markers drag along the x-axis and update the bound model", async ({
+  page,
+}) => {
+  await page.goto("./cfasim-ui/charts/line-chart");
+  const readout = page.locator(".marker-demo-readout");
+  await expect(readout).toContainText("Isolation: day 12.0");
+
+  const hit = page.locator('[data-testid="marker-hit"]').first();
+  await expect(hit).toBeAttached();
+  // Raw mouse coords are viewport-relative and don't auto-scroll.
+  await hit.scrollIntoViewIfNeeded();
+  const box = await hit.boundingBox();
+  expect(box).not.toBeNull();
+  const startX = box!.x + box!.width / 2;
+  const y = box!.y + box!.height / 2;
+
+  await page.mouse.move(startX, y);
+  await page.mouse.down();
+  await page.mouse.move(startX + 80, y, { steps: 5 });
+  await page.mouse.up();
+
+  // The v-model readout moved with the drag...
+  await expect(readout).not.toContainText("Isolation: day 12.0");
+  // ...and so did the rendered line.
+  const line = page.locator('[data-testid="marker-line"]').first();
+  const movedBox = await line.boundingBox();
+  expect(movedBox!.x).toBeGreaterThan(startX + 60);
+});
+
+test("marker labels respond to arrow keys", async ({ page }) => {
+  await page.goto("./cfasim-ui/charts/line-chart");
+  const readout = page.locator(".marker-demo-readout");
+  await expect(readout).toContainText("Recovery: day 32.0");
+  const hit = page.locator('[data-testid="marker-hit"]').nth(1);
+  await hit.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(readout).toContainText("Recovery: day 33.0");
+});

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import {
@@ -17,6 +17,8 @@ import {
   ChartAnnotations,
   ChartAxisLabels,
   positionLegendItems,
+  layoutMarkerLabels,
+  markerDashArray,
   TITLE_LINE_HEIGHT,
   TITLE_FONT_SIZE,
   TITLE_FONT_WEIGHT,
@@ -36,6 +38,9 @@ import {
   type ChartTooltipValue,
   type BlendMode,
   type LineMarkStyle,
+  type ChartMarker,
+  type ChartMarkerDragPayload,
+  type ChartPadding,
 } from "../_shared/index.js";
 
 /**
@@ -177,6 +182,23 @@ interface LineChartProps extends ChartCommonProps {
   series?: Series[];
   areas?: Area[];
   areaSections?: AreaSection[];
+  /**
+   * Vertical marker lines spanning the full plot height, each with an
+   * optional label just above the top of the line. Markers are
+   * draggable along the x-axis by default — bind with
+   * `v-model:markers` to receive position updates. Labels are painted
+   * above all series with a legibility outline, and labels that would
+   * overlap drop down to the next row. See `ChartMarker`.
+   */
+  markers?: ChartMarker[];
+  /**
+   * Vertical gap in pixels between marker-label baselines and the top
+   * of the marker lines (the top of the plot). Increase for more
+   * clearance. The chart reserves top padding for the labels
+   * automatically (`markerLabelGap` plus the tallest label font size).
+   * Default: 7.
+   */
+  markerLabelGap?: number;
   lineOpacity?: number;
   yMin?: number;
   /**
@@ -242,6 +264,7 @@ const props = withDefaults(defineProps<LineChartProps>(), {
   menu: true,
   tooltipClamp: "window",
   yScaleType: "linear",
+  markerLabelGap: 7,
 });
 
 const {
@@ -259,6 +282,9 @@ defineOptions({ inheritAttrs: false });
 
 const emit = defineEmits<{
   (e: "hover", payload: ChartHoverPayload): void;
+  (e: "update:markers", markers: ChartMarker[]): void;
+  (e: "markerDrag", payload: ChartMarkerDragPayload): void;
+  (e: "markerDragEnd", payload: ChartMarkerDragPayload): void;
 }>();
 
 defineSlots<{
@@ -948,6 +974,36 @@ function indexFromPointer(clientX: number): number | null {
   return nearestIndex(s0, targetX);
 }
 
+const markersHaveLabels = computed(() =>
+  (props.markers ?? []).some((m) => m.label),
+);
+
+/** Tallest labeled-marker font size; sizes the reserved top room. */
+const maxMarkerLabelFontSize = computed(() => {
+  let max = 0;
+  for (const m of props.markers ?? []) {
+    if (!m.label) continue;
+    max = Math.max(max, m.labelStyle?.fontSize ?? MARKER_LABEL_FONT_SIZE);
+  }
+  return max;
+});
+
+/** Extra top room is reserved when any marker has a label, so the
+ * row-0 label sits `markerLabelGap` px above the top of the line
+ * without clipping the svg edge. */
+const markerChartPadding = computed<ChartPadding | undefined>(() => {
+  const cp = props.chartPadding;
+  if (!markersHaveLabels.value) return cp;
+  const base =
+    typeof cp === "number"
+      ? { top: cp, right: cp, bottom: cp, left: cp }
+      : { ...(cp ?? {}) };
+  return {
+    ...base,
+    top: (base.top ?? 0) + props.markerLabelGap + maxMarkerLabelFontSize.value,
+  };
+});
+
 const {
   containerRef,
   svgRef,
@@ -988,7 +1044,7 @@ const {
   downloadLink: () => props.downloadLink,
   downloadButton: () => props.downloadButton,
   fullscreenTarget: () => props.fullscreenTarget,
-  chartPadding: () => props.chartPadding,
+  chartPadding: () => markerChartPadding.value,
   inlineLegendLabels: () => inlineLegendLabels.value,
   hasTooltipSlot: () => hasTooltipSlot.value,
   getCsv: toCsv,
@@ -1029,6 +1085,218 @@ const positionedLegendItems = computed(() =>
     legendY.value,
   ),
 );
+
+const MARKER_LABEL_FONT_SIZE = 12;
+const MARKER_LABEL_ROW_HEIGHT = 15;
+/** Estimated character width as a fraction of the label font size. */
+const MARKER_LABEL_CHAR_FACTOR = 0.6;
+
+interface RenderedMarker {
+  index: number;
+  internalX: number;
+  px: number;
+  color: string;
+  strokeWidth: number;
+  dash?: string;
+  outline: boolean;
+  outlineColor: string;
+  outlineWidth: number;
+  label?: string;
+  labelX: number;
+  labelY: number;
+  anchor: "start" | "end";
+  labelFontSize: number;
+  labelFontWeight: number | string;
+  labelFill: string;
+  labelOutlineColor: string;
+  labelOutlineWidth: number;
+  draggable: boolean;
+  hitTop: number;
+  ariaLabel: string;
+  ariaNow: number;
+  ariaText: string;
+}
+
+/** Marker x resolved to the chart's internal x coordinate space. */
+function markerInternalX(m: ChartMarker): number {
+  if (xIsDate.value) {
+    return typeof m.x === "number" ? m.x : (parseDate(m.x, tz.value) ?? NaN);
+  }
+  return Number(m.x) - xDisplayOffset.value;
+}
+
+const markerDragState = ref<{ index: number; x: number } | null>(null);
+
+const markerAriaRange = computed(() => {
+  const { min, max } = xExtent.value;
+  const off = xIsDate.value ? 0 : xDisplayOffset.value;
+  return { min: min + off, max: max + off };
+});
+
+const renderedMarkers = computed<RenderedMarker[]>(() => {
+  const ms = props.markers ?? [];
+  if (ms.length === 0) return [];
+  const { min, max } = xExtent.value;
+  const drag = markerDragState.value;
+  const off = xIsDate.value ? 0 : xDisplayOffset.value;
+  const out: RenderedMarker[] = [];
+  for (let i = 0; i < ms.length; i++) {
+    const m = ms[i];
+    let xv = drag?.index === i ? drag.x : markerInternalX(m);
+    if (!isFinite(xv)) continue;
+    xv = Math.min(max, Math.max(min, xv));
+    const style = resolveLabelStyle(m.labelStyle, {
+      fontSize: MARKER_LABEL_FONT_SIZE,
+    });
+    out.push({
+      index: i,
+      internalX: xv,
+      px: xPixel(xv),
+      color: m.color ?? "#999",
+      strokeWidth: m.strokeWidth ?? 1.5,
+      dash: markerDashArray(m),
+      outline: m.outline === true,
+      outlineColor: m.outlineColor ?? "var(--color-bg-0, #fff)",
+      outlineWidth: m.outlineWidth ?? 4,
+      label: m.label,
+      labelX: 0,
+      labelY: 0,
+      anchor: "start",
+      labelFontSize: style.fontSize,
+      labelFontWeight: style.fontWeight ?? 600,
+      labelFill: style.fill,
+      labelOutlineColor: m.labelOutlineColor ?? "var(--color-bg-0, #fff)",
+      labelOutlineWidth: m.labelOutlineWidth ?? 3,
+      draggable: m.draggable !== false,
+      hitTop: padding.value.top,
+      ariaLabel: m.label ?? `Marker ${i + 1}`,
+      ariaNow: xv + off,
+      ariaText: formatXValue(xv, 0),
+    });
+  }
+  const labeled = out.filter((r) => r.label);
+  const placements = layoutMarkerLabels(
+    labeled.map((r) => ({
+      x: r.px,
+      width: r.label!.length * r.labelFontSize * MARKER_LABEL_CHAR_FACTOR,
+    })),
+    { left: padding.value.left, right: padding.value.left + innerW.value },
+  );
+  labeled.forEach((r, j) => {
+    const p = placements[j];
+    r.labelX = p.x;
+    r.anchor = p.anchor;
+    r.labelY =
+      padding.value.top -
+      props.markerLabelGap +
+      p.row * MARKER_LABEL_ROW_HEIGHT;
+    r.hitTop = Math.min(r.labelY - r.labelFontSize, padding.value.top);
+  });
+  return out;
+});
+
+let markerDragCleanup: (() => void) | null = null;
+onBeforeUnmount(() => markerDragCleanup?.());
+
+/** Convert a pointer clientX to the chart's internal x coordinate. */
+function markerPointerX(clientX: number): number {
+  const rect = svgRef.value?.getBoundingClientRect();
+  const left = rect?.left ?? 0;
+  const { min, max } = xExtent.value;
+  const range = max - min || 1;
+  return (
+    min + ((clientX - left - padding.value.left) / (innerW.value || 1)) * range
+  );
+}
+
+function clampMarkerX(xv: number): number {
+  const { min, max } = xExtent.value;
+  return Math.min(max, Math.max(min, xv));
+}
+
+/** Internal x converted back to the marker's own coordinate space. */
+function markerEmitX(internalX: number): number | Date {
+  return xIsDate.value ? new Date(internalX) : internalX + xDisplayOffset.value;
+}
+
+function emitMarkerUpdate(index: number, internalX: number, final: boolean) {
+  const ms = props.markers ?? [];
+  if (!ms[index]) return;
+  const updated = ms.map((m, i) =>
+    i === index ? { ...m, x: markerEmitX(internalX) } : m,
+  );
+  emit("update:markers", updated);
+  const payload: ChartMarkerDragPayload = {
+    index,
+    x: updated[index].x as number | Date,
+    marker: updated[index],
+  };
+  if (final) emit("markerDragEnd", payload);
+  else emit("markerDrag", payload);
+}
+
+function onMarkerPointerDown(index: number, e: PointerEvent) {
+  if (e.pointerType === "mouse" && e.button !== 0) return;
+  const m = (props.markers ?? [])[index];
+  if (!m || m.draggable === false) return;
+  e.preventDefault();
+  e.stopPropagation();
+  try {
+    (e.currentTarget as Element | null)?.setPointerCapture?.(e.pointerId);
+  } catch {
+    // synthetic events (tests) can carry an inactive pointerId
+  }
+  const start = clampMarkerX(markerInternalX(m));
+  // Keep the grab point fixed under the pointer instead of snapping the
+  // line to the pointer x (the hit strip is wider than the line).
+  const grabOffset = start - markerPointerX(e.clientX);
+  const cleanup = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", finish);
+    window.removeEventListener("pointercancel", cancel);
+    markerDragCleanup = null;
+  };
+  const move = (ev: PointerEvent) => {
+    const xv = clampMarkerX(markerPointerX(ev.clientX) + grabOffset);
+    markerDragState.value = { index, x: xv };
+    emitMarkerUpdate(index, xv, false);
+  };
+  const finish = (ev: PointerEvent) => {
+    cleanup();
+    const xv = clampMarkerX(markerPointerX(ev.clientX) + grabOffset);
+    markerDragState.value = null;
+    emitMarkerUpdate(index, xv, true);
+  };
+  const cancel = () => {
+    cleanup();
+    markerDragState.value = null;
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", finish);
+  window.addEventListener("pointercancel", cancel);
+  markerDragCleanup = cleanup;
+  markerDragState.value = { index, x: start };
+}
+
+function onMarkerKeydown(index: number, e: KeyboardEvent) {
+  const dir =
+    e.key === "ArrowRight" || e.key === "ArrowUp"
+      ? 1
+      : e.key === "ArrowLeft" || e.key === "ArrowDown"
+        ? -1
+        : 0;
+  if (dir === 0) return;
+  const m = (props.markers ?? [])[index];
+  if (!m || m.draggable === false) return;
+  e.preventDefault();
+  const { min, max } = xExtent.value;
+  const base =
+    !xIsDate.value && !hasExplicitX.value ? 1 : (max - min) / 100 || 1;
+  const xv = clampMarkerX(
+    markerInternalX(m) + dir * base * (e.shiftKey ? 10 : 1),
+  );
+  emitMarkerUpdate(index, xv, true);
+}
 </script>
 
 <template>
@@ -1359,6 +1627,73 @@ const positionedLegendItems = computed(() =>
           :project="projectAnnotation"
           :bounds="bounds"
         />
+        <!-- markers: draggable vertical rules, painted above all series -->
+        <g
+          v-for="m in renderedMarkers"
+          :key="'marker' + m.index"
+          class="line-chart-marker"
+        >
+          <line
+            v-if="m.outline"
+            data-testid="marker-outline"
+            :x1="m.px"
+            :y1="padding.top"
+            :x2="m.px"
+            :y2="padding.top + innerH"
+            :stroke="m.outlineColor"
+            :stroke-width="m.strokeWidth + m.outlineWidth"
+          />
+          <line
+            data-testid="marker-line"
+            :x1="m.px"
+            :y1="padding.top"
+            :x2="m.px"
+            :y2="padding.top + innerH"
+            :stroke="m.color"
+            :stroke-width="m.strokeWidth"
+            :stroke-dasharray="m.dash"
+          />
+          <text
+            v-if="m.label"
+            data-testid="marker-label"
+            :x="m.labelX"
+            :y="m.labelY"
+            :text-anchor="m.anchor"
+            :font-size="m.labelFontSize"
+            :font-weight="m.labelFontWeight"
+            :fill="m.labelFill"
+            :stroke="m.labelOutlineColor"
+            :stroke-width="m.labelOutlineWidth"
+            stroke-linejoin="round"
+            paint-order="stroke fill"
+            :style="m.draggable ? { cursor: 'ew-resize' } : undefined"
+            @pointerdown="onMarkerPointerDown(m.index, $event)"
+          >
+            {{ m.label }}
+          </text>
+          <line
+            v-if="m.draggable"
+            data-testid="marker-hit"
+            class="line-chart-marker-hit"
+            :x1="m.px"
+            :y1="m.hitTop"
+            :x2="m.px"
+            :y2="padding.top + innerH"
+            stroke="transparent"
+            stroke-width="14"
+            role="slider"
+            tabindex="0"
+            aria-orientation="horizontal"
+            :aria-label="m.ariaLabel"
+            :aria-valuemin="markerAriaRange.min"
+            :aria-valuemax="markerAriaRange.max"
+            :aria-valuenow="m.ariaNow"
+            :aria-valuetext="m.ariaText"
+            style="cursor: ew-resize; touch-action: none"
+            @pointerdown="onMarkerPointerDown(m.index, $event)"
+            @keydown="onMarkerKeydown(m.index, $event)"
+          />
+        </g>
         <!-- area section labels -->
         <g v-for="(item, i) in sectionLabels.labels" :key="'seclab' + i">
           <circle
@@ -1478,6 +1813,15 @@ const positionedLegendItems = computed(() =>
   height: 0.625em;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+.line-chart-marker-hit {
+  outline: none;
+}
+
+.line-chart-marker-hit:focus-visible {
+  outline: 2px solid var(--color-primary, #0057b7);
+  outline-offset: 2px;
 }
 </style>
 

@@ -39,6 +39,14 @@ export {
   type CsvSeries,
 } from "./seriesCsv.js";
 export { default as ChartAnnotations } from "./ChartAnnotations.vue";
+export {
+  layoutMarkerLabels,
+  markerDashArray,
+  type ChartMarker,
+  type ChartMarkerDragPayload,
+  type MarkerLabelItem,
+  type MarkerLabelPlacement,
+} from "./markers.js";
 export { default as ChartAxisLabels } from "./ChartAxisLabels.vue";
 export { useChartCommon } from "./useChartCommon.js";
 export type { ChartAnnotation } from "./annotations.js";

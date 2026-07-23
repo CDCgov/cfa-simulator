@@ -2639,4 +2639,257 @@ describe("LineChart", () => {
       expect(chartSvg(wrapper)?.getAttribute("role")).toBe("figure");
     });
   });
+
+  describe("markers", () => {
+    // width 600, no yLabel → padding.left 50, right 10 → innerW 540.
+    // Markers with labels reserve top room of markerLabelGap (7) +
+    // label font size (12) → padding.top 10 + 19 = 29. height 300 →
+    // innerH 241, plot bottom 270. Data extent x: 0..10.
+    const baseProps = {
+      data: [0, 2, 4, 6, 8, 10, 8, 6, 4, 2, 0],
+      width: 600,
+      height: 300,
+      menu: false,
+    };
+
+    it("renders a full-height dashed line with a halo'd label above the plot", () => {
+      const wrapper = mount(LineChart, {
+        props: { ...baseProps, markers: [{ x: 5, label: "Isolation" }] },
+      });
+      const line = wrapper.find('[data-testid="marker-line"]');
+      expect(line.attributes("x1")).toBe("320");
+      expect(line.attributes("y1")).toBe("29");
+      expect(line.attributes("y2")).toBe("270");
+      expect(line.attributes("stroke")).toBe("#999");
+      expect(line.attributes("stroke-width")).toBe("1.5");
+      expect(line.attributes("stroke-dasharray")).toBe("4 4");
+
+      const label = wrapper.find('[data-testid="marker-label"]');
+      expect(label.text()).toBe("Isolation");
+      // left edge aligned over the line
+      expect(label.attributes("x")).toBe("320");
+      // baseline sits markerLabelGap above the top of the line (29 - 7)
+      expect(label.attributes("y")).toBe("22");
+      expect(label.attributes("text-anchor")).toBe("start");
+      expect(label.attributes("stroke")).toBe("var(--color-bg-0, #fff)");
+      expect(label.attributes("stroke-width")).toBe("3");
+      expect(label.attributes("paint-order")).toBe("stroke fill");
+    });
+
+    it("honors line and label styling overrides", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          ...baseProps,
+          markers: [
+            {
+              x: 2,
+              label: "A",
+              color: "#f00",
+              strokeWidth: 3,
+              dashed: false,
+              labelOutlineColor: "#000",
+              labelOutlineWidth: 5,
+              labelStyle: { color: "#00f", fontSize: 14, fontWeight: 400 },
+            },
+          ],
+        },
+      });
+      const line = wrapper.find('[data-testid="marker-line"]');
+      expect(line.attributes("stroke")).toBe("#f00");
+      expect(line.attributes("stroke-width")).toBe("3");
+      expect(line.attributes("stroke-dasharray")).toBeUndefined();
+      const label = wrapper.find('[data-testid="marker-label"]');
+      expect(label.attributes("fill")).toBe("#00f");
+      expect(label.attributes("font-size")).toBe("14");
+      expect(label.attributes("font-weight")).toBe("400");
+      expect(label.attributes("stroke")).toBe("#000");
+      expect(label.attributes("stroke-width")).toBe("5");
+    });
+
+    it("renders a page-colored outline behind the line when outline is true", () => {
+      const wrapper = mount(LineChart, {
+        props: { ...baseProps, markers: [{ x: 5, outline: true }] },
+      });
+      const outline = wrapper.find('[data-testid="marker-outline"]');
+      expect(outline.exists()).toBe(true);
+      expect(outline.attributes("stroke")).toBe("var(--color-bg-0, #fff)");
+      expect(outline.attributes("stroke-width")).toBe("5.5");
+    });
+
+    it("drops a colliding label down to the next row", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          ...baseProps,
+          markers: [
+            { x: 5, label: "One" },
+            { x: 5.2, label: "Two" },
+          ],
+        },
+      });
+      const labels = wrapper.findAll('[data-testid="marker-label"]');
+      expect(labels[0].attributes("y")).toBe("22");
+      expect(labels[1].attributes("y")).toBe("37");
+    });
+
+    it("honors markerLabelGap for extra clearance above the lines", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          ...baseProps,
+          markerLabelGap: 20,
+          markers: [{ x: 5, label: "Isolation" }],
+        },
+      });
+      // Reserved top room grows to 20 + 12 → padding.top 42; the label
+      // baseline sits 20px above the top of the line.
+      const line = wrapper.find('[data-testid="marker-line"]');
+      expect(line.attributes("y1")).toBe("42");
+      const label = wrapper.find('[data-testid="marker-label"]');
+      expect(label.attributes("y")).toBe("22");
+    });
+
+    it("reserves top room based on the tallest label font", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          ...baseProps,
+          markers: [{ x: 5, label: "Big", labelStyle: { fontSize: 20 } }],
+        },
+      });
+      // Room = 7 + 20 → padding.top 37; baseline at 37 - 7.
+      const line = wrapper.find('[data-testid="marker-line"]');
+      expect(line.attributes("y1")).toBe("37");
+      const label = wrapper.find('[data-testid="marker-label"]');
+      expect(label.attributes("y")).toBe("30");
+    });
+
+    it("does not render a hit target when draggable is false", () => {
+      const wrapper = mount(LineChart, {
+        props: { ...baseProps, markers: [{ x: 5, draggable: false }] },
+      });
+      expect(wrapper.find('[data-testid="marker-hit"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="marker-line"]').exists()).toBe(true);
+    });
+
+    it("emits update:markers and markerDrag while dragging, markerDragEnd on release", async () => {
+      const wrapper = mount(LineChart, {
+        props: { ...baseProps, markers: [{ x: 5, label: "Isolation" }] },
+      });
+      const hit = wrapper.find('[data-testid="marker-hit"]');
+      // happy-dom rects are all zeros, so clientX maps through
+      // padding.left directly: x = (clientX - 50) / 540 * 10.
+      await hit.trigger("pointerdown", { clientX: 320, button: 0 });
+      window.dispatchEvent(new MouseEvent("pointermove", { clientX: 428 }));
+      await wrapper.vm.$nextTick();
+
+      const updates = wrapper.emitted("update:markers")!;
+      expect(updates.length).toBeGreaterThanOrEqual(1);
+      const moved = updates[updates.length - 1][0] as { x: number }[];
+      expect(moved[0].x).toBeCloseTo(7);
+      const drags = wrapper.emitted("markerDrag")!;
+      expect(drags[drags.length - 1][0]).toMatchObject({ index: 0 });
+
+      window.dispatchEvent(new MouseEvent("pointerup", { clientX: 428 }));
+      const ends = wrapper.emitted("markerDragEnd")!;
+      expect(ends.length).toBe(1);
+      expect((ends[0][0] as { x: number }).x).toBeCloseTo(7);
+    });
+
+    it("keeps the grab offset so the line does not jump to the pointer", async () => {
+      const wrapper = mount(LineChart, {
+        props: { ...baseProps, markers: [{ x: 5 }] },
+      });
+      const hit = wrapper.find('[data-testid="marker-hit"]');
+      // Grab 5px right of the line (within the hit strip)...
+      await hit.trigger("pointerdown", { clientX: 325, button: 0 });
+      // ...and move 108px right: the marker should move exactly +2 data units.
+      window.dispatchEvent(new MouseEvent("pointermove", { clientX: 433 }));
+      const updates = wrapper.emitted("update:markers")!;
+      const moved = updates[updates.length - 1][0] as { x: number }[];
+      expect(moved[0].x).toBeCloseTo(7);
+      window.dispatchEvent(new MouseEvent("pointerup", { clientX: 433 }));
+    });
+
+    it("moves the marker by one index step on arrow keys", async () => {
+      const wrapper = mount(LineChart, {
+        props: { ...baseProps, markers: [{ x: 5 }] },
+      });
+      const hit = wrapper.find('[data-testid="marker-hit"]');
+      await hit.trigger("keydown", { key: "ArrowRight" });
+      let updated = wrapper.emitted("update:markers")!.at(-1)![0] as {
+        x: number;
+      }[];
+      expect(updated[0].x).toBe(6);
+      expect(wrapper.emitted("markerDragEnd")!.length).toBe(1);
+      await hit.trigger("keydown", { key: "ArrowLeft" });
+      updated = wrapper.emitted("update:markers")!.at(-1)![0] as {
+        x: number;
+      }[];
+      expect(updated[0].x).toBe(4);
+    });
+
+    it("clamps drag and keyboard moves to the data extent", async () => {
+      const wrapper = mount(LineChart, {
+        props: { ...baseProps, markers: [{ x: 10 }] },
+      });
+      const hit = wrapper.find('[data-testid="marker-hit"]');
+      await hit.trigger("keydown", { key: "ArrowRight" });
+      const updated = wrapper.emitted("update:markers")!.at(-1)![0] as {
+        x: number;
+      }[];
+      expect(updated[0].x).toBe(10);
+    });
+
+    it("positions and emits in display space when xMin offsets the axis", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 5, 10],
+          xMin: 10,
+          width: 600,
+          height: 300,
+          menu: false,
+          markers: [{ x: 11 }],
+        },
+      });
+      // Display 10..12 maps to internal 0..2; x=11 is the middle.
+      const line = wrapper.find('[data-testid="marker-line"]');
+      expect(line.attributes("x1")).toBe("320");
+      const hit = wrapper.find('[data-testid="marker-hit"]');
+      await hit.trigger("keydown", { key: "ArrowRight" });
+      const updated = wrapper.emitted("update:markers")!.at(-1)![0] as {
+        x: number;
+      }[];
+      expect(updated[0].x).toBe(12);
+    });
+
+    it("renders markers on a date axis and emits Date positions", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          x: ["2026-01-01", "2026-01-11"],
+          y: [0, 10],
+          width: 600,
+          height: 300,
+          menu: false,
+          markers: [{ x: "2026-01-06", label: "Peak" }],
+        },
+      });
+      const line = wrapper.find('[data-testid="marker-line"]');
+      expect(line.attributes("x1")).toBe("320");
+      const hit = wrapper.find('[data-testid="marker-hit"]');
+      await hit.trigger("keydown", { key: "ArrowRight" });
+      const updated = wrapper.emitted("update:markers")!.at(-1)![0] as {
+        x: Date;
+      }[];
+      expect(updated[0].x).toBeInstanceOf(Date);
+      // One step is 1/100 of the 10-day range
+      expect(updated[0].x.getTime()).toBe(
+        Date.parse("2026-01-06T00:00:00Z") + (10 * 86400000) / 100,
+      );
+    });
+
+    it("skips markers with unparseable x values", () => {
+      const wrapper = mount(LineChart, {
+        props: { ...baseProps, markers: [{ x: "not-a-date" }, { x: 5 }] },
+      });
+      expect(wrapper.findAll('[data-testid="marker-line"]').length).toBe(1);
+    });
+  });
 });

@@ -1,5 +1,6 @@
 ---
-keywords: [line, chart, time-series, series, axis, area, confidence band, svg]
+keywords:
+  [line, chart, time-series, series, axis, area, confidence band, marker, svg]
 ---
 
 # LineChart
@@ -1054,6 +1055,231 @@ positioned from the anchor as usual via `offset`.
 
   </template>
 </ComponentDemo>
+
+### Draggable markers
+
+Use `markers` to draw vertical lines spanning the full plot height, each
+with a label just above the top of the line. Markers are **draggable**
+along the x-axis by default — bind with `v-model:markers` to receive
+position updates while dragging (plus `marker-drag` / `marker-drag-end`
+events). Labels are painted above all series lines with a background-colored
+stroke so they stay legible, and labels that would collide move down to the
+next row.
+
+Each marker can drive its **own variable**: assemble the `markers` array
+from your refs in a writable computed and split drag updates back out in
+its setter, as below. (Alternatively, listen to `marker-drag` and dispatch
+on `payload.index` or `payload.marker.label`.)
+
+Drag the lines below (or focus one and use the arrow keys):
+
+<script setup>
+import { ref, computed } from "vue";
+
+const infections = Array.from({ length: 45 }, (_, t) =>
+  120 * Math.exp(-((t - 18) ** 2) / 160),
+);
+const hospitalizations = Array.from({ length: 45 }, (_, t) =>
+  38 * Math.exp(-((t - 24) ** 2) / 180),
+);
+const isolation = ref(12);
+const recovery = ref(32);
+const markers = computed({
+  get: () => [
+    { x: isolation.value, label: "Isolation" },
+    { x: recovery.value, label: "Recovery" },
+  ],
+  set: ([a, b]) => {
+    isolation.value = a.x;
+    recovery.value = b.x;
+  },
+});
+const styledMarkers = ref([
+  {
+    x: 10,
+    label: "Intervention",
+    color: "#ef4444",
+    strokeWidth: 2,
+    dashed: false,
+    outline: true,
+    labelStyle: { color: "#ef4444", fontSize: 13 },
+    labelOutlineWidth: 4,
+  },
+  {
+    x: 22,
+    label: "Peak",
+    color: "#0057b7",
+    dash: "2 6",
+    labelStyle: { color: "#0057b7" },
+  },
+]);
+</script>
+
+<ComponentDemo>
+  <LineChart
+    v-model:markers="markers"
+    :series="[
+      { data: infections, color: '#1a1a1a', strokeWidth: 2, legend: 'Infections' },
+      { data: hospitalizations, color: '#0057b7', strokeWidth: 2, legend: 'Hospitalizations' },
+    ]"
+    :height="260"
+    x-label="Days"
+    y-label="Count"
+  />
+  <p class="marker-demo-readout">
+    Isolation: day {{ isolation.toFixed(1) }} · Recovery: day
+    {{ recovery.toFixed(1) }}
+  </p>
+
+<template #code>
+
+```vue
+<script setup>
+import { ref, computed } from "vue";
+
+// Each marker drives its own variable...
+const isolation = ref(12);
+const recovery = ref(32);
+
+// ...mapped through a writable computed: the getter assembles the
+// markers array, the setter splits drag updates back out.
+const markers = computed({
+  get: () => [
+    { x: isolation.value, label: "Isolation" },
+    { x: recovery.value, label: "Recovery" },
+  ],
+  set: ([a, b]) => {
+    isolation.value = a.x;
+    recovery.value = b.x;
+  },
+});
+</script>
+
+<LineChart
+  v-model:markers="markers"
+  :series="[
+    {
+      data: infections,
+      color: '#1a1a1a',
+      strokeWidth: 2,
+      legend: 'Infections',
+    },
+    {
+      data: hospitalizations,
+      color: '#0057b7',
+      strokeWidth: 2,
+      legend: 'Hospitalizations',
+    },
+  ]"
+  :height="260"
+  x-label="Days"
+  y-label="Count"
+/>
+<p>
+  Isolation: day {{ isolation.toFixed(1) }} · Recovery: day
+  {{ recovery.toFixed(1) }}
+</p>
+```
+
+  </template>
+</ComponentDemo>
+
+Drag positions are continuous floats — round in the setter
+(`isolation.value = Math.round(a.x)`) if the variable should be whole
+days; the marker then snaps as you drag. If you don't need separate
+variables, a plain `ref` holding the array works too:
+`const markers = ref([{ x: 12, label: "Isolation" }])` with
+`v-model:markers="markers"`.
+
+Labels sit `marker-label-gap` pixels above the top of the lines
+(default 7) — increase it for more clearance; the chart reserves the
+extra top padding automatically (the gap plus the tallest label font
+size), so nothing clips.
+
+The line's style is configurable per marker: `color`, `strokeWidth`,
+`dashed: false` for a solid line (or `dash` for a custom pattern), and
+`outline: true` for a page-colored stroke behind the line. The label's
+text styles via `labelStyle` and its legibility stroke via
+`labelOutlineColor` / `labelOutlineWidth` (set `0` to disable). Set
+`draggable: false` to pin a marker in place.
+
+<ComponentDemo>
+  <LineChart
+    v-model:markers="styledMarkers"
+    :series="[
+      { data: infections, color: '#1a1a1a', strokeWidth: 2 },
+      { data: hospitalizations, color: '#9ca3af', strokeWidth: 2 },
+    ]"
+    :height="240"
+    x-label="Days"
+    y-label="Count"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  v-model:markers="markers"
+  :series="[...]"
+  :height="240"
+  x-label="Days"
+  y-label="Count"
+/>
+
+<script setup>
+const markers = ref([
+  {
+    x: 10,
+    label: "Intervention",
+    color: "#ef4444",
+    strokeWidth: 2,
+    dashed: false,
+    outline: true,
+    labelStyle: { color: "#ef4444", fontSize: 13 },
+    labelOutlineWidth: 4,
+  },
+  {
+    x: 22,
+    label: "Peak",
+    color: "#0057b7",
+    dash: "2 6",
+    labelStyle: { color: "#0057b7" },
+  },
+]);
+</script>
+```
+
+  </template>
+</ComponentDemo>
+
+On a date axis, set `x` to a `Date`, a date string, or epoch-ms; drag
+updates then emit `Date` values. On a numeric axis `x` is in the same
+display space as the axis (it respects `xMin`).
+
+```ts
+interface ChartMarker {
+  x: number | string | Date; // position in data coords (Date/string on a date axis)
+  label?: string; // text above the top of the line
+  color?: string; // line color (default: #999)
+  strokeWidth?: number; // line width (default: 1.5)
+  dashed?: boolean; // default: true; false = solid
+  dash?: string | number | readonly number[]; // custom stroke-dasharray (wins over dashed)
+  outline?: boolean; // page-colored stroke behind the line
+  outlineColor?: string; // default: var(--color-bg-0, #fff)
+  outlineWidth?: number; // extra width added to strokeWidth (default: 4)
+  labelStyle?: LabelStyle; // { fontSize?, color?, fontWeight? } — defaults 12 / currentColor / 600
+  labelOutlineColor?: string; // label legibility stroke (default: var(--color-bg-0, #fff))
+  labelOutlineWidth?: number; // default: 3; 0 disables
+  draggable?: boolean; // default: true
+}
+```
+
+Each draggable marker is exposed as a horizontal slider (`role="slider"`):
+it's keyboard-focusable, and <kbd>←</kbd>/<kbd>→</kbd> move it one step
+(hold <kbd>Shift</kbd> for ×10). Note that when the chart has a `title` or
+`ariaLabel`, the `<svg>` defaults to `role="img"`, which hides the sliders
+from assistive tech — pass `role="figure"` if screen-reader users should
+reach them.
 
 ### Chart menu
 
