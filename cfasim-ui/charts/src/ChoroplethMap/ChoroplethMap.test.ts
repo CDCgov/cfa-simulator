@@ -700,6 +700,64 @@ describe("ChoroplethMap", () => {
     wrapper.unmount();
   });
 
+  it("suppresses hover tooltips through a resize and recovers on the next move", async () => {
+    // Regression: each window-resize tick dismissed the tooltip, but the
+    // browser's synthetic re-entry mouseover after every relayout re-showed
+    // it — the tooltip flickered through a drag-resize. Hover must stay
+    // suppressed until resize events stop arriving (a trailing settle
+    // window), then re-establish from the first real mousemove — no feature
+    // boundary crossing required, since that mouseover was swallowed.
+    vi.useFakeTimers();
+    try {
+      const wrapper = mount(ChoroplethMap, {
+        attachTo: document.body,
+        props: {
+          topology: statesTopo,
+          width: 600,
+          height: 400,
+          tooltipTrigger: "hover",
+          data: [{ id: "06", value: 42 }],
+        },
+      });
+      const california = wrapper
+        .findAll(".state-path")
+        .find((p) => p.attributes("data-feat-id") === "06")!;
+      await california.trigger("mouseover", { clientX: 100, clientY: 100 });
+      const tip = document.body.querySelector<HTMLElement>(
+        ".chart-tooltip-content",
+      )!;
+      expect(tip.style.visibility).toBe("visible");
+
+      // A resize tick dismisses the tooltip…
+      window.dispatchEvent(new Event("resize"));
+      expect(tip.style.visibility).toBe("hidden");
+      expect(wrapper.emitted("stateHover")).toHaveLength(2); // hover + null
+
+      // …and the synthetic mouseover landing inside the settle window must
+      // not flash it back.
+      await california.trigger("mouseover", { clientX: 100, clientY: 100 });
+      expect(tip.style.visibility).toBe("hidden");
+      expect(wrapper.emitted("stateHover")).toHaveLength(2);
+
+      // Once resize events stop, the first real move restores the hover.
+      vi.advanceTimersByTime(250);
+      california.element.dispatchEvent(
+        new MouseEvent("mousemove", {
+          bubbles: true,
+          clientX: 102,
+          clientY: 101,
+        }),
+      );
+      await flushPromises();
+      expect(tip.style.visibility).toBe("visible");
+      expect(wrapper.emitted("stateHover")).toHaveLength(3);
+
+      wrapper.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("emits update:focus with the clicked feature id", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: { topology: statesTopo, width: 600, height: 400 },

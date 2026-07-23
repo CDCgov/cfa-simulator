@@ -532,6 +532,22 @@ let meetOffsetX = 0;
 let meetOffsetY = 0;
 
 let isZooming = false;
+// Hover is also suppressed for a trailing settle window around window
+// resizes: after each relayout the browser re-dispatches synthetic mouse
+// events at the last cursor position, which re-showed the tooltip between
+// the per-event dismissals — a visible flicker through a drag-resize. Long
+// enough to bridge the gap between discrete resize ticks.
+const VIEWPORT_SETTLE_MS = 200;
+let viewportSettleTimer = 0;
+let isViewportSettling = false;
+function suppressHoverUntilSettled() {
+  isViewportSettling = true;
+  window.clearTimeout(viewportSettleTimer);
+  viewportSettleTimer = window.setTimeout(() => {
+    viewportSettleTimer = 0;
+    isViewportSettling = false;
+  }, VIEWPORT_SETTLE_MS);
+}
 let tooltipObserver: ResizeObserver | null = null;
 const lastTooltipSize = { width: 0, height: 0 };
 let lastPointer: { x: number; y: number } | null = null;
@@ -672,6 +688,19 @@ function dismissOnViewportChange() {
   clearHover();
 }
 
+// Window resizes additionally suppress hover for the settle window: unlike
+// a scroll (where the next real mouse event is legitimate hover intent),
+// the cursor is pinned to the window edge for the whole drag, so any mouse
+// event arriving mid-resize is a synthetic re-fire. Scoped to the window
+// resize listener only — the svg ResizeObserver also fires on mount and
+// fullscreen toggles, where suppression would swallow an immediate
+// deliberate hover (a single programmatic move never re-fires, so there
+// would be no recovery).
+function dismissOnWindowResize() {
+  suppressHoverUntilSettled();
+  clearHover();
+}
+
 // Tracks the svg's rendered width so applyStrokeScale can compensate
 // stroke widths for the viewBox-to-CSS scale. Fires on container resizes
 // only — cheap, and the map itself never relayouts on zoom/pan.
@@ -718,7 +747,7 @@ onMounted(() => {
     passive: true,
     capture: true,
   });
-  window.addEventListener("resize", dismissOnViewportChange, { passive: true });
+  window.addEventListener("resize", dismissOnWindowResize, { passive: true });
 });
 
 onUnmounted(() => {
@@ -729,13 +758,14 @@ onUnmounted(() => {
   if (redrawFrame) cancelAnimationFrame(redrawFrame);
   if (cityLayoutFrame) cancelAnimationFrame(cityLayoutFrame);
   window.clearTimeout(pendingSelectTimer);
+  window.clearTimeout(viewportSettleTimer);
   if (crispResizeTimer) window.clearTimeout(crispResizeTimer);
   teardownZoom();
   teardownInteraction();
   window.removeEventListener("scroll", dismissOnViewportChange, {
     capture: true,
   });
-  window.removeEventListener("resize", dismissOnViewportChange);
+  window.removeEventListener("resize", dismissOnWindowResize);
 });
 
 function setupZoom() {
@@ -2645,42 +2675,57 @@ function emitSelection(data: TooltipPayload) {
   emit("update:focus", wasFocused ? null : data.id);
 }
 
+function hoverFromEvent(me: MouseEvent) {
+  const featId = featureIdFromEvent(me.target, me.clientX, me.clientY);
+  if (!featId) return;
+  const data = tooltipDataById.get(featId);
+  if (!data) return;
+  setHoverId(featId);
+  if (hasInteractiveTooltip.value) showTooltip(featId, me.clientX, me.clientY);
+  emit("stateHover", { id: data.id, name: data.name, value: data.value });
+}
+
 function onDelegatedEvent(event: Event) {
   // Only hover is suppressed mid-gesture (stroke churn while the map
-  // moves); clicks stay live — even during zoom animations — since d3
-  // already swallows genuine post-drag clicks via clickDistance.
-  if (event.type === "mouseover" && isZooming) return;
+  // moves) and through the viewport settle window; clicks stay live —
+  // even during zoom animations — since d3 already swallows genuine
+  // post-drag clicks via clickDistance.
+  if (event.type === "mouseover") {
+    if (isZooming || isViewportSettling) return;
+    hoverFromEvent(event as MouseEvent);
+    return;
+  }
   const me = event as MouseEvent;
   const featId = featureIdFromEvent(me.target, me.clientX, me.clientY);
   if (!featId) return;
   const data = tooltipDataById.get(featId);
   if (!data) return;
-  const payload = { id: data.id, name: data.name, value: data.value };
-  if (event.type === "click") {
-    if (props.zoom) {
-      window.clearTimeout(pendingSelectTimer);
-      pendingSelectTimer = 0;
-      // detail > 1 is the second click of a double-click — that gesture is
-      // a zoom (handled by d3), not a select.
-      if (me.detail <= 1) {
-        pendingSelectTimer = window.setTimeout(() => {
-          pendingSelectTimer = 0;
-          emitSelection(data);
-        }, CLICK_SELECT_DELAY_MS);
-      }
-    } else {
-      emitSelection(data);
+  if (props.zoom) {
+    window.clearTimeout(pendingSelectTimer);
+    pendingSelectTimer = 0;
+    // detail > 1 is the second click of a double-click — that gesture is
+    // a zoom (handled by d3), not a select.
+    if (me.detail <= 1) {
+      pendingSelectTimer = window.setTimeout(() => {
+        pendingSelectTimer = 0;
+        emitSelection(data);
+      }, CLICK_SELECT_DELAY_MS);
     }
-  } else if (event.type === "mouseover") {
-    setHoverId(featId);
-    if (hasInteractiveTooltip.value)
-      showTooltip(featId, me.clientX, me.clientY);
-    emit("stateHover", payload);
+  } else {
+    emitSelection(data);
   }
 }
 
 function onDelegatedMouseMove(event: MouseEvent) {
-  if (isZooming) return;
+  if (isZooming || isViewportSettling) return;
+  // A resize/scroll dismissal can also swallow the browser's re-entry
+  // mouseover (it lands inside the settle window), parking the cursor on
+  // a feature with no hover and no boundary crossing coming — the first
+  // real move after settle re-establishes it.
+  if (!hoveredEl) {
+    hoverFromEvent(event);
+    return;
+  }
   moveTooltip(event.clientX, event.clientY);
 }
 
@@ -2694,7 +2739,9 @@ function onDelegatedMouseOut(event: MouseEvent) {
 // hover is resolved by picking on every mousemove instead (a 1px read
 // from a CPU canvas; cheap even at mousemove rates).
 function onCanvasMouseMove(event: MouseEvent) {
-  if (isZooming) return;
+  // Settle-window suppression needs no recovery here: hover re-resolves
+  // on the next real mousemove by picking.
+  if (isZooming || isViewportSettling) return;
   const featId = pickFeatureAt(event.clientX, event.clientY);
   if (featId === canvasHoveredId) {
     if (featId) moveTooltip(event.clientX, event.clientY);
