@@ -21,8 +21,11 @@ import usStates from "us-atlas/states-10m.json";
 import usCounties from "us-atlas/counties-10m.json";
 import type { Topology } from "topojson-specification";
 
+import { usHsaTopology } from "../us-hsa-topology/index.js";
+
 const statesTopo = usStates as unknown as Topology;
 const countiesTopo = usCounties as unknown as Topology;
+const hsaTopo = usHsaTopology;
 
 // jsdom has no TouchEvent; dispatch a plain bubbling event with the touch
 // lists our handlers read off it. `el` is the path the touch lands on.
@@ -3039,6 +3042,132 @@ describe("ChoroplethMap mixed geographic levels", () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("Atlantis"));
     expect(ids(wrapper)).toContain("06037");
     warn.mockRestore();
+    wrapper.unmount();
+  });
+});
+
+describe("ChoroplethMap pre-merged HSA topology (objects.hsas fast path)", () => {
+  // Feature id → rendered path data. The fast path must reproduce the runtime
+  // county merge exactly, so path `d` strings are compared verbatim.
+  const pathsById = (wrapper: {
+    findAll: (s: string) => { attributes: (a: string) => string | undefined }[];
+  }) => {
+    const m = new Map<string, string | undefined>();
+    for (const p of wrapper.findAll(".state-path")) {
+      m.set(p.attributes("data-feat-id")!, p.attributes("d"));
+    }
+    return m;
+  };
+
+  async function mountHsas(extra: Record<string, unknown> = {}) {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: hsaTopo,
+        width: 600,
+        height: 400,
+        geoType: "hsas" as const,
+        ...extra,
+      },
+    });
+    await flushDynamicImports();
+    return wrapper;
+  }
+
+  it("renders identically to the runtime merge from a counties topology", async () => {
+    const fast = await mountHsas();
+    const legacy = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "hsas" as const,
+      },
+    });
+    await flushDynamicImports();
+    const fastPaths = pathsById(fast);
+    const legacyPaths = pathsById(legacy);
+    expect(fastPaths.size).toBeGreaterThan(900);
+    expect(fastPaths).toEqual(legacyPaths);
+    fast.unmount();
+    legacy.unmount();
+  });
+
+  it("scopes to a single state by HSA-code prefix", async () => {
+    const fast = await mountHsas({ state: "06" });
+    const legacy = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        width: 600,
+        height: 400,
+        geoType: "hsas" as const,
+        state: "06",
+      },
+    });
+    await flushDynamicImports();
+    const fastPaths = pathsById(fast);
+    expect(fastPaths.size).toBeGreaterThan(10);
+    for (const id of fastPaths.keys()) expect(id.slice(0, 2)).toBe("06");
+    expect(fastPaths).toEqual(pathsById(legacy));
+    fast.unmount();
+    legacy.unmount();
+  });
+
+  it("labels and colors HSAs via the lazy hsaNames table", async () => {
+    const wrapper = await mountHsas({
+      data: [{ id: "010259", value: 100 }],
+    });
+    const butler = wrapper
+      .findAll(".state-path")
+      .find((p) => p.find("title").text().includes("Butler, AL"));
+    expect(butler).toBeDefined();
+    expect(butler!.attributes("fill")).not.toBe("#ddd");
+    wrapper.unmount();
+  });
+
+  it("draws a state-level row as one merged shape (mixed levels)", async () => {
+    const wrapper = await mountHsas({
+      data: [{ id: "06", value: 90, geoType: "states" as const }],
+    });
+    const rendered = [...pathsById(wrapper).keys()];
+    expect(rendered).toContain("06");
+    // California's HSAs are replaced by the single state feature.
+    expect(rendered.filter((id) => id.startsWith("06") && id !== "06")).toEqual(
+      [],
+    );
+    // Other states still render as HSAs.
+    expect(rendered.filter((id) => id.startsWith("01")).length).toBeGreaterThan(
+      1,
+    );
+    wrapper.unmount();
+  });
+
+  it("does not outline a states-only topology in hsas mode", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        geoType: "hsas" as const,
+        theme: { outline: "#0a0" },
+      },
+    });
+    await flushDynamicImports();
+    expect(wrapper.find(".choropleth-outline").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("renders state borders and the exterior outline without a counties object", async () => {
+    const wrapper = await mountHsas({ theme: { outline: "#0a0" } });
+    const borderPath = wrapper
+      .findAll("path")
+      .find(
+        (p) =>
+          p.attributes("fill") === "none" &&
+          p.attributes("pointer-events") === "none" &&
+          !p.classes("choropleth-outline"),
+      );
+    expect(borderPath).toBeDefined();
+    expect(wrapper.find(".choropleth-outline").exists()).toBe(true);
     wrapper.unmount();
   });
 });

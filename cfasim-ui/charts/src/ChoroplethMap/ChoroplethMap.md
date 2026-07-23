@@ -72,6 +72,7 @@ npm install us-atlas
 
 - **State-level maps**: use `us-atlas/states-10m.json`
 - **County or HSA maps**: use `us-atlas/counties-10m.json` (includes both county and state boundaries)
+- **HSA-only maps**: the pre-merged `usHsaTopology` from `@cfasim-ui/charts/us-hsa-topology` renders identically to the county topology at roughly half the size — see [HSA-level map](#hsa-level-map)
 
 ```vue
 <script setup>
@@ -607,14 +608,28 @@ Only the national capital is flagged on the national map; a state's own capital 
 
 ### HSA-level map
 
-Set `geoType="hsas"` to render Health Service Area boundaries. HSAs are dissolved from county boundaries using a built-in FIPS-to-HSA mapping. Use 6-digit HSA codes as IDs. State borders are overlaid for context.
+Set `geoType="hsas"` to render Health Service Area boundaries. Use 6-digit HSA codes as IDs. State borders are overlaid for context. Two topologies work:
 
-This demo pairs `tooltip-trigger="hover"` with a custom `#tooltip` slot —
+- `us-atlas/counties-10m.json` — HSAs are dissolved from the county boundaries at runtime using the built-in FIPS-to-HSA mapping.
+- **`usHsaTopology` from `@cfasim-ui/charts/us-hsa-topology`** — the same merge performed ahead of time and shipped as a ~155&nbsp;KB-gzipped topology (about half the county topology's size, since arcs interior to an HSA are gone). It renders identically and still includes the state boundaries, so state borders, the `state` prop, and state-level `data` rows all work. Prefer it when the map only needs HSA and state levels; county-level rendering (`geoType="counties"` or `geoType: "counties"` data rows) still needs the county topology.
+
+```vue
+<script setup>
+import { ChoroplethMap } from "@cfasim-ui/charts";
+import { usHsaTopology } from "@cfasim-ui/charts/us-hsa-topology";
+</script>
+
+<template>
+  <ChoroplethMap :topology="usHsaTopology" geo-type="hsas" :data="hsaData" />
+</template>
+```
+
+This demo uses the pre-merged topology, and pairs `tooltip-trigger="hover"` with a custom `#tooltip` slot —
 hover an HSA on desktop, or tap one on touch, before or after zooming in.
 
 <ComponentDemo>
   <ChoroplethMap
-    :topology="countiesTopo"
+    :topology="hsaTopo"
     geo-type="hsas"
     zoom
     tooltip-trigger="hover"
@@ -646,7 +661,7 @@ hover an HSA on desktop, or tap one on touch, before or after zooming in.
 
 ```vue
 <ChoroplethMap
-  :topology="countiesTopo"
+  :topology="usHsaTopology"
   geo-type="hsas"
   zoom
   tooltip-trigger="hover"
@@ -678,7 +693,8 @@ hover an HSA on desktop, or tap one on touch, before or after zooming in.
 Set the `state` prop to render just one state's outline with its `counties` or
 `hsas` inside it — no surrounding states — and the projection zooms to fit it.
 Accepts a state **name** (`"California"`) or a 2-digit **FIPS code** (`"06"`).
-This needs a counties topology (the same `us-atlas/counties-10m.json`). `data`
+This needs a counties topology (the same `us-atlas/counties-10m.json`), or the
+pre-merged `usHsaTopology` when `geoType` is `"hsas"`. `data`
 can stay national; only features inside the selected state are drawn and
 colored.
 

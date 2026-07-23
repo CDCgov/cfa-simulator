@@ -146,7 +146,10 @@ const props = withDefaults(
   defineProps<{
     /** TopoJSON topology object (e.g. from us-atlas/states-10m.json or us-atlas/counties-10m.json).
      * Must contain a "states" object for geoType="states", or both "states" and "counties" objects
-     * for geoType="counties" or geoType="hsas". */
+     * for geoType="counties" or geoType="hsas". For HSA maps, the pre-merged
+     * `usHsaTopology` from `@cfasim-ui/charts/us-hsa-topology` (an "hsas" +
+     * "states" topology, about half the size of a counties topology) can be
+     * passed instead of a counties topology. */
     topology: Topology;
     data?: StateData[];
     /** Geographic type: "states" (default), "counties", or "hsas" (Health Service Areas) */
@@ -1384,12 +1387,38 @@ const hsaFeaturesGeo = computed(() => {
   const mod = hsaModule.value;
   if (!mod) return { type: "FeatureCollection" as const, features: [] };
   const { fipsToHsa, hsaNames } = mod;
-  const topo = toRaw(props.topology) as unknown as CountiesTopo;
+  const topo = toRaw(props.topology) as unknown as CountiesTopo & {
+    objects?: { hsas?: GeometryCollection };
+  };
+  const scopeFips = stateFips.value;
+
+  // Fast path: a pre-merged HSA topology (@cfasim-ui/charts/us-hsa-topology)
+  // carries an `objects.hsas` collection whose ids are already HSA codes —
+  // no county merge needed. HSA codes are state-FIPS-prefixed, so
+  // single-state scoping filters by prefix; names still come from the lazy
+  // `hsaNames` table.
+  const hsasObj = topo.objects?.hsas;
+  if (hsasObj) {
+    const fc = feature(topo as unknown as Topology, hsasObj) as
+      GeoJSON.FeatureCollection | GeoJSON.Feature;
+    const all = fc.type === "FeatureCollection" ? fc.features : [fc];
+    const features: GeoJSON.Feature[] = [];
+    for (const f of all) {
+      const id = String(f.id).padStart(6, "0");
+      if (scopeFips && id.slice(0, 2) !== scopeFips) continue;
+      features.push({
+        ...f,
+        id,
+        properties: { name: hsaNames[id] ?? id },
+      });
+    }
+    return { type: "FeatureCollection" as const, features };
+  }
+
   // HSAs are unions of counties: a states-only topology can't build them.
   const countyGeometries = topo.objects?.counties?.geometries;
   if (!countyGeometries)
     return { type: "FeatureCollection" as const, features: [] };
-  const scopeFips = stateFips.value;
   const groups = new Map<string, typeof countyGeometries>();
 
   for (const geom of countyGeometries) {
@@ -1568,16 +1597,27 @@ const stateBordersPath = computed(() => {
 const outlineMesh = computed<GeoJSON.MultiLineString | null>(() => {
   if (!resolvedTheme.value.outline) return null;
   const topo = toRaw(props.topology) as unknown as {
-    objects?: { states?: NamedGeometry; counties?: NamedGeometry };
+    objects?: {
+      states?: NamedGeometry;
+      counties?: NamedGeometry;
+      hsas?: GeometryCollection;
+    };
   };
   const useCounties = props.geoType === "counties" || props.geoType === "hsas";
-  const obj = useCounties ? topo.objects?.counties : topo.objects?.states;
+  // A pre-merged HSA topology has no counties object; its `objects.states`
+  // meshes to the same exterior (both objects partition the same territory
+  // over a shared arc set, so arcs used exactly once are the same coastline).
+  // Gated on `hsas` so topologies that simply lack counties still get none.
+  const obj = useCounties
+    ? (topo.objects?.counties ??
+      (topo.objects?.hsas ? topo.objects?.states : undefined))
+    : topo.objects?.states;
   if (!obj) return null;
   const scope = stateFips.value;
   if (!scope) {
     return mesh(topo as unknown as Topology, obj, (a, b) => a === b);
   }
-  const pad = useCounties ? 5 : 2;
+  const pad = obj === topo.objects?.counties ? 5 : 2;
   const geometries = obj.geometries.filter(
     (g) => String(g.id).padStart(pad, "0").slice(0, 2) === scope,
   );

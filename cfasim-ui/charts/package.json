@@ -34,6 +34,10 @@
       "types": "./dist/us-cities.d.ts",
       "import": "./dist/us-cities.js"
     },
+    "./us-hsa-topology": {
+      "types": "./dist/us-hsa-topology.d.ts",
+      "import": "./dist/us-hsa-topology.js"
+    },
     "./style.css": "./dist/index.css"
   },
   "sideEffects": [

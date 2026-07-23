@@ -89,6 +89,10 @@ export default defineConfig({
           find: "@cfasim-ui/charts/us-cities",
           replacement: resolve(ROOT, "cfasim-ui/charts/src/us-cities.ts"),
         },
+        {
+          find: "@cfasim-ui/charts/us-hsa-topology",
+          replacement: resolve(ROOT, "cfasim-ui/charts/src/us-hsa-topology.ts"),
+        },
         // Resolve package imports to source so Vue SFC edits hot-reload
         // without needing `plz build` first.
         {

@@ -9,6 +9,7 @@ import * as uiComponents from "@cfasim-ui/components";
 import * as chartComponents from "@cfasim-ui/charts";
 import usStates from "us-atlas/states-10m.json";
 import usCounties from "us-atlas/counties-10m.json";
+import { usHsaTopology } from "@cfasim-ui/charts/us-hsa-topology";
 import ComponentDemo from "./ComponentDemo.vue";
 import InstallBox from "./InstallBox.vue";
 
@@ -44,5 +45,6 @@ export default {
     app.component("ComponentDemo", ComponentDemo);
     app.config.globalProperties.statesTopo = usStates;
     app.config.globalProperties.countiesTopo = usCounties;
+    app.config.globalProperties.hsaTopo = usHsaTopology;
   },
 } satisfies Theme;
