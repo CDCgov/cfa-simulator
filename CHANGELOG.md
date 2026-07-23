@@ -1,6 +1,21 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.3] - 2026-07-23
+
+### Bug Fixes
+
+- **charts:** Support switching ChoroplethMap renderer at runtime
+- **charts:** Suppress ChoroplethMap hover tooltips while a window resize settles
+
+### Features
+
+- **charts:** Add pre-merged us-hsa-topology export with a ChoroplethMap fast path
+
+### Refactor
+
+- **cfasim-ui:** Dedupe shared chart computeds, axis labels, and combobox sizing
+
 ## [0.8.2] - 2026-07-22
 
 ### Bug Fixes
