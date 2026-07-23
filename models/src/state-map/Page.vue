@@ -246,7 +246,7 @@ const subtitle = computed(() =>
     <ToggleGroup
       v-model="params.renderer"
       label="Renderer"
-      hint="Canvas rasterizes the whole map (scales to thousands of counties); SVG keeps a DOM node per feature. Switching remounts the map."
+      hint="Canvas rasterizes the whole map (scales to thousands of counties); SVG keeps a DOM node per feature. Switching swaps the backend in place."
       :options="[
         { value: 'canvas', label: 'Canvas' },
         { value: 'svg', label: 'SVG' },
@@ -260,7 +260,6 @@ const subtitle = computed(() =>
     <div class="layout" :class="{ 'is-state': params.selectedState }">
       <div class="map-container">
         <ChoroplethMap
-          :key="params.renderer"
           :topology="topology"
           :state="params.selectedState"
           :geo-type="mapGeoType"

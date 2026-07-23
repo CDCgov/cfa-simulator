@@ -2683,6 +2683,110 @@ describe("ChoroplethMap canvas renderer", () => {
     expect(wrapper.findAll(".state-path").length).toBe(0);
     wrapper.unmount();
   });
+
+  it("switching renderer to canvas at runtime sizes the canvas, draws, and picks", async () => {
+    const matchMediaSpy = vi.spyOn(window, "matchMedia");
+    const wrapper = mountCanvas({ renderer: "svg" as const });
+    await flushPromises();
+    expect(wrapper.findAll(".state-path").length).toBeGreaterThan(50);
+    expect(wrapper.find("canvas.choropleth-canvas").exists()).toBe(false);
+
+    // The svg box doesn't change on a renderer flip, so the resize observer
+    // won't fire — the component must size the fresh canvas itself from the
+    // current box (happy-dom rects are zero; give the svg a concrete one).
+    const svgEl = mapSurface(wrapper).element as SVGSVGElement;
+    svgEl.getBoundingClientRect = () =>
+      ({ width: 600, height: 400, top: 0, left: 0 }) as DOMRect;
+    await wrapper.setProps({ renderer: "canvas" });
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Path DOM replaced by a sized canvas (not the intrinsic 300×150)...
+    expect(wrapper.findAll(".state-path").length).toBe(0);
+    const canvas = wrapper.find("canvas.choropleth-canvas")
+      .element as HTMLCanvasElement;
+    expect(canvas.width).toBe(600);
+    expect(canvas.height).toBe(400);
+    expect(canvas.style.width).toBe("600px");
+    // ...the scene was drawn, the DPR listener armed, and picking re-wired.
+    expect(drawCtx.fill.mock.calls.length).toBeGreaterThanOrEqual(50);
+    expect(
+      matchMediaSpy.mock.calls.some(([q]) => String(q).includes("dppx")),
+    ).toBe(true);
+    pickColor = [0, 0, 1, 255];
+    mapSurface(wrapper).element.dispatchEvent(
+      new MouseEvent("mousemove", {
+        bubbles: true,
+        clientX: 100,
+        clientY: 100,
+      }),
+    );
+    expect(wrapper.emitted("stateHover")).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it("switching renderer back to svg rebuilds the path tree and delegation", async () => {
+    const wrapper = mountCanvas();
+    await flushPromises();
+    expect(wrapper.find("canvas.choropleth-canvas").exists()).toBe(true);
+    expect(wrapper.findAll(".state-path").length).toBe(0);
+
+    await wrapper.setProps({ renderer: "svg" });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(wrapper.find("canvas.choropleth-canvas").exists()).toBe(false);
+    expect(wrapper.findAll(".state-path").length).toBeGreaterThan(50);
+    // Canvas mode never writes the zoom transform into the svg group — the
+    // flip syncs it (identity here, since nothing zoomed).
+    expect(mapSurface(wrapper).find("g").attributes("transform")).toBe(
+      "translate(0,0) scale(1)",
+    );
+
+    // Per-feature delegation works again...
+    const path = wrapper.find(".state-path");
+    path.element.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    expect(wrapper.emitted("stateHover")).toHaveLength(1);
+    // ...and the canvas picking listener on the svg is gone.
+    pickColor = [0, 0, 1, 255];
+    mapSurface(wrapper).element.dispatchEvent(
+      new MouseEvent("mousemove", {
+        bubbles: true,
+        clientX: 100,
+        clientY: 100,
+      }),
+    );
+    expect(wrapper.emitted("stateHover")).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it("flips renderer and geoType together in one update", async () => {
+    // Both change in the same tick: the geometry watcher rebuilds pre-flush
+    // and the renderer watcher redoes the backend setup post-flush — the
+    // scene must land in a sized canvas, not the intrinsic 300×150 store.
+    const wrapper = mountCanvas({
+      topology: countiesTopo,
+      geoType: "counties" as const,
+    });
+    await flushPromises();
+    expect(wrapper.find("canvas.choropleth-canvas").exists()).toBe(true);
+
+    await wrapper.setProps({ geoType: "states", renderer: "svg" });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(wrapper.find("canvas.choropleth-canvas").exists()).toBe(false);
+    expect(wrapper.findAll(".state-path").length).toBeGreaterThan(50);
+
+    const svgEl = mapSurface(wrapper).element as SVGSVGElement;
+    svgEl.getBoundingClientRect = () =>
+      ({ width: 600, height: 400, top: 0, left: 0 }) as DOMRect;
+    const fillsBefore = drawCtx.fill.mock.calls.length;
+    await wrapper.setProps({ geoType: "counties", renderer: "canvas" });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(wrapper.findAll(".state-path").length).toBe(0);
+    const canvas = wrapper.find("canvas.choropleth-canvas")
+      .element as HTMLCanvasElement;
+    expect(canvas.width).toBe(600);
+    // Every county filled into the sized canvas.
+    expect(drawCtx.fill.mock.calls.length - fillsBefore).toBeGreaterThan(2000);
+    wrapper.unmount();
+  });
 });
 
 describe("ChoroplethMap mixed geographic levels", () => {

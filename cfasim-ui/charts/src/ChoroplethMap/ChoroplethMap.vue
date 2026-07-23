@@ -317,13 +317,14 @@ const props = withDefaults(
      */
     focusZoom?: boolean;
     /**
-     * Rendering backend, fixed at mount. `"svg"` (default) keeps one DOM
-     * path per feature — full assistive-tech fallback (per-feature
-     * `<title>`) and SVG export. `"canvas"` paints every feature into a
-     * single canvas: much faster for dense maps (counties, HSAs) and on
-     * mobile WebKit, with identical interactions. In canvas mode the menu
-     * offers PNG export only, and there is no per-feature fallback for
-     * assistive tech — configure an interactive tooltip.
+     * Rendering backend, switchable at runtime (zoom/pan carry over).
+     * `"svg"` (default) keeps one DOM path per feature — full
+     * assistive-tech fallback (per-feature `<title>`) and SVG export.
+     * `"canvas"` paints every feature into a single canvas: much faster
+     * for dense maps (counties, HSAs) and on mobile WebKit, with
+     * identical interactions. In canvas mode the menu offers PNG export
+     * only, and there is no per-feature fallback for assistive tech —
+     * configure an interactive tooltip.
      */
     renderer?: "svg" | "canvas";
     /**
@@ -596,8 +597,7 @@ let lastTap: { x: number; y: number; time: number } | null = null;
 
 function setupInteraction() {
   const svg = svgRef.value;
-  const g = mapGroupRef.value;
-  if (!svg || !g) return;
+  if (!svg) return;
   // Tap handling is wired on every device, on the svg itself so taps on the
   // map background (not just feature paths) can expand the touch map.
   // `touchend` is non-passive so a confirmed tap can preventDefault and
@@ -608,6 +608,17 @@ function setupInteraction() {
   svg.addEventListener("touchstart", onTouchStart, { passive: true });
   svg.addEventListener("touchend", onTouchEnd);
   svg.addEventListener("touchcancel", onTouchCancel, { passive: true });
+  setupPointerInteraction();
+}
+
+// Mouse delegation is the backend-dependent half (per-feature elements in
+// svg mode, per-move picking in canvas mode), split out so a runtime
+// `renderer` flip re-wires only it — the touch listeners above stay put,
+// keeping their registered-before-d3-zoom order.
+function setupPointerInteraction() {
+  const svg = svgRef.value;
+  const g = mapGroupRef.value;
+  if (!svg || !g) return;
   // Continuous hover tracking stays off on touch (stroke-width churn
   // degrades zoom/pan); taps provide the one-shot hover + tooltip instead
   // (see touchHover).
@@ -626,13 +637,10 @@ function setupInteraction() {
   g.addEventListener("mouseout", onDelegatedMouseOut);
 }
 
-function teardownInteraction() {
+function teardownPointerInteraction() {
   const svg = svgRef.value;
   const g = mapGroupRef.value;
   if (svg) {
-    svg.removeEventListener("touchstart", onTouchStart);
-    svg.removeEventListener("touchend", onTouchEnd);
-    svg.removeEventListener("touchcancel", onTouchCancel);
     svg.removeEventListener("click", onDelegatedEvent);
     svg.removeEventListener("mousemove", onCanvasMouseMove);
     svg.removeEventListener("mouseleave", onCanvasMouseLeave);
@@ -642,6 +650,16 @@ function teardownInteraction() {
   g.removeEventListener("mouseover", onDelegatedEvent);
   g.removeEventListener("mousemove", onDelegatedMouseMove);
   g.removeEventListener("mouseout", onDelegatedMouseOut);
+}
+
+function teardownInteraction() {
+  const svg = svgRef.value;
+  if (svg) {
+    svg.removeEventListener("touchstart", onTouchStart);
+    svg.removeEventListener("touchend", onTouchEnd);
+    svg.removeEventListener("touchcancel", onTouchCancel);
+  }
+  teardownPointerInteraction();
 }
 
 // Scroll / resize don't reliably emit mouseout on the underlying path even
@@ -3321,6 +3339,52 @@ const menuItems = computed<ChartMenuItem[]>(() => {
 watch(
   () => [featuresGeo.value, pathGenerator.value, hasInteractiveTooltip.value],
   () => rebuildPaths(),
+);
+
+// Runtime `renderer` flip → redo the backend-dependent mount work against
+// the new backend. `flush: "post"` so the v-if `<canvas>` has been
+// added/removed before we touch it. Everything else (zoom behavior, touch
+// taps, resize observer, city overlay) is backend-independent.
+watch(
+  isCanvas,
+  (canvasNow) => {
+    // The old backend's hover state lives on elements / draw state about
+    // to be discarded — drop it before rebuilding.
+    if (hoveredEl || canvasHoveredId) emit("stateHover", null);
+    hoveredEl = null;
+    canvasHoveredId = null;
+    hideTooltip();
+    teardownPointerInteraction();
+    setupPointerInteraction();
+    rebuildPaths();
+    applyFocus();
+    if (canvasNow) {
+      armDprListener();
+      // The svg box didn't change, so the resize observer won't fire —
+      // size and pin the fresh canvas from the current box ourselves
+      // (a new <canvas> otherwise keeps its intrinsic 300×150 store).
+      const rect = svgRef.value?.getBoundingClientRect();
+      if (rect?.width) resizeCanvasSurface(rect.width, rect.height);
+      return;
+    }
+    dprQuery?.removeEventListener("change", onDprChange);
+    dprQuery = null;
+    // Canvas mode draws the zoom itself and never writes the transform
+    // into the svg group — sync it so a zoomed view carries over.
+    if (svgRef.value && mapGroupRef.value) {
+      mapGroupRef.value.setAttribute(
+        "transform",
+        String(zoomTransform(svgRef.value)),
+      );
+    }
+    // Release canvas-only buffers; a flip back rebuilds them.
+    scene = null;
+    pickingCanvas = null;
+    pickingCtx = null;
+    snapshotCanvas = null;
+    snapshotView = null;
+  },
+  { flush: "post" },
 );
 
 // Each repaint below costs one DOM write per feature (~3k on a county

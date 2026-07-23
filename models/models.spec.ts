@@ -207,6 +207,58 @@ test("state-map mixed levels pick and tooltip on the canvas renderer", async ({
   );
 });
 
+test("state-map renderer toggle swaps backends in place", async ({ page }) => {
+  await page.goto("/state-map?renderer=svg");
+  await expect(page.locator(".state-path").first()).toBeVisible();
+  await expect(page.locator("canvas.choropleth-canvas")).toHaveCount(0);
+
+  await page
+    .getByRole("group", { name: "Renderer" })
+    .getByRole("button", { name: "Canvas" })
+    .click();
+  await expect(page.locator("canvas.choropleth-canvas")).toBeVisible();
+  await expect(page.locator(".state-path")).toHaveCount(0);
+  // The fresh canvas must be sized to the map box — a missed resize leaves
+  // the intrinsic 300×150 backing store, clipping the map to a corner.
+  const size = await page.evaluate(() => {
+    const c = document.querySelector(
+      "canvas.choropleth-canvas",
+    ) as HTMLCanvasElement;
+    const svg = document.querySelector(
+      ".choropleth-wrapper > svg:not(.choropleth-city-overlay)",
+    )!;
+    return {
+      width: c.width,
+      expected: Math.round(
+        svg.getBoundingClientRect().width * window.devicePixelRatio,
+      ),
+    };
+  });
+  expect(size.width).toBe(size.expected);
+  expect(await canvasPaintedPixels(page)).toBeGreaterThan(MIN_PAINTED);
+  // Hover resolves through the picking canvas after the swap.
+  const svgBox = (await page
+    .locator(".choropleth-wrapper > svg:not(.choropleth-city-overlay)")
+    .boundingBox())!;
+  await page.mouse.move(
+    svgBox.x + svgBox.width / 2,
+    svgBox.y + svgBox.height / 2,
+  );
+  await page.mouse.move(
+    svgBox.x + svgBox.width / 2 + 1,
+    svgBox.y + svgBox.height / 2 + 1,
+  );
+  await expect(page.locator(".chart-tooltip-content")).toBeVisible();
+
+  // Back to svg: path DOM and per-feature delegation return.
+  await page
+    .getByRole("group", { name: "Renderer" })
+    .getByRole("button", { name: "SVG" })
+    .click();
+  await expect(page.locator(".state-path").first()).toBeVisible();
+  await expect(page.locator("canvas.choropleth-canvas")).toHaveCount(0);
+});
+
 test("state-map shows cities with level-of-detail, without overlapping labels", async ({
   page,
 }) => {

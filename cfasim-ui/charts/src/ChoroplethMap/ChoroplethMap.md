@@ -1113,7 +1113,10 @@ Differences from the default SVG renderer:
 - There is no per-feature `<title>` fallback or per-feature DOM for
   assistive tech — configure an interactive tooltip (`tooltip-trigger` or
   the `#tooltip` slot), or stay on SVG where that fallback matters.
-- `renderer` is fixed at mount.
+
+`renderer` can also be switched on a mounted map (e.g. drop to canvas past a
+feature-count threshold) — the map rebuilds for the new backend in place and
+the current zoom/pan carries over.
 
 The dense county demo below uses it.
 
