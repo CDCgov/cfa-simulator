@@ -219,7 +219,7 @@ dependencies = [
 
 [[package]]
 name = "cfasim"
-version = "0.8.3"
+version = "0.8.4"
 dependencies = [
  "anyhow",
  "axoupdater",
@@ -242,7 +242,7 @@ dependencies = [
 
 [[package]]
 name = "cfasim-model"
-version = "0.8.3"
+version = "0.8.4"
 dependencies = [
  "js-sys",
  "wasm-bindgen",

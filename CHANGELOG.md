@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.4] - 2026-07-24
+
+### Features
+
+- **charts:** Add draggable vertical markers to LineChart
+
 ## [0.8.3] - 2026-07-23
 
 ### Bug Fixes
