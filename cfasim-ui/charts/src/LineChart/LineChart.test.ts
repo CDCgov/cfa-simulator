@@ -2640,6 +2640,67 @@ describe("LineChart", () => {
     });
   });
 
+  describe("title", () => {
+    // width 400, no yLabel → padding.left 50, right 10 → innerW 340,
+    // so bounds.left 50, bounds.right 390, center 220.
+    const base = { data: [1, 2, 3], width: 400, height: 200, menu: false };
+
+    const titleEl = (wrapper: ReturnType<typeof mount>) =>
+      wrapper.find("svg text").element;
+
+    it("renders left-aligned at the plot's left edge with defaults", () => {
+      const wrapper = mount(LineChart, { props: { ...base, title: "T" } });
+      const t = titleEl(wrapper);
+      expect(t.getAttribute("x")).toBe("50");
+      expect(t.getAttribute("y")).toBe("18");
+      expect(t.getAttribute("text-anchor")).toBe("start");
+      expect(t.getAttribute("font-size")).toBe("14");
+      expect(t.getAttribute("font-weight")).toBe("600");
+      expect(t.getAttribute("fill")).toBe("currentColor");
+    });
+
+    it("centers and right-aligns against the plot bounds", () => {
+      const center = mount(LineChart, {
+        props: { ...base, title: "T", titleStyle: { align: "center" } },
+      });
+      expect(titleEl(center).getAttribute("x")).toBe("220");
+      expect(titleEl(center).getAttribute("text-anchor")).toBe("middle");
+      const right = mount(LineChart, {
+        props: { ...base, title: "T", titleStyle: { align: "right" } },
+      });
+      expect(titleEl(right).getAttribute("x")).toBe("390");
+      expect(titleEl(right).getAttribute("text-anchor")).toBe("end");
+    });
+
+    it("renders multi-line titles with custom style", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          ...base,
+          title: "A\nB\nC",
+          titleStyle: {
+            fontSize: 16,
+            lineHeight: 22,
+            color: "#123456",
+            fontWeight: 700,
+          },
+        },
+      });
+      const t = titleEl(wrapper);
+      expect(t.getAttribute("y")).toBe("22");
+      expect(t.getAttribute("font-size")).toBe("16");
+      expect(t.getAttribute("font-weight")).toBe("700");
+      expect(t.getAttribute("fill")).toBe("#123456");
+      const tspans = Array.from(t.querySelectorAll("tspan"));
+      expect(tspans.map((s) => s.textContent?.trim())).toEqual(["A", "B", "C"]);
+      expect(tspans.map((s) => s.getAttribute("dy"))).toEqual([
+        "0",
+        "22",
+        "22",
+      ]);
+      expect(tspans.every((s) => s.getAttribute("x") === "50")).toBe(true);
+    });
+  });
+
   describe("markers", () => {
     // width 600, no yLabel → padding.left 50, right 10 → innerW 540.
     // Markers with labels reserve top room of markerLabelGap (7) +

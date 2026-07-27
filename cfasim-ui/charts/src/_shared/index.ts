@@ -48,6 +48,7 @@ export {
   type MarkerLabelPlacement,
 } from "./markers.js";
 export { default as ChartAxisLabels } from "./ChartAxisLabels.vue";
+export { default as ChartTitle } from "./ChartTitle.vue";
 export { useChartCommon } from "./useChartCommon.js";
 export type { ChartAnnotation } from "./annotations.js";
 export {

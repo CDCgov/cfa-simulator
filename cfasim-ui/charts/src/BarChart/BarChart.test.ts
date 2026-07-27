@@ -825,6 +825,42 @@ describe("BarChart", () => {
       expect(texts).toContain("Weekly cases");
     });
 
+    it("pulls a left-aligned title to the category inset with categoryAlign start", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [1, 2],
+          categories: ["A", "B"],
+          title: "T",
+          orientation: "horizontal",
+          categoryAlign: "start",
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      // headerLeftX = CATEGORY_LABEL_INSET (2) so the title lines up with
+      // start-aligned category labels.
+      expect(wrapper.find("svg text").element.getAttribute("x")).toBe("2");
+    });
+
+    it("keeps a centered title anchored to the plot bounds under categoryAlign start", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [1, 2],
+          categories: ["A", "B"],
+          title: "T",
+          orientation: "horizontal",
+          categoryAlign: "start",
+          titleStyle: { align: "center" },
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      // width 400, no yLabel → bounds.left 50, innerW 340 → center 220.
+      expect(wrapper.find("svg text").element.getAttribute("x")).toBe("220");
+    });
+
     it("renders xLabel and yLabel", () => {
       const wrapper = mount(BarChart, {
         props: {

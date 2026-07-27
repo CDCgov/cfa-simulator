@@ -464,6 +464,31 @@ function isPreset(name: string): name is DateFormatPreset {
   return name in PRESET_OPTIONS;
 }
 
+// Intl.DateTimeFormat construction is expensive (locale data lookup), and
+// formatDate runs per tick per axis recompute. Cache formatters keyed by
+// option *content*, not object identity, so a caller mutating or recreating
+// an options object gets exactly what per-call construction gave. Bounded:
+// distinct option sets are few, but a pathological caller can't grow it.
+const dtfCache = new Map<string, Intl.DateTimeFormat>();
+const DTF_CACHE_MAX = 64;
+
+function cachedFormatter(
+  options: Intl.DateTimeFormatOptions,
+  tz: DateTimezone,
+): Intl.DateTimeFormat {
+  const key = tz + JSON.stringify(options);
+  let fmt = dtfCache.get(key);
+  if (!fmt) {
+    if (dtfCache.size >= DTF_CACHE_MAX) dtfCache.clear();
+    fmt = new Intl.DateTimeFormat(
+      undefined,
+      tz === "utc" ? { ...options, timeZone: "UTC" } : options,
+    );
+    dtfCache.set(key, fmt);
+  }
+  return fmt;
+}
+
 /**
  * Format an epoch-ms timestamp into a tick label. When `format` is
  * undefined, picks a preset based on the tick `unit` (Vega-Lite style:
@@ -495,7 +520,5 @@ export function formatDate(
   if (presetName === "iso") return formatIso(ms, tz);
   if (presetName === "iso-datetime") return formatIsoDateTime(ms, tz);
 
-  const finalOpts: Intl.DateTimeFormatOptions =
-    tz === "utc" ? { ...options, timeZone: "UTC" } : options;
-  return new Intl.DateTimeFormat(undefined, finalOpts).format(ms);
+  return cachedFormatter(options, tz).format(ms);
 }

@@ -228,6 +228,13 @@ describe("formatDate", () => {
     expect(s).toContain("15");
   });
 
+  it("formatter caching is content-keyed: in-place options mutation applies", () => {
+    const opts: Intl.DateTimeFormatOptions = { year: "numeric" };
+    expect(formatDate(ms, opts, "utc")).toBe("2026");
+    opts.month = "short";
+    expect(formatDate(ms, opts, "utc")).toContain("Jan");
+  });
+
   it("function format receives ms and unit", () => {
     const captured: Array<{ ms: number; unit?: string }> = [];
     formatDate(

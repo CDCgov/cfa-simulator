@@ -16,10 +16,8 @@ import {
   makeTooltipValueFormatter,
   ChartAnnotations,
   ChartAxisLabels,
+  ChartTitle,
   positionLegendItems,
-  TITLE_LINE_HEIGHT,
-  TITLE_FONT_SIZE,
-  TITLE_FONT_WEIGHT,
   TICK_LABEL_FONT_SIZE,
   pickContrastColor,
   parseDate,
@@ -1056,30 +1054,6 @@ const headerLeftX = computed(() =>
     : padding.value.left,
 );
 
-/** Resolved title style with defaults applied. */
-const titleResolved = computed(() => {
-  const s = props.titleStyle;
-  const align = s?.align ?? "left";
-  const b = bounds.value;
-  const x =
-    align === "left"
-      ? headerLeftX.value
-      : align === "right"
-        ? b.right
-        : b.left + b.width / 2;
-  const anchor =
-    align === "left" ? "start" : align === "right" ? "end" : "middle";
-  return {
-    lines: (props.title ?? "").split("\n"),
-    fontSize: s?.fontSize ?? TITLE_FONT_SIZE,
-    lineHeight: s?.lineHeight ?? TITLE_LINE_HEIGHT,
-    fontWeight: s?.fontWeight ?? TITLE_FONT_WEIGHT,
-    color: s?.color ?? "currentColor",
-    x,
-    anchor,
-  };
-});
-
 const hoveredCategoryLabel = computed(() => {
   const i = hoverIndex.value;
   if (i === null) return undefined;
@@ -1471,25 +1445,12 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
         :role="chartRole || undefined"
         :aria-label="chartAriaLabel || undefined"
       >
-        <!-- title -->
-        <text
-          v-if="title"
-          :x="titleResolved.x"
-          :y="titleResolved.lineHeight"
-          :text-anchor="titleResolved.anchor"
-          :font-size="titleResolved.fontSize"
-          :font-weight="titleResolved.fontWeight"
-          :fill="titleResolved.color"
-        >
-          <tspan
-            v-for="(line, i) in titleResolved.lines"
-            :key="i"
-            :x="titleResolved.x"
-            :dy="i === 0 ? 0 : titleResolved.lineHeight"
-          >
-            {{ line }}
-          </tspan>
-        </text>
+        <ChartTitle
+          :title="title"
+          :title-style="titleStyle"
+          :bounds="bounds"
+          :left-x="headerLeftX"
+        />
         <!-- column headers (category / value), in the reserved row above the plot -->
         <text
           v-for="h in columnHeaders"

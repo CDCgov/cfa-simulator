@@ -16,12 +16,10 @@ import {
   makeTooltipValueFormatter,
   ChartAnnotations,
   ChartAxisLabels,
+  ChartTitle,
   positionLegendItems,
   layoutMarkerLabels,
   markerDashArray,
-  TITLE_LINE_HEIGHT,
-  TITLE_FONT_SIZE,
-  TITLE_FONT_WEIGHT,
   resolveLabelStyle,
   parseDate,
   isAllDates,
@@ -605,6 +603,47 @@ function toSectionPath(section: AreaSection, closed = true): string {
   return d;
 }
 
+/** Fill/stroke color for an area section (referenced series → grey). */
+function sectionColor(sec: AreaSection): string {
+  return (
+    sec.color ??
+    (sec.seriesIndex != null
+      ? (allSeries.value[sec.seriesIndex]?.color ?? "currentColor")
+      : "#999")
+  );
+}
+
+// Rendered geometry is cached in computeds rather than called from the
+// template: template method calls re-run on every re-render (each
+// hover-move frame patches the svg), and rebuilding every path string
+// per frame is the expensive part of a large chart's render.
+
+/** Per-series path (and dot points when enabled). */
+const seriesRender = computed(() =>
+  allSeries.value.map((s) => ({
+    s,
+    path: s.line !== false ? toPath(s) : "",
+    points: s.dots ? toPoints(s) : [],
+  })),
+);
+
+/** Per-area fill path. */
+const areaRender = computed(() =>
+  allAreas.value.map((a) => ({ a, path: toAreaPath(a) })),
+);
+
+/** Per-section fill/line paths, snapped boundary x's, and color. */
+const sectionRender = computed(() =>
+  (props.areaSections ?? []).map((sec) => ({
+    sec,
+    fillPath: toSectionPath(sec),
+    linePath: sec.seriesIndex != null ? toSectionPath(sec, false) : "",
+    startX: snap(sectionXPixel(sec, "start")),
+    endX: snap(sectionXPixel(sec, "end")),
+    color: sectionColor(sec),
+  })),
+);
+
 const SECTION_LABEL_ROW_HEIGHT = 36;
 const SECTION_LABEL_TOP_MARGIN = 12;
 const SECTION_LABEL_CHAR_WIDTH = 7;
@@ -647,11 +686,7 @@ const sectionLabels = computed<{
     const preferred = startPx + textWidth / 2 + 2;
     const maxCx = chartRight - textWidth / 2 - labelRightPad;
     const cx = Math.min(preferred, maxCx);
-    const color =
-      sec.color ??
-      (sec.seriesIndex != null
-        ? (allSeries.value[sec.seriesIndex]?.color ?? "currentColor")
-        : "#999");
+    const color = sectionColor(sec);
     // Section labels default to the section's data-driven color/weight;
     // user-supplied styles override piece-by-piece.
     const labelStyle = resolveLabelStyle(
@@ -732,11 +767,7 @@ const inlineLegendItems = computed<InlineLegendItem[]>(() => {
       if (sec.legend !== "inline") continue;
       if (!sec.label && !sec.description) continue;
       const label = [sec.label, sec.description].filter(Boolean).join(" ");
-      const color =
-        sec.color ??
-        (sec.seriesIndex != null
-          ? (allSeries.value[sec.seriesIndex]?.color ?? "currentColor")
-          : "#999");
+      const color = sectionColor(sec);
       items.push({
         label,
         color,
@@ -908,46 +939,55 @@ function nearestIndex(s: ResolvedSeries, targetX: number): number | null {
   return bestDist === Infinity ? null : bestIdx;
 }
 
-const hoverDots = computed(() => {
+/**
+ * Nearest point per tooltip-visible series at the hovered x — one
+ * `nearestIndex` pass feeding both the hover dots and the tooltip values.
+ */
+const hoverPoints = computed(() => {
   const targetX = hoverDataX.value;
   if (targetX === null) return [];
-  const dots: { x: number; y: number; color: string }[] = [];
-  for (const s of allSeries.value) {
+  const out: {
+    seriesIndex: number;
+    color: string;
+    value: number;
+    x: number;
+    y: number;
+  }[] = [];
+  const series = allSeries.value;
+  for (let i = 0; i < series.length; i++) {
+    const s = series[i];
     if (s.showInTooltip === false) continue;
     const nIdx = nearestIndex(s, targetX);
-    if (nIdx === null) continue;
-    const yv = s.data[nIdx];
-    if (!isFinite(yv)) continue;
-    dots.push({
-      x: xPixel(seriesXAt(s, nIdx)),
-      y: yPixel(yv),
+    const value = nIdx !== null ? Number(s.data[nIdx]) : NaN;
+    const finite = isFinite(value);
+    out.push({
+      seriesIndex: i,
       color: s.color ?? "currentColor",
+      value,
+      x: finite ? xPixel(seriesXAt(s, nIdx!)) : NaN,
+      y: finite ? yPixel(value) : NaN,
     });
   }
-  return dots;
+  return out;
 });
+
+const hoverDots = computed(() =>
+  hoverPoints.value.filter((p) => isFinite(p.value)),
+);
 
 const hoverSlotProps = computed(() => {
   const idx = hoverIndex.value;
   const targetX = hoverDataX.value;
   if (idx === null || targetX === null) return null;
-  // Single source of truth for label dispatch — same as the x-axis ticks.
-  const xLabel = formatXValue(targetX, idx);
-  const series = allSeries.value;
-  const values: ChartTooltipValue[] = [];
-  for (let i = 0; i < series.length; i++) {
-    const s = series[i];
-    if (s.showInTooltip === false) continue;
-    const nIdx = nearestIndex(s, targetX);
-    values.push({
-      value: nIdx !== null ? Number(s.data[nIdx]) : NaN,
-      color: s.color ?? "currentColor",
-      seriesIndex: i,
-    });
-  }
+  const values: ChartTooltipValue[] = hoverPoints.value.map((p) => ({
+    value: p.value,
+    color: p.color,
+    seriesIndex: p.seriesIndex,
+  }));
   return {
     index: idx,
-    xLabel,
+    // Single source of truth for label dispatch — same as the x-axis ticks.
+    xLabel: formatXValue(targetX, idx),
     values,
     data: props.tooltipData?.[idx] ?? null,
   };
@@ -1051,30 +1091,6 @@ const {
   pointerToIndex: indexFromPointer,
   onHover: (payload) => emit("hover", payload),
   extraBelowHeight: () => sectionLabels.value.extraHeight,
-});
-
-/** Resolved title style with defaults applied. */
-const titleResolved = computed(() => {
-  const s = props.titleStyle;
-  const align = s?.align ?? "left";
-  const b = bounds.value;
-  const x =
-    align === "left"
-      ? b.left
-      : align === "right"
-        ? b.right
-        : b.left + b.width / 2;
-  const anchor =
-    align === "left" ? "start" : align === "right" ? "end" : "middle";
-  return {
-    lines: (props.title ?? "").split("\n"),
-    fontSize: s?.fontSize ?? TITLE_FONT_SIZE,
-    lineHeight: s?.lineHeight ?? TITLE_LINE_HEIGHT,
-    fontWeight: s?.fontWeight ?? TITLE_FONT_WEIGHT,
-    color: s?.color ?? "currentColor",
-    x,
-    anchor,
-  };
 });
 
 const positionedLegendItems = computed(() =>
@@ -1324,25 +1340,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
         :role="chartRole || undefined"
         :aria-label="chartAriaLabel || undefined"
       >
-        <!-- title -->
-        <text
-          v-if="title"
-          :x="titleResolved.x"
-          :y="titleResolved.lineHeight"
-          :text-anchor="titleResolved.anchor"
-          :font-size="titleResolved.fontSize"
-          :font-weight="titleResolved.fontWeight"
-          :fill="titleResolved.color"
-        >
-          <tspan
-            v-for="(line, i) in titleResolved.lines"
-            :key="i"
-            :x="titleResolved.x"
-            :dy="i === 0 ? 0 : titleResolved.lineHeight"
-          >
-            {{ line }}
-          </tspan>
-        </text>
+        <ChartTitle :title="title" :title-style="titleStyle" :bounds="bounds" />
         <!-- inline legend -->
         <g v-if="positionedLegendItems.length > 0">
           <template
@@ -1479,19 +1477,19 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
         </text>
         <!-- areas -->
         <path
-          v-for="(a, i) in allAreas"
+          v-for="({ a, path }, i) in areaRender"
           :key="'area' + i"
-          :d="toAreaPath(a)"
+          :d="path"
           :fill="a.color ?? 'currentColor'"
           :fill-opacity="a.opacity ?? 0.2"
           stroke="none"
           :style="a.blendMode ? { mixBlendMode: a.blendMode } : undefined"
         />
         <!-- data lines and dots -->
-        <template v-for="(s, i) in allSeries" :key="i">
+        <template v-for="({ s, path, points }, i) in seriesRender" :key="i">
           <path
             v-if="s.line !== false && s.outline"
-            :d="toPath(s)"
+            :d="path"
             fill="none"
             :stroke="s.outlineColor ?? 'var(--color-bg-0, #fff)'"
             :stroke-width="(s.strokeWidth ?? 1.5) + (s.outlineWidth ?? 4)"
@@ -1501,7 +1499,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           />
           <path
             v-if="s.line !== false"
-            :d="toPath(s)"
+            :d="path"
             fill="none"
             :stroke="s.color ?? 'currentColor'"
             :stroke-width="s.strokeWidth ?? 1.5"
@@ -1511,7 +1509,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           />
           <template v-if="s.dots">
             <circle
-              v-for="(pt, j) in toPoints(s)"
+              v-for="(pt, j) in points"
               :key="j"
               :cx="pt.x"
               :cy="pt.y"
@@ -1524,62 +1522,42 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           </template>
         </template>
         <!-- area sections (rendered above series) -->
-        <template v-for="(sec, i) in areaSections ?? []" :key="'areasec' + i">
+        <template v-for="(r, i) in sectionRender" :key="'areasec' + i">
           <path
-            :d="toSectionPath(sec)"
-            :fill="
-              sec.color ??
-              (sec.seriesIndex != null
-                ? (allSeries[sec.seriesIndex]?.color ?? 'currentColor')
-                : '#999')
-            "
-            :fill-opacity="sec.opacity ?? 0.15"
+            :d="r.fillPath"
+            :fill="r.color"
+            :fill-opacity="r.sec.opacity ?? 0.15"
             stroke="none"
           />
           <path
-            v-if="sec.seriesIndex != null"
-            :d="toSectionPath(sec, false)"
+            v-if="r.sec.seriesIndex != null"
+            :d="r.linePath"
             fill="none"
-            :stroke="
-              sec.color ?? allSeries[sec.seriesIndex]?.color ?? 'currentColor'
-            "
-            :stroke-width="sec.strokeWidth ?? 2"
-            :stroke-dasharray="sec.dashed ? '6 3' : undefined"
+            :stroke="r.color"
+            :stroke-width="r.sec.strokeWidth ?? 2"
+            :stroke-dasharray="r.sec.dashed ? '6 3' : undefined"
           />
           <!-- vertical edge lines for full-height sections -->
-          <template v-if="sec.seriesIndex == null">
+          <template v-if="r.sec.seriesIndex == null">
             <line
-              :x1="snap(sectionXPixel(sec, 'start'))"
+              v-for="(x, j) in [r.startX, r.endX]"
+              :key="j"
+              :x1="x"
               :y1="padding.top"
-              :x2="snap(sectionXPixel(sec, 'start'))"
+              :x2="x"
               :y2="padding.top + innerH"
-              :stroke="sec.color ?? '#999'"
-              :stroke-width="sec.strokeWidth ?? 2"
-              :stroke-dasharray="sec.dashed ? '6 3' : undefined"
-            />
-            <line
-              :x1="snap(sectionXPixel(sec, 'end'))"
-              :y1="padding.top"
-              :x2="snap(sectionXPixel(sec, 'end'))"
-              :y2="padding.top + innerH"
-              :stroke="sec.color ?? '#999'"
-              :stroke-width="sec.strokeWidth ?? 2"
-              :stroke-dasharray="sec.dashed ? '6 3' : undefined"
+              :stroke="r.color"
+              :stroke-width="r.sec.strokeWidth ?? 2"
+              :stroke-dasharray="r.sec.dashed ? '6 3' : undefined"
             />
           </template>
           <!-- tick marks at section boundaries -->
           <line
-            :x1="snap(sectionXPixel(sec, 'start'))"
+            v-for="(x, j) in [r.startX, r.endX]"
+            :key="'t' + j"
+            :x1="x"
             :y1="padding.top + innerH - 4"
-            :x2="snap(sectionXPixel(sec, 'start'))"
-            :y2="padding.top + innerH + 4"
-            stroke="currentColor"
-            stroke-opacity="0.4"
-          />
-          <line
-            :x1="snap(sectionXPixel(sec, 'end'))"
-            :y1="padding.top + innerH - 4"
-            :x2="snap(sectionXPixel(sec, 'end'))"
+            :x2="x"
             :y2="padding.top + innerH + 4"
             stroke="currentColor"
             stroke-opacity="0.4"
