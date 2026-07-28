@@ -9,6 +9,15 @@ import { nationalCityMarkers, stateCityMarkers } from "@cfasim-ui/charts/us-citi
 const nationalCities = nationalCityMarkers();
 const californiaCities = stateCityMarkers("06");
 
+// One row per state for the state-labels demo, deterministic-ish values.
+import statesTopoForLabels from "us-atlas/states-10m.json";
+const stateLabelData = computed(() =>
+  statesTopoForLabels.objects.states.geometries.map((g, i) => ({
+    id: String(g.id).padStart(2, "0"),
+    value: (i * 41) % 100,
+  })),
+);
+
 // Build one row per county (~3,143) with a deterministic-ish value so the
 // perf example can render every region with a custom tooltip.
 const denseCountyData = computed(() => {
@@ -605,6 +614,41 @@ usCities; //=> the raw UsCity[] to build your own selection
 Only the national capital is flagged on the national map; a state's own capital is flagged in its single-state view. A flagged capital's label is placed first and never dropped for collisions; it carries a `.choropleth-city-label-capital` class if you want to style it, but by default it looks like every other label — the marker is a plain dot too.
 
 **Styling:** the default marker style is dark dots and labels with a thin white halo, which reads over any map fill in either color scheme. The `theme` prop's marker keys configure the layer — `markerColor` (dots + labels), `markerHalo` (the halo around both), `markerHaloWidth` (dot halo width in CSS px), and `markerOpacity` (the whole layer). Any CSS color works. A stylesheet can alternatively set the CSS custom properties on `.choropleth-cities` (`--choropleth-city-marker`, `--choropleth-city-label-color`, `--choropleth-city-halo`); theme keys win when both are set.
+
+### State labels (`state-labels`)
+
+Set `state-labels` to label every state with its USPS abbreviation. A label that fits renders centered inside its state, and its text is automatically colored dark or light for contrast against that state's fill. States too small for their label — the classic VT/NH/MA/RI/CT stack, plus NJ, DE, MD, and DC — get a **callout**: the abbreviation sits beside the state over open background. A leader line points back at the state only when the label had to move away (stacked into a column, or pushed past intervening land, like DC's across the Chesapeake); a label sitting right beside its state — Hawaii's next to the big island — stays clean with no line. The layer is non-interactive (hover/click pass through) and works with both the SVG and canvas backends.
+
+The labels adapt to the rendered size twice over. They shrink on small maps (capped relative to the map, with a legibility floor) so a narrow inline map keeps its inside labels instead of dissolving into callouts. And on a zoomable map they re-fit continuously: zoom into New England and the called-out states gain inside labels once they're big enough on screen. A state clipped by the zoomed view keeps its label only while it can sit nearby — otherwise it's left unlabeled rather than pinned to a viewport edge with a leader dragged across the map.
+
+<ComponentDemo>
+  <ChoroplethMap
+    :topology="statesTopo"
+    :data="stateLabelData"
+    state-labels
+    zoom
+    title="State abbreviations: inside where they fit, callouts elsewhere"
+    :legend="false"
+    :height="440"
+  />
+
+<template #code>
+
+```vue
+<script setup>
+import { ChoroplethMap } from "@cfasim-ui/charts";
+import statesTopo from "us-atlas/states-10m.json";
+</script>
+
+<ChoroplethMap :topology="statesTopo" :data="stateData" state-labels zoom />
+```
+
+  </template>
+</ComponentDemo>
+
+Labels always mark _states_, so the prop also works on county and HSA maps (and in single-state mode, where only the scoped state is labeled). There the fill under a label isn't one color, so inside labels keep the same scheme-independent dark-text + white-halo styling as callouts instead of contrast-picking.
+
+**Styling:** a stylesheet can override the layer's CSS custom properties on `.choropleth-state-labels` — `--choropleth-state-label-color` and `--choropleth-state-label-halo` for the default (callout/halo) styling and the leader lines, and `--choropleth-state-label-dark` / `--choropleth-state-label-light` for the two contrast-picked inside colors. Callout labels carry a `.choropleth-state-label-callout` class and leader lines `.choropleth-state-leader` as hooks.
 
 ### HSA-level map
 

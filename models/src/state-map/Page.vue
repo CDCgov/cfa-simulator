@@ -63,6 +63,8 @@ const defaults = {
   fit: "full" as "full" | "tight",
   // Overlay the capital (starred) + most-populous cities.
   cities: "off" as "off" | "on",
+  // State-abbreviation labels (inside where they fit, callouts elsewhere).
+  labels: "off" as "off" | "on",
   // Rendering backend. Canvas scales to thousands of counties; svg keeps
   // per-feature DOM. Fixed at mount, so the map is keyed on it to remount.
   renderer: "canvas" as "canvas" | "svg",
@@ -235,6 +237,15 @@ const subtitle = computed(() =>
       ]"
     />
     <ToggleGroup
+      v-model="params.labels"
+      label="State labels"
+      hint="Label each state with its abbreviation — inside the state where it fits, or as a leader-line callout for the small east-coast states."
+      :options="[
+        { value: 'off', label: 'Off' },
+        { value: 'on', label: 'On' },
+      ]"
+    />
+    <ToggleGroup
       v-model="params.outline"
       label="Outline"
       hint="Draw the exterior boundary (theme.outline) on top of interior borders — the national outline, or the state boundary in a state view."
@@ -268,6 +279,7 @@ const subtitle = computed(() =>
           :focus="focus"
           :focus-zoom="false"
           :cities="cityMarkers"
+          :state-labels="params.labels === 'on'"
           :theme="mapTheme"
           :zoom="params.cities === 'on'"
           :tight-fit="params.fit === 'tight'"

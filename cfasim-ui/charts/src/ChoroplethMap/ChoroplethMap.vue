@@ -43,6 +43,8 @@ import {
   isTouchDevice,
   ChartZoomControls,
   parseRgb,
+  resolveColorToRgb,
+  relativeLuminance,
   useMapTheme,
   mapThemeDefaults,
   LIGHT_HIGHLIGHT,
@@ -55,8 +57,15 @@ import {
 } from "../_shared/index.js";
 import { placeTooltip } from "../tooltip-position.js";
 import ChoroplethTooltip from "./ChoroplethTooltip.vue";
-import { layoutCities } from "./cityLayout.js";
+import { layoutCities, estimateTextWidth } from "./cityLayout.js";
 import type { CityMarker } from "./cityLayout.js";
+import {
+  layoutStateLabels,
+  fipsToStateAbbr,
+  decimateRing,
+  ringAreaCentroid,
+  type StateLabelFeature,
+} from "./stateLabelLayout.js";
 import {
   resolveGeoOverrides,
   serializeOverrides,
@@ -361,6 +370,17 @@ const props = withDefaults(
      * always show.
      */
     citiesMinZoom?: number;
+    /**
+     * Label each state with its USPS abbreviation. A label that fits renders
+     * centered inside its state, colored dark or light for contrast against
+     * that state's fill; a state too small for its label gets a callout —
+     * the abbreviation sits beside the state over open background with a
+     * leader line pointing at it (the VT/NH/MA/RI/CT stack on a national
+     * map). Labels re-fit as you zoom, so a called-out state gains an
+     * inside label once it's big enough on screen. Works on any `geoType`
+     * (labels always mark states); non-interactive. Default `false`.
+     */
+    stateLabels?: boolean;
   }>(),
   {
     geoType: "states",
@@ -376,6 +396,7 @@ const props = withDefaults(
     focusZoom: true,
     tightFit: false,
     citiesMinZoom: 2,
+    stateLabels: false,
   },
 );
 
@@ -450,6 +471,8 @@ const overlayGroupRef = ref<SVGGElement | null>(null);
 // mode (where mapGroupRef stays at identity) and keeps a constant on-screen
 // marker/label size under zoom.
 const cityLayerRef = ref<SVGGElement | null>(null);
+// State-abbreviation labels share the same overlay svg (below the cities).
+const stateLabelLayerRef = ref<SVGGElement | null>(null);
 const cityOverlayRef = ref<SVGSVGElement | null>(null);
 const tooltipChildRef = ref<InstanceType<typeof ChoroplethTooltip> | null>(
   null,
@@ -525,7 +548,7 @@ let canvasHoveredId: string | null = null;
 const canvasFocused = new Map<string, CanvasHighlightItem>();
 let canvasOverlays: CanvasOverlayItem[] = [];
 let redrawFrame = 0;
-let cityLayoutFrame = 0;
+let overlayLayoutFrame = 0;
 // xMidYMid-meet letterbox offsets (CSS px) inside the svg/canvas box,
 // tracked by the resize observer alongside viewScale.
 let meetOffsetX = 0;
@@ -716,7 +739,7 @@ onMounted(() => {
   setupZoom();
   rebuildPaths();
   applyFocus();
-  scheduleCityLayout();
+  scheduleOverlayLayout();
   attachTooltipObserver();
   if (svgRef.value && typeof ResizeObserver !== "undefined") {
     svgResizeObserver = new ResizeObserver((entries) => {
@@ -756,7 +779,7 @@ onUnmounted(() => {
   dprQuery?.removeEventListener("change", onDprChange);
   if (pendingMoveFrame) cancelAnimationFrame(pendingMoveFrame);
   if (redrawFrame) cancelAnimationFrame(redrawFrame);
-  if (cityLayoutFrame) cancelAnimationFrame(cityLayoutFrame);
+  if (overlayLayoutFrame) cancelAnimationFrame(overlayLayoutFrame);
   window.clearTimeout(pendingSelectTimer);
   window.clearTimeout(viewportSettleTimer);
   if (crispResizeTimer) window.clearTimeout(crispResizeTimer);
@@ -797,9 +820,10 @@ function setupZoom() {
       const t = event.transform;
       scaleK.value = t.k;
       applyStrokeScale();
-      // City markers live outside the zoomed group, so re-place them against
-      // the new transform (constant on-screen size, labels re-decluttered).
-      if (props.cities?.length) scheduleCityLayout();
+      // City markers + state labels live outside the zoomed group, so
+      // re-place them against the new transform (constant on-screen size,
+      // labels re-decluttered / re-fit).
+      if (props.cities?.length || props.stateLabels) scheduleOverlayLayout();
       isZoomed.value = t.k !== 1 || t.x !== 0 || t.y !== 0;
       if (isZoomed.value) hasZoomed.value = true;
     })
@@ -2685,6 +2709,26 @@ function hoverFromEvent(me: MouseEvent) {
   emit("stateHover", { id: data.id, name: data.name, value: data.value });
 }
 
+// Click-select semantics shared by map features and the state-label hit
+// boxes: on a zoomable map the select defers so a double-click stays a
+// zoom, and the second click of a double-click cancels it.
+function selectWithClickSemantics(data: TooltipPayload, detail: number) {
+  if (props.zoom) {
+    window.clearTimeout(pendingSelectTimer);
+    pendingSelectTimer = 0;
+    // detail > 1 is the second click of a double-click — that gesture is
+    // a zoom (handled by d3), not a select.
+    if (detail <= 1) {
+      pendingSelectTimer = window.setTimeout(() => {
+        pendingSelectTimer = 0;
+        emitSelection(data);
+      }, CLICK_SELECT_DELAY_MS);
+    }
+  } else {
+    emitSelection(data);
+  }
+}
+
 function onDelegatedEvent(event: Event) {
   // Only hover is suppressed mid-gesture (stroke churn while the map
   // moves) and through the viewport settle window; clicks stay live —
@@ -2700,20 +2744,7 @@ function onDelegatedEvent(event: Event) {
   if (!featId) return;
   const data = tooltipDataById.get(featId);
   if (!data) return;
-  if (props.zoom) {
-    window.clearTimeout(pendingSelectTimer);
-    pendingSelectTimer = 0;
-    // detail > 1 is the second click of a double-click — that gesture is
-    // a zoom (handled by d3), not a select.
-    if (me.detail <= 1) {
-      pendingSelectTimer = window.setTimeout(() => {
-        pendingSelectTimer = 0;
-        emitSelection(data);
-      }, CLICK_SELECT_DELAY_MS);
-    }
-  } else {
-    emitSelection(data);
-  }
+  selectWithClickSemantics(data, me.detail);
 }
 
 function onDelegatedMouseMove(event: MouseEvent) {
@@ -2729,9 +2760,20 @@ function onDelegatedMouseMove(event: MouseEvent) {
   moveTooltip(event.clientX, event.clientY);
 }
 
+// The currently hovered feature id, whichever backend tracks it.
+function hoveredFeatId(): string | null {
+  return isCanvas.value ? canvasHoveredId : (hoveredEl?.dataset.featId ?? null);
+}
+
 function onDelegatedMouseOut(event: MouseEvent) {
   const related = event.relatedTarget as Element | null;
   if (related && mapGroupRef.value?.contains(related)) return;
+  // Crossing from a state onto its own label hit box keeps the hover —
+  // the hit box re-establishes any other target itself.
+  const hit = related?.closest?.(
+    ".choropleth-state-label-hit",
+  ) as SVGElement | null;
+  if (hit?.dataset.state && hit.dataset.state === hoveredFeatId()) return;
   clearHover();
 }
 
@@ -2960,7 +3002,8 @@ function pinToSvgBox(el: HTMLElement | SVGElement | null): void {
 
 // Project + place city markers and paint them into cityLayerRef. Runs in JS
 // (not via the mapGroup transform) so it's identical across svg/canvas mode.
-// rAF-coalesced through scheduleCityLayout — safe to call on every zoom frame.
+// rAF-coalesced through scheduleOverlayLayout — safe to call on every zoom
+// frame.
 function renderCityLayer() {
   const g = cityLayerRef.value;
   if (!g) return;
@@ -2972,11 +3015,6 @@ function renderCityLayer() {
     return;
   }
 
-  // Pin the overlay to the map svg box BEFORE clearing the layer below, so
-  // getBoundingClientRect reads the settled layout instead of the one the
-  // removeChild loop would dirty (which would force a synchronous reflow every
-  // zoom frame). The box only changes on resize / header toggle.
-  pinToSvgBox(cityOverlayRef.value);
   while (g.firstChild) g.removeChild(g.firstChild);
 
   const t = svgRef.value ? zoomTransform(svgRef.value) : { k: 1, x: 0, y: 0 };
@@ -3038,14 +3076,278 @@ function renderCityLayer() {
   g.appendChild(frag);
 }
 
-// rAF-coalesced: zoom/pan can fire several events per frame, and the v-if `<g>`
-// isn't in the DOM until after Vue's patch, which rAF defers past.
-function scheduleCityLayout() {
-  if (cityLayoutFrame) return;
-  cityLayoutFrame = requestAnimationFrame(() => {
-    cityLayoutFrame = 0;
+// rAF-coalesced: zoom/pan can fire several events per frame, and the v-if
+// overlay isn't in the DOM until after Vue's patch, which rAF defers past.
+// One frame drives both overlay layers (cities + state labels). The overlay
+// is pinned to the map svg's box BEFORE either layer mutates the DOM, so
+// getBoundingClientRect reads the settled layout instead of one the
+// removeChild loops would dirty (which would force a synchronous reflow
+// every zoom frame). The box only changes on resize / header toggle.
+function scheduleOverlayLayout() {
+  if (overlayLayoutFrame) return;
+  overlayLayoutFrame = requestAnimationFrame(() => {
+    overlayLayoutFrame = 0;
+    pinToSvgBox(cityOverlayRef.value);
     renderCityLayer();
+    renderStateLabelLayer();
   });
+}
+
+// ─── State-abbreviation labels (stateLabels) ─────────────────────────────
+const STATE_LABEL_PX = 11.5;
+const STATE_LABEL_HALO_PX = 2.6;
+const STATE_LABEL_FIT_PAD_PX = 3;
+const STATE_LABEL_GAP_PX = 5;
+const STATE_LEADER_WIDTH_PX = 1;
+// Labels shrink with the rendered map instead of staying a fixed px size:
+// on a small inline map an 11.5px label dwarfs the states, turning most of
+// the country into a tangle of callouts. Cap the label's size relative to
+// the map (canonical units), with a floor so text stays legible.
+const STATE_LABEL_MAX_CANONICAL = 18;
+const STATE_LABEL_MIN_PX = 6.5;
+function stateLabelPx(vs: number): number {
+  return Math.min(
+    STATE_LABEL_PX,
+    Math.max(STATE_LABEL_MIN_PX, STATE_LABEL_MAX_CANONICAL * vs),
+  );
+}
+
+// Per-state projected geometry for the label layout, rebuilt only when the
+// projection refits (state/geoType/tightFit/topology) — every zoom frame
+// reuses it, transforming sample points instead of re-projecting rings.
+// Labels always mark *states* (from the topology's `states` object), so
+// they work on county/HSA base maps too; single-state mode labels only the
+// scoped state.
+const stateLabelGeometry = computed<StateLabelFeature[]>(() => {
+  if (!props.stateLabels) return [];
+  const proj = projection.value;
+  const path = pathGenerator.value;
+  const feats = stateFips.value
+    ? stateOutlineFeature.value
+      ? [stateOutlineFeature.value]
+      : []
+    : statesFeatures.value;
+  const out: StateLabelFeature[] = [];
+  for (const f of feats) {
+    const geom = f.geometry;
+    if (!geom) continue;
+    const id = String(f.id).padStart(2, "0");
+    const abbr = fipsToStateAbbr[id];
+    if (!abbr) continue;
+    const b = path.bounds(f as GeoJSON.Feature);
+    const c = path.centroid(f as GeoJSON.Feature);
+    if (!Number.isFinite(b[0][0]) || !Number.isFinite(c[0])) continue;
+    const polys =
+      geom.type === "Polygon"
+        ? [geom.coordinates]
+        : geom.type === "MultiPolygon"
+          ? geom.coordinates
+          : [];
+    // Decimate in lon/lat before projecting — the label hit tests only need
+    // coarse coastline fidelity, and this caps the per-refit projection work.
+    const rings: [number, number][][] = [];
+    let best: { area: number; cx: number; cy: number } | null = null;
+    for (const poly of polys) {
+      const outer = poly[0] as [number, number][] | undefined;
+      if (!outer) continue;
+      const projected: [number, number][] = [];
+      for (const pt of decimateRing(outer)) {
+        const p = proj(pt);
+        if (p && Number.isFinite(p[0]) && Number.isFinite(p[1])) {
+          projected.push([p[0], p[1]]);
+        }
+      }
+      if (projected.length < 3) continue;
+      rings.push(projected);
+      const rc = ringAreaCentroid(projected);
+      if (!best || rc.area > best.area) best = rc;
+    }
+    if (rings.length === 0) continue;
+    out.push({
+      id,
+      abbr,
+      centroid: [c[0], c[1]],
+      anchor: best ? [best.cx, best.cy] : [c[0], c[1]],
+      bounds: { x0: b[0][0], y0: b[0][1], x1: b[1][0], y1: b[1][1] },
+      rings,
+    });
+  }
+  return out;
+});
+
+// The fill an inside label sits on, for contrast-picking its text color —
+// only meaningful when the state renders as ONE states-level feature (a
+// states base map, or a mixed-level row re-tiling this state at "states").
+// Null when the state is tiled into counties/HSAs under the label; the
+// default halo styling applies there instead.
+function stateLabelFill(stateId: string): string | null {
+  const level = geoOverrides.value.get(stateId) ?? props.geoType;
+  return level === "states" ? colorFor(stateId) : null;
+}
+
+// ── State-label hit boxes: hover/click proxies for their state ──────────
+// Attached to per-render rects, so listeners die with their elements. They
+// reuse the map's own hover/tooltip/select machinery (setHoverId,
+// showTooltip, selectWithClickSemantics), so both backends behave exactly
+// as if the state itself were hovered.
+function labelHitId(event: Event): string | null {
+  return (event.currentTarget as SVGElement | null)?.dataset.state ?? null;
+}
+
+function onLabelHitOver(event: MouseEvent) {
+  if (isZooming || isViewportSettling) return;
+  const id = labelHitId(event);
+  const data = id ? tooltipDataById.get(id) : undefined;
+  if (!id || !data) return;
+  if (hoveredFeatId() === id) {
+    // Crossed in from the state itself — hover is already live.
+    moveTooltip(event.clientX, event.clientY);
+    return;
+  }
+  setHoverId(id);
+  if (hasInteractiveTooltip.value) {
+    showTooltip(id, event.clientX, event.clientY);
+  }
+  emit("stateHover", { id: data.id, name: data.name, value: data.value });
+}
+
+function onLabelHitMove(event: MouseEvent) {
+  if (isZooming || isViewportSettling) return;
+  if (hoveredFeatId() !== labelHitId(event)) {
+    // A settle-window dismissal can swallow the entry mouseover, exactly
+    // as on the map itself — re-establish from the first real move.
+    onLabelHitOver(event);
+    return;
+  }
+  moveTooltip(event.clientX, event.clientY);
+}
+
+function onLabelHitOut(event: MouseEvent) {
+  const id = labelHitId(event);
+  // Crossing from the label onto its own state keeps the hover (svg mode
+  // resolves the destination path, canvas mode picks at the exit point);
+  // any other destination re-establishes hover itself.
+  const relatedId = isCanvas.value
+    ? pickFeatureAt(event.clientX, event.clientY)
+    : eventToFeatureId(event.relatedTarget);
+  if (id && relatedId === id) return;
+  clearHover();
+}
+
+function onLabelHitClick(event: MouseEvent) {
+  const id = labelHitId(event);
+  const data = id ? tooltipDataById.get(id) : undefined;
+  if (data) selectWithClickSemantics(data, event.detail);
+}
+
+// Place + paint the state-abbreviation labels. Same coordinate model as the
+// city layer: positions apply the zoom transform in JS, sizes divide by
+// viewScale, so labels keep a constant on-screen size in both backends and
+// re-fit (inside vs callout) as the map zooms.
+function renderStateLabelLayer() {
+  const g = stateLabelLayerRef.value;
+  if (!g) return;
+  const geometry = stateLabelGeometry.value;
+  if (!props.stateLabels || geometry.length === 0) {
+    while (g.firstChild) g.removeChild(g.firstChild);
+    return;
+  }
+  while (g.firstChild) g.removeChild(g.firstChild);
+
+  const vs = viewScale.value || 1;
+  const labelPx = stateLabelPx(vs);
+  const t = svgRef.value ? zoomTransform(svgRef.value) : { k: 1, x: 0, y: 0 };
+  const placed = layoutStateLabels(
+    geometry,
+    { k: t.k, x: t.x, y: t.y },
+    {
+      width: width.value,
+      height: height.value,
+      viewScale: vs,
+      labelPx,
+      fitPadPx: STATE_LABEL_FIT_PAD_PX * (labelPx / STATE_LABEL_PX),
+      gapPx: STATE_LABEL_GAP_PX * (labelPx / STATE_LABEL_PX),
+    },
+  );
+
+  const font = labelPx / vs;
+  // Halo and leader scale with the label so small text isn't drowned.
+  const halo = (STATE_LABEL_HALO_PX * (labelPx / STATE_LABEL_PX)) / vs;
+  const leaderW = (STATE_LEADER_WIDTH_PX * (labelPx / STATE_LABEL_PX)) / vs;
+  // Each label's box is a hover/click proxy for its state — hover highlight
+  // + stateHover always (matching the map, which highlights without a
+  // tooltip), tooltip only when one is configured (inside the handlers) —
+  // most useful for callouts, whose labels sit over open background. Mouse
+  // only: on touch the overlay must stay transparent so taps keep feeding
+  // the map's own gesture handling. Gated per state on `tooltipDataById`,
+  // so labels over states that aren't rendered as one states-level feature
+  // (county/HSA tiles) stay inert.
+  const interactive = !isTouchDevice();
+  const hitPad = 2 / vs;
+  const labelH = font * 1.15;
+  const frag = document.createDocumentFragment();
+  for (const p of placed) {
+    if (p.leader) {
+      const line = document.createElementNS(SVG_NS, "line");
+      line.setAttribute("x1", String(p.leader.x1));
+      line.setAttribute("y1", String(p.leader.y1));
+      line.setAttribute("x2", String(p.leader.x2));
+      line.setAttribute("y2", String(p.leader.y2));
+      line.setAttribute("class", "choropleth-state-leader");
+      line.setAttribute("stroke-width", String(leaderW));
+      line.setAttribute("data-state", p.id);
+      frag.appendChild(line);
+    }
+    if (interactive && tooltipDataById.has(p.id)) {
+      const w = estimateTextWidth(p.abbr, labelPx) / vs;
+      const x0 =
+        p.anchor === "start"
+          ? p.x - hitPad
+          : p.anchor === "end"
+            ? p.x - w - hitPad
+            : p.x - w / 2 - hitPad;
+      const rect = document.createElementNS(SVG_NS, "rect");
+      rect.setAttribute("x", String(x0));
+      rect.setAttribute("y", String(p.y - labelH / 2 - hitPad));
+      rect.setAttribute("width", String(w + 2 * hitPad));
+      rect.setAttribute("height", String(labelH + 2 * hitPad));
+      rect.setAttribute("fill", "none");
+      rect.setAttribute("class", "choropleth-state-label-hit");
+      rect.setAttribute("data-state", p.id);
+      rect.addEventListener("mouseover", onLabelHitOver);
+      rect.addEventListener("mousemove", onLabelHitMove);
+      rect.addEventListener("mouseout", onLabelHitOut);
+      rect.addEventListener("click", onLabelHitClick);
+      frag.appendChild(rect);
+    }
+    const text = document.createElementNS(SVG_NS, "text");
+    text.setAttribute("data-state", p.id);
+    text.setAttribute("x", String(p.x));
+    text.setAttribute("y", String(p.y));
+    text.setAttribute("text-anchor", p.anchor);
+    text.setAttribute("dominant-baseline", "central");
+    text.setAttribute("font-size", String(font));
+    let cls = `choropleth-state-label choropleth-state-label-${p.placement}`;
+    // Inside labels sit on their state's fill: pick dark/light text by the
+    // fill's WCAG luminance, with no halo (a halo would blur against the
+    // matching fill). Callouts — and any fill we can't resolve to RGB —
+    // keep the scheme-independent dark-text + white-halo default.
+    const fill = p.placement === "inside" ? stateLabelFill(p.id) : null;
+    const rgb = fill ? resolveColorToRgb(fill) : null;
+    if (rgb) {
+      text.style.fill =
+        relativeLuminance(rgb) > 0.179
+          ? "var(--choropleth-state-label-dark, #1a1a1a)"
+          : "var(--choropleth-state-label-light, #fff)";
+    } else {
+      text.setAttribute("stroke-width", String(halo));
+      cls += " choropleth-state-label-halo";
+    }
+    text.setAttribute("class", cls);
+    text.textContent = p.abbr;
+    frag.appendChild(text);
+  }
+  g.appendChild(frag);
 }
 
 function rebuildPaths() {
@@ -3547,7 +3849,28 @@ watch(
     props.legend,
     props.legendTitle,
   ],
-  () => scheduleCityLayout(),
+  () => scheduleOverlayLayout(),
+  { flush: "post" },
+);
+
+// State labels → re-place + recolor. Contrast text colors derive from each
+// state's fill, so everything that repaints fills (data, scale, resolved
+// theme) re-renders the labels too; geometry covers projection refits and
+// single-state scoping. Header props re-pin the overlay box, as above.
+watch(
+  () => [
+    stateLabelGeometry.value,
+    viewScale.value,
+    props.zoom,
+    props.data,
+    props.dataGeoType,
+    props.colorScale,
+    resolvedTheme.value,
+    props.title,
+    props.legend,
+    props.legendTitle,
+  ],
+  () => scheduleOverlayLayout(),
   { flush: "post" },
 );
 
@@ -3700,13 +4023,14 @@ watch(
       zoom). pointer-events: none lets hover/click fall through to the map.
       -->
       <svg
-        v-if="cities && cities.length"
+        v-if="(cities && cities.length) || stateLabels"
         ref="cityOverlayRef"
         class="choropleth-city-overlay"
         :viewBox="`0 0 ${width} ${height}`"
         preserveAspectRatio="xMidYMid meet"
         aria-hidden="true"
       >
+        <g ref="stateLabelLayerRef" class="choropleth-state-labels" />
         <g
           ref="cityLayerRef"
           class="choropleth-cities"
@@ -3821,6 +4145,43 @@ watch(
 .choropleth-cities :deep(.choropleth-city-dot) {
   fill: var(--choropleth-city-marker);
   stroke: var(--choropleth-city-halo);
+}
+
+/* State-abbreviation labels (stateLabels). Inside labels get an inline
+   contrast-picked fill (dark/light against their state's own fill, no
+   halo); callouts and unresolvable fills use the same scheme-independent
+   dark-text + white-halo default as the city layer. Sizes are set in JS
+   (canonical units) so labels stay a constant on-screen size under zoom.
+   Elements are created imperatively (renderStateLabelLayer), so rules need
+   :deep() anchored on the templated group to match. */
+.choropleth-state-labels {
+  --choropleth-state-label-color: #1a1a1a;
+  --choropleth-state-label-halo: #fff;
+  font-family: var(--font-family, system-ui, sans-serif);
+}
+
+.choropleth-state-labels :deep(.choropleth-state-label) {
+  fill: var(--choropleth-state-label-color);
+  font-weight: 600;
+}
+
+.choropleth-state-labels :deep(.choropleth-state-label-halo) {
+  stroke: var(--choropleth-state-label-halo);
+  paint-order: stroke fill;
+  stroke-linejoin: round;
+}
+
+.choropleth-state-labels :deep(.choropleth-state-leader) {
+  stroke: var(--choropleth-state-label-color);
+  opacity: 0.75;
+}
+
+/* Hover/click proxy over each label (rendered only when an interactive
+   tooltip is configured, mouse devices only). The overlay svg is
+   pointer-events: none; the hit rects opt back in. */
+.choropleth-state-labels :deep(.choropleth-state-label-hit) {
+  pointer-events: all;
+  cursor: pointer;
 }
 
 .choropleth-cities :deep(.choropleth-city-label) {

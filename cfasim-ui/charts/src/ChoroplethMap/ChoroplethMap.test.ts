@@ -3970,3 +3970,304 @@ describe("ChoroplethMap theming", () => {
     expect(wrapper.find(".state-path").attributes("fill")).toBe("#eee");
   });
 });
+
+describe("ChoroplethMap state labels (stateLabels)", () => {
+  async function flushOverlayLayout() {
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => resolve()),
+    );
+    await flushPromises();
+  }
+
+  function layerOf(wrapper: ReturnType<typeof mount>) {
+    return wrapper.find(".choropleth-state-labels");
+  }
+
+  function labelFor(wrapper: ReturnType<typeof mount>, abbr: string) {
+    return [
+      ...layerOf(wrapper).element.querySelectorAll(".choropleth-state-label"),
+    ].find((n) => n.textContent === abbr) as SVGTextElement | undefined;
+  }
+
+  it("renders nothing by default", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 800, height: 500 },
+    });
+    expect(layerOf(wrapper).exists()).toBe(false);
+  });
+
+  it("labels every projectable state with its USPS abbreviation", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 800, height: 500 },
+    });
+    await wrapper.setProps({ stateLabels: true });
+    await flushOverlayLayout();
+    const labels = [
+      ...layerOf(wrapper).element.querySelectorAll(".choropleth-state-label"),
+    ].map((n) => n.textContent);
+    // 50 states + DC; the island territories project to null under
+    // geoAlbersUsa and are skipped.
+    expect(labels.length).toBeGreaterThanOrEqual(50);
+    expect(labels).toContain("CA");
+    expect(labels).toContain("TX");
+    expect(labels).toContain("RI");
+    // No duplicates.
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it("gives small east-coast states callout labels with leader lines", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 800,
+        height: 500,
+        stateLabels: true,
+      },
+    });
+    await flushOverlayLayout();
+    const el = layerOf(wrapper).element;
+    for (const abbr of ["RI", "DE", "DC"]) {
+      const label = labelFor(wrapper, abbr)!;
+      expect(label, abbr).toBeDefined();
+      expect(label.getAttribute("class")).toContain(
+        "choropleth-state-label-callout",
+      );
+    }
+    // Big states are labeled in place, no leader.
+    for (const abbr of ["CA", "TX"]) {
+      const label = labelFor(wrapper, abbr)!;
+      expect(label.getAttribute("class")).toContain(
+        "choropleth-state-label-inside",
+      );
+    }
+    // Leaders only for displaced callouts: DC's label is pushed across
+    // Maryland to open water, so it gets a line; Hawaii's label sits right
+    // beside the big island, so it doesn't. Never more lines than callouts.
+    const callouts = el.querySelectorAll(".choropleth-state-label-callout");
+    const leaders = el.querySelectorAll(".choropleth-state-leader");
+    expect(leaders.length).toBeGreaterThan(0);
+    expect(leaders.length).toBeLessThanOrEqual(callouts.length);
+    expect(
+      el.querySelector('.choropleth-state-leader[data-state="11"]'),
+    ).not.toBeNull();
+    expect(
+      el.querySelector('.choropleth-state-leader[data-state="15"]'),
+    ).toBeNull();
+    expect(labelFor(wrapper, "HI")).toBeDefined();
+  });
+
+  it("picks light text on dark fills and dark text on light fills", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 800,
+        height: 500,
+        stateLabels: true,
+        colorScale: { min: "#ffffff", max: "#000000" },
+        data: [
+          { id: "06", value: 100 }, // California → max → black fill
+          { id: "36", value: 0 }, // New York → min → white fill
+        ],
+      },
+    });
+    await flushOverlayLayout();
+    const ca = labelFor(wrapper, "CA")!;
+    const ny = labelFor(wrapper, "NY")!;
+    expect(ca.style.fill).toContain("--choropleth-state-label-light");
+    expect(ny.style.fill).toContain("--choropleth-state-label-dark");
+    // Contrast-picked labels drop the halo (it would blur against the fill).
+    expect(ca.getAttribute("class")).not.toContain(
+      "choropleth-state-label-halo",
+    );
+  });
+
+  it("keeps the halo default on county maps (no uniform state fill)", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 800,
+        height: 500,
+        stateLabels: true,
+      },
+    });
+    await flushOverlayLayout();
+    const ca = labelFor(wrapper, "CA")!;
+    expect(ca).toBeDefined();
+    expect(ca.getAttribute("class")).toContain("choropleth-state-label-halo");
+    expect(ca.style.fill).toBe("");
+    expect(Number(ca.getAttribute("stroke-width"))).toBeGreaterThan(0);
+  });
+
+  it("labels only the scoped state in single-state mode", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        state: "California",
+        width: 800,
+        height: 500,
+        stateLabels: true,
+      },
+    });
+    await flushOverlayLayout();
+    const labels = [
+      ...layerOf(wrapper).element.querySelectorAll(".choropleth-state-label"),
+    ].map((n) => n.textContent);
+    expect(labels).toEqual(["CA"]);
+  });
+
+  it("makes label boxes hover/click proxies when a tooltip is configured", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 800,
+        height: 500,
+        stateLabels: true,
+        tooltipTrigger: "hover" as const,
+        data: [{ id: "44", value: 7 }],
+      },
+    });
+    await flushOverlayLayout();
+    const hit = layerOf(wrapper).element.querySelector(
+      '.choropleth-state-label-hit[data-state="44"]',
+    )!;
+    expect(hit).not.toBeNull();
+
+    // Hovering Rhode Island's callout label box shows its tooltip, emits
+    // stateHover, and highlights the state path itself.
+    hit.dispatchEvent(
+      new MouseEvent("mouseover", {
+        bubbles: true,
+        clientX: 100,
+        clientY: 100,
+      }),
+    );
+    const tip = document.body.querySelector<HTMLElement>(
+      ".chart-tooltip-content",
+    )!;
+    expect(tip.style.visibility).toBe("visible");
+    // Slot content lands on the next Vue patch.
+    await flushPromises();
+    expect(tip.textContent).toContain("Rhode Island");
+    const hovers = wrapper.emitted("stateHover")!;
+    expect(hovers.at(-1)![0]).toMatchObject({ id: "44" });
+    const ri = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "44")!;
+    expect((ri.element as SVGPathElement).style.stroke).not.toBe("");
+
+    // Leaving the label box clears hover + tooltip.
+    hit.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
+    expect(tip.style.visibility).toBe("hidden");
+    expect(wrapper.emitted("stateHover")!.at(-1)![0]).toBeNull();
+
+    // Clicking the label box selects the state like clicking the state.
+    hit.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(wrapper.emitted("stateClick")!.at(-1)![0]).toMatchObject({
+      id: "44",
+    });
+    wrapper.unmount();
+  });
+
+  it("hover-highlights from a label box even without a tooltip", async () => {
+    // Matches the map itself: hovering a state applies the highlight and
+    // emits stateHover with no tooltip configured; labels proxy the same.
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 800,
+        height: 500,
+        stateLabels: true,
+      },
+    });
+    await flushOverlayLayout();
+    const hit = layerOf(wrapper).element.querySelector(
+      '.choropleth-state-label-hit[data-state="44"]',
+    )!;
+    expect(hit).not.toBeNull();
+    hit.dispatchEvent(
+      new MouseEvent("mouseover", {
+        bubbles: true,
+        clientX: 100,
+        clientY: 100,
+      }),
+    );
+    expect(wrapper.emitted("stateHover")!.at(-1)![0]).toMatchObject({
+      id: "44",
+    });
+    const ri = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "44")!;
+    expect((ri.element as SVGPathElement).style.stroke).not.toBe("");
+    // No tooltip configured → none shown.
+    expect(document.body.querySelector(".chart-tooltip-content")).toBeNull();
+    wrapper.unmount();
+  });
+
+  it("keeps label boxes inert on county maps and on touch devices", async () => {
+    // County map: the state isn't rendered as one states-level feature, so
+    // there's nothing to proxy hover to.
+    const counties = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 800,
+        height: 500,
+        stateLabels: true,
+        tooltipTrigger: "hover" as const,
+      },
+    });
+    await flushOverlayLayout();
+    expect(
+      layerOf(counties).element.querySelectorAll(".choropleth-state-label-hit"),
+    ).toHaveLength(0);
+
+    // Touch device: the overlay must stay transparent so taps keep feeding
+    // the map's own gesture handling.
+    vi.mocked(isTouchDevice).mockReturnValue(true);
+    try {
+      const touch = mount(ChoroplethMap, {
+        props: {
+          topology: statesTopo,
+          width: 800,
+          height: 500,
+          stateLabels: true,
+          tooltipTrigger: "hover" as const,
+        },
+      });
+      await flushOverlayLayout();
+      expect(
+        layerOf(touch).element.querySelectorAll(".choropleth-state-label-hit")
+          .length,
+      ).toBe(0);
+      expect(
+        layerOf(touch).element.querySelectorAll(".choropleth-state-label")
+          .length,
+      ).toBeGreaterThan(0);
+    } finally {
+      vi.mocked(isTouchDevice).mockReturnValue(false);
+    }
+  });
+
+  it("clears the layer when stateLabels is switched off", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 800,
+        height: 500,
+        stateLabels: true,
+      },
+    });
+    await flushOverlayLayout();
+    expect(
+      layerOf(wrapper).element.querySelectorAll(".choropleth-state-label")
+        .length,
+    ).toBeGreaterThan(0);
+    await wrapper.setProps({ stateLabels: false });
+    await flushOverlayLayout();
+    expect(layerOf(wrapper).exists()).toBe(false);
+  });
+});
