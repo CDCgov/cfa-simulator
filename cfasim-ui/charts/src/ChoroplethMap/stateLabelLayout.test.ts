@@ -260,8 +260,9 @@ describe("layoutStateLabels", () => {
   it("keeps a label on a state you've zoomed into (centroid off screen)", () => {
     const big = sq("01", "AA", 100, 100, 200);
     // k=5 panned so the state fills the view while its centroid (200,200 →
-    // (-200,400)) is off screen to the left: the label must move to the
-    // center of the VISIBLE part instead of disappearing.
+    // (-200,400)) is off screen to the left: the label clamps to the near
+    // viewport edge at the centroid's latitude instead of disappearing —
+    // stable under panning, since the clamp tracks the centroid 1:1.
     const [placed] = layoutStateLabels(
       [big],
       { k: 5, x: -1200, y: -600 },
@@ -269,8 +270,23 @@ describe("layoutStateLabels", () => {
     );
     expect(placed).toBeDefined();
     expect(placed.placement).toBe("inside");
-    expect(placed.x).toBeCloseTo(150);
-    expect(placed.y).toBeCloseTo(300);
+    expect(placed.x).toBeLessThan(40); // pinned near the left edge
+    expect(placed.y).toBeCloseTo(400); // at the centroid's latitude
+  });
+
+  it("culls and clamps against a letterboxed viewport when provided", () => {
+    // A state below the viewBox (y 700..900) — normally culled, but a
+    // letterboxed fullscreen view exposes that canonical space.
+    const low = sq("01", "AA", 400, 700, 200);
+    expect(layoutStateLabels([low], undefined, OPTS)).toHaveLength(0);
+    const [placed] = layoutStateLabels([low], undefined, {
+      ...OPTS,
+      viewport: { x0: 0, y0: -200, x1: 1000, y1: 1000 },
+    });
+    expect(placed).toBeDefined();
+    expect(placed.placement).toBe("inside");
+    expect(placed.x).toBeCloseTo(500);
+    expect(placed.y).toBeCloseTo(800);
   });
 
   it("re-fits under zoom: a callout state gains an inside label zoomed in", () => {

@@ -18,7 +18,6 @@ import {
   estimateTextWidth,
   rectsOverlap,
   boxFor,
-  within,
   LINE_HEIGHT,
   type LabelRect,
   type ZoomTransformLike,
@@ -130,6 +129,15 @@ export interface StateLabelLayoutOptions {
   height: number;
   /** Rendered px per canonical unit; converts px sizes into canonical units. */
   viewScale: number;
+  /**
+   * The VISIBLE rect in canonical coordinates, when it extends beyond the
+   * `width`×`height` viewBox — an `xMidYMid meet` letterboxed svg (the
+   * fullscreen view on a portrait phone) shows canonical space past the
+   * viewBox on the letterboxed axis, and labels must cull/clamp against
+   * what the user actually sees, not the viewBox. Defaults to
+   * `[0,0]..[width,height]`.
+   */
+  viewport?: LabelRect;
   /** Label font size in px. */
   labelPx?: number;
   /** Padding (px) the label box must clear inside the state's shape to count
@@ -272,6 +280,11 @@ export function layoutStateLabels(
   } = options;
   const vs = viewScale || 1;
   const t = transform;
+  // The rect labels cull/clamp against — the viewBox unless a letterboxed
+  // view exposes more canonical space (see StateLabelLayoutOptions).
+  const vp = options.viewport ?? { x0: 0, y0: 0, x1: width, y1: height };
+  const inView = (b: LabelRect): boolean =>
+    b.x0 >= vp.x0 && b.y0 >= vp.y0 && b.x1 <= vp.x1 && b.y1 <= vp.y1;
   const font = labelPx / vs;
   const labelH = font * LINE_HEIGHT;
   const fitPad = fitPadPx / vs;
@@ -297,10 +310,10 @@ export function layoutStateLabels(
       y1: t.k * b.y1 + t.y,
     };
     if (
-      boundsT.x1 < -CULL_MARGIN ||
-      boundsT.x0 > width + CULL_MARGIN ||
-      boundsT.y1 < -CULL_MARGIN ||
-      boundsT.y0 > height + CULL_MARGIN
+      boundsT.x1 < vp.x0 - CULL_MARGIN ||
+      boundsT.x0 > vp.x1 + CULL_MARGIN ||
+      boundsT.y1 < vp.y0 - CULL_MARGIN ||
+      boundsT.y0 > vp.y1 + CULL_MARGIN
     ) {
       continue;
     }
@@ -362,27 +375,36 @@ export function layoutStateLabels(
   // coast (FL, MI).
   const fitH = font * FIT_TEXT_HEIGHT;
   for (const k of kept) {
-    // Everything below works from the VISIBLE part of the state (its box
-    // clipped to the viewport). At the base view that IS the whole box; on
-    // a zoomed-in view it keeps nudges human-scaled (a zoomed state's full
-    // box spans several screens, and box-proportional nudges scattered the
-    // few surviving labels to arbitrary spots) and provides an on-screen
-    // origin when the centroid/anchor have scrolled out of view — a state
-    // filling half the screen keeps its label instead of dropping it.
-    const vx0 = Math.max(k.boundsT.x0, 0);
-    const vy0 = Math.max(k.boundsT.y0, 0);
-    const vx1 = Math.min(k.boundsT.x1, width);
-    const vy1 = Math.min(k.boundsT.y1, height);
     const origins: [number, number][] = [k.centroidT, k.anchorT];
-    if (vx1 > vx0 && vy1 > vy0) {
-      origins.push([(vx0 + vx1) / 2, (vy0 + vy1) / 2]);
+    // When the label's geographic home has scrolled off screen but the
+    // state is still visible (zoomed far in), CLAMP it to the nearest
+    // viewport edge instead of dropping it. Clamping tracks the centroid
+    // 1:1, so under panning the label glides along the edge — a
+    // viewport-centered origin re-centered itself on every pan frame,
+    // which read as labels chasing the screen.
+    const edgePad = labelH;
+    const clampedX = Math.min(
+      Math.max(k.centroidT[0], vp.x0 + edgePad),
+      vp.x1 - edgePad,
+    );
+    const clampedY = Math.min(
+      Math.max(k.centroidT[1], vp.y0 + edgePad),
+      vp.y1 - edgePad,
+    );
+    if (clampedX !== k.centroidT[0] || clampedY !== k.centroidT[1]) {
+      origins.push([clampedX, clampedY]);
     }
     // Nudge distances scale with the label first (imperceptible shifts),
-    // then with the visible box — an L-shaped state (FL, LA) can have its
+    // then with the VISIBLE box — an L-shaped state (FL, LA) can have its
     // centroid right on a coast, and a box-proportional shift walks the
-    // label back into the shape's meat.
-    const bw = (vx1 - vx0) / 8;
-    const bh = (vy1 - vy0) / 8;
+    // label back into the shape's meat. Capped so a zoomed-in state (whose
+    // box spans several screens) can't scatter its label far from home.
+    const vx0 = Math.max(k.boundsT.x0, vp.x0);
+    const vy0 = Math.max(k.boundsT.y0, vp.y0);
+    const vx1 = Math.min(k.boundsT.x1, vp.x1);
+    const vy1 = Math.min(k.boundsT.y1, vp.y1);
+    const bw = Math.min((vx1 - vx0) / 8, labelH * 3);
+    const bh = Math.min((vy1 - vy0) / 8, labelH * 3);
     const nudges: [number, number][] = [
       [0, 0],
       [0, -labelH / 2],
@@ -410,7 +432,7 @@ export function layoutStateLabels(
           fitH + 2 * fitPad,
           "middle",
         );
-        if (!within(rect, width, height)) continue;
+        if (!inView(rect)) continue;
         if (!rectInsideRings(rect, k.s.rings)) continue;
         result.push({
           id: k.s.id,
@@ -468,7 +490,7 @@ export function layoutStateLabels(
     // label entirely is what a hand-drawn zoomed map does, and it stops
     // labels teleporting to the viewport edges as the transform animates.
     const [ax, ay] = k.anchorT;
-    if (ax < 0 || ax > width || ay < 0 || ay > height) continue;
+    if (ax < vp.x0 || ax > vp.x1 || ay < vp.y0 || ay > vp.y1) continue;
 
     const dir: 1 | -1 = k.s.anchor[0] >= landCenterX ? 1 : -1;
     const anchorSide = dir > 0 ? ("start" as const) : ("end" as const);
@@ -481,12 +503,12 @@ export function layoutStateLabels(
     // past maxDist: a longer leader reads as noise.
     const startX = ax + dir * gap;
     // Viewport containment is already guaranteed: the loop condition bounds
-    // x, and y is clamped into [labelH/2, height - labelH/2] by y0 and the
-    // sink loop's ceiling.
+    // x, and y is clamped into the viewport by y0 and the sink loop's
+    // ceiling.
     const scanRow = (y: number): { x: number; rect: LabelRect } | null => {
       for (
         let x = startX;
-        (dir > 0 ? x + k.w <= width : x - k.w >= 0) &&
+        (dir > 0 ? x + k.w <= vp.x1 : x - k.w >= vp.x0) &&
         Math.abs(x - startX) <= maxDist;
         x += dir * step
       ) {
@@ -500,12 +522,12 @@ export function layoutStateLabels(
 
     // Start at the anchor's row or just below the chain, whichever is
     // lower; sink slot by slot while the row is blocked.
-    const y0 = Math.min(Math.max(ay, labelH / 2), height - labelH / 2);
+    const y0 = Math.min(Math.max(ay, vp.y0 + labelH / 2), vp.y1 - labelH / 2);
     const yStart = Math.max(y0, chainY[dir] + slotH);
     let found: { x: number; y: number; rect: LabelRect } | null = null;
     for (
       let y = yStart;
-      y <= height - labelH / 2 && y - y0 <= MAX_CALLOUT_DROP_SLOTS * slotH;
+      y <= vp.y1 - labelH / 2 && y - y0 <= MAX_CALLOUT_DROP_SLOTS * slotH;
       y += slotH
     ) {
       const row = scanRow(y);

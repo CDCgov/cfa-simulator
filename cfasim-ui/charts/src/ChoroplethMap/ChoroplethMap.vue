@@ -762,6 +762,11 @@ onMounted(() => {
       } else {
         applyStrokeScale();
       }
+      // The overlay layers read the meet offsets (plain module state, not
+      // reactive) for their letterbox-aware viewport and pin — a resize can
+      // change the offsets without changing viewScale, so re-place here
+      // rather than relying on the viewScale watcher alone.
+      if (props.cities?.length || props.stateLabels) scheduleOverlayLayout();
     });
     svgResizeObserver.observe(svgRef.value);
   }
@@ -3051,7 +3056,9 @@ function renderCityLayer() {
       labelPx: CITY_LABEL_PX,
       dotPx: CITY_DOT_PX,
       gapPx: CITY_LABEL_GAP_PX,
-      margin: 4,
+      // A letterboxed view (fullscreen on a portrait phone) shows canonical
+      // space beyond the viewBox — widen the cull so dots there still render.
+      margin: 4 + Math.max(meetOffsetX, meetOffsetY) / (viewScale.value || 1),
     },
   );
 
@@ -3273,12 +3280,23 @@ function renderStateLabelLayer() {
   // Halo, leader, and pads scale with the label so small text isn't drowned.
   const scale = labelPx / STATE_LABEL_PX;
   const t = overlayTransform();
+  // An xMidYMid-meet letterboxed view (fullscreen on a portrait phone)
+  // shows canonical space beyond the viewBox; labels must cull/clamp
+  // against what's actually visible. Meet offsets are CSS px.
+  const mx = meetOffsetX / vs;
+  const my = meetOffsetY / vs;
   const placed = layoutStateLabels(
     geometry,
     { k: t.k, x: t.x, y: t.y },
     {
       width: width.value,
       height: height.value,
+      viewport: {
+        x0: -mx,
+        y0: -my,
+        x1: width.value + mx,
+        y1: height.value + my,
+      },
       viewScale: vs,
       labelPx,
       fitPadPx: STATE_LABEL_FIT_PAD_PX * scale,
