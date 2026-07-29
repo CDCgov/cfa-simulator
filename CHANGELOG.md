@@ -1,6 +1,18 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.6] - 2026-07-29
+
+### Bug Fixes
+
+- **charts:** Keep state labels on zoomed-in states by placing within the visible area
+- **charts:** Cull and clamp overlay labels against the letterboxed fullscreen viewport
+
+### Features
+
+- **charts:** Add zoom-aware enlargeDc so DC is visible at the national overview
+- **charts:** Enable enlargeDc by default on state-level maps
+
 ## [0.8.5] - 2026-07-29
 
 ### Chores

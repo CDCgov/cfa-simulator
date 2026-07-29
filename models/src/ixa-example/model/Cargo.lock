@@ -144,7 +144,7 @@ dependencies = [
 
 [[package]]
 name = "cfasim-model"
-version = "0.8.5"
+version = "0.8.6"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
