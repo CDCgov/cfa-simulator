@@ -646,7 +646,7 @@ import statesTopo from "us-atlas/states-10m.json";
   </template>
 </ComponentDemo>
 
-Labels always mark _states_, so the prop also works on county and HSA maps (and in single-state mode, where only the scoped state is labeled). There the fill under a label isn't one color, so inside labels keep the same scheme-independent dark-text + white-halo styling as callouts instead of contrast-picking.
+Enabling `state-labels` also reserves a slim right margin in the national map fit so the coast column has room to sit beside its states. Labels always mark _states_, so the prop also works on county and HSA maps (and in single-state mode, where only the scoped state is labeled). There the fill under a label isn't one color, so inside labels keep the same scheme-independent dark-text + white-halo styling as callouts instead of contrast-picking.
 
 **Styling:** a stylesheet can override the layer's CSS custom properties on `.choropleth-state-labels` — `--choropleth-state-label-color` and `--choropleth-state-label-halo` for the default (callout/halo) styling and the leader lines, and `--choropleth-state-label-dark` / `--choropleth-state-label-light` for the two contrast-picked inside colors. Callout labels carry a `.choropleth-state-label-callout` class and leader lines `.choropleth-state-leader` as hooks.
 

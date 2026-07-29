@@ -60,6 +60,13 @@ async function clickSelect(target: { trigger: (e: string) => Promise<void> }) {
   }
 }
 
+// The overlay layers (cities + state labels) paint on the next rAF after
+// Vue's patch; flush both.
+async function flushOverlayLayout() {
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await flushPromises();
+}
+
 describe("ChoroplethMap", () => {
   it("renders SVG with state paths", () => {
     const wrapper = mount(ChoroplethMap, {
@@ -3487,13 +3494,6 @@ describe("ChoroplethMap accessibility", () => {
 
 describe("ChoroplethMap city overlay", () => {
   // The overlay is painted in a requestAnimationFrame callback; let it run.
-  async function flushCityLayout() {
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => resolve()),
-    );
-    await flushPromises();
-  }
-
   const CITIES = [
     {
       name: "Austin",
@@ -3512,7 +3512,7 @@ describe("ChoroplethMap city overlay", () => {
     const wrapper = mount(ChoroplethMap, {
       props: { topology: statesTopo, width: 800, height: 500, cities: CITIES },
     });
-    await flushCityLayout();
+    await flushOverlayLayout();
     const layer = layerOf(wrapper);
     expect(layer.exists()).toBe(true);
     const el = layer.element;
@@ -3525,7 +3525,7 @@ describe("ChoroplethMap city overlay", () => {
     const wrapper = mount(ChoroplethMap, {
       props: { topology: statesTopo, width: 800, height: 500, cities: CITIES },
     });
-    await flushCityLayout();
+    await flushOverlayLayout();
     const el = layerOf(wrapper).element;
     const labels = [...el.querySelectorAll(".choropleth-city-label")].map(
       (n) => n.textContent,
@@ -3561,7 +3561,7 @@ describe("ChoroplethMap city overlay", () => {
         },
       },
     });
-    await flushCityLayout();
+    await flushOverlayLayout();
     const layer = layerOf(wrapper).element as SVGGElement;
     expect(layer.style.getPropertyValue("--choropleth-city-marker")).toBe(
       "#123456",
@@ -3589,7 +3589,7 @@ describe("ChoroplethMap city overlay", () => {
         theme: { outline: "#0a0" },
       },
     });
-    await flushCityLayout();
+    await flushOverlayLayout();
     const layer = layerOf(wrapper).element as SVGGElement;
     expect(layer.style.getPropertyValue("--choropleth-city-marker")).toBe("");
     expect(layer.style.opacity).toBe("");
@@ -3601,7 +3601,7 @@ describe("ChoroplethMap city overlay", () => {
     });
     expect(layerOf(wrapper).exists()).toBe(false);
     await wrapper.setProps({ cities: CITIES });
-    await flushCityLayout();
+    await flushOverlayLayout();
     expect(
       layerOf(wrapper).element.querySelectorAll(".choropleth-city-dot"),
     ).toHaveLength(3);
@@ -3611,7 +3611,7 @@ describe("ChoroplethMap city overlay", () => {
     const wrapper = mount(ChoroplethMap, {
       props: { topology: statesTopo, width: 800, height: 500, cities: CITIES },
     });
-    await flushCityLayout();
+    await flushOverlayLayout();
     const overlay = wrapper.find(".choropleth-city-overlay");
     expect(overlay.exists()).toBe(true);
     expect(overlay.element.tagName.toLowerCase()).toBe("svg");
@@ -3636,7 +3636,7 @@ describe("ChoroplethMap city overlay", () => {
         title: "Cities",
       },
     });
-    await flushCityLayout();
+    await flushOverlayLayout();
     const overlay = wrapper.find(".choropleth-city-overlay");
     expect(overlay.exists()).toBe(true);
     // renderCityLayer sets top/left/width/height inline to match the map svg's
@@ -3658,7 +3658,7 @@ describe("ChoroplethMap city overlay", () => {
         zoom: true,
       },
     });
-    await flushCityLayout();
+    await flushOverlayLayout();
     // At base zoom (k=1 < default citiesMinZoom of 2) nothing is drawn yet.
     expect(
       layerOf(wrapper).element.querySelectorAll(".choropleth-city-dot"),
@@ -3676,7 +3676,7 @@ describe("ChoroplethMap city overlay", () => {
         citiesMinZoom: 1,
       },
     });
-    await flushCityLayout();
+    await flushOverlayLayout();
     expect(
       layerOf(wrapper).element.querySelectorAll(".choropleth-city-dot").length,
     ).toBeGreaterThan(0);
@@ -3704,7 +3704,7 @@ describe("ChoroplethMap city overlay", () => {
         zoom: true,
       },
     });
-    await flushCityLayout();
+    await flushOverlayLayout();
     // At base zoom (k=1): the minZoom-1 city shows, the minZoom-5 one doesn't.
     const labels = [
       ...layerOf(wrapper).element.querySelectorAll(".choropleth-city-label"),
@@ -3972,13 +3972,6 @@ describe("ChoroplethMap theming", () => {
 });
 
 describe("ChoroplethMap state labels (stateLabels)", () => {
-  async function flushOverlayLayout() {
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => resolve()),
-    );
-    await flushPromises();
-  }
-
   function layerOf(wrapper: ReturnType<typeof mount>) {
     return wrapper.find(".choropleth-state-labels");
   }
@@ -4131,7 +4124,7 @@ describe("ChoroplethMap state labels (stateLabels)", () => {
     });
     await flushOverlayLayout();
     const hit = layerOf(wrapper).element.querySelector(
-      '.choropleth-state-label-hit[data-state="44"]',
+      '.choropleth-state-label-hit[data-feat-id="44"]',
     )!;
     expect(hit).not.toBeNull();
 
@@ -4185,7 +4178,7 @@ describe("ChoroplethMap state labels (stateLabels)", () => {
     });
     await flushOverlayLayout();
     const hit = layerOf(wrapper).element.querySelector(
-      '.choropleth-state-label-hit[data-state="44"]',
+      '.choropleth-state-label-hit[data-feat-id="44"]',
     )!;
     expect(hit).not.toBeNull();
     hit.dispatchEvent(
@@ -4250,6 +4243,32 @@ describe("ChoroplethMap state labels (stateLabels)", () => {
     } finally {
       vi.mocked(isTouchDevice).mockReturnValue(false);
     }
+  });
+
+  it("reserves a right margin in the projection fit for the coast column", async () => {
+    // With stateLabels on, the national fit shrinks slightly to the left so
+    // the east-coast callout column has room beside its states; Maine's
+    // path must therefore differ from the flush default fit.
+    const meD = (w: ReturnType<typeof mount>) =>
+      (
+        w
+          .findAll(".state-path")
+          .find((p) => p.attributes("data-feat-id") === "23")!
+          .element as SVGPathElement
+      ).getAttribute("d");
+    const plain = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 800, height: 500 },
+    });
+    const labeled = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 800,
+        height: 500,
+        stateLabels: true,
+      },
+    });
+    await flushOverlayLayout();
+    expect(meD(labeled)).not.toBe(meD(plain));
   });
 
   it("clears the layer when stateLabels is switched off", async () => {

@@ -92,8 +92,10 @@ const IDENTITY: ZoomTransformLike = { k: 1, x: 0, y: 0 };
 // Average glyph advance as a fraction of font size for a typical sans font.
 // Only used to estimate label width for collision — exactness isn't required.
 const AVG_ADVANCE = 0.56;
-// Text box height as a multiple of font size (a little vertical padding).
-const LINE_HEIGHT = 1.15;
+/** Text box height as a multiple of font size (a little vertical padding).
+ *  Shared with the state-label layer so both overlay layers agree on the
+ *  label box model. */
+export const LINE_HEIGHT = 1.15;
 
 /** Rough label width in px (no DOM measurement). */
 export function estimateTextWidth(text: string, fontPx: number): number {
@@ -126,11 +128,13 @@ export function placedLabelBox(
   return boxFor(placed.label.x, placed.label.y, w, h, placed.label.anchor);
 }
 
-function within(box: Box, width: number, height: number): boolean {
+/** True when the box lies fully inside the `width`×`height` viewport. */
+export function within(box: Box, width: number, height: number): boolean {
   return box.x0 >= 0 && box.y0 >= 0 && box.x1 <= width && box.y1 <= height;
 }
 
-function boxFor(
+/** Box of a label anchored at (`anchorX`, vertical-center `centerY`). */
+export function boxFor(
   anchorX: number,
   centerY: number,
   w: number,

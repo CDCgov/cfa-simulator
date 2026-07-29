@@ -69,7 +69,6 @@ export type {
 export {
   parseRgb,
   resolveColorToRgb,
-  relativeLuminance,
   pickContrastColor,
   type Rgb,
 } from "./contrast.js";

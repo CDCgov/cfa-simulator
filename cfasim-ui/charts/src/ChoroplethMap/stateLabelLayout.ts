@@ -17,6 +17,9 @@
 import {
   estimateTextWidth,
   rectsOverlap,
+  boxFor,
+  within,
+  LINE_HEIGHT,
   type LabelRect,
   type ZoomTransformLike,
 } from "./cityLayout.js";
@@ -113,6 +116,9 @@ export interface PlacedStateLabel {
   y: number;
   anchor: "start" | "middle" | "end";
   placement: "inside" | "callout";
+  /** Label text width in canonical units (already viewScale-converted), so
+   *  consumers can derive the label box without re-estimating. */
+  w: number;
   /** Leader line from the label edge to the state, callouts only. */
   leader: StateLabelLeader | null;
 }
@@ -131,16 +137,13 @@ export interface StateLabelLayoutOptions {
   fitPadPx?: number;
   /** Gap (px) between a callout label and the geometry it clears. */
   gapPx?: number;
-  /** How far outside the viewport (canonical units) a state's box may sit and
-   *  still be considered. States beyond this are culled. */
-  margin?: number;
 }
 
 const IDENTITY: ZoomTransformLike = { k: 1, x: 0, y: 0 };
-// Text box height as a multiple of font size (matches cityLayout). Used for
-// label-label collision boxes and callout stacking.
-const LINE_HEIGHT = 1.15;
-// The inside FIT test uses the text's visual (cap) height instead — an
+// How far outside the viewport (canonical units) a state's box may sit and
+// still be considered; beyond this the state is culled.
+const CULL_MARGIN = 8;
+// The inside FIT test uses the text's visual (cap) height — an
 // abbreviation has no descenders, and testing the full line box made states
 // that visually hold their label with room to spare (KY, FL, MN) fail on a
 // corner poking just past a border.
@@ -217,11 +220,7 @@ export function pointInRings(
   return false;
 }
 
-function within(box: LabelRect, width: number, height: number): boolean {
-  return box.x0 >= 0 && box.y0 >= 0 && box.x1 <= width && box.y1 <= height;
-}
-
-/** Center + corners + edge midpoints, in post-transform space. */
+/** Center + corners + edge midpoints of a rect. */
 function rectSamples(rect: LabelRect): [number, number][] {
   const cx = (rect.x0 + rect.x1) / 2;
   const cy = (rect.y0 + rect.y1) / 2;
@@ -249,14 +248,14 @@ interface Kept {
 
 /**
  * Project + place state labels. Inside labels are placed first (each fully
- * inside its own shape, padded); everything else becomes a callout, processed
- * top-to-bottom: the label scans outward (toward the nearer horizontal viewport
- * edge) past any land until it sits over background, shifting vertically when
- * it would collide with an already-placed label, with a leader line back to
- * the state. A callout is dropped — not pinned — when its state's anchor is
- * off screen, or when no open background exists within leader range; a
- * zoomed/panned view leaves clipped states unlabeled instead of dragging
- * leaders across the map.
+ * inside its own shape, padded); everything else becomes a callout, chained
+ * per side in anchor-latitude order — each label at or below the previous —
+ * scanning outward from the anchor on the state's landmass side to the first
+ * open-background spot, sinking a row at a time while blocked, with a leader
+ * line back to the state when displaced. A callout is dropped — not pinned —
+ * when its state's anchor is off screen, or when no open background exists
+ * within leader range; a zoomed/panned view leaves clipped states unlabeled
+ * instead of dragging leaders across the map.
  */
 export function layoutStateLabels(
   states: readonly StateLabelFeature[],
@@ -270,7 +269,6 @@ export function layoutStateLabels(
     labelPx = 11,
     fitPadPx = 2,
     gapPx = 5,
-    margin = 8,
   } = options;
   const vs = viewScale || 1;
   const t = transform;
@@ -299,10 +297,10 @@ export function layoutStateLabels(
       y1: t.k * b.y1 + t.y,
     };
     if (
-      boundsT.x1 < -margin ||
-      boundsT.x0 > width + margin ||
-      boundsT.y1 < -margin ||
-      boundsT.y0 > height + margin
+      boundsT.x1 < -CULL_MARGIN ||
+      boundsT.x0 > width + CULL_MARGIN ||
+      boundsT.y1 < -CULL_MARGIN ||
+      boundsT.y0 > height + CULL_MARGIN
     ) {
       continue;
     }
@@ -315,34 +313,40 @@ export function layoutStateLabels(
     });
   }
 
-  /** All sample points of `rect` fall inside `rings` (pre-transform). */
+  // Land tests run in PRE-transform space: the zoom transform is affine and
+  // axis-aligned, so a screen-space rect maps to a pre-transform rect once
+  // per call instead of inverse-transforming every sample per state (these
+  // run on every scan step of every zoom frame).
+  const preRectOf = (rect: LabelRect): LabelRect => ({
+    x0: invX(rect.x0),
+    y0: invY(rect.y0),
+    x1: invX(rect.x1),
+    y1: invY(rect.y1),
+  });
+
+  /** All sample points of `rect` (post-transform) fall inside `rings`. */
   const rectInsideRings = (
     rect: LabelRect,
     rings: [number, number][][],
   ): boolean =>
-    rectSamples(rect).every(([x, y]) => pointInRings(invX(x), invY(y), rings));
+    rectSamples(preRectOf(rect)).every(([x, y]) => pointInRings(x, y, rings));
 
-  /** `rect` touches any kept state's shape: a sample point lands inside it,
-   *  or one of its ring vertices lands inside the rect. */
+  /** `rect` touches any kept state's shape: one of the state's ring vertices
+   *  lands inside the rect (the cheap scan, checked first), or a sample point
+   *  of the rect lands inside the state. */
   const rectOverLand = (rect: LabelRect): boolean => {
+    const pre = preRectOf(rect);
+    const samples = rectSamples(pre);
     for (const k of kept) {
-      if (!rectsOverlap(rect, k.boundsT)) continue;
-      if (
-        rectSamples(rect).some(([x, y]) =>
-          pointInRings(invX(x), invY(y), k.s.rings),
-        )
-      ) {
-        return true;
-      }
-      const rx0 = invX(rect.x0);
-      const rx1 = invX(rect.x1);
-      const ry0 = invY(rect.y0);
-      const ry1 = invY(rect.y1);
+      if (!rectsOverlap(pre, k.s.bounds)) continue;
       for (const ring of k.s.rings) {
         for (const [x, y] of ring) {
-          if (x >= rx0 && x <= rx1 && y >= ry0 && y <= ry1) return true;
+          if (x >= pre.x0 && x <= pre.x1 && y >= pre.y0 && y <= pre.y1) {
+            return true;
+          }
         }
       }
+      if (samples.some(([x, y]) => pointInRings(x, y, k.s.rings))) return true;
     }
     return false;
   };
@@ -379,33 +383,34 @@ export function layoutStateLabels(
       [-bw, bh],
       [-bw, -bh],
     ];
-    const candidates: [number, number][] = [];
-    for (const [dx, dy] of nudges) {
-      candidates.push([k.centroidT[0] + dx, k.centroidT[1] + dy]);
-      candidates.push([k.anchorT[0] + dx, k.anchorT[1] + dy]);
-    }
     let placed = false;
-    for (const c of candidates) {
-      const rect: LabelRect = {
-        x0: c[0] - k.w / 2 - fitPad,
-        x1: c[0] + k.w / 2 + fitPad,
-        y0: c[1] - fitH / 2 - fitPad,
-        y1: c[1] + fitH / 2 + fitPad,
-      };
-      if (!within(rect, width, height)) continue;
-      if (!rectInsideRings(rect, k.s.rings)) continue;
-      result.push({
-        id: k.s.id,
-        abbr: k.s.abbr,
-        x: round(c[0]),
-        y: round(c[1]),
-        anchor: "middle",
-        placement: "inside",
-        leader: null,
-      });
-      placedBoxes.push(rect);
-      placed = true;
-      break;
+    outer: for (const [dx, dy] of nudges) {
+      for (const origin of [k.centroidT, k.anchorT]) {
+        const cx = origin[0] + dx;
+        const cy = origin[1] + dy;
+        const rect = boxFor(
+          cx,
+          cy,
+          k.w + 2 * fitPad,
+          fitH + 2 * fitPad,
+          "middle",
+        );
+        if (!within(rect, width, height)) continue;
+        if (!rectInsideRings(rect, k.s.rings)) continue;
+        result.push({
+          id: k.s.id,
+          abbr: k.s.abbr,
+          x: round(cx),
+          y: round(cy),
+          anchor: "middle",
+          placement: "inside",
+          w: k.w,
+          leader: null,
+        });
+        placedBoxes.push(rect);
+        placed = true;
+        break outer;
+      }
     }
     if (!placed) callouts.push(k);
   }
@@ -421,7 +426,8 @@ export function layoutStateLabels(
   // their own latitude).
   callouts.sort((a, b) => a.anchorT[1] - b.anchorT[1]);
   const step = labelH * 0.9;
-  const slotH = labelH * LINE_HEIGHT;
+  // Chain row pitch: one label box plus 15% breathing room between rows.
+  const slotH = labelH * 1.15;
   const adjacentDist = ADJACENT_LEADER_PX / vs;
   const maxDist = MAX_CALLOUT_DIST_PX / vs;
   // Horizontal center of the whole landmass (pre-transform), the anchor for
@@ -438,10 +444,7 @@ export function layoutStateLabels(
   }
   const landCenterX = (landX0 + landX1) / 2;
   // Bottom of the last label placed on each side (the chain state).
-  const chainY: Record<"1" | "-1", number> = {
-    "1": -Infinity,
-    "-1": -Infinity,
-  };
+  const chainY: Record<1 | -1, number> = { 1: -Infinity, [-1]: -Infinity };
 
   for (const k of callouts) {
     // A callout only makes sense for a state whose anchor is on screen: a
@@ -453,17 +456,18 @@ export function layoutStateLabels(
     if (ax < 0 || ax > width || ay < 0 || ay > height) continue;
 
     const dir: 1 | -1 = k.s.anchor[0] >= landCenterX ? 1 : -1;
-    const dirKey = String(dir) as "1" | "-1";
+    const anchorSide = dir > 0 ? ("start" as const) : ("end" as const);
     const rectAt = (x: number, y: number): LabelRect =>
-      dir > 0
-        ? { x0: x, x1: x + k.w, y0: y - labelH / 2, y1: y + labelH / 2 }
-        : { x0: x - k.w, x1: x, y0: y - labelH / 2, y1: y + labelH / 2 };
+      boxFor(x, y, k.w, labelH, anchorSide);
 
     // Scan outward from the ANCHOR (largest land mass), not the far edge of
     // the whole bbox — for an island chain like Hawaii this puts the label
     // right beside the big island instead of past the whole chain. Gives up
     // past maxDist: a longer leader reads as noise.
     const startX = ax + dir * gap;
+    // Viewport containment is already guaranteed: the loop condition bounds
+    // x, and y is clamped into [labelH/2, height - labelH/2] by y0 and the
+    // sink loop's ceiling.
     const scanRow = (y: number): { x: number; rect: LabelRect } | null => {
       for (
         let x = startX;
@@ -472,7 +476,6 @@ export function layoutStateLabels(
         x += dir * step
       ) {
         const rect = rectAt(x, y);
-        if (!within(rect, width, height)) continue;
         if (rectOverLand(rect)) continue;
         if (placedBoxes.some((b) => rectsOverlap(rect, b))) continue;
         return { x, rect };
@@ -483,7 +486,7 @@ export function layoutStateLabels(
     // Start at the anchor's row or just below the chain, whichever is
     // lower; sink slot by slot while the row is blocked.
     const y0 = Math.min(Math.max(ay, labelH / 2), height - labelH / 2);
-    const yStart = Math.max(y0, chainY[dirKey] + slotH);
+    const yStart = Math.max(y0, chainY[dir] + slotH);
     let found: { x: number; y: number; rect: LabelRect } | null = null;
     for (
       let y = yStart;
@@ -501,24 +504,31 @@ export function layoutStateLabels(
     // far-away label. A dropped label does not advance the chain.
     if (!found) continue;
 
-    chainY[dirKey] = found.y;
+    chainY[dir] = found.y;
     placedBoxes.push(found.rect);
     // A label sitting right beside its state at its own latitude reads as
     // adjacent — a leader line would be noise. Only displaced labels
-    // (stacked into a column, or pushed past other land) get one.
+    // (stacked into a column, or pushed past other land) get one. The
+    // vertex scan runs in pre-transform space with an early break, and only
+    // when the cheap y-displacement test hasn't already ruled adjacency out.
     const lx = dir > 0 ? found.x - gap * 0.5 : found.x + gap * 0.5;
     const ly = found.y;
-    let ownD2 = Infinity;
-    for (const ring of k.s.rings) {
-      for (const [vx, vy] of ring) {
-        const px = t.k * vx + t.x;
-        const py = t.k * vy + t.y;
-        const d2 = (px - lx) * (px - lx) + (py - ly) * (py - ly);
-        if (d2 < ownD2) ownD2 = d2;
+    let adjacent = false;
+    if (Math.abs(found.y - y0) <= labelH) {
+      const px = invX(lx);
+      const py = invY(ly);
+      const thresh = (adjacentDist / t.k) ** 2;
+      scan: for (const ring of k.s.rings) {
+        for (const [vx, vy] of ring) {
+          const dx = vx - px;
+          const dy = vy - py;
+          if (dx * dx + dy * dy <= thresh) {
+            adjacent = true;
+            break scan;
+          }
+        }
       }
     }
-    const adjacent =
-      ownD2 <= adjacentDist * adjacentDist && Math.abs(found.y - y0) <= labelH;
     // The leader points at the state's bounding-box point nearest the label
     // (clamping is monotone, so the lines of a stacked column keep the fan
     // order and can't cross), pulled a little toward the anchor so it ends
@@ -533,8 +543,9 @@ export function layoutStateLabels(
       abbr: k.s.abbr,
       x: round(found.x),
       y: round(found.y),
-      anchor: dir > 0 ? "start" : "end",
+      anchor: anchorSide,
       placement: "callout",
+      w: k.w,
       leader: adjacent
         ? null
         : {

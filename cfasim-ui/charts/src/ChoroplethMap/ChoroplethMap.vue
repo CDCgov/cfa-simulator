@@ -44,7 +44,7 @@ import {
   ChartZoomControls,
   parseRgb,
   resolveColorToRgb,
-  relativeLuminance,
+  pickContrastColor,
   useMapTheme,
   mapThemeDefaults,
   LIGHT_HIGHLIGHT,
@@ -57,8 +57,8 @@ import {
 } from "../_shared/index.js";
 import { placeTooltip } from "../tooltip-position.js";
 import ChoroplethTooltip from "./ChoroplethTooltip.vue";
-import { layoutCities, estimateTextWidth } from "./cityLayout.js";
-import type { CityMarker } from "./cityLayout.js";
+import { layoutCities, boxFor, LINE_HEIGHT } from "./cityLayout.js";
+import type { CityMarker, ZoomTransformLike } from "./cityLayout.js";
 import {
   layoutStateLabels,
   fipsToStateAbbr,
@@ -1686,6 +1686,13 @@ const outlineMesh = computed<GeoJSON.MultiLineString | null>(() => {
 // flush against the SVG edge. Only applied in single-state mode.
 const STATE_FIT_INSET = 12;
 
+// Right margin (canonical px) reserved by `stateLabels` on national maps:
+// without it the projection fits the landmass flush to the viewport edge
+// and the east-coast callout column has nowhere to sit near its states —
+// labels sank below Maine instead of stacking beside New England. Sized to
+// hold one label plus its gap at typical rendered widths.
+const STATE_LABELS_FIT_PAD = 48;
+
 // Resolved `tightFit` amount in [0,1]: false/0 → 0 (full fit), true → 1.
 const tightFitAmount = computed(() => {
   const v = props.tightFit;
@@ -1745,9 +1752,15 @@ const projection = computed(() => {
     if (Number.isFinite(c[0]) && Number.isFinite(c[1])) return albers;
     return geoMercator().fitExtent(extent, outline);
   }
+  // stateLabels reserves a slim right margin so the callout column can hug
+  // the east coast; both the full and tight fits use the same extent, so
+  // the tight-fit lerp composes with it unchanged.
   const extent: [[number, number], [number, number]] = [
     [0, 0],
-    [width.value, height.value],
+    [
+      width.value - (props.stateLabels ? STATE_LABELS_FIT_PAD : 0),
+      height.value,
+    ],
   ];
   const full = geoAlbersUsa().fitExtent(extent, featuresGeo.value);
   const conus = conusFeaturesGeo.value;
@@ -2699,14 +2712,20 @@ function emitSelection(data: TooltipPayload) {
   emit("update:focus", wasFocused ? null : data.id);
 }
 
-function hoverFromEvent(me: MouseEvent) {
-  const featId = featureIdFromEvent(me.target, me.clientX, me.clientY);
-  if (!featId) return;
+// Establish hover for a feature id: highlight + tooltip (when configured)
+// + stateHover emit. Shared by the map's delegated mouseover and the
+// state-label hit boxes, which resolve the id from a different source.
+function establishHover(featId: string, clientX: number, clientY: number) {
   const data = tooltipDataById.get(featId);
   if (!data) return;
   setHoverId(featId);
-  if (hasInteractiveTooltip.value) showTooltip(featId, me.clientX, me.clientY);
+  if (hasInteractiveTooltip.value) showTooltip(featId, clientX, clientY);
   emit("stateHover", { id: data.id, name: data.name, value: data.value });
+}
+
+function hoverFromEvent(me: MouseEvent) {
+  const featId = featureIdFromEvent(me.target, me.clientX, me.clientY);
+  if (featId) establishHover(featId, me.clientX, me.clientY);
 }
 
 // Click-select semantics shared by map features and the state-label hit
@@ -2768,12 +2787,11 @@ function hoveredFeatId(): string | null {
 function onDelegatedMouseOut(event: MouseEvent) {
   const related = event.relatedTarget as Element | null;
   if (related && mapGroupRef.value?.contains(related)) return;
-  // Crossing from a state onto its own label hit box keeps the hover —
-  // the hit box re-establishes any other target itself.
-  const hit = related?.closest?.(
-    ".choropleth-state-label-hit",
-  ) as SVGElement | null;
-  if (hit?.dataset.state && hit.dataset.state === hoveredFeatId()) return;
+  // Crossing onto any element representing the hovered feature (a
+  // state-label hit box carries data-feat-id like the paths do) keeps the
+  // hover — that element re-establishes any other target itself.
+  const relatedId = eventToFeatureId(related);
+  if (relatedId && relatedId === hoveredFeatId()) return;
   clearHover();
 }
 
@@ -3007,17 +3025,13 @@ function pinToSvgBox(el: HTMLElement | SVGElement | null): void {
 function renderCityLayer() {
   const g = cityLayerRef.value;
   if (!g) return;
+  clearChildren(g);
 
   const cities = props.cities;
   const proj = projection.value;
-  if (!cities || cities.length === 0 || !proj) {
-    while (g.firstChild) g.removeChild(g.firstChild);
-    return;
-  }
+  if (!cities || cities.length === 0 || !proj) return;
 
-  while (g.firstChild) g.removeChild(g.firstChild);
-
-  const t = svgRef.value ? zoomTransform(svgRef.value) : { k: 1, x: 0, y: 0 };
+  const t = overlayTransform();
   // Level-of-detail: on a zoomable map, each city shows only once zoomed to its
   // `minZoom` (falling back to the `citiesMinZoom` prop), so bigger cities can
   // appear first and more reveal as you zoom in. A static map (zoom off) can't
@@ -3091,6 +3105,15 @@ function scheduleOverlayLayout() {
     renderCityLayer();
     renderStateLabelLayer();
   });
+}
+
+function clearChildren(el: Element) {
+  while (el.firstChild) el.removeChild(el.firstChild);
+}
+
+// The current zoom transform, shared by both overlay renderers.
+function overlayTransform(): ZoomTransformLike {
+  return svgRef.value ? zoomTransform(svgRef.value) : { k: 1, x: 0, y: 0 };
 }
 
 // ─── State-abbreviation labels (stateLabels) ─────────────────────────────
@@ -3186,34 +3209,27 @@ function stateLabelFill(stateId: string): string | null {
 }
 
 // ── State-label hit boxes: hover/click proxies for their state ──────────
-// Attached to per-render rects, so listeners die with their elements. They
-// reuse the map's own hover/tooltip/select machinery (setHoverId,
-// showTooltip, selectWithClickSemantics), so both backends behave exactly
-// as if the state itself were hovered.
-function labelHitId(event: Event): string | null {
-  return (event.currentTarget as SVGElement | null)?.dataset.state ?? null;
-}
-
+// One delegated listener set on the templated label <g> (matching the
+// map's own delegation pattern) — the hit rects carry data-feat-id like
+// the feature paths, so `eventToFeatureId` resolves them, and the handlers
+// reuse the map's hover/tooltip/select machinery (establishHover,
+// selectWithClickSemantics). Both backends behave exactly as if the state
+// itself were hovered.
 function onLabelHitOver(event: MouseEvent) {
   if (isZooming || isViewportSettling) return;
-  const id = labelHitId(event);
-  const data = id ? tooltipDataById.get(id) : undefined;
-  if (!id || !data) return;
+  const id = eventToFeatureId(event.target);
+  if (!id) return;
   if (hoveredFeatId() === id) {
     // Crossed in from the state itself — hover is already live.
     moveTooltip(event.clientX, event.clientY);
     return;
   }
-  setHoverId(id);
-  if (hasInteractiveTooltip.value) {
-    showTooltip(id, event.clientX, event.clientY);
-  }
-  emit("stateHover", { id: data.id, name: data.name, value: data.value });
+  establishHover(id, event.clientX, event.clientY);
 }
 
 function onLabelHitMove(event: MouseEvent) {
   if (isZooming || isViewportSettling) return;
-  if (hoveredFeatId() !== labelHitId(event)) {
+  if (hoveredFeatId() !== eventToFeatureId(event.target)) {
     // A settle-window dismissal can swallow the entry mouseover, exactly
     // as on the map itself — re-establish from the first real move.
     onLabelHitOver(event);
@@ -3223,7 +3239,7 @@ function onLabelHitMove(event: MouseEvent) {
 }
 
 function onLabelHitOut(event: MouseEvent) {
-  const id = labelHitId(event);
+  const id = eventToFeatureId(event.target);
   // Crossing from the label onto its own state keeps the hover (svg mode
   // resolves the destination path, canvas mode picks at the exit point);
   // any other destination re-establishes hover itself.
@@ -3235,7 +3251,7 @@ function onLabelHitOut(event: MouseEvent) {
 }
 
 function onLabelHitClick(event: MouseEvent) {
-  const id = labelHitId(event);
+  const id = eventToFeatureId(event.target);
   const data = id ? tooltipDataById.get(id) : undefined;
   if (data) selectWithClickSemantics(data, event.detail);
 }
@@ -3247,16 +3263,16 @@ function onLabelHitClick(event: MouseEvent) {
 function renderStateLabelLayer() {
   const g = stateLabelLayerRef.value;
   if (!g) return;
+  clearChildren(g);
+  // Empty whenever the prop is off (stateLabelGeometry gates on it).
   const geometry = stateLabelGeometry.value;
-  if (!props.stateLabels || geometry.length === 0) {
-    while (g.firstChild) g.removeChild(g.firstChild);
-    return;
-  }
-  while (g.firstChild) g.removeChild(g.firstChild);
+  if (geometry.length === 0) return;
 
   const vs = viewScale.value || 1;
   const labelPx = stateLabelPx(vs);
-  const t = svgRef.value ? zoomTransform(svgRef.value) : { k: 1, x: 0, y: 0 };
+  // Halo, leader, and pads scale with the label so small text isn't drowned.
+  const scale = labelPx / STATE_LABEL_PX;
+  const t = overlayTransform();
   const placed = layoutStateLabels(
     geometry,
     { k: t.k, x: t.x, y: t.y },
@@ -3265,26 +3281,26 @@ function renderStateLabelLayer() {
       height: height.value,
       viewScale: vs,
       labelPx,
-      fitPadPx: STATE_LABEL_FIT_PAD_PX * (labelPx / STATE_LABEL_PX),
-      gapPx: STATE_LABEL_GAP_PX * (labelPx / STATE_LABEL_PX),
+      fitPadPx: STATE_LABEL_FIT_PAD_PX * scale,
+      gapPx: STATE_LABEL_GAP_PX * scale,
     },
   );
 
   const font = labelPx / vs;
-  // Halo and leader scale with the label so small text isn't drowned.
-  const halo = (STATE_LABEL_HALO_PX * (labelPx / STATE_LABEL_PX)) / vs;
-  const leaderW = (STATE_LEADER_WIDTH_PX * (labelPx / STATE_LABEL_PX)) / vs;
+  const halo = (STATE_LABEL_HALO_PX * scale) / vs;
+  const leaderW = (STATE_LEADER_WIDTH_PX * scale) / vs;
   // Each label's box is a hover/click proxy for its state — hover highlight
   // + stateHover always (matching the map, which highlights without a
   // tooltip), tooltip only when one is configured (inside the handlers) —
   // most useful for callouts, whose labels sit over open background. Mouse
-  // only: on touch the overlay must stay transparent so taps keep feeding
-  // the map's own gesture handling. Gated per state on `tooltipDataById`,
-  // so labels over states that aren't rendered as one states-level feature
+  // only: on touch the rects would sit above the interaction svg and
+  // swallow the taps that feed the map's own gesture handling, so they
+  // aren't created at all. Gated per state on `tooltipDataById`, so labels
+  // over states that aren't rendered as one states-level feature
   // (county/HSA tiles) stay inert.
   const interactive = !isTouchDevice();
   const hitPad = 2 / vs;
-  const labelH = font * 1.15;
+  const labelH = font * LINE_HEIGHT;
   const frag = document.createDocumentFragment();
   for (const p of placed) {
     if (p.leader) {
@@ -3299,25 +3315,15 @@ function renderStateLabelLayer() {
       frag.appendChild(line);
     }
     if (interactive && tooltipDataById.has(p.id)) {
-      const w = estimateTextWidth(p.abbr, labelPx) / vs;
-      const x0 =
-        p.anchor === "start"
-          ? p.x - hitPad
-          : p.anchor === "end"
-            ? p.x - w - hitPad
-            : p.x - w / 2 - hitPad;
+      const box = boxFor(p.x, p.y, p.w, labelH, p.anchor);
       const rect = document.createElementNS(SVG_NS, "rect");
-      rect.setAttribute("x", String(x0));
-      rect.setAttribute("y", String(p.y - labelH / 2 - hitPad));
-      rect.setAttribute("width", String(w + 2 * hitPad));
+      rect.setAttribute("x", String(box.x0 - hitPad));
+      rect.setAttribute("y", String(box.y0 - hitPad));
+      rect.setAttribute("width", String(p.w + 2 * hitPad));
       rect.setAttribute("height", String(labelH + 2 * hitPad));
       rect.setAttribute("fill", "none");
       rect.setAttribute("class", "choropleth-state-label-hit");
-      rect.setAttribute("data-state", p.id);
-      rect.addEventListener("mouseover", onLabelHitOver);
-      rect.addEventListener("mousemove", onLabelHitMove);
-      rect.addEventListener("mouseout", onLabelHitOut);
-      rect.addEventListener("click", onLabelHitClick);
+      rect.setAttribute("data-feat-id", p.id);
       frag.appendChild(rect);
     }
     const text = document.createElementNS(SVG_NS, "text");
@@ -3333,12 +3339,14 @@ function renderStateLabelLayer() {
     // matching fill). Callouts — and any fill we can't resolve to RGB —
     // keep the scheme-independent dark-text + white-halo default.
     const fill = p.placement === "inside" ? stateLabelFill(p.id) : null;
-    const rgb = fill ? resolveColorToRgb(fill) : null;
-    if (rgb) {
-      text.style.fill =
-        relativeLuminance(rgb) > 0.179
-          ? "var(--choropleth-state-label-dark, #1a1a1a)"
-          : "var(--choropleth-state-label-light, #fff)";
+    if (fill && resolveColorToRgb(fill)) {
+      // resolveColorToRgb is cached, so the second resolve inside
+      // pickContrastColor is free.
+      text.style.fill = pickContrastColor(
+        fill,
+        "var(--choropleth-state-label-light, #fff)",
+        "var(--choropleth-state-label-dark, #1a1a1a)",
+      );
     } else {
       text.setAttribute("stroke-width", String(halo));
       cls += " choropleth-state-label-halo";
@@ -3830,9 +3838,11 @@ watch(
   { flush: "post" },
 );
 
-// City overlay → re-place markers. Fires on data change, projection refit
-// (state/geoType/tightFit), and container resize (viewScale). `flush: "post"`
-// so the v-if `<g>` exists before we paint into it.
+// Overlay layers (cities + state labels) → re-place through the shared rAF
+// frame. Fires on data change, projection refit (state/geoType/tightFit),
+// and container resize (viewScale). `flush: "post"` so the v-if overlay
+// exists before we paint into it. One watcher: the frame renders both
+// layers regardless of which dep fired.
 watch(
   () => [
     props.cities,
@@ -3848,27 +3858,14 @@ watch(
     props.title,
     props.legend,
     props.legendTitle,
-  ],
-  () => scheduleOverlayLayout(),
-  { flush: "post" },
-);
-
-// State labels → re-place + recolor. Contrast text colors derive from each
-// state's fill, so everything that repaints fills (data, scale, resolved
-// theme) re-renders the labels too; geometry covers projection refits and
-// single-state scoping. Header props re-pin the overlay box, as above.
-watch(
-  () => [
+    // State-label deps, active only while the prop is on so a cities-only
+    // map doesn't re-render its overlay on every data tick: geometry covers
+    // projection refits + single-state scoping, and the fill deps (data,
+    // scale, resolved theme) recolor the contrast-picked inside labels.
     stateLabelGeometry.value,
-    viewScale.value,
-    props.zoom,
-    props.data,
-    props.dataGeoType,
-    props.colorScale,
-    resolvedTheme.value,
-    props.title,
-    props.legend,
-    props.legendTitle,
+    ...(props.stateLabels
+      ? [props.data, props.dataGeoType, props.colorScale, resolvedTheme.value]
+      : []),
   ],
   () => scheduleOverlayLayout(),
   { flush: "post" },
@@ -4030,7 +4027,17 @@ watch(
         preserveAspectRatio="xMidYMid meet"
         aria-hidden="true"
       >
-        <g ref="stateLabelLayerRef" class="choropleth-state-labels" />
+        <!-- Delegated hover/click for the label hit rects (the only children
+        that opt into pointer events); one listener set instead of four per
+        rect per frame. -->
+        <g
+          ref="stateLabelLayerRef"
+          class="choropleth-state-labels"
+          @mouseover="onLabelHitOver"
+          @mousemove="onLabelHitMove"
+          @mouseout="onLabelHitOut"
+          @click="onLabelHitClick"
+        />
         <g
           ref="cityLayerRef"
           class="choropleth-cities"

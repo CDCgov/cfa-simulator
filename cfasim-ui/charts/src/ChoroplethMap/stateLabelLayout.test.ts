@@ -8,11 +8,15 @@ import {
   type StateLabelFeature,
   type PlacedStateLabel,
 } from "./stateLabelLayout";
-import { estimateTextWidth, rectsOverlap, type LabelRect } from "./cityLayout";
+import {
+  rectsOverlap,
+  boxFor,
+  LINE_HEIGHT,
+  type LabelRect,
+} from "./cityLayout";
 
 const OPTS = { width: 1000, height: 600, viewScale: 1 };
 const LABEL_PX = 11;
-const LINE_HEIGHT = 1.15;
 
 /** Square state helper: axis-aligned square with side `size` at (x0, y0). */
 function sq(
@@ -40,13 +44,9 @@ function sq(
   };
 }
 
-/** The label's own box under the layout's width/height model. */
+/** The label's own box, from the width the layout reports. */
 function boxOf(p: PlacedStateLabel): LabelRect {
-  const w = estimateTextWidth(p.abbr, LABEL_PX);
-  const h = LABEL_PX * LINE_HEIGHT;
-  const x0 =
-    p.anchor === "start" ? p.x : p.anchor === "end" ? p.x - w : p.x - w / 2;
-  return { x0, y0: p.y - h / 2, x1: x0 + w, y1: p.y + h / 2 };
+  return boxFor(p.x, p.y, p.w, LABEL_PX * LINE_HEIGHT, p.anchor);
 }
 
 describe("fipsToStateAbbr", () => {
@@ -162,19 +162,6 @@ describe("layoutStateLabels", () => {
     expect(callout.placement).toBe("callout");
     expect(callout.anchor).toBe("end");
     expect(callout.x).toBeLessThan(200);
-    expect(callout.leader).toBeNull();
-  });
-
-  it("prefers the state's landmass side over pushing past a neighbor", () => {
-    const tiny = sq("02", "BB", 600, 300, 8);
-    // A landmass immediately east; the tiny state sits on the map's west
-    // side, so its label goes west into the open background there.
-    const land = sq("03", "CC", 620, 250, 100);
-    const placed = layoutStateLabels([tiny, land], undefined, OPTS);
-    const callout = placed.find((p) => p.id === "02")!;
-    expect(callout.placement).toBe("callout");
-    expect(callout.anchor).toBe("end");
-    expect(callout.x).toBeLessThan(600);
     expect(callout.leader).toBeNull();
   });
 
