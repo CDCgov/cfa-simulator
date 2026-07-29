@@ -391,8 +391,11 @@ const props = withDefaults(
      * on a states map, county 11001 on a county map, DC's HSA on an HSA
      * map. The enlarged shape is what you see and what you hover/click;
      * ids and data values are untouched. No effect in single-state mode.
+     * Default (`null` = auto): enabled (4x) on state-level maps, where DC
+     * is otherwise a few pixels wide; off on county/HSA maps. Pass `false`
+     * to turn it off.
      */
-    enlargeDc?: boolean | number;
+    enlargeDc?: boolean | number | null;
   }>(),
   {
     geoType: "states",
@@ -408,8 +411,10 @@ const props = withDefaults(
     focusZoom: true,
     tightFit: false,
     citiesMinZoom: 2,
-    enlargeDc: false,
     stateLabels: false,
+    // null = auto (see the prop docs); a plain absent boolean prop would be
+    // cast to false by Vue, hiding the states-map default.
+    enlargeDc: null,
   },
 );
 
@@ -1635,7 +1640,9 @@ const DC_DEFAULT_SCALE = 4;
 // Base enlargement factor, or null when off. Disabled in single-state mode
 // (a map scoped to a state is already zoomed in).
 const dcScaleBase = computed<number | null>(() => {
-  const v = props.enlargeDc;
+  // Unset means "on for state-level maps, off elsewhere"; an explicit
+  // `false` always disables.
+  const v = props.enlargeDc ?? props.geoType === "states";
   if (!v || stateFips.value) return null;
   const s = v === true ? DC_DEFAULT_SCALE : Number(v);
   return Number.isFinite(s) && s > 1 ? s : null;

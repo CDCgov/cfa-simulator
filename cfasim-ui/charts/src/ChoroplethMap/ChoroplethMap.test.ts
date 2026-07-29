@@ -3997,9 +3997,50 @@ describe("ChoroplethMap enlargeDc", () => {
       .attributes("d")!;
   }
 
+  it("is on by default for state maps, off for county maps, false disables", () => {
+    const auto = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 800, height: 500 },
+    });
+    const off = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 800,
+        height: 500,
+        enlargeDc: false,
+      },
+    });
+    const ratio = pathBBox(dOf(auto, "11")).w / pathBBox(dOf(off, "11")).w;
+    expect(ratio).toBeGreaterThan(3.4);
+    expect(ratio).toBeLessThan(4.6);
+    // County maps stay opt-in.
+    const countyAuto = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 800,
+        height: 500,
+      },
+    });
+    const countyOff = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 800,
+        height: 500,
+        enlargeDc: false,
+      },
+    });
+    expect(dOf(countyAuto, "11001")).toBe(dOf(countyOff, "11001"));
+  });
+
   it("enlarges DC in place at the overview (true → 4×), neighbors untouched", () => {
     const plain = mount(ChoroplethMap, {
-      props: { topology: statesTopo, width: 800, height: 500 },
+      props: {
+        topology: statesTopo,
+        width: 800,
+        height: 500,
+        enlargeDc: false,
+      },
     });
     const scaled = mount(ChoroplethMap, {
       props: { topology: statesTopo, width: 800, height: 500, enlargeDc: true },
@@ -4022,7 +4063,12 @@ describe("ChoroplethMap enlargeDc", () => {
 
   it("accepts a numeric factor and ignores factors ≤ 1", () => {
     const plain = mount(ChoroplethMap, {
-      props: { topology: statesTopo, width: 800, height: 500 },
+      props: {
+        topology: statesTopo,
+        width: 800,
+        height: 500,
+        enlargeDc: false,
+      },
     });
     const five = mount(ChoroplethMap, {
       props: { topology: statesTopo, width: 800, height: 500, enlargeDc: 5 },
@@ -4038,7 +4084,12 @@ describe("ChoroplethMap enlargeDc", () => {
 
   it("shrinks back to true size once the zoom catches up", async () => {
     const plain = mount(ChoroplethMap, {
-      props: { topology: statesTopo, width: 800, height: 500 },
+      props: {
+        topology: statesTopo,
+        width: 800,
+        height: 500,
+        enlargeDc: false,
+      },
     });
     const wrapper = mount(ChoroplethMap, {
       props: {
