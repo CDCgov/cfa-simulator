@@ -362,12 +362,27 @@ export function layoutStateLabels(
   // coast (FL, MI).
   const fitH = font * FIT_TEXT_HEIGHT;
   for (const k of kept) {
+    // Everything below works from the VISIBLE part of the state (its box
+    // clipped to the viewport). At the base view that IS the whole box; on
+    // a zoomed-in view it keeps nudges human-scaled (a zoomed state's full
+    // box spans several screens, and box-proportional nudges scattered the
+    // few surviving labels to arbitrary spots) and provides an on-screen
+    // origin when the centroid/anchor have scrolled out of view — a state
+    // filling half the screen keeps its label instead of dropping it.
+    const vx0 = Math.max(k.boundsT.x0, 0);
+    const vy0 = Math.max(k.boundsT.y0, 0);
+    const vx1 = Math.min(k.boundsT.x1, width);
+    const vy1 = Math.min(k.boundsT.y1, height);
+    const origins: [number, number][] = [k.centroidT, k.anchorT];
+    if (vx1 > vx0 && vy1 > vy0) {
+      origins.push([(vx0 + vx1) / 2, (vy0 + vy1) / 2]);
+    }
     // Nudge distances scale with the label first (imperceptible shifts),
-    // then with the state's box — an L-shaped state (FL, LA) can have its
-    // centroid right on a coast, and a bbox-proportional shift walks the
+    // then with the visible box — an L-shaped state (FL, LA) can have its
+    // centroid right on a coast, and a box-proportional shift walks the
     // label back into the shape's meat.
-    const bw = (k.boundsT.x1 - k.boundsT.x0) / 8;
-    const bh = (k.boundsT.y1 - k.boundsT.y0) / 8;
+    const bw = (vx1 - vx0) / 8;
+    const bh = (vy1 - vy0) / 8;
     const nudges: [number, number][] = [
       [0, 0],
       [0, -labelH / 2],
@@ -385,7 +400,7 @@ export function layoutStateLabels(
     ];
     let placed = false;
     outer: for (const [dx, dy] of nudges) {
-      for (const origin of [k.centroidT, k.anchorT]) {
+      for (const origin of origins) {
         const cx = origin[0] + dx;
         const cy = origin[1] + dy;
         const rect = boxFor(

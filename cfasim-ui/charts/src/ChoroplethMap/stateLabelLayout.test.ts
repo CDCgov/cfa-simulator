@@ -257,6 +257,22 @@ describe("layoutStateLabels", () => {
     expect(placed.y).toBeCloseTo(175);
   });
 
+  it("keeps a label on a state you've zoomed into (centroid off screen)", () => {
+    const big = sq("01", "AA", 100, 100, 200);
+    // k=5 panned so the state fills the view while its centroid (200,200 →
+    // (-200,400)) is off screen to the left: the label must move to the
+    // center of the VISIBLE part instead of disappearing.
+    const [placed] = layoutStateLabels(
+      [big],
+      { k: 5, x: -1200, y: -600 },
+      OPTS,
+    );
+    expect(placed).toBeDefined();
+    expect(placed.placement).toBe("inside");
+    expect(placed.x).toBeCloseTo(150);
+    expect(placed.y).toBeCloseTo(300);
+  });
+
   it("re-fits under zoom: a callout state gains an inside label zoomed in", () => {
     const tiny = sq("02", "BB", 700, 300, 8);
     const base = layoutStateLabels([tiny], undefined, OPTS);
