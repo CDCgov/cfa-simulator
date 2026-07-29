@@ -3971,6 +3971,191 @@ describe("ChoroplethMap theming", () => {
   });
 });
 
+describe("ChoroplethMap enlargeDc", () => {
+  // Rough bbox of a path's `d` (geoPath emits only M/L pairs for polygons).
+  function pathBBox(d: string) {
+    const nums = d.match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/g)!.map(Number);
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (let i = 0; i < nums.length - 1; i += 2) {
+      const x = nums[i];
+      const y = nums[i + 1];
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+    return { w: x1 - x0, h: y1 - y0, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
+  }
+
+  function dOf(wrapper: ReturnType<typeof mount>, id: string) {
+    return wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === id)!
+      .attributes("d")!;
+  }
+
+  it("enlarges DC in place at the overview (true → 4×), neighbors untouched", () => {
+    const plain = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 800, height: 500 },
+    });
+    const scaled = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 800, height: 500, enlargeDc: true },
+    });
+    const before = pathBBox(dOf(plain, "11"));
+    const after = pathBBox(dOf(scaled, "11"));
+    expect(after.w / before.w).toBeGreaterThan(3.4);
+    expect(after.w / before.w).toBeLessThan(4.6);
+    expect(after.h / before.h).toBeGreaterThan(3.4);
+    expect(after.h / before.h).toBeLessThan(4.6);
+    // In place: the center barely moves.
+    expect(Math.abs(after.cx - before.cx)).toBeLessThan(3);
+    expect(Math.abs(after.cy - before.cy)).toBeLessThan(3);
+    // Maryland untouched.
+    expect(dOf(scaled, "24")).toBe(dOf(plain, "24"));
+    // DC paints last so the enlargement sits above its neighbors.
+    const paths = scaled.findAll(".state-path");
+    expect(paths[paths.length - 1].attributes("data-feat-id")).toBe("11");
+  });
+
+  it("accepts a numeric factor and ignores factors ≤ 1", () => {
+    const plain = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 800, height: 500 },
+    });
+    const five = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 800, height: 500, enlargeDc: 5 },
+    });
+    const ratio = pathBBox(dOf(five, "11")).w / pathBBox(dOf(plain, "11")).w;
+    expect(ratio).toBeGreaterThan(4.3);
+    expect(ratio).toBeLessThan(5.7);
+    const noop = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 800, height: 500, enlargeDc: 1 },
+    });
+    expect(dOf(noop, "11")).toBe(dOf(plain, "11"));
+  });
+
+  it("shrinks back to true size once the zoom catches up", async () => {
+    const plain = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 800, height: 500 },
+    });
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 800,
+        height: 500,
+        zoom: true,
+        enlargeDc: 2,
+      },
+    });
+    expect(dOf(wrapper, "11")).not.toBe(dOf(plain, "11"));
+    // A focus zoom animates to k = focusZoomLevel (4): the effective scale
+    // max(1, 2/4) bottoms out at 1 and DC returns to its exact base
+    // geometry. The path `d` is in canonical coordinates (the zoom lives on
+    // the group transform), so base and zoomed `d`s compare directly.
+    await wrapper.setProps({ focus: "24" });
+    await flushPromises();
+    await new Promise((r) => setTimeout(r, 550));
+    await flushPromises();
+    expect(dOf(wrapper, "11")).toBe(dOf(plain, "11"));
+    wrapper.unmount();
+  });
+
+  it("enlarges DC's county on a county map", () => {
+    const plain = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 800,
+        height: 500,
+      },
+    });
+    const scaled = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 800,
+        height: 500,
+        enlargeDc: 6,
+      },
+    });
+    const before = pathBBox(dOf(plain, "11001"));
+    const after = pathBBox(dOf(scaled, "11001"));
+    expect(after.w / before.w).toBeGreaterThan(5);
+    expect(after.w / before.w).toBeLessThan(7);
+  });
+
+  it("enlarges DC's HSA on an HSA map", async () => {
+    const { fipsToHsa } = await import("./hsaMapping.js");
+    const dcHsa = fipsToHsa["11001"];
+    expect(dcHsa).toBeTruthy();
+    const plain = mount(ChoroplethMap, {
+      props: {
+        topology: hsaTopo,
+        geoType: "hsas" as const,
+        width: 800,
+        height: 500,
+      },
+    });
+    const scaled = mount(ChoroplethMap, {
+      props: {
+        topology: hsaTopo,
+        geoType: "hsas" as const,
+        width: 800,
+        height: 500,
+        enlargeDc: 4,
+      },
+    });
+    await flushDynamicImports();
+    const before = pathBBox(dOf(plain, dcHsa));
+    const after = pathBBox(dOf(scaled, dcHsa));
+    expect(after.w / before.w).toBeGreaterThan(3.2);
+    expect(after.w / before.w).toBeLessThan(4.8);
+  });
+
+  it("keeps the enlargement above a neighbor after a hover cycle", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 800, height: 500, enlargeDc: true },
+    });
+    const lastId = () => {
+      const paths = wrapper.findAll(".state-path");
+      return paths[paths.length - 1].attributes("data-feat-id");
+    };
+    const md = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "24")!;
+    await md.trigger("mouseover");
+    // While hovered the neighbor wins, matching the canvas highlight.
+    expect(lastId()).toBe("24");
+    await md.trigger("mouseout");
+    expect(lastId()).toBe("11");
+  });
+
+  it("does nothing in single-state mode", () => {
+    const plain = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        state: "11",
+        width: 800,
+        height: 500,
+      },
+    });
+    const scaled = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        state: "11",
+        width: 800,
+        height: 500,
+        enlargeDc: true,
+      },
+    });
+    expect(dOf(scaled, "11001")).toBe(dOf(plain, "11001"));
+  });
+});
+
 describe("ChoroplethMap state labels (stateLabels)", () => {
   function layerOf(wrapper: ReturnType<typeof mount>) {
     return wrapper.find(".choropleth-state-labels");

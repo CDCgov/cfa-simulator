@@ -64,6 +64,7 @@ function scene3(): CanvasScene {
     items,
     indexById: new Map(items.map((it, i) => [it.id, i])),
     featureStrokes: new FakePath2D("M0M1M2") as unknown as Path2D,
+    raisedStroke: null,
     borders: new FakePath2D("Mborders") as unknown as Path2D,
     exterior: null,
   };

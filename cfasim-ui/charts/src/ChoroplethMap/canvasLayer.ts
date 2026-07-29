@@ -22,6 +22,12 @@ export interface CanvasScene {
    * canvas2D especially).
    */
   featureStrokes: Path2D | null;
+  /**
+   * Stroke for a feature kept OUT of `featureStrokes` because its geometry
+   * is swapped at runtime (the zoom-aware enlarged DC): a concatenated
+   * Path2D can't be edited, so this one strokes separately after it.
+   */
+  raisedStroke: Path2D | null;
   /** State-borders mesh (counties / hsas mode). */
   borders: Path2D | null;
   /**
@@ -121,11 +127,13 @@ export function buildScene(
   pathFor: (feature: never) => string | null,
   colorFor: (id: string) => string,
   bordersD?: string | null,
+  raisedId?: string | null,
 ): CanvasScene {
   const items: SceneItem[] = [];
   const indexById = new Map<string, number>();
   const featureStrokes = new Path2D();
   let strokeCount = 0;
+  let raisedStroke: Path2D | null = null;
   for (const feat of features) {
     const d = pathFor(feat as never);
     if (!d) continue;
@@ -133,7 +141,9 @@ export function buildScene(
     const path = new Path2D(d);
     indexById.set(id, items.length);
     items.push({ id, path, fill: colorFor(id) });
-    if (typeof featureStrokes.addPath === "function") {
+    if (raisedId != null && id === raisedId) {
+      raisedStroke = path;
+    } else if (typeof featureStrokes.addPath === "function") {
       featureStrokes.addPath(path);
       strokeCount++;
     }
@@ -142,6 +152,7 @@ export function buildScene(
     items,
     indexById,
     featureStrokes: strokeCount ? featureStrokes : null,
+    raisedStroke,
     borders: bordersD ? new Path2D(bordersD) : null,
     exterior: null,
   };
@@ -227,6 +238,9 @@ function finishBasePass(
       ctx.stroke(scene.featureStrokes);
     } else {
       for (const item of scene.items) ctx.stroke(item.path);
+    }
+    if (scene.raisedStroke && scene.featureStrokes) {
+      ctx.stroke(scene.raisedStroke);
     }
   }
 

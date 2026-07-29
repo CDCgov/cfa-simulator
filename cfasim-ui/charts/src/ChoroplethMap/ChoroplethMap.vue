@@ -9,7 +9,7 @@ import {
   toRaw,
   useSlots,
 } from "vue";
-import { geoPath, geoAlbersUsa, geoMercator } from "d3-geo";
+import { geoPath, geoAlbersUsa, geoMercator, geoCentroid } from "d3-geo";
 import {
   zoom as d3Zoom,
   zoomIdentity,
@@ -381,6 +381,18 @@ const props = withDefaults(
      * (labels always mark states); non-interactive. Default `false`.
      */
     stateLabels?: boolean;
+    /**
+     * Enlarge the District of Columbia so it can be seen and interacted
+     * with at the national overview. `true` enlarges 4x; a number sets the
+     * factor. Zoom-aware: as you zoom in, DC holds that enlarged on-screen
+     * size until its true geography reaches it (zoom factor >= the scale),
+     * after which it renders at its actual size - zoomed-in views are
+     * never distorted. Applies to DC's feature at every level: the state
+     * on a states map, county 11001 on a county map, DC's HSA on an HSA
+     * map. The enlarged shape is what you see and what you hover/click;
+     * ids and data values are untouched. No effect in single-state mode.
+     */
+    enlargeDc?: boolean | number;
   }>(),
   {
     geoType: "states",
@@ -396,6 +408,7 @@ const props = withDefaults(
     focusZoom: true,
     tightFit: false,
     citiesMinZoom: 2,
+    enlargeDc: false,
     stateLabels: false,
   },
 );
@@ -834,6 +847,8 @@ function setupZoom() {
     })
     .on("end", () => {
       isZooming = false;
+      // DC-enlargement picking updates are deferred through gestures.
+      if (dcPickingStale) rebuildDcPicking();
       // Sharpen after gestures: an idle-view frame starts a base refresh.
       if (isCanvas.value) requestRedraw();
     });
@@ -1614,10 +1629,54 @@ function levelOf(featureId: string): GeoType {
   return featureLevelById.value.get(featureId) ?? props.geoType;
 }
 
-const featuresGeo = computed(() => ({
-  type: "FeatureCollection" as const,
-  features: mixedFeatures.value.features,
-}));
+// ─── DC enlargement (enlargeDc) ──────────────────────────────────────────
+const DC_DEFAULT_SCALE = 4;
+
+// Base enlargement factor, or null when off. Disabled in single-state mode
+// (a map scoped to a state is already zoomed in).
+const dcScaleBase = computed<number | null>(() => {
+  const v = props.enlargeDc;
+  if (!v || stateFips.value) return null;
+  const s = v === true ? DC_DEFAULT_SCALE : Number(v);
+  return Number.isFinite(s) && s > 1 ? s : null;
+});
+
+// DC's feature id at the rendered level. Null when the enlargement is off,
+// or until the lazy HSA table resolves on HSA maps.
+const dcFeatureId = computed<string | null>(() => {
+  if (dcScaleBase.value == null) return null;
+  if (props.geoType === "states") return "11";
+  if (props.geoType === "counties") return "11001";
+  return hsaModule.value?.fipsToHsa["11001"] ?? null;
+});
+
+// Zoom-aware effective scale: hold DC at a constant enlarged on-screen size
+// (base ÷ k) until its true geography catches up at k ≥ base, then render
+// it undistorted. `scaleK` updates per zoom frame, so the size animates
+// smoothly through gestures and transitions with no threshold pop.
+const dcEffScale = computed(() => {
+  const s = dcScaleBase.value;
+  if (s == null || dcFeatureId.value == null) return 1;
+  return Math.max(1, s / scaleK.value);
+});
+
+const featuresGeo = computed(() => {
+  let features = mixedFeatures.value.features;
+  // The enlarged DC overlaps its neighbors, so it must paint (and pick)
+  // last — in both backends, draw order follows this array.
+  const dcId = dcFeatureId.value;
+  if (dcId != null) {
+    const i = features.findIndex((f) => String(f.id) === dcId);
+    if (i >= 0 && i !== features.length - 1) {
+      features = [
+        ...features.slice(0, i),
+        ...features.slice(i + 1),
+        features[i],
+      ];
+    }
+  }
+  return { type: "FeatureCollection" as const, features };
+});
 
 watch(
   () => overrideResolution.value,
@@ -2628,13 +2687,19 @@ function restoreDefaultStroke(pathEl: SVGPathElement) {
   pathEl.setAttribute("stroke", resolvedTheme.value.stroke);
   pathEl.removeAttribute("stroke-dasharray");
   pathEl.removeAttribute("stroke-linecap");
-  // applyHighlightStroke raised the path above the borders mesh and the
-  // exterior outline; lower it back so those layers aren't left occluded
-  // along this feature's edges. Order among feature paths doesn't matter
-  // (they only meet at shared edges), so any slot before the anchor works.
-  // The position check keeps bulk restores (updateStrokes) from moving
-  // paths that were never raised.
-  const anchor = bordersPathEl ?? outlinePathEl;
+  // applyHighlightStroke raised the path above the borders mesh, the
+  // exterior outline, and the enlarged DC; lower it back so those layers
+  // aren't left occluded. Order among ordinary feature paths doesn't
+  // matter (they only meet at shared edges), but the enlarged DC overlaps
+  // its neighbors' interiors and must stay on top — its path (last among
+  // the features, before the meshes) is the preferred anchor. The position
+  // check keeps bulk restores (updateStrokes) from moving paths that were
+  // never raised.
+  const dcPathEl =
+    dcFeatureId.value != null
+      ? (pathsByFeatureId.get(dcFeatureId.value) ?? null)
+      : null;
+  const anchor = dcPathEl ?? bordersPathEl ?? outlinePathEl;
   if (
     anchor?.parentNode &&
     anchor.parentNode === pathEl.parentNode &&
@@ -3376,6 +3441,87 @@ function renderStateLabelLayer() {
   g.appendChild(frag);
 }
 
+// ── DC enlargement runtime (see the dcEffScale computed) ────────────────
+// The base geometry stays unscaled everywhere (featuresGeo, projection fit,
+// tooltips, labels, focus bounds); only DC's RENDERED path re-derives when
+// the effective scale changes — one tiny path per zoom frame.
+let dcApplied: { id: string; scale: number } | null = null;
+let dcPickingStale = false;
+
+// Scale DC's rings around its centroid in lon/lat: the projection is
+// locally affine at DC's size, so this matches screen-space scaling.
+function scaledDcGeometry(
+  feat: ChoroplethFeature,
+  s: number,
+): ChoroplethFeature {
+  const geom = feat.geometry;
+  if (!geom || (geom.type !== "Polygon" && geom.type !== "MultiPolygon")) {
+    return feat;
+  }
+  const [cx, cy] = geoCentroid(feat as GeoJSON.Feature);
+  const scaleRing = (ring: number[][]): number[][] =>
+    ring.map(([x, y]) => [cx + (x - cx) * s, cy + (y - cy) * s]);
+  const coordinates =
+    geom.type === "Polygon"
+      ? geom.coordinates.map(scaleRing)
+      : geom.coordinates.map((poly) => poly.map(scaleRing));
+  return {
+    ...feat,
+    geometry: { type: geom.type, coordinates } as GeoJSON.Geometry,
+  };
+}
+
+function rebuildDcPicking() {
+  dcPickingStale = false;
+  if (scene && pickingCanvas) {
+    pickingCtx = buildPicking(scene, width.value, height.value, pickingCanvas);
+  }
+}
+
+/** Write DC's rendered path at scale `s`; true when something was written. */
+function writeDcPath(id: string, s: number): boolean {
+  const feat = featuresById.value.get(id);
+  if (!feat) return false;
+  const d = pathGenerator.value(
+    (s === 1 ? feat : scaledDcGeometry(feat as ChoroplethFeature, s)) as never,
+  );
+  if (!d) return false;
+  if (isCanvas.value) {
+    if (!scene) return false;
+    const idx = scene.indexById.get(id);
+    if (idx == null) return false;
+    const p = new Path2D(d);
+    scene.items[idx] = { ...scene.items[idx], path: p };
+    scene.raisedStroke = p;
+    markBaseDirty();
+    requestRedraw();
+    // Rebuilding the picking bitmap repaints every feature; hover is
+    // suppressed during gestures anyway, so defer to the zoom-end handler.
+    if (isZooming) dcPickingStale = true;
+    else rebuildDcPicking();
+    return true;
+  }
+  const p = pathsByFeatureId.get(id);
+  if (!p) return false;
+  p.setAttribute("d", d);
+  return true;
+}
+
+function applyDcScale() {
+  const id = dcFeatureId.value;
+  const s = dcEffScale.value;
+  const target = id != null && s > 1 ? { id, scale: s } : null;
+  // Restore a previously enlarged feature that is no longer targeted
+  // (prop turned off, geoType switch re-resolving the id).
+  if (dcApplied && (!target || target.id !== dcApplied.id)) {
+    writeDcPath(dcApplied.id, 1);
+    dcApplied = null;
+  }
+  if (!target) return;
+  if (dcApplied && Math.abs(dcApplied.scale - target.scale) < 0.004) return;
+  if (writeDcPath(target.id, target.scale)) dcApplied = target;
+}
+
 function rebuildPaths() {
   const baseG = baseGroupRef.value;
   const overlayG = overlayGroupRef.value;
@@ -3432,6 +3578,7 @@ function rebuildPaths() {
       path as (feature: never) => string | null,
       colorFor,
       borders ? path(borders) : null,
+      dcFeatureId.value,
     );
     syncOutlinePath();
     if (!pickingCanvas && typeof document !== "undefined") {
@@ -3443,6 +3590,9 @@ function rebuildPaths() {
     markBaseDirty();
     markPainted();
     requestRedraw();
+    // The fresh scene is at base size; re-apply the current enlargement.
+    dcApplied = null;
+    applyDcScale();
     return;
   }
 
@@ -3492,6 +3642,9 @@ function rebuildPaths() {
   syncOutlinePath();
   applyStrokeScale();
   markPainted();
+  // The fresh path tree is at base size; re-apply the current enlargement.
+  dcApplied = null;
+  applyDcScale();
 }
 
 // Create / update / remove the exterior outline (theme.outline). Kept
@@ -3886,6 +4039,14 @@ watch(
       : []),
   ],
   () => scheduleOverlayLayout(),
+  { flush: "post" },
+);
+
+// DC's enlargement follows the zoom level; geometry/backend changes are
+// covered by rebuildPaths re-applying at its end.
+watch(
+  () => dcEffScale.value,
+  () => applyDcScale(),
   { flush: "post" },
 );
 

@@ -650,6 +650,43 @@ Enabling `state-labels` also reserves a slim right margin in the national map fi
 
 **Styling:** a stylesheet can override the layer's CSS custom properties on `.choropleth-state-labels` — `--choropleth-state-label-color` and `--choropleth-state-label-halo` for the default (callout/halo) styling and the leader lines, and `--choropleth-state-label-dark` / `--choropleth-state-label-light` for the two contrast-picked inside colors. Callout labels carry a `.choropleth-state-label-callout` class and leader lines `.choropleth-state-leader` as hooks.
 
+### Enlarging DC (`enlarge-dc`)
+
+The District of Columbia is a few pixels wide on a national map — impossible to see or hover. Set `enlarge-dc` to render it enlarged in place around its own centroid: `true` enlarges 4×, a number sets the factor. The enlarged shape is what you see and what you interact with (fills, tooltips, hover/click, canvas picking), while ids and data values stay untouched.
+
+The enlargement is **zoom-aware**: as you zoom in, DC holds that enlarged on-screen size until its true geography reaches it, then renders at its actual size — zoomed-in views are never distorted, and the size animates continuously with the zoom (no threshold pop). **Try it: zoom into the mid-Atlantic and watch DC settle to its true size.**
+
+<ComponentDemo>
+  <ChoroplethMap
+    :topology="statesTopo"
+    :data="stateLabelData"
+    :enlarge-dc="5"
+    state-labels
+    zoom
+    tooltip-trigger="hover"
+    title="DC enlarged 5× at the overview; true size once zoomed in"
+    :legend="false"
+    :height="440"
+  />
+
+<template #code>
+
+```vue
+<ChoroplethMap
+  :topology="statesTopo"
+  :data="stateData"
+  :enlarge-dc="5"
+  state-labels
+  zoom
+  tooltip-trigger="hover"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+Works on every `geoType` — the enlarged feature is DC's state on a state map, county `11001` on a county map, or DC's HSA on an HSA map. Factors of `1` or less are ignored, and single-state maps are unaffected (a map scoped to a state is already zoomed in).
+
 ### HSA-level map
 
 Set `geoType="hsas"` to render Health Service Area boundaries. Use 6-digit HSA codes as IDs. State borders are overlaid for context. Two topologies work:
