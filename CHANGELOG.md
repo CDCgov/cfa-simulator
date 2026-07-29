@@ -1,6 +1,21 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.5] - 2026-07-29
+
+### Chores
+
+- Raise charts CSS size limit to 12 KB for the state-label styles
+
+### Features
+
+- **charts:** Add optional state-abbreviation labels to ChoroplethMap
+- **charts:** Give state-label callouts coast room and simplify the label layer
+
+### Performance
+
+- **charts:** Cache LineChart geometry per render, share ChartTitle, memoize date formatters
+
 ## [0.8.4] - 2026-07-24
 
 ### Features
