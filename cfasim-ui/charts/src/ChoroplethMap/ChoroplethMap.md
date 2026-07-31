@@ -1156,8 +1156,9 @@ const focus = computed(() => {
 ### Custom tooltip number format
 
 Pass `tooltip-value-format` to format numeric values shown in the tooltip
-(both the native SVG `<title>` and the interactive HTML tooltip). Use the
-`#tooltip` slot if you want full control over the tooltip's content.
+(the interactive HTML tooltip, the native SVG `<title>`, and each feature's
+`aria-label`). Use the `#tooltip` slot if you want full control over the
+tooltip's content.
 
 <ComponentDemo>
   <ChoroplethMap
@@ -1207,9 +1208,8 @@ Differences from the default SVG renderer:
 
 - The menu offers **Fullscreen** and **Save as PNG** only (there is no SVG
   DOM to serialize; the PNG exports straight off the rendering canvas).
-- There is no per-feature `<title>` fallback or per-feature DOM for
-  assistive tech — configure an interactive tooltip (`tooltip-trigger` or
-  the `#tooltip` slot), or stay on SVG where that fallback matters.
+- There is no per-feature DOM for assistive tech (SVG mode names every
+  feature via `aria-label`) — stay on SVG where that matters.
 
 `renderer` can also be switched on a mounted map (e.g. drop to canvas past a
 feature-count threshold) — the map rebuilds for the new backend in place and
@@ -1320,8 +1320,17 @@ set `tooltip-trigger`.
 
 ## Accessibility
 
-The map's individual regions aren't exposed to assistive tech, so the map
-announces itself with a single accessible name. When it has a `title`, the root
+In SVG mode (the default renderer) every region is exposed to assistive tech
+as a named graphic: each feature path carries `role="img"` and an `aria-label`
+of `"Name"` or `"Name: value"` (formatted through `tooltip-value-format`),
+kept in sync as data changes. Maps without an interactive tooltip also get a
+native SVG `<title>` on each feature, so hovering shows the browser tooltip;
+configuring `tooltip-trigger`, `tooltip-format`, or the `#tooltip` slot
+replaces the `<title>` (the two tooltips would fight) but the `aria-label`
+stays. In canvas mode there is no per-feature DOM, so regions aren't exposed
+individually.
+
+The map also announces itself as a whole. When it has a `title`, the root
 element gets `role="figure"` and an `aria-label` set to the title, so screen
 readers announce it as a labeled figure while the menu and reset controls stay
 reachable.

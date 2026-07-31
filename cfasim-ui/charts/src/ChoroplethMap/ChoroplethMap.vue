@@ -330,13 +330,14 @@ const props = withDefaults(
     focusZoom?: boolean;
     /**
      * Rendering backend, switchable at runtime (zoom/pan carry over).
-     * `"svg"` (default) keeps one DOM path per feature — full
-     * assistive-tech fallback (per-feature `<title>`) and SVG export.
-     * `"canvas"` paints every feature into a single canvas: much faster
-     * for dense maps (counties, HSAs) and on mobile WebKit, with
-     * identical interactions. In canvas mode the menu offers PNG export
-     * only, and there is no per-feature fallback for assistive tech —
-     * configure an interactive tooltip.
+     * `"svg"` (default) keeps one DOM path per feature — every feature
+     * carries an accessible name ("Name: value" via `aria-label`, plus a
+     * native `<title>` tooltip when no interactive tooltip is configured)
+     * and the menu offers SVG export. `"canvas"` paints every feature
+     * into a single canvas: much faster for dense maps (counties, HSAs)
+     * and on mobile WebKit, with identical interactions. In canvas mode
+     * the menu offers PNG export only, and there is no per-feature DOM
+     * for assistive tech — stay on SVG where that matters.
      */
     renderer?: "svg" | "canvas";
     /**
@@ -498,7 +499,8 @@ const tooltipChildRef = ref<InstanceType<typeof ChoroplethTooltip> | null>(
 const slots = useSlots();
 // Slot/prop presence doesn't change at runtime, so this is effectively
 // computed once. Used to gate the teleported tooltip and the SVG <title>
-// fallback.
+// (the native-tooltip half of the per-feature name; the aria-label half is
+// unconditional).
 const hasInteractiveTooltip = computed(
   () => !!props.tooltipTrigger || !!props.tooltipFormat || !!slots.tooltip,
 );
@@ -2093,7 +2095,8 @@ function formatTooltipValue(value: number | string | undefined): string {
   return String(value);
 }
 
-/** "Name" or "Name: formatted-value" — used for the SVG <title> fallback. */
+/** "Name" or "Name: formatted-value" — each feature's accessible name
+ * (aria-label, plus the SVG <title> when no interactive tooltip is set). */
 function titleText(name: string, value: number | string | undefined): string {
   return value == null ? name : `${name}: ${formatTooltipValue(value)}`;
 }
@@ -3614,14 +3617,22 @@ function rebuildPaths() {
     const id = String(feat.id);
     const name = featureName(feat);
     const value = valueFor(id);
+    const label = titleText(name, value);
     const p = makePath(path(feat));
     p.setAttribute("class", "state-path");
     p.setAttribute("data-feat-id", id);
     p.setAttribute("fill", colorFor(id));
     p.setAttribute("stroke", stroke);
+    // Every feature is named for assistive tech regardless of tooltip
+    // config — aria-label never triggers the browser's native tooltip, so
+    // it can't double up with the interactive HTML tooltip. The <title>
+    // (which IS a native tooltip) is only added when no interactive
+    // tooltip would fight it.
+    p.setAttribute("role", "img");
+    p.setAttribute("aria-label", label);
     if (wantsTitleFallback) {
       const title = document.createElementNS(SVG_NS, "title");
-      title.textContent = titleText(name, value);
+      title.textContent = label;
       p.appendChild(title);
     }
     frag.appendChild(p);
@@ -3743,19 +3754,20 @@ function updateFills() {
     requestRedraw();
     return;
   }
-  const refreshTitle = !hasInteractiveTooltip.value;
   for (const [id, p] of pathsByFeatureId) {
     const value = valueFor(id);
     const entry = tooltipDataById.get(id);
     p.setAttribute("fill", colorFor(id));
-    // Refresh cached tooltip payload so a later hover (or the SVG <title>
-    // fallback below) reflects the new value.
-    if (entry) entry.value = value;
-    if (refreshTitle && entry) {
-      // First child is the <title> appended in rebuildPaths when fallback
-      // mode is active.
+    // Refresh cached tooltip payload so a later hover (and the per-feature
+    // accessible name below) reflects the new value.
+    if (entry) {
+      entry.value = value;
+      const label = titleText(entry.name, value);
+      p.setAttribute("aria-label", label);
+      // First child is the <title> appended in rebuildPaths when no
+      // interactive tooltip is configured.
       const title = p.firstElementChild;
-      if (title) title.textContent = titleText(entry.name, value);
+      if (title) title.textContent = label;
     }
   }
 }

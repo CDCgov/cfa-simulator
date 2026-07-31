@@ -171,6 +171,27 @@ describe("ChoroplethMap", () => {
     expect(california!.find("title").text()).toContain("42");
   });
 
+  it("keeps per-feature aria-labels in sync with data when an interactive tooltip is set", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        data: [{ id: "06", value: 42 }],
+        tooltipFormat: (d: { name: string }) => `<b>${d.name}</b>`,
+      },
+    });
+    const california = wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06")!;
+    expect(california.find("title").exists()).toBe(false);
+    expect(california.attributes("aria-label")).toBe("California: 42");
+
+    await wrapper.setProps({ data: [{ id: "06", value: 99 }] });
+    expect(california.attributes("aria-label")).toBe("California: 99");
+    wrapper.unmount();
+  });
+
   it("formats numeric tooltip values via tooltipValueFormat", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
@@ -651,13 +672,16 @@ describe("ChoroplethMap", () => {
         </template>`,
       },
     });
-    // Slot presence should suppress the native SVG <title> fallback.
+    // Slot presence suppresses the native SVG <title> (it would double up
+    // with the HTML tooltip) but every feature keeps its accessible name.
     expect(wrapper.find(".state-path title").exists()).toBe(false);
 
     const california = wrapper
       .findAll(".state-path")
       .find((p) => p.attributes("data-feat-id") === "06");
     expect(california).toBeDefined();
+    expect(california!.attributes("role")).toBe("img");
+    expect(california!.attributes("aria-label")).toBe("California: 42");
     await california!.trigger("mouseover");
     // showTooltip awaits one tick to measure before positioning; flush
     // microtasks so the direct DOM write has happened.
