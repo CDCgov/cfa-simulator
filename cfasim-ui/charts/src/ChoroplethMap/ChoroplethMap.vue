@@ -1779,7 +1779,11 @@ const outlineMesh = computed<GeoJSON.MultiLineString | null>(() => {
 // theme.hsaBorders): both mesh the topology's county geometries, scoped to
 // the selected state in single-state mode, differing only in which shared
 // arcs the predicate keeps. Null without a `counties` object — a
-// states-only or pre-merged HSA topology never draws either.
+// states-only or pre-merged HSA topology never draws either. States
+// re-tiled through `data[].geoType` are dropped before meshing: they are
+// not tiled at the base level, so the base-derived ruling would contradict
+// their own feature strokes — a state reported as one merged state-level
+// shape stays unruled inside.
 const pad5 = (id: unknown) => String(id).padStart(5, "0");
 function meshCounties(
   predicate: (aId: unknown, bId: unknown) => boolean,
@@ -1790,9 +1794,11 @@ function meshCounties(
   const counties = topo.objects?.counties;
   if (!counties) return null;
   const scope = stateFips.value;
-  const geometries = scope
-    ? counties.geometries.filter((g) => pad5(g.id).slice(0, 2) === scope)
-    : counties.geometries;
+  const overridden = geoOverrides.value;
+  const geometries = counties.geometries.filter((g) => {
+    const state = pad5(g.id).slice(0, 2);
+    return (!scope || state === scope) && !overridden.has(state);
+  });
   return mesh(
     topo as unknown as Topology,
     { type: "GeometryCollection", geometries } as NamedGeometry,

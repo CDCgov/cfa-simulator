@@ -785,6 +785,8 @@ hover an HSA on desktop, or tap one on touch, before or after zooming in.
 
 It needs a topology with county arcs (`us-atlas/counties-10m.json`): the pre-merged `usHsaTopology` has none, so it never draws county borders. On `geoType="counties"` maps the key does nothing — the feature strokes already are the county lines. The complementary `theme.hsaBorders` draws HSA separators over county-level maps instead; see [Color by HSA, interact by county](#color-by-hsa-interact-by-county-datageotype).
 
+Both meshes respect [mixed levels](#mixing-levels-on-one-map-datageotype): a state re-tiled through `data[].geoType` is left unruled, so a state reported as one merged state-level shape stays flat inside — its own feature strokes carry whatever structure it has.
+
 With `zoom` enabled, the `countyBordersMinZoom` prop turns the mesh into a zoom-in detail layer, like per-city `minZoom` on markers: `:county-borders-min-zoom="2"` keeps the county lines hidden until the user zooms in one level.
 
 <ComponentDemo>
