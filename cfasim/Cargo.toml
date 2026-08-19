@@ -1,6 +1,6 @@
 [package]
 name = "cfasim"
-version = "0.8.7"
+version = "0.8.8"
 edition = "2021"
 rust-version.workspace = true
 description = "CLI for scaffolding interactive simulations using Python, Rust, and WebAssembly"

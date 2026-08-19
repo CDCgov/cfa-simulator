@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.8] - 2026-08-19
+
+### Bug Fixes
+
+- **charts:** Add support for mixed regions with county outlines
+
 ## [0.8.7] - 2026-08-19
 
 ### Bug Fixes
