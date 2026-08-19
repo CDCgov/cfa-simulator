@@ -2,7 +2,13 @@
 import { ref, computed, watch } from "vue";
 import { SelectBox, Button, ToggleGroup } from "@cfasim-ui/components";
 import { ChoroplethMap } from "@cfasim-ui/charts";
-import type { StateData, GeoType, FocusValue } from "@cfasim-ui/charts";
+import type {
+  StateData,
+  GeoType,
+  FocusValue,
+  MapTheme,
+  ThresholdStop,
+} from "@cfasim-ui/charts";
 import { fipsToHsa, hsaNames } from "@cfasim-ui/charts/hsa-mapping";
 import {
   nationalCityMarkers,
@@ -47,13 +53,26 @@ const fipsToStateName = new Map(
 const pseudo = (id: string | number): number =>
   parseInt(String(id).slice(-3) || "0", 10) % 100;
 
-const countyData: StateData[] = objects.counties.geometries.map((g) => ({
-  id: String(g.id).padStart(5, "0"),
-  value: pseudo(g.id),
-}));
-const hsaData: StateData[] = [...new Set(Object.values(fipsToHsa))].map(
-  (code) => ({ id: code, value: pseudo(code) }),
+// Skew values so most regions read "Not Changing" and ~15% get no row at
+// all (grey base fill).
+function shaped(u: number): number | null {
+  if (u < 15) return null;
+  if (u < 65) return 40 + Math.round(((u - 15) / 50) * 19);
+  if (u < 77) return 20 + Math.round(((u - 65) / 12) * 19);
+  if (u < 89) return 60 + Math.round(((u - 77) / 12) * 19);
+  if (u < 95) return Math.round(((u - 89) / 6) * 19);
+  return 80 + Math.round(((u - 95) / 5) * 19);
+}
+const shapedRows = (ids: string[]): StateData[] =>
+  ids.flatMap((id) => {
+    const value = shaped(pseudo(id));
+    return value == null ? [] : [{ id, value }];
+  });
+
+const countyData: StateData[] = shapedRows(
+  objects.counties.geometries.map((g) => String(g.id).padStart(5, "0")),
 );
+const hsaData: StateData[] = shapedRows([...new Set(Object.values(fipsToHsa))]);
 
 const defaults = {
   // Empty = national view; a state name drills into that state.
@@ -69,41 +88,100 @@ const defaults = {
   // per-feature DOM. Fixed at mount, so the map is keyed on it to remount.
   renderer: "canvas" as "canvas" | "svg",
   // Exterior outline (theme.outline) around the rendered geography.
-  outline: "off" as "off" | "on",
+  outline: "on" as "off" | "on",
   // Mix levels: report a couple of states as one whole-state estimate on the
-  // otherwise county-level national map.
+  // otherwise HSA-level national map.
   mixed: "off" as "off" | "on",
+  // County boundaries overlaid on the HSA view (theme.countyBorders).
+  // "zoom" reveals them only once zoomed in 2x (countyBordersMinZoom).
+  hsaDetail: "on" as "off" | "on" | "zoom",
 };
 const { params } = useModelParams(defaults);
 
-// Theme demo: the exterior outline adapts to the page theme via light-dark().
-const mapTheme = computed(() =>
-  params.outline === "on"
-    ? { outline: "light-dark(#1e293b, #cbd5e1)", outlineWidth: 1.5 }
-    : undefined,
+const stateHsaView = computed(
+  () => Boolean(params.selectedState) && params.geoType === "hsas",
 );
+// National default: HSA-level data on county geography (county-level
+// hover/focus). Mixed mode re-tiles whole states, so it uses the HSA base.
+const nationalCountyView = computed(
+  () => !params.selectedState && params.mixed !== "on",
+);
+
+// "At zoom" only applies to the state view's county mesh; the national
+// county lines are feature strokes, which have no LOD.
+const hsaDetailOptions = computed(() =>
+  stateHsaView.value
+    ? [
+        { value: "off", label: "Off" },
+        { value: "on", label: "On" },
+        { value: "zoom", label: "At zoom" },
+      ]
+    : [
+        { value: "off", label: "Off" },
+        { value: "on", label: "On" },
+      ],
+);
+
+// White county lines under darker HSA/state separators.
+const mapTheme = computed<MapTheme | undefined>(() => {
+  const theme: MapTheme = {};
+  const countyLineColor = "rgba(255, 255, 255, 0.45)";
+  if (params.outline === "on") {
+    theme.outline = "#bbb";
+    theme.outlineWidth = 1;
+  }
+  if (stateHsaView.value && params.hsaDetail !== "off") {
+    theme.countyBorders = countyLineColor;
+    theme.stroke = "#555";
+  }
+  if (nationalCountyView.value) {
+    theme.hsaBorders = "#555";
+    theme.borders = "#555";
+    theme.bordersWidth = 0.5;
+    // County lines are the feature strokes; width 0 hides them.
+    if (params.hsaDetail === "off") theme.strokeWidth = 0;
+    else theme.stroke = countyLineColor;
+    theme.highlight = "#000";
+  }
+  return Object.keys(theme).length ? theme : undefined;
+});
+
+// Epidemic-trend palette (Growing → Declining) as thresholds over 0-99.
+const rtColorScale: ThresholdStop[] = [
+  { min: 0, color: "#006166", label: "Declining" },
+  { min: 20, color: "#33958f", label: "Likely Declining" },
+  { min: 40, color: "#fff", label: "Not Changing" },
+  { min: 60, color: "#a14d8f", label: "Likely Growing" },
+  { min: 80, color: "#6d085a", label: "Growing" },
+];
 
 const lastClicked = ref<{ id: string; name: string } | null>(null);
 const focus = ref<FocusValue>(null);
+const hoveredHsa = ref<string | null>(null);
 
 // Clear the selection/highlight whenever the map's subject changes.
 watch(
-  () => [params.selectedState, params.geoType],
+  () => [params.selectedState, params.geoType, params.mixed],
   () => {
     lastClicked.value = null;
     focus.value = null;
+    hoveredHsa.value = null;
   },
 );
 
-// National view shows all US counties (canvas-rendered); a state view shows
-// that state's counties or HSAs.
-const mapGeoType = computed<GeoType>(() =>
-  params.selectedState ? params.geoType : "counties",
+const mapGeoType = computed<GeoType>(() => {
+  if (params.selectedState) return params.geoType;
+  return params.mixed === "on" ? "hsas" : "counties";
+});
+// HSA rows color the national county grid (each county fills with its
+// parent HSA's value).
+const mapDataGeoType = computed<GeoType | undefined>(() =>
+  nationalCountyView.value ? "hsas" : undefined,
 );
-// States reported as a single whole-state estimate instead of county detail.
+// States reported as a single whole-state estimate instead of HSA detail.
 const MIXED_STATES = ["06", "48"];
 const mixedData: StateData[] = [
-  ...countyData,
+  ...hsaData,
   ...MIXED_STATES.map((fips) => ({
     id: fips,
     value: pseudo(fips + "7"),
@@ -114,7 +192,7 @@ const mixedData: StateData[] = [
 const mapData = computed(() => {
   if (params.selectedState)
     return params.geoType === "hsas" ? hsaData : countyData;
-  return params.mixed === "on" ? mixedData : countyData;
+  return params.mixed === "on" ? mixedData : hsaData;
 });
 
 // City overlay: national top-100 (+ DC) or, in a state view, that state's
@@ -128,8 +206,8 @@ const cityMarkers = computed(() => {
 
 function onMapClick(payload: { id: string; name: string }) {
   if (!params.selectedState) {
-    // National county view: drill into the clicked county's state. A mixed-in
-    // whole-state feature already carries the 2-digit FIPS.
+    // Drill into the clicked feature's state (county FIPS and HSA codes
+    // are both state-prefixed).
     const id = String(payload.id);
     const stateFips =
       id.length <= 2 ? id.padStart(2, "0") : id.padStart(5, "0").slice(0, 2);
@@ -147,6 +225,23 @@ function onMapClick(payload: { id: string; name: string }) {
   } else {
     focus.value = id;
   }
+}
+
+// Outline the hovered county's parent HSA; the guard avoids rebuilding
+// the overlay while moving within one HSA.
+function onMapHover(payload: { id: string; name: string } | null) {
+  if (!nationalCountyView.value) return;
+  const hsa = payload
+    ? (fipsToHsa[String(payload.id).padStart(5, "0")] ?? null)
+    : null;
+  if (hsa === hoveredHsa.value) return;
+  hoveredHsa.value = hsa;
+  focus.value = hsa ? [{ id: hsa, geoType: "hsas", stroke: "#000" }] : null;
+}
+
+function tooltipHsaLabel(id: string): string {
+  const hsa = fipsToHsa[String(id).padStart(5, "0")];
+  return hsa ? `HSA: ${hsaNames[hsa] ?? hsa} (${hsa})` : "No HSA mapping";
 }
 
 function backToNational() {
@@ -182,11 +277,13 @@ const parentHsa = computed(() => {
 const heading = computed(() =>
   params.selectedState ? params.selectedState : "United States",
 );
-const subtitle = computed(() =>
-  params.selectedState
-    ? "Counties or HSAs within the state. Click one to see its details."
-    : `US counties (${params.renderer} renderer). Click one to drill into its state.`,
-);
+const subtitle = computed(() => {
+  if (params.selectedState)
+    return "Counties or HSAs within the state. Click one to see its details.";
+  if (params.mixed === "on")
+    return `US Health Service Areas with California and Texas merged (${params.renderer} renderer). Click to drill into a state.`;
+  return `HSA-level data on county geography (${params.renderer} renderer). Hover a county to outline its HSA; click to drill into its state.`;
+});
 </script>
 
 <template>
@@ -208,6 +305,13 @@ const subtitle = computed(() =>
       ]"
     />
     <ToggleGroup
+      v-if="stateHsaView || nationalCountyView"
+      v-model="params.hsaDetail"
+      label="HSA detail"
+      hint="Show county lines inside each HSA. In a state view, “At zoom” hides them until you zoom in 2× (countyBordersMinZoom)."
+      :options="hsaDetailOptions"
+    />
+    <ToggleGroup
       v-if="!params.selectedState"
       v-model="params.fit"
       label="Fit"
@@ -221,9 +325,9 @@ const subtitle = computed(() =>
       v-if="!params.selectedState"
       v-model="params.mixed"
       label="Levels"
-      hint="“Mixed” reports California and Texas as one whole-state estimate (data[].geoType) while the rest of the map stays county-level."
+      hint="“Mixed” reports California and Texas as one whole-state estimate (data[].geoType) while the rest of the map stays HSA-level."
       :options="[
-        { value: 'off', label: 'Counties' },
+        { value: 'off', label: 'HSAs' },
         { value: 'on', label: 'Mixed' },
       ]"
     />
@@ -274,20 +378,30 @@ const subtitle = computed(() =>
           :topology="topology"
           :state="params.selectedState"
           :geo-type="mapGeoType"
+          :data-geo-type="mapDataGeoType"
           :data="mapData"
+          :color-scale="rtColorScale"
           :renderer="params.renderer"
           :focus="focus"
           :focus-zoom="false"
           :cities="cityMarkers"
           :state-labels="params.labels === 'on'"
           :theme="mapTheme"
-          :zoom="params.cities === 'on'"
+          zoom
+          :county-borders-min-zoom="params.hsaDetail === 'zoom' ? 2 : 1"
           :tight-fit="params.fit === 'tight'"
           :legend="false"
           :menu="false"
           tooltip-trigger="hover"
           @state-click="onMapClick"
-        />
+          @state-hover="onMapHover"
+        >
+          <template v-if="nationalCountyView" #tooltip="{ id, name, value }">
+            <div class="tooltip-name">{{ name }}</div>
+            <div class="tooltip-hsa">{{ tooltipHsaLabel(String(id)) }}</div>
+            <div v-if="value != null">Value: {{ value }}</div>
+          </template>
+        </ChoroplethMap>
       </div>
 
       <Transition name="panel">
@@ -422,6 +536,15 @@ const subtitle = computed(() =>
 
 .muted {
   color: var(--color-text-secondary);
+}
+
+.tooltip-name {
+  font-weight: 600;
+}
+
+.tooltip-hsa {
+  opacity: 0.7;
+  font-size: 0.85em;
 }
 
 /* Stack the info panel below the map when the container is narrow (mobile,

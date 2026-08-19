@@ -31,6 +31,17 @@ export interface CanvasScene {
   /** State-borders mesh (counties / hsas mode). */
   borders: Path2D | null;
   /**
+   * County-borders mesh over HSA / state-level maps (theme.countyBorders).
+   * Like `exterior`, built lazily by the component when its color resolves
+   * visible — mutable scene state rather than a buildScene input.
+   */
+  countyBorders: Path2D | null;
+  /**
+   * HSA-borders mesh over county / state-level maps (theme.hsaBorders).
+   * Lazily built by the component like `countyBorders`.
+   */
+  hsaBorders: Path2D | null;
+  /**
    * Exterior boundary of the rendered geography (theme.outline). Built
    * lazily by the component when the outline resolves visible, so it is
    * mutable scene state rather than a buildScene input.
@@ -69,6 +80,14 @@ export interface CanvasBaseState {
   bordersColor: string;
   /** State-borders mesh width in CSS px; 0 disables. */
   bordersWidth: number;
+  /** County-borders mesh color; undefined = off (resolved theme.countyBorders). */
+  countyBordersColor: string | undefined;
+  /** County-borders mesh width in CSS px; 0 disables (also the LOD gate). */
+  countyBordersWidth: number;
+  /** HSA-borders mesh color; undefined = off (resolved theme.hsaBorders). */
+  hsaBordersColor: string | undefined;
+  /** HSA-borders mesh width in CSS px; 0 disables. */
+  hsaBordersWidth: number;
   /** Exterior outline color; undefined = off (resolved theme.outline). */
   outlineColor: string | undefined;
   /** Exterior outline width in CSS px; 0 disables. */
@@ -154,6 +173,8 @@ export function buildScene(
     featureStrokes: strokeCount ? featureStrokes : null,
     raisedStroke,
     borders: bordersD ? new Path2D(bordersD) : null,
+    countyBorders: null,
+    hsaBorders: null,
     exterior: null,
   };
 }
@@ -242,6 +263,24 @@ function finishBasePass(
     if (scene.raisedStroke && scene.featureStrokes) {
       ctx.stroke(scene.raisedStroke);
     }
+  }
+
+  // Decor meshes below the state mesh, finest first, mirroring the SVG
+  // z-order: county borders, then HSA borders.
+  if (
+    scene.countyBorders &&
+    state.countyBordersColor &&
+    state.countyBordersWidth > 0
+  ) {
+    ctx.lineWidth = lw(state.countyBordersWidth);
+    ctx.strokeStyle = state.countyBordersColor;
+    ctx.stroke(scene.countyBorders);
+  }
+
+  if (scene.hsaBorders && state.hsaBordersColor && state.hsaBordersWidth > 0) {
+    ctx.lineWidth = lw(state.hsaBordersWidth);
+    ctx.strokeStyle = state.hsaBordersColor;
+    ctx.stroke(scene.hsaBorders);
   }
 
   if (scene.borders && state.bordersWidth > 0) {

@@ -17,14 +17,17 @@ let overrides: Map<Element, string>;
 let gcs: ReturnType<typeof vi.spyOn>;
 
 // Channel order matches createMapThemeResolver:
-// fill, stroke, borders, outline, background, highlight
-const CHANNELS = 6;
+// fill, stroke, borders, countyBorders, hsaBorders, outline, background,
+// highlight
+const CHANNELS = 8;
 const FILL = 0;
 const STROKE = 1;
 const BORDERS = 2;
-const OUTLINE = 3;
-const BG = 4;
-const HIGHLIGHT = 5;
+const COUNTY_BORDERS = 3;
+const HSA_BORDERS = 4;
+const OUTLINE = 5;
+const BG = 6;
+const HIGHLIGHT = 7;
 
 function channels(): HTMLElement[] {
   return Array.from(
@@ -76,6 +79,14 @@ describe("themeEquals", () => {
     expect(themeEquals({ outlineWidth: 2 }, { outlineWidth: 1 })).toBe(false);
     expect(themeEquals({ borders: "#333" }, {})).toBe(false);
     expect(themeEquals({ bordersWidth: 2 }, { bordersWidth: 1 })).toBe(false);
+    expect(themeEquals({ countyBorders: "#999" }, {})).toBe(false);
+    expect(
+      themeEquals({ countyBordersWidth: 1 }, { countyBordersWidth: 0.5 }),
+    ).toBe(false);
+    expect(themeEquals({ hsaBorders: "#fff" }, {})).toBe(false);
+    expect(themeEquals({ hsaBordersWidth: 1 }, { hsaBordersWidth: 0.5 })).toBe(
+      false,
+    );
     expect(themeEquals({ highlight: "#f00" }, {})).toBe(false);
   });
 });
@@ -132,7 +143,7 @@ describe("withVarFallback", () => {
 });
 
 describe("createMapThemeResolver", () => {
-  it("appends a hidden six-channel probe", () => {
+  it("appends a hidden eight-channel probe", () => {
     createMapThemeResolver(container, () => {});
     const probe = container.querySelector<HTMLElement>(
       "[data-cfasim-map-probe]",
@@ -153,15 +164,21 @@ describe("createMapThemeResolver", () => {
     overrides.set(spans[FILL]!, "rgb(1, 1, 1)");
     overrides.set(spans[STROKE]!, "rgb(2, 2, 2)");
     overrides.set(spans[BORDERS]!, "rgb(3, 3, 3)");
-    overrides.set(spans[OUTLINE]!, "rgb(4, 4, 4)");
-    overrides.set(spans[BG]!, "rgb(5, 5, 5)");
-    overrides.set(spans[HIGHLIGHT]!, "rgb(6, 6, 6)");
+    overrides.set(spans[COUNTY_BORDERS]!, "rgb(4, 4, 4)");
+    overrides.set(spans[HSA_BORDERS]!, "rgb(5, 5, 5)");
+    overrides.set(spans[OUTLINE]!, "rgb(6, 6, 6)");
+    overrides.set(spans[BG]!, "rgb(7, 7, 7)");
+    overrides.set(spans[HIGHLIGHT]!, "rgb(8, 8, 8)");
     const t = r.resolve({
       fill: "#a00",
       stroke: "#0b0",
       strokeWidth: 2,
       borders: "#333",
       bordersWidth: 1.5,
+      countyBorders: "#999",
+      countyBordersWidth: 0.5,
+      hsaBorders: "#fff",
+      hsaBordersWidth: 0.75,
       outline: "#d00",
       outlineWidth: 1.25,
       background: "#00c",
@@ -173,10 +190,14 @@ describe("createMapThemeResolver", () => {
       strokeWidth: 2,
       borders: "rgb(3, 3, 3)",
       bordersWidth: 1.5,
-      outline: "rgb(4, 4, 4)",
+      countyBorders: "rgb(4, 4, 4)",
+      countyBordersWidth: 0.5,
+      hsaBorders: "rgb(5, 5, 5)",
+      hsaBordersWidth: 0.75,
+      outline: "rgb(6, 6, 6)",
       outlineWidth: 1.25,
-      background: "rgb(5, 5, 5)",
-      highlight: "rgb(6, 6, 6)",
+      background: "rgb(7, 7, 7)",
+      highlight: "rgb(8, 8, 8)",
     });
   });
 
@@ -193,6 +214,34 @@ describe("createMapThemeResolver", () => {
     overrides.set(spans[OUTLINE]!, "rgb(4, 4, 4)");
     r.invalidate();
     expect(r.resolve({ outline: "#d00" }).outline).toBe("rgb(4, 4, 4)");
+  });
+
+  it("keeps county borders off unless a visible color resolves", () => {
+    const r = createMapThemeResolver(container, () => {});
+    const spans = channels();
+    overrides.set(spans[FILL]!, "rgb(0, 0, 1)");
+    expect(r.resolve(undefined).countyBorders).toBeUndefined();
+    r.invalidate();
+    expect(
+      r.resolve({ countyBorders: "transparent" }).countyBorders,
+    ).toBeUndefined();
+    overrides.set(spans[COUNTY_BORDERS]!, "rgb(4, 4, 4)");
+    r.invalidate();
+    expect(r.resolve({ countyBorders: "#999" }).countyBorders).toBe(
+      "rgb(4, 4, 4)",
+    );
+  });
+
+  it("keeps HSA borders off unless a visible color resolves", () => {
+    const r = createMapThemeResolver(container, () => {});
+    const spans = channels();
+    overrides.set(spans[FILL]!, "rgb(0, 0, 1)");
+    expect(r.resolve(undefined).hsaBorders).toBeUndefined();
+    r.invalidate();
+    expect(r.resolve({ hsaBorders: "transparent" }).hsaBorders).toBeUndefined();
+    overrides.set(spans[HSA_BORDERS]!, "rgb(5, 5, 5)");
+    r.invalidate();
+    expect(r.resolve({ hsaBorders: "#fff" }).hsaBorders).toBe("rgb(5, 5, 5)");
   });
 
   it("keeps the background off unless a visible color resolves", () => {

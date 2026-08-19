@@ -1,7 +1,8 @@
 /**
  * Map theming. All paint styling for the choropleth surface lives in one
  * `MapTheme` object: base fill, interior strokes, the state-borders mesh,
- * an exterior outline, a background wash, and the hover/focus highlight.
+ * the county-borders mesh, an exterior outline, a background wash, and the
+ * hover/focus highlight.
  *
  * Every color accepts any CSS color the page can express (`var()`,
  * `light-dark()`, `currentColor`, `color-mix()`), resolved against the map
@@ -41,6 +42,35 @@ export interface MapTheme {
   borders?: string;
   /** State-borders mesh width in CSS px. Default 1; 0 disables. */
   bordersWidth?: number;
+  /**
+   * County-boundary mesh drawn over HSA and state-level maps (never on
+   * county maps, where the feature strokes already are county lines).
+   * Needs a topology with a `counties` object; only lines interior to the
+   * base features are drawn, so HSA / state separators stay crisp. Off
+   * unless a visible color resolves, so the `--choropleth-county-borders`
+   * custom property can enable it (it defaults to `transparent`).
+   */
+  countyBorders?: string;
+  /**
+   * County-borders mesh width in CSS px. Defaults to the feature stroke
+   * width; 0 disables.
+   */
+  countyBordersWidth?: number;
+  /**
+   * HSA-boundary mesh drawn over county and state-level maps (never on
+   * HSA maps, where the feature strokes already are HSA lines) — pairs
+   * with `dataGeoType: "hsas"` to give a county-interactive map crisp
+   * HSA separators. Needs a topology with a `counties` object; state
+   * borders are excluded (they belong to the state layers). Off unless a
+   * visible color resolves, so the `--choropleth-hsa-borders` custom
+   * property can enable it (it defaults to `transparent`).
+   */
+  hsaBorders?: string;
+  /**
+   * HSA-borders mesh width in CSS px. Defaults to the feature stroke
+   * width; 0 disables.
+   */
+  hsaBordersWidth?: number;
   /**
    * Exterior boundary of the rendered geography (the nation outline, or
    * the state outline in single-state mode), drawn on top of interior
@@ -95,6 +125,12 @@ export interface ResolvedMapTheme {
   /** Resolved borders color, falling back to `stroke`. */
   borders: string;
   bordersWidth: number | undefined;
+  /** undefined when county borders resolve invisible (off by default) */
+  countyBorders: string | undefined;
+  countyBordersWidth: number | undefined;
+  /** undefined when HSA borders resolve invisible (off by default) */
+  hsaBorders: string | undefined;
+  hsaBordersWidth: number | undefined;
   /** undefined when the outline resolves invisible (off by default) */
   outline: string | undefined;
   outlineWidth: number | undefined;
@@ -120,6 +156,8 @@ export const mapThemeDefaults = {
   fill: `var(--choropleth-fill, light-dark(${LIGHT_FILL}, ${DARK_FILL}))`,
   stroke: `var(--choropleth-stroke, light-dark(${LIGHT_STROKE}, ${DARK_STROKE}))`,
   borders: "var(--choropleth-borders, transparent)",
+  countyBorders: "var(--choropleth-county-borders, transparent)",
+  hsaBorders: "var(--choropleth-hsa-borders, transparent)",
   outline: "var(--choropleth-outline, transparent)",
   background: "var(--choropleth-background, transparent)",
   highlight: `var(--choropleth-highlight, light-dark(${LIGHT_HIGHLIGHT}, ${DARK_HIGHLIGHT}))`,
@@ -132,6 +170,10 @@ const RESOLVED_KEYS: readonly (keyof ResolvedMapTheme)[] = [
   "strokeWidth",
   "borders",
   "bordersWidth",
+  "countyBorders",
+  "countyBordersWidth",
+  "hsaBorders",
+  "hsaBordersWidth",
   "outline",
   "outlineWidth",
   "background",
@@ -247,6 +289,8 @@ export function createMapThemeResolver(
       : `var(--choropleth-highlight, ${LIGHT_HIGHLIGHT})`,
     // transparent sentinels: these stay off until a visible color resolves
     borders: mapThemeDefaults.borders,
+    countyBorders: mapThemeDefaults.countyBorders,
+    hsaBorders: mapThemeDefaults.hsaBorders,
     outline: mapThemeDefaults.outline,
     background: mapThemeDefaults.background,
   };
@@ -269,6 +313,8 @@ export function createMapThemeResolver(
   const fillEl = channel();
   const strokeEl = channel();
   const bordersEl = channel();
+  const countyBordersEl = channel();
+  const hsaBordersEl = channel();
   const outlineEl = channel();
   const bgEl = channel();
   const highlightEl = channel();
@@ -277,6 +323,8 @@ export function createMapThemeResolver(
   let fresh = false;
   let last: MapTheme | undefined;
   let rawBorders = "";
+  let rawCountyBorders = "";
+  let rawHsaBorders = "";
   let rawOutline = "";
   let rawBackground = "";
   // swatch pool for scale palettes: grows to the largest palette seen,
@@ -293,6 +341,10 @@ export function createMapThemeResolver(
     strokeWidth: undefined,
     borders: LIGHT_STROKE,
     bordersWidth: undefined,
+    countyBorders: undefined,
+    countyBordersWidth: undefined,
+    hsaBorders: undefined,
+    hsaBordersWidth: undefined,
     outline: undefined,
     outlineWidth: undefined,
     background: undefined,
@@ -319,6 +371,8 @@ export function createMapThemeResolver(
     return {
       strokeWidth: theme?.strokeWidth,
       bordersWidth: theme?.bordersWidth,
+      countyBordersWidth: theme?.countyBordersWidth,
+      hsaBordersWidth: theme?.hsaBordersWidth,
       outlineWidth: theme?.outlineWidth,
     };
   }
@@ -333,6 +387,16 @@ export function createMapThemeResolver(
     write(fillEl, theme?.fill || defaults.fill, defaults.fill);
     write(strokeEl, theme?.stroke || defaults.stroke, defaults.stroke);
     write(bordersEl, theme?.borders || defaults.borders, defaults.borders);
+    write(
+      countyBordersEl,
+      theme?.countyBorders || defaults.countyBorders,
+      defaults.countyBorders,
+    );
+    write(
+      hsaBordersEl,
+      theme?.hsaBorders || defaults.hsaBorders,
+      defaults.hsaBorders,
+    );
     write(outlineEl, theme?.outline || defaults.outline, defaults.outline);
     write(bgEl, theme?.background || defaults.background, defaults.background);
     write(
@@ -351,12 +415,16 @@ export function createMapThemeResolver(
     }
     const stroke = read(strokeEl);
     rawBorders = read(bordersEl);
+    rawCountyBorders = read(countyBordersEl);
+    rawHsaBorders = read(hsaBordersEl);
     rawOutline = read(outlineEl);
     rawBackground = read(bgEl);
     cached = {
       fill: fillColor,
       stroke,
       borders: visible(rawBorders) ?? stroke,
+      countyBorders: visible(rawCountyBorders),
+      hsaBorders: visible(rawHsaBorders),
       outline: visible(rawOutline),
       background: visible(rawBackground),
       highlight: read(highlightEl),
@@ -409,6 +477,8 @@ export function createMapThemeResolver(
     if (fresh) {
       const stroke = read(strokeEl);
       const borders = read(bordersEl);
+      const countyBorders = read(countyBordersEl);
+      const hsaBorders = read(hsaBordersEl);
       const outline = read(outlineEl);
       const background = read(bgEl);
       const highlight = read(highlightEl);
@@ -416,11 +486,15 @@ export function createMapThemeResolver(
         fillColor !== cached.fill ||
         stroke !== cached.stroke ||
         borders !== rawBorders ||
+        countyBorders !== rawCountyBorders ||
+        hsaBorders !== rawHsaBorders ||
         outline !== rawOutline ||
         background !== rawBackground ||
         highlight !== cached.highlight
       ) {
         rawBorders = borders;
+        rawCountyBorders = countyBorders;
+        rawHsaBorders = hsaBorders;
         rawOutline = outline;
         rawBackground = background;
         cached = {
@@ -428,6 +502,8 @@ export function createMapThemeResolver(
           fill: fillColor,
           stroke,
           borders: visible(borders) ?? stroke,
+          countyBorders: visible(countyBorders),
+          hsaBorders: visible(hsaBorders),
           outline: visible(outline),
           background: visible(background),
           highlight,
@@ -499,6 +575,10 @@ function resolveWithoutDom(theme: MapTheme | undefined): ResolvedMapTheme {
     strokeWidth: theme?.strokeWidth,
     borders: plain(theme?.borders) ?? stroke,
     bordersWidth: theme?.bordersWidth,
+    countyBorders: plain(theme?.countyBorders),
+    countyBordersWidth: theme?.countyBordersWidth,
+    hsaBorders: plain(theme?.hsaBorders),
+    hsaBordersWidth: theme?.hsaBordersWidth,
     outline: plain(theme?.outline),
     outlineWidth: theme?.outlineWidth,
     background: plain(theme?.background),

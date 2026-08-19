@@ -58,6 +58,13 @@ const splitStateData = computed(() => [
     .map((d) => ({ ...d, geoType: "counties" })),
 ]);
 
+// County-borders demo: one row per California HSA, deterministic-ish values.
+const caHsaData = computed(() =>
+  [...new Set(Object.values(fipsToHsa))]
+    .filter((code) => code.startsWith("06"))
+    .map((code) => ({ id: code, value: parseInt(code.slice(-3), 10) % 100 })),
+);
+
 const focusedCounty = ref(null);
 const parentFocus = computed(() => {
   const fips = focusedCounty.value;
@@ -194,7 +201,7 @@ import statesTopo from "us-atlas/states-10m.json";
 
 ### Theming (`theme`)
 
-All map paint styling lives in one `theme` prop: the base `fill` for features without data, the feature `stroke` (+ `strokeWidth`), the state-`borders` mesh over county/HSA maps (+ `bordersWidth`), an exterior `outline` (+ `outlineWidth`), a `background` wash, and the hover/focus `highlight`. Every color accepts any CSS color the page can express, including `var()`, `light-dark()`, and `color-mix()`, resolved against the map container's cascade. When the effective values change (a site light/dark toggle, an OS scheme flip, a custom-property redefinition), the map repaints on its own — in both the SVG and canvas renderers. `colorScale` colors resolve the same way, so theme tokens work there too.
+All map paint styling lives in one `theme` prop: the base `fill` for features without data, the feature `stroke` (+ `strokeWidth`), the state-`borders` mesh over county/HSA maps (+ `bordersWidth`), a `countyBorders` mesh over HSA and state-level maps (+ `countyBordersWidth`, see [County borders](#county-borders-over-an-hsa-map-theme-countyborders)), its complement `hsaBorders` over county and state-level maps (+ `hsaBordersWidth`, see [Color by HSA, interact by county](#color-by-hsa-interact-by-county-datageotype)), an exterior `outline` (+ `outlineWidth`), a `background` wash, and the hover/focus `highlight`. Every color accepts any CSS color the page can express, including `var()`, `light-dark()`, and `color-mix()`, resolved against the map container's cascade. When the effective values change (a site light/dark toggle, an OS scheme flip, a custom-property redefinition), the map repaints on its own — in both the SVG and canvas renderers. `colorScale` colors resolve the same way, so theme tokens work there too.
 
 The `outline` is the exterior boundary of the rendered geography — the national outline, or the selected state's boundary in single-state mode — drawn on top of interior borders with its own color and width. It's off by default and turns on when a visible color resolves.
 
@@ -258,21 +265,24 @@ Every channel's default routes through a `--choropleth-*` custom property, so a 
 }
 ```
 
-| Theme key         | Default                                               | Notes                                                                                |
-| ----------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `fill`            | `var(--choropleth-fill, light-dark(#ddd, #3f3f46))`   | Fill for features without a data value                                               |
-| `stroke`          | `var(--choropleth-stroke, light-dark(#fff, #18181b))` | Interior feature borders                                                             |
-| `strokeWidth`     | `0.5` (halved on county/HSA maps)                     | Explicit values apply as-is on every geoType; `0` disables                           |
-| `borders`         | `var(--choropleth-borders, transparent)`              | State mesh over county/HSA maps; falls back to `stroke`; hide with `bordersWidth: 0` |
-| `bordersWidth`    | `1`                                                   | `0` disables                                                                         |
-| `outline`         | `var(--choropleth-outline, transparent)`              | Exterior boundary; off until a visible color resolves                                |
-| `outlineWidth`    | `1`                                                   | `0` disables                                                                         |
-| `background`      | `var(--choropleth-background, transparent)`           | Wash behind the map; off until a visible color resolves                              |
-| `highlight`       | `var(--choropleth-highlight, light-dark(#000, #fff))` | Hover/focus stroke; per-item `FocusItem.stroke` wins                                 |
-| `markerColor`     | `--choropleth-city-marker` / `-label-color` vars      | `cities` overlay dot + label color                                                   |
-| `markerHalo`      | `--choropleth-city-halo` var                          | Halo around marker dots and labels                                                   |
-| `markerHaloWidth` | `0.9`                                                 | Dot halo width in CSS px; `0` disables                                               |
-| `markerOpacity`   | `1`                                                   | Opacity of the whole marker layer                                                    |
+| Theme key            | Default                                               | Notes                                                                                |
+| -------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `fill`               | `var(--choropleth-fill, light-dark(#ddd, #3f3f46))`   | Fill for features without a data value                                               |
+| `stroke`             | `var(--choropleth-stroke, light-dark(#fff, #18181b))` | Interior feature borders                                                             |
+| `strokeWidth`        | `0.5` (halved on county/HSA maps)                     | Explicit values apply as-is on every geoType; `0` disables                           |
+| `borders`            | `var(--choropleth-borders, transparent)`              | State mesh over county/HSA maps; falls back to `stroke`; hide with `bordersWidth: 0` |
+| `countyBorders`      | `var(--choropleth-county-borders, transparent)`       | County mesh over HSA/state-level maps; off until a visible color resolves            |
+| `countyBordersWidth` | feature stroke width                                  | `0` disables                                                                         |
+| `hsaBorders`         | `var(--choropleth-hsa-borders, transparent)`          | HSA mesh over county/state-level maps; off until a visible color resolves            |
+| `hsaBordersWidth`    | feature stroke width                                  | `0` disables                                                                         |
+| `outline`            | `var(--choropleth-outline, transparent)`              | Exterior boundary; off until a visible color resolves                                |
+| `outlineWidth`       | `1`                                                   | `0` disables                                                                         |
+| `background`         | `var(--choropleth-background, transparent)`           | Wash behind the map; off until a visible color resolves                              |
+| `highlight`          | `var(--choropleth-highlight, light-dark(#000, #fff))` | Hover/focus stroke; per-item `FocusItem.stroke` wins                                 |
+| `markerColor`        | `--choropleth-city-marker` / `-label-color` vars      | `cities` overlay dot + label color                                                   |
+| `markerHalo`         | `--choropleth-city-halo` var                          | Halo around marker dots and labels                                                   |
+| `markerHaloWidth`    | `0.9`                                                 | Dot halo width in CSS px; `0` disables                                               |
+| `markerOpacity`      | `1`                                                   | Opacity of the whole marker layer                                                    |
 
 ::: warning Breaking change
 `theme` replaces the former `noDataColor`, `strokeColor`, and `strokeWidth` props: use `theme.fill`, `theme.stroke`, and `theme.strokeWidth` instead.
@@ -769,6 +779,51 @@ hover an HSA on desktop, or tap one on touch, before or after zooming in.
   </template>
 </ComponentDemo>
 
+### County borders over an HSA map (`theme.countyBorders`)
+
+`theme.countyBorders` overlays county boundaries on an HSA (or state-level) map, so HSA-level data can be read against the county geography underneath. Only the county lines _interior_ to each HSA are drawn — the HSA separators keep their own `stroke`, and the state mesh and outline still paint on top. `countyBordersWidth` defaults to the feature stroke width; the color carries the distinction, so a translucent color works well.
+
+It needs a topology with county arcs (`us-atlas/counties-10m.json`): the pre-merged `usHsaTopology` has none, so it never draws county borders. On `geoType="counties"` maps the key does nothing — the feature strokes already are the county lines. The complementary `theme.hsaBorders` draws HSA separators over county-level maps instead; see [Color by HSA, interact by county](#color-by-hsa-interact-by-county-datageotype).
+
+With `zoom` enabled, the `countyBordersMinZoom` prop turns the mesh into a zoom-in detail layer, like per-city `minZoom` on markers: `:county-borders-min-zoom="2"` keeps the county lines hidden until the user zooms in one level.
+
+<ComponentDemo>
+  <ChoroplethMap
+    :topology="countiesTopo"
+    geo-type="hsas"
+    state="California"
+    :data="caHsaData"
+    :theme="{
+      countyBorders: 'light-dark(rgba(15, 23, 42, 0.3), rgba(226, 232, 240, 0.3))',
+    }"
+    tooltip-trigger="hover"
+    title="Cases by HSA, county boundaries overlaid"
+    :legend-title="'Cases'"
+    :height="420"
+  />
+
+<template #code>
+
+```vue
+<ChoroplethMap
+  :topology="countiesTopo"
+  geo-type="hsas"
+  state="California"
+  :data="hsaData"
+  :theme="{
+    countyBorders:
+      'light-dark(rgba(15, 23, 42, 0.3), rgba(226, 232, 240, 0.3))',
+  }"
+  tooltip-trigger="hover"
+  title="Cases by HSA, county boundaries overlaid"
+  :legend-title="'Cases'"
+  :height="420"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Single-state map (`state`)
 
 Set the `state` prop to render just one state's outline with its `counties` or
@@ -933,6 +988,14 @@ value (via the built-in FIPS → HSA mapping); hover, click, and `focus`
 still operate on the county geometry, and you can layer an HSA outline
 on top with a `FocusItem`.
 
+This is the composition for a county-interactive map of HSA-level data:
+pair it with `theme.hsaBorders` — the [county mesh](#county-borders-over-an-hsa-map-theme-countyborders)'s
+complement — so the HSA boundaries stay crisp as their own line layer
+(only HSA-crossing county edges are meshed; state borders are left to
+the state layers). For the full hover story, listen to `@state-hover`
+and set `focus` to the hovered county's parent HSA: the county carries
+the built-in hover highlight while its whole HSA gets an outline.
+
 <ComponentDemo>
   <ChoroplethMap
     :topology="countiesTopo"
@@ -954,6 +1017,7 @@ on top with a `FocusItem`.
       { id: '060737', geoType: 'hsas', style: 'dashed' },
     ]"
     :focus-zoom-level="6"
+    :theme="{ hsaBorders: 'light-dark(#fff, #18181b)', hsaBordersWidth: 0.75 }"
     title="HSA-keyed data on a county map"
     :legend-title="'Cases'"
     :height="400"
@@ -971,6 +1035,7 @@ on top with a `FocusItem`.
   :touch-expand="false"
   :data="hsaData"
   :focus="[{ id: '06043' }, { id: '060737', geoType: 'hsas', style: 'dashed' }]"
+  :theme="{ hsaBorders: 'light-dark(#fff, #18181b)', hsaBordersWidth: 0.75 }"
   title="HSA-keyed data on a county map"
 />
 ```
@@ -1424,6 +1489,14 @@ interface MapTheme {
   borders?: string;
   /** State-borders mesh width in CSS px. Default 1; 0 disables. */
   bordersWidth?: number;
+  /** County-boundary mesh over HSA/state-level maps. Off by default. */
+  countyBorders?: string;
+  /** County-borders mesh width in CSS px. Default: the feature stroke width. */
+  countyBordersWidth?: number;
+  /** HSA-boundary mesh over county/state-level maps. Off by default. */
+  hsaBorders?: string;
+  /** HSA-borders mesh width in CSS px. Default: the feature stroke width. */
+  hsaBordersWidth?: number;
   /** Exterior boundary, drawn on top of interior borders. Off by default. */
   outline?: string;
   /** Exterior outline width in CSS px. Default 1; 0 disables. */

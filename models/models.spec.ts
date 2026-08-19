@@ -90,11 +90,11 @@ const canvasPaintedPixels = (page: import("@playwright/test").Page) =>
 // Well below any real map, well above a blank/collapsed one.
 const MIN_PAINTED = 2000;
 
-test("state-map starts national (canvas counties) and drills into a clicked county's state", async ({
+test("state-map starts national (canvas county grid) and drills into a clicked county's state", async ({
   page,
 }) => {
   await page.goto("/state-map");
-  await expect(page.locator(".subtitle")).toContainText("counties");
+  await expect(page.locator(".subtitle")).toContainText("HSA-level data");
   await expect(page.locator("canvas.choropleth-canvas")).toBeVisible();
   expect(await canvasPaintedPixels(page)).toBeGreaterThan(MIN_PAINTED);
   // No info panel at the national level.
@@ -112,7 +112,7 @@ test("state-map back button returns to the national view", async ({ page }) => {
   await expect(page.locator(".info-panel h2")).toHaveText("California");
   await page.getByRole("button", { name: "Back to US" }).click();
   await expect(page.locator(".info-panel")).toHaveCount(0);
-  await expect(page.locator(".subtitle")).toContainText("counties");
+  await expect(page.locator(".subtitle")).toContainText("HSA-level data");
 });
 
 test("state-map renders an island territory via the Mercator fallback", async ({
@@ -133,9 +133,9 @@ test("state-map shows county details and highlights without zooming", async ({
   await clickMapCenter(page);
   // Clicking updates the info panel...
   await expect(page.locator(".info-panel .info-selection")).toBeVisible();
-  // ...and highlights on the map without zooming (cities off ⇒ no zoom, no
-  // zoom controls).
-  await expect(page.locator(".chart-zoom-controls")).toHaveCount(0);
+  // ...and highlights on the map without zooming (focus-zoom is off; the
+  // always-on zoom controls are still offered).
+  await expect(page.locator(".chart-zoom-controls")).toBeVisible();
 });
 
 test("state-map outline toggle draws the exterior boundary", async ({
@@ -155,6 +155,73 @@ test("state-map outline toggle draws the exterior boundary", async ({
   await expect(outline).toHaveCount(0);
 });
 
+test("state-map national view: county-level hover over HSA-level data", async ({
+  page,
+}) => {
+  await page.goto("/state-map?renderer=svg");
+  // The base features are counties (5-digit FIPS), colored by HSA rows via
+  // dataGeoType, with the HSA separators drawn as one mesh.
+  const sanBernardino = page.locator('.state-path[data-feat-id="06071"]');
+  await expect(sanBernardino).toHaveCount(1);
+  await expect(page.locator(".choropleth-hsa-borders")).toHaveAttribute(
+    "d",
+    /.+/,
+  );
+  // Hovering a county names the county and its parent HSA in the tooltip
+  // and outlines the whole HSA as a focus overlay.
+  await sanBernardino.hover();
+  const tooltip = page.locator(".chart-tooltip-content");
+  await expect(tooltip).toContainText("San Bernardino");
+  await expect(tooltip).toContainText("HSA:");
+  await expect(page.locator(".focus-overlay")).toHaveCount(1);
+  // HSA detail Off hides the county separators (theme.strokeWidth 0); the
+  // HSA mesh stays.
+  await page
+    .getByRole("group", { name: "HSA detail" })
+    .getByRole("button", { name: "Off" })
+    .click();
+  await expect
+    .poll(() =>
+      sanBernardino.evaluate((el) => getComputedStyle(el).strokeWidth),
+    )
+    .toBe("0px");
+  await expect(page.locator(".choropleth-hsa-borders")).toHaveCount(1);
+  // Mixed switches back to the HSA base (whole-state estimates read best
+  // there), dropping the county grid and its mesh.
+  await page
+    .getByRole("group", { name: "Levels" })
+    .getByRole("button", { name: "Mixed" })
+    .click();
+  await expect(sanBernardino).toHaveCount(0);
+  await expect(page.locator(".choropleth-hsa-borders")).toHaveCount(0);
+});
+
+test("state-map HSA detail overlays county boundaries inside HSAs", async ({
+  page,
+}) => {
+  // SVG renderer so the county mesh is a real DOM path we can assert on.
+  await page.goto(
+    "/state-map?selectedState=California&geoType=hsas&renderer=svg&hsaDetail=on",
+  );
+  const mesh = page.locator(".choropleth-county-borders");
+  await expect(mesh).toHaveCount(1);
+  await expect(mesh).toHaveAttribute("stroke", /.+/);
+  await expect(mesh).toHaveAttribute("d", /.+/);
+  // "At zoom" keeps the mesh in the DOM but hides it until zoomed in 2×
+  // (countyBordersMinZoom).
+  await page
+    .getByRole("group", { name: "HSA detail" })
+    .getByRole("button", { name: "At zoom" })
+    .click();
+  await expect(mesh).toHaveAttribute("display", "none");
+  // Off removes the path entirely (the mesh is lazy).
+  await page
+    .getByRole("group", { name: "HSA detail" })
+    .getByRole("button", { name: "Off" })
+    .click();
+  await expect(mesh).toHaveCount(0);
+});
+
 test("state-map mixed levels draw a state as one feature with one tooltip", async ({
   page,
 }) => {
@@ -162,7 +229,7 @@ test("state-map mixed levels draw a state as one feature with one tooltip", asyn
   await page.goto("/state-map?renderer=svg&mixed=on");
   const california = page.locator('.state-path[data-feat-id="06"]');
   await expect(california).toHaveCount(1);
-  // California's 58 counties are gone — the state is the only "06…" feature.
+  // California's HSAs are gone — the state is the only "06…" feature.
   await expect(page.locator('.state-path[data-feat-id^="06"]')).toHaveCount(1);
   await expect(page.locator('.state-path[data-feat-id^="48"]')).toHaveCount(1);
   // Colored from its own state-level row, not left as no-data.
@@ -173,15 +240,15 @@ test("state-map mixed levels draw a state as one feature with one tooltip", asyn
   await expect(tooltip).toBeVisible();
   await expect(tooltip).toContainText("California");
 
-  // Back to counties: the merged feature is replaced by county detail.
+  // Back to HSAs: the merged feature is replaced by HSA detail.
   await page
     .getByRole("group", { name: "Levels" })
-    .getByRole("button", { name: "Counties" })
+    .getByRole("button", { name: "HSAs" })
     .click();
   await expect(california).toHaveCount(0);
-  await expect(page.locator('.state-path[data-feat-id="06037"]')).toHaveCount(
-    1,
-  );
+  await expect
+    .poll(() => page.locator('.state-path[data-feat-id^="06"]').count())
+    .toBeGreaterThan(1);
 });
 
 test("state-map mixed levels pick and tooltip on the canvas renderer", async ({
@@ -199,7 +266,7 @@ test("state-map mixed levels pick and tooltip on the canvas renderer", async ({
   await page.goto("/state-map?renderer=canvas&mixed=on");
   await expect(page.locator("canvas.choropleth-canvas")).toBeVisible();
   await expect(page.locator(".state-path")).toHaveCount(0);
-  // Index-color picking must resolve the merged state, not a stale county.
+  // Index-color picking must resolve the merged state, not a stale HSA.
   await page.mouse.move(cx, cy);
   await page.mouse.move(cx + 1, cy + 1);
   await expect(page.locator(".chart-tooltip-content")).toContainText(

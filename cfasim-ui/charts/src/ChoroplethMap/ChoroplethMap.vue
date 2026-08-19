@@ -397,6 +397,15 @@ const props = withDefaults(
      * to turn it off.
      */
     enlargeDc?: boolean | number | null;
+    /**
+     * Minimum zoom scale at which the county-borders mesh
+     * (`theme.countyBorders`) shows, so it can act as a zoom-in detail
+     * layer: e.g. `2` keeps county lines hidden until the user zooms in
+     * one level. Default `1` (always visible). Only applies when `zoom` is
+     * enabled — a static map has no way to zoom, so its county borders
+     * always show.
+     */
+    countyBordersMinZoom?: number;
   }>(),
   {
     geoType: "states",
@@ -416,6 +425,7 @@ const props = withDefaults(
     // null = auto (see the prop docs); a plain absent boolean prop would be
     // cast to false by Vue, hiding the states-map default.
     enlargeDc: null,
+    countyBordersMinZoom: 1,
   },
 );
 
@@ -536,6 +546,8 @@ const titleInlineStyle = computed(() => {
 const pathsByFeatureId = new Map<string, SVGPathElement>();
 const tooltipDataById = new Map<string, TooltipPayload>();
 let bordersPathEl: SVGPathElement | null = null;
+let countyBordersPathEl: SVGPathElement | null = null;
+let hsaBordersPathEl: SVGPathElement | null = null;
 // Exterior outline path (theme.outline), managed by syncOutlinePath.
 let outlinePathEl: SVGPathElement | null = null;
 let hoveredEl: SVGPathElement | null = null;
@@ -1453,6 +1465,14 @@ watch(
     // A mixed-level row can pull HSAs in (`data[].geoType`), and any state
     // override on an HSA base map needs the table to place its features.
     if (props.data?.some((d) => d.geoType === "hsas")) return true;
+    // The HSA-borders mesh groups counties by the table even when nothing
+    // else on the map is HSA-shaped.
+    if (
+      resolvedTheme.value.hsaBorders &&
+      (props.geoType === "counties" || props.geoType === "states")
+    ) {
+      return true;
+    }
     const focus = props.focus;
     if (!focus) return false;
     const items = Array.isArray(focus) ? focus : [focus];
@@ -1755,6 +1775,82 @@ const outlineMesh = computed<GeoJSON.MultiLineString | null>(() => {
   );
 });
 
+// Shared scaffolding for the two decor meshes (theme.countyBorders /
+// theme.hsaBorders): both mesh the topology's county geometries, scoped to
+// the selected state in single-state mode, differing only in which shared
+// arcs the predicate keeps. Null without a `counties` object — a
+// states-only or pre-merged HSA topology never draws either.
+const pad5 = (id: unknown) => String(id).padStart(5, "0");
+function meshCounties(
+  predicate: (aId: unknown, bId: unknown) => boolean,
+): GeoJSON.MultiLineString | null {
+  const topo = toRaw(props.topology) as unknown as {
+    objects?: { counties?: NamedGeometry };
+  };
+  const counties = topo.objects?.counties;
+  if (!counties) return null;
+  const scope = stateFips.value;
+  const geometries = scope
+    ? counties.geometries.filter((g) => pad5(g.id).slice(0, 2) === scope)
+    : counties.geometries;
+  return mesh(
+    topo as unknown as Topology,
+    { type: "GeometryCollection", geometries } as NamedGeometry,
+    (a, b) => a !== b && predicate(a.id, b.id),
+  );
+}
+
+// County-boundary mesh (theme.countyBorders) over HSA and state-level
+// maps. Only arcs interior to a base feature are meshed (same HSA / same
+// state on both sides), so the base separators keep their own stroke.
+// Lazy: runs once a visible color resolves (HSA maps also wait for the
+// FIPS→HSA table). Skipped on county maps.
+const countyBordersMesh = computed<GeoJSON.MultiLineString | null>(() => {
+  if (!resolvedTheme.value.countyBorders) return null;
+  if (props.geoType !== "hsas" && props.geoType !== "states") return null;
+  let groupOf: (id: unknown) => string | undefined;
+  if (props.geoType === "hsas") {
+    const table = hsaModule.value?.fipsToHsa;
+    if (!table) return null;
+    groupOf = (id) => table[pad5(id)];
+  } else {
+    groupOf = (id) => pad5(id).slice(0, 2);
+  }
+  return meshCounties((aId, bId) => {
+    // An undefined group (a county with no HSA mapping) is a hole in the
+    // base map — leave it unruled rather than drawing lines over the
+    // background wash.
+    const group = groupOf(aId);
+    return group !== undefined && group === groupOf(bId);
+  });
+});
+
+// HSA-boundary mesh (theme.hsaBorders) over county and state-level maps —
+// the county mesh's complement, giving a county-interactive map
+// (dataGeoType: "hsas") crisp HSA separators. State-crossing arcs are
+// excluded (they belong to the state layers); a mapped↔unmapped county
+// edge IS an HSA exterior, so it draws. Skipped on HSA maps.
+const hsaBordersMesh = computed<GeoJSON.MultiLineString | null>(() => {
+  if (!resolvedTheme.value.hsaBorders) return null;
+  if (props.geoType !== "counties" && props.geoType !== "states") return null;
+  const table = hsaModule.value?.fipsToHsa;
+  if (!table) return null;
+  return meshCounties((aId, bId) => {
+    const a = pad5(aId);
+    const b = pad5(bId);
+    if (a.slice(0, 2) !== b.slice(0, 2)) return false;
+    return table[a] !== table[b];
+  });
+});
+
+// County-borders LOD (countyBordersMinZoom): with zoom enabled the mesh
+// only shows at/past the threshold; a static map can't zoom, so it always
+// shows. `scaleK` updates per zoom frame, but this only flips at the
+// threshold crossing.
+const countyBordersZoomVisible = computed(
+  () => !props.zoom || scaleK.value >= props.countyBordersMinZoom,
+);
+
 // Breathing room (canonical px) around a single state so its outline isn't
 // flush against the SVG edge. Only applied in single-state mode.
 const STATE_FIT_INSET = 12;
@@ -1866,6 +1962,15 @@ const effectiveStrokeWidth = computed(() => {
 
 const effectiveBordersWidth = computed(
   () => resolvedTheme.value.bordersWidth ?? 1,
+);
+// County lines default to the feature stroke width: they subdivide the
+// features, so they should never read heavier than the features' own
+// separators — the color carries the distinction.
+const effectiveCountyBordersWidth = computed(
+  () => resolvedTheme.value.countyBordersWidth ?? effectiveStrokeWidth.value,
+);
+const effectiveHsaBordersWidth = computed(
+  () => resolvedTheme.value.hsaBordersWidth ?? effectiveStrokeWidth.value,
 );
 const effectiveOutlineWidth = computed(
   () => resolvedTheme.value.outlineWidth ?? 1,
@@ -2309,6 +2414,14 @@ function canvasDrawState(): CanvasDrawState {
     strokeWidth: effectiveStrokeWidth.value,
     bordersColor: t.borders,
     bordersWidth: effectiveBordersWidth.value,
+    countyBordersColor: t.countyBorders,
+    // The LOD gate folds into the width: 0 disables the layer in
+    // finishBasePass exactly like an explicit countyBordersWidth: 0.
+    countyBordersWidth: countyBordersZoomVisible.value
+      ? effectiveCountyBordersWidth.value
+      : 0,
+    hsaBordersColor: t.hsaBorders,
+    hsaBordersWidth: effectiveHsaBordersWidth.value,
     outlineColor: t.outline,
     outlineWidth: effectiveOutlineWidth.value,
     background: t.background,
@@ -2656,6 +2769,14 @@ function applyStrokeScale() {
     "stroke-width",
     String(effectiveBordersWidth.value / d),
   );
+  countyBordersPathEl?.setAttribute(
+    "stroke-width",
+    String(effectiveCountyBordersWidth.value / d),
+  );
+  hsaBordersPathEl?.setAttribute(
+    "stroke-width",
+    String(effectiveHsaBordersWidth.value / d),
+  );
   outlinePathEl?.setAttribute(
     "stroke-width",
     String(effectiveOutlineWidth.value / d),
@@ -2709,7 +2830,12 @@ function restoreDefaultStroke(pathEl: SVGPathElement) {
     dcFeatureId.value != null
       ? (pathsByFeatureId.get(dcFeatureId.value) ?? null)
       : null;
-  const anchor = dcPathEl ?? bordersPathEl ?? outlinePathEl;
+  const anchor =
+    dcPathEl ??
+    countyBordersPathEl ??
+    hsaBordersPathEl ??
+    bordersPathEl ??
+    outlinePathEl;
   if (
     anchor?.parentNode &&
     anchor.parentNode === pathEl.parentNode &&
@@ -3545,6 +3671,8 @@ function rebuildPaths() {
   pathsByFeatureId.clear();
   tooltipDataById.clear();
   bordersPathEl = null;
+  countyBordersPathEl = null;
+  hsaBordersPathEl = null;
   outlinePathEl = null;
   hoveredEl = null;
   // Old focused / overlay paths are about to be detached — drop refs so
@@ -3590,6 +3718,8 @@ function rebuildPaths() {
       borders ? path(borders) : null,
       dcFeatureId.value,
     );
+    syncCountyBordersPath();
+    syncHsaBordersPath();
     syncOutlinePath();
     if (!pickingCanvas && typeof document !== "undefined") {
       pickingCanvas = document.createElement("canvas");
@@ -3657,12 +3787,112 @@ function rebuildPaths() {
     bordersPathEl = b;
   }
   baseG.appendChild(frag);
+  syncCountyBordersPath();
+  syncHsaBordersPath();
   syncOutlinePath();
   applyStrokeScale();
   markPainted();
   // The fresh path tree is at base size; re-apply the current enlargement.
   dcApplied = null;
   applyDcScale();
+}
+
+// Create / update / remove the county-borders mesh (theme.countyBorders).
+// Mirrors syncOutlinePath: kept separate from rebuildPaths so the mesh can
+// appear or disappear (a `--choropleth-county-borders` flip) without
+// rebuilding the feature tree. SVG: a path inserted below the state-borders
+// mesh and the exterior outline. Canvas: scene state for finishBasePass.
+function syncCountyBordersPath() {
+  // No features (e.g. hsas before the lazy module resolves) means a
+  // projection fitted to an empty collection and NaN paths — treat the
+  // mesh as absent until rebuildPaths runs with real data.
+  const m = featuresGeo.value.features.length ? countyBordersMesh.value : null;
+  const d = m ? pathGenerator.value(m) : null;
+  if (isCanvas.value) {
+    if (!scene) return;
+    scene.countyBorders = d ? new Path2D(d) : null;
+    markBaseDirty();
+    requestRedraw();
+    return;
+  }
+  const baseG = baseGroupRef.value;
+  if (!baseG) return;
+  if (!d) {
+    countyBordersPathEl?.remove();
+    countyBordersPathEl = null;
+    return;
+  }
+  if (!countyBordersPathEl) {
+    const el = document.createElementNS(SVG_NS, "path") as SVGPathElement;
+    el.setAttribute("fill", "none");
+    el.setAttribute("stroke-linejoin", "round");
+    el.setAttribute("pointer-events", "none");
+    el.setAttribute("class", "choropleth-county-borders");
+    baseG.insertBefore(
+      el,
+      hsaBordersPathEl ?? bordersPathEl ?? outlinePathEl ?? null,
+    );
+    countyBordersPathEl = el;
+  }
+  countyBordersPathEl.setAttribute("d", d);
+  countyBordersPathEl.setAttribute(
+    "stroke",
+    resolvedTheme.value.countyBorders!,
+  );
+  syncCountyBordersVisibility();
+  applyStrokeScale();
+}
+
+// Create / update / remove the HSA-borders mesh (theme.hsaBorders). Same
+// shape as syncCountyBordersPath; sits above the county mesh, below the
+// state-borders mesh and the outline. No LOD: on a county-interactive map
+// it is the data level's separator, not a detail layer.
+function syncHsaBordersPath() {
+  const m = featuresGeo.value.features.length ? hsaBordersMesh.value : null;
+  const d = m ? pathGenerator.value(m) : null;
+  if (isCanvas.value) {
+    if (!scene) return;
+    scene.hsaBorders = d ? new Path2D(d) : null;
+    markBaseDirty();
+    requestRedraw();
+    return;
+  }
+  const baseG = baseGroupRef.value;
+  if (!baseG) return;
+  if (!d) {
+    hsaBordersPathEl?.remove();
+    hsaBordersPathEl = null;
+    return;
+  }
+  if (!hsaBordersPathEl) {
+    const el = document.createElementNS(SVG_NS, "path") as SVGPathElement;
+    el.setAttribute("fill", "none");
+    el.setAttribute("stroke-linejoin", "round");
+    el.setAttribute("pointer-events", "none");
+    el.setAttribute("class", "choropleth-hsa-borders");
+    baseG.insertBefore(el, bordersPathEl ?? outlinePathEl ?? null);
+    hsaBordersPathEl = el;
+  }
+  hsaBordersPathEl.setAttribute("d", d);
+  hsaBordersPathEl.setAttribute("stroke", resolvedTheme.value.hsaBorders!);
+  applyStrokeScale();
+}
+
+// LOD toggle for the county-borders mesh, cheap enough for the zoom-frame
+// threshold crossing: SVG hides the existing path, canvas re-renders (the
+// draw state reads the gate live).
+function syncCountyBordersVisibility() {
+  if (isCanvas.value) {
+    markBaseDirty();
+    requestRedraw();
+    return;
+  }
+  if (!countyBordersPathEl) return;
+  if (countyBordersZoomVisible.value) {
+    countyBordersPathEl.removeAttribute("display");
+  } else {
+    countyBordersPathEl.setAttribute("display", "none");
+  }
 }
 
 // Create / update / remove the exterior outline (theme.outline). Kept
@@ -3723,16 +3953,24 @@ const strokeDeps = () =>
     resolvedTheme.value.borders,
     effectiveStrokeWidth.value,
     effectiveBordersWidth.value,
+    effectiveCountyBordersWidth.value,
+    effectiveHsaBordersWidth.value,
     effectiveOutlineWidth.value,
   ] as const;
 const highlightDeps = () => [resolvedTheme.value.highlight] as const;
 const outlineDeps = () =>
   [outlineMesh.value, resolvedTheme.value.outline] as const;
+const countyBordersDeps = () =>
+  [countyBordersMesh.value, resolvedTheme.value.countyBorders] as const;
+const hsaBordersDeps = () =>
+  [hsaBordersMesh.value, resolvedTheme.value.hsaBorders] as const;
 
 let paintedFillDeps: readonly unknown[] | null = null;
 let paintedStrokeDeps: readonly unknown[] | null = null;
 let paintedHighlightDeps: readonly unknown[] | null = null;
 let paintedOutlineDeps: readonly unknown[] | null = null;
+let paintedCountyBordersDeps: readonly unknown[] | null = null;
+let paintedHsaBordersDeps: readonly unknown[] | null = null;
 
 const samePaint = (a: readonly unknown[], b: readonly unknown[] | null) =>
   b !== null && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
@@ -3742,6 +3980,8 @@ function markPainted() {
   paintedStrokeDeps = strokeDeps();
   paintedHighlightDeps = highlightDeps();
   paintedOutlineDeps = outlineDeps();
+  paintedCountyBordersDeps = countyBordersDeps();
+  paintedHsaBordersDeps = hsaBordersDeps();
 }
 
 function updateFills() {
@@ -4014,6 +4254,24 @@ watch(outlineDeps, (deps) => {
   paintedOutlineDeps = deps;
   syncOutlinePath();
 });
+
+// County-borders mesh or color → create/update/remove its path (or canvas
+// scene state). Also fires when the lazy HSA table resolves on HSA maps.
+watch(countyBordersDeps, (deps) => {
+  if (samePaint(deps, paintedCountyBordersDeps)) return;
+  paintedCountyBordersDeps = deps;
+  syncCountyBordersPath();
+});
+
+// HSA-borders mesh or color → same lifecycle as the county mesh above.
+watch(hsaBordersDeps, (deps) => {
+  if (samePaint(deps, paintedHsaBordersDeps)) return;
+  paintedHsaBordersDeps = deps;
+  syncHsaBordersPath();
+});
+
+// County-borders LOD threshold crossing → cheap show/hide, no `d` rebuild.
+watch(countyBordersZoomVisible, () => syncCountyBordersVisibility());
 
 // Focus or projection changed → re-apply the focus transform imperatively.
 // `flush: "post"` so any pending path rebuild from the watcher above has

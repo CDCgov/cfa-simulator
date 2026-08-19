@@ -66,6 +66,8 @@ function scene3(): CanvasScene {
     featureStrokes: new FakePath2D("M0M1M2") as unknown as Path2D,
     raisedStroke: null,
     borders: new FakePath2D("Mborders") as unknown as Path2D,
+    countyBorders: null,
+    hsaBorders: null,
     exterior: null,
   };
 }
@@ -77,6 +79,10 @@ function baseState() {
     strokeWidth: 0.5,
     bordersColor: "#fff",
     bordersWidth: 1,
+    countyBordersColor: undefined as string | undefined,
+    countyBordersWidth: 0.5,
+    hsaBordersColor: undefined as string | undefined,
+    hsaBordersWidth: 0.5,
     outlineColor: undefined,
     outlineWidth: 1,
     background: undefined,
@@ -202,6 +208,68 @@ describe("drawScene", () => {
     scene.exterior = new FakePath2D("Mext") as unknown as Path2D;
     drawScene(ctx, scene, view, baseState());
     expect(ctx.ops.some((o) => o.startsWith("stroke:Mext"))).toBe(false);
+  });
+
+  it("strokes county borders below the state mesh", () => {
+    const ctx = fakeCtx();
+    const scene = scene3();
+    scene.countyBorders = new FakePath2D("Mcounty") as unknown as Path2D;
+    drawScene(ctx, scene, view, {
+      ...baseState(),
+      countyBordersColor: "#999",
+    });
+    const order = ctx.ops.filter((o) => o.startsWith("stroke"));
+    // 0.5 CSS px → 0.5/(0.5·4) = 0.25 map units, before the state mesh.
+    const countyIdx = order.indexOf("stroke:Mcounty:#999@0.25");
+    const bordersIdx = order.indexOf("stroke:Mborders:#fff@0.5");
+    expect(countyIdx).toBeGreaterThan(-1);
+    expect(bordersIdx).toBeGreaterThan(countyIdx);
+  });
+
+  it("strokes HSA borders between the county mesh and the state mesh", () => {
+    const ctx = fakeCtx();
+    const scene = scene3();
+    scene.countyBorders = new FakePath2D("Mcounty") as unknown as Path2D;
+    scene.hsaBorders = new FakePath2D("Mhsa") as unknown as Path2D;
+    drawScene(ctx, scene, view, {
+      ...baseState(),
+      countyBordersColor: "#999",
+      hsaBordersColor: "#eee",
+    });
+    const order = ctx.ops.filter((o) => o.startsWith("stroke"));
+    const countyIdx = order.indexOf("stroke:Mcounty:#999@0.25");
+    const hsaIdx = order.indexOf("stroke:Mhsa:#eee@0.25");
+    const bordersIdx = order.indexOf("stroke:Mborders:#fff@0.5");
+    expect(countyIdx).toBeGreaterThan(-1);
+    expect(hsaIdx).toBeGreaterThan(countyIdx);
+    expect(bordersIdx).toBeGreaterThan(hsaIdx);
+  });
+
+  it("leaves HSA borders unpainted without a color or at width 0", () => {
+    const ctx = fakeCtx();
+    const scene = scene3();
+    scene.hsaBorders = new FakePath2D("Mhsa") as unknown as Path2D;
+    drawScene(ctx, scene, view, baseState());
+    drawScene(ctx, scene, view, {
+      ...baseState(),
+      hsaBordersColor: "#eee",
+      hsaBordersWidth: 0,
+    });
+    expect(ctx.ops.some((o) => o.startsWith("stroke:Mhsa"))).toBe(false);
+  });
+
+  it("leaves county borders unpainted without a color or at width 0", () => {
+    const ctx = fakeCtx();
+    const scene = scene3();
+    scene.countyBorders = new FakePath2D("Mcounty") as unknown as Path2D;
+    drawScene(ctx, scene, view, baseState());
+    // Width 0 is also the LOD gate (countyBordersMinZoom below threshold).
+    drawScene(ctx, scene, view, {
+      ...baseState(),
+      countyBordersColor: "#999",
+      countyBordersWidth: 0,
+    });
+    expect(ctx.ops.some((o) => o.startsWith("stroke:Mcounty"))).toBe(false);
   });
 
   it("uses the borders color and width channels", () => {
