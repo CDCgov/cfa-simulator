@@ -1,6 +1,16 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.9] - 2026-08-19
+
+### Chores
+
+- **deps:** Bump vite from 5.4.21 to 8.1.5
+
+### Features
+
+- **charts:** Support per-stop choropleth outlines
+
 ## [0.8.8] - 2026-08-19
 
 ### Bug Fixes
