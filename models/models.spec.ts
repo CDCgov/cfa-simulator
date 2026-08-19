@@ -65,7 +65,9 @@ test("fetch example renders", async ({ page }) => {
 // view, mid-state for a single-state view) — always over land.
 const clickMapCenter = (page: import("@playwright/test").Page) =>
   page
-    .locator(".choropleth-wrapper > svg:not(.choropleth-city-overlay)")
+    .locator(
+      ".primary-map .choropleth-wrapper > svg:not(.choropleth-city-overlay)",
+    )
     .click();
 
 // Count painted (non-transparent) canvas pixels. Real maps paint hundreds of
@@ -77,7 +79,7 @@ const clickMapCenter = (page: import("@playwright/test").Page) =>
 const canvasPaintedPixels = (page: import("@playwright/test").Page) =>
   page.evaluate(() => {
     const c = document.querySelector(
-      "canvas.choropleth-canvas",
+      ".primary-map canvas.choropleth-canvas",
     ) as HTMLCanvasElement | null;
     if (!c) return 0;
     const ctx = c.getContext("2d");
@@ -94,8 +96,12 @@ test("state-map starts national (canvas county grid) and drills into a clicked c
   page,
 }) => {
   await page.goto("/state-map");
-  await expect(page.locator(".subtitle")).toContainText("HSA-level data");
-  await expect(page.locator("canvas.choropleth-canvas")).toBeVisible();
+  await expect(page.locator(".state-map-page > .subtitle")).toContainText(
+    "HSA-level data",
+  );
+  await expect(
+    page.locator(".primary-map canvas.choropleth-canvas"),
+  ).toBeVisible();
   expect(await canvasPaintedPixels(page)).toBeGreaterThan(MIN_PAINTED);
   // No info panel at the national level.
   await expect(page.locator(".info-panel")).toHaveCount(0);
@@ -110,9 +116,13 @@ test("state-map starts national (canvas county grid) and drills into a clicked c
 test("state-map back button returns to the national view", async ({ page }) => {
   await page.goto("/state-map?selectedState=California");
   await expect(page.locator(".info-panel h2")).toHaveText("California");
+  await expect(page.getByRole("group", { name: "HSA detail" })).toBeVisible();
   await page.getByRole("button", { name: "Back to US" }).click();
   await expect(page.locator(".info-panel")).toHaveCount(0);
-  await expect(page.locator(".subtitle")).toContainText("HSA-level data");
+  await expect(page.getByRole("group", { name: "HSA detail" })).toBeVisible();
+  await expect(page.locator(".state-map-page > .subtitle")).toContainText(
+    "HSA-level data",
+  );
 });
 
 test("state-map renders an island territory via the Mercator fallback", async ({
@@ -121,7 +131,9 @@ test("state-map renders an island territory via the Mercator fallback", async ({
   // geoAlbersUsa can't project Puerto Rico; the component must fall back to
   // geoMercator instead of emitting NaN (which would leave the canvas blank).
   await page.goto("/state-map?selectedState=Puerto%20Rico");
-  await expect(page.locator("canvas.choropleth-canvas")).toBeVisible();
+  await expect(
+    page.locator(".primary-map canvas.choropleth-canvas"),
+  ).toBeVisible();
   expect(await canvasPaintedPixels(page)).toBeGreaterThan(MIN_PAINTED);
 });
 
@@ -129,13 +141,15 @@ test("state-map shows county details and highlights without zooming", async ({
   page,
 }) => {
   await page.goto("/state-map?selectedState=California");
-  await expect(page.locator("canvas.choropleth-canvas")).toBeVisible();
+  await expect(
+    page.locator(".primary-map canvas.choropleth-canvas"),
+  ).toBeVisible();
   await clickMapCenter(page);
   // Clicking updates the info panel...
   await expect(page.locator(".info-panel .info-selection")).toBeVisible();
   // ...and highlights on the map without zooming (focus-zoom is off; the
   // always-on zoom controls are still offered).
-  await expect(page.locator(".chart-zoom-controls")).toBeVisible();
+  await expect(page.locator(".primary-map .chart-zoom-controls")).toBeVisible();
 });
 
 test("state-map outline toggle draws the exterior boundary", async ({
@@ -143,7 +157,7 @@ test("state-map outline toggle draws the exterior boundary", async ({
 }) => {
   // SVG renderer so the outline is a real DOM path we can assert on.
   await page.goto("/state-map?renderer=svg&outline=on");
-  const outline = page.locator(".choropleth-outline");
+  const outline = page.locator(".primary-map .choropleth-outline");
   await expect(outline).toHaveCount(1);
   await expect(outline).toHaveAttribute("stroke", /.+/);
   await expect(outline).toHaveAttribute("d", /.+/);
@@ -155,25 +169,102 @@ test("state-map outline toggle draws the exterior boundary", async ({
   await expect(outline).toHaveCount(0);
 });
 
+test("state-map includes contiguous white, purple, and grey outline regions", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await page.goto("/state-map?renderer=svg");
+  const comparison = page.locator(".outline-comparison-map");
+  await expect(comparison).toBeVisible();
+  await expect(comparison.locator(".choropleth-wrapper")).toHaveCount(0);
+  await comparison.scrollIntoViewIfNeeded();
+  await expect(page.locator(".primary-map .choropleth-wrapper")).toBeVisible();
+  await expect(comparison.locator(".choropleth-wrapper")).toBeVisible();
+  const primaryHsaBorders = page.locator(
+    ".primary-map .choropleth-hsa-borders",
+  );
+  const comparisonHsaBorders = comparison.locator(".choropleth-hsa-borders");
+  const primaryStateBorders = page.locator(
+    ".primary-map .choropleth-state-borders",
+  );
+  const comparisonStateBorders = comparison.locator(
+    ".choropleth-state-borders",
+  );
+  await expect(primaryHsaBorders).toHaveAttribute("stroke", /.+/);
+  const renderedStrokeWidth = (locator: typeof primaryHsaBorders) =>
+    locator.evaluate((element) => {
+      const path = element as SVGPathElement;
+      const matrix = path.getScreenCTM();
+      return (
+        Number(path.getAttribute("stroke-width")) *
+        (matrix ? Math.hypot(matrix.a, matrix.b) : 1)
+      );
+    });
+  expect(await renderedStrokeWidth(primaryHsaBorders)).toBeCloseTo(0.5, 4);
+  expect(await renderedStrokeWidth(comparisonHsaBorders)).toBeCloseTo(0.5, 4);
+  expect(await renderedStrokeWidth(primaryStateBorders)).toBeCloseTo(0.75, 4);
+  expect(await renderedStrokeWidth(comparisonStateBorders)).toBeCloseTo(
+    0.75,
+    4,
+  );
+  await expect(comparisonHsaBorders).toHaveAttribute(
+    "stroke",
+    (await primaryHsaBorders.getAttribute("stroke"))!,
+  );
+  await expect(comparisonHsaBorders).toHaveAttribute(
+    "stroke-width",
+    (await primaryHsaBorders.getAttribute("stroke-width"))!,
+  );
+  await expect(
+    comparison.locator('.state-path[data-feat-id="06071"]'),
+  ).toHaveAttribute("fill", "rgb(255, 255, 255)");
+  await expect(
+    comparison.locator('.state-path[data-feat-id="06071"]'),
+  ).toHaveAttribute("stroke", "rgb(204, 204, 204)");
+  await expect(
+    comparison.locator('.state-path[data-feat-id="48001"]'),
+  ).toHaveAttribute("fill", "rgb(109, 8, 90)");
+  await expect(
+    comparison.locator('.state-path[data-feat-id="48001"]'),
+  ).toHaveAttribute("stroke", "rgb(154, 77, 136)");
+  await expect(
+    comparison.locator('.state-path[data-feat-id="36061"]'),
+  ).toHaveAttribute("fill", "rgb(221, 221, 221)");
+  await expect(
+    comparison.locator('.state-path[data-feat-id="36061"]'),
+  ).toHaveAttribute("stroke", "rgb(170, 170, 170)");
+
+  const whiteCounty = comparison.locator('.state-path[data-feat-id="06071"]');
+  await whiteCounty.hover();
+  // Scrolling the lower map into view starts the viewport-settle guard;
+  // re-enter once it expires so the hover style is applied.
+  await page.waitForTimeout(250);
+  await whiteCounty.dispatchEvent("mouseover");
+  await expect
+    .poll(() => whiteCounty.evaluate((el) => getComputedStyle(el).stroke))
+    .toBe("rgb(85, 85, 85)");
+});
+
 test("state-map national view: county-level hover over HSA-level data", async ({
   page,
 }) => {
   await page.goto("/state-map?renderer=svg");
   // The base features are counties (5-digit FIPS), colored by HSA rows via
   // dataGeoType, with the HSA separators drawn as one mesh.
-  const sanBernardino = page.locator('.state-path[data-feat-id="06071"]');
-  await expect(sanBernardino).toHaveCount(1);
-  await expect(page.locator(".choropleth-hsa-borders")).toHaveAttribute(
-    "d",
-    /.+/,
+  const sanBernardino = page.locator(
+    '.primary-map .state-path[data-feat-id="06071"]',
   );
+  await expect(sanBernardino).toHaveCount(1);
+  await expect(
+    page.locator(".primary-map .choropleth-hsa-borders"),
+  ).toHaveAttribute("d", /.+/);
   // Hovering a county names the county and its parent HSA in the tooltip
   // and outlines the whole HSA as a focus overlay.
   await sanBernardino.hover();
-  const tooltip = page.locator(".chart-tooltip-content");
+  const tooltip = page.locator(".chart-tooltip-content").first();
   await expect(tooltip).toContainText("San Bernardino");
   await expect(tooltip).toContainText("HSA:");
-  await expect(page.locator(".focus-overlay")).toHaveCount(1);
+  await expect(page.locator(".primary-map .focus-overlay")).toHaveCount(1);
   // HSA detail Off hides the county separators (theme.strokeWidth 0); the
   // HSA mesh stays.
   await page
@@ -185,7 +276,9 @@ test("state-map national view: county-level hover over HSA-level data", async ({
       sanBernardino.evaluate((el) => getComputedStyle(el).strokeWidth),
     )
     .toBe("0px");
-  await expect(page.locator(".choropleth-hsa-borders")).toHaveCount(1);
+  await expect(
+    page.locator(".primary-map .choropleth-hsa-borders"),
+  ).toHaveCount(1);
   // Mixed switches back to the HSA base (whole-state estimates read best
   // there), dropping the county grid and its mesh.
   await page
@@ -193,7 +286,9 @@ test("state-map national view: county-level hover over HSA-level data", async ({
     .getByRole("button", { name: "Mixed" })
     .click();
   await expect(sanBernardino).toHaveCount(0);
-  await expect(page.locator(".choropleth-hsa-borders")).toHaveCount(0);
+  await expect(
+    page.locator(".primary-map .choropleth-hsa-borders"),
+  ).toHaveCount(0);
 });
 
 test("state-map HSA detail overlays county boundaries inside HSAs", async ({
@@ -203,7 +298,7 @@ test("state-map HSA detail overlays county boundaries inside HSAs", async ({
   await page.goto(
     "/state-map?selectedState=California&geoType=hsas&renderer=svg&hsaDetail=on",
   );
-  const mesh = page.locator(".choropleth-county-borders");
+  const mesh = page.locator(".primary-map .choropleth-county-borders");
   await expect(mesh).toHaveCount(1);
   await expect(mesh).toHaveAttribute("stroke", /.+/);
   await expect(mesh).toHaveAttribute("d", /.+/);
@@ -227,16 +322,25 @@ test("state-map mixed levels draw a state as one feature with one tooltip", asyn
 }) => {
   // SVG renderer so the substituted features are real DOM paths.
   await page.goto("/state-map?renderer=svg&mixed=on");
-  const california = page.locator('.state-path[data-feat-id="06"]');
+  const california = page.locator(
+    '.primary-map .state-path[data-feat-id="06"]',
+  );
   await expect(california).toHaveCount(1);
   // California's HSAs are gone — the state is the only "06…" feature.
-  await expect(page.locator('.state-path[data-feat-id^="06"]')).toHaveCount(1);
-  await expect(page.locator('.state-path[data-feat-id^="48"]')).toHaveCount(1);
+  await expect(
+    page.locator('.primary-map .state-path[data-feat-id^="06"]'),
+  ).toHaveCount(1);
+  await expect(
+    page.locator('.primary-map .state-path[data-feat-id^="48"]'),
+  ).toHaveCount(1);
+  await expect(
+    page.locator('.primary-map .state-path[data-feat-id="48"]'),
+  ).toHaveAttribute("stroke", "rgb(154, 77, 136)");
   // Colored from its own state-level row, not left as no-data.
   await expect(california).not.toHaveAttribute("fill", "#ddd");
   // The whole state hovers (and tooltips) as one unit.
   await california.hover();
-  const tooltip = page.locator(".chart-tooltip-content");
+  const tooltip = page.locator(".chart-tooltip-content").first();
   await expect(tooltip).toBeVisible();
   await expect(tooltip).toContainText("California");
 
@@ -247,7 +351,9 @@ test("state-map mixed levels draw a state as one feature with one tooltip", asyn
     .click();
   await expect(california).toHaveCount(0);
   await expect
-    .poll(() => page.locator('.state-path[data-feat-id^="06"]').count())
+    .poll(() =>
+      page.locator('.primary-map .state-path[data-feat-id^="06"]').count(),
+    )
     .toBeGreaterThan(1);
 });
 
@@ -258,41 +364,47 @@ test("state-map mixed levels pick and tooltip on the canvas renderer", async ({
   // projection, same box) so the canvas hover has a point to aim at.
   await page.goto("/state-map?renderer=svg&mixed=on");
   const box = (await page
-    .locator('.state-path[data-feat-id="06"]')
+    .locator('.primary-map .state-path[data-feat-id="06"]')
     .boundingBox())!;
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
 
   await page.goto("/state-map?renderer=canvas&mixed=on");
-  await expect(page.locator("canvas.choropleth-canvas")).toBeVisible();
-  await expect(page.locator(".state-path")).toHaveCount(0);
+  await expect(
+    page.locator(".primary-map canvas.choropleth-canvas"),
+  ).toBeVisible();
+  await expect(page.locator(".primary-map .state-path")).toHaveCount(0);
   // Index-color picking must resolve the merged state, not a stale HSA.
   await page.mouse.move(cx, cy);
   await page.mouse.move(cx + 1, cy + 1);
-  await expect(page.locator(".chart-tooltip-content")).toContainText(
+  await expect(page.locator(".chart-tooltip-content").first()).toContainText(
     "California",
   );
 });
 
 test("state-map renderer toggle swaps backends in place", async ({ page }) => {
   await page.goto("/state-map?renderer=svg");
-  await expect(page.locator(".state-path").first()).toBeVisible();
-  await expect(page.locator("canvas.choropleth-canvas")).toHaveCount(0);
+  await expect(page.locator(".primary-map .state-path").first()).toBeVisible();
+  await expect(
+    page.locator(".primary-map canvas.choropleth-canvas"),
+  ).toHaveCount(0);
 
   await page
     .getByRole("group", { name: "Renderer" })
     .getByRole("button", { name: "Canvas" })
     .click();
-  await expect(page.locator("canvas.choropleth-canvas")).toBeVisible();
-  await expect(page.locator(".state-path")).toHaveCount(0);
+  await expect(
+    page.locator(".primary-map canvas.choropleth-canvas"),
+  ).toBeVisible();
+  await expect(page.locator(".primary-map .state-path")).toHaveCount(0);
   // The fresh canvas must be sized to the map box — a missed resize leaves
   // the intrinsic 300×150 backing store, clipping the map to a corner.
   const size = await page.evaluate(() => {
     const c = document.querySelector(
-      "canvas.choropleth-canvas",
+      ".primary-map canvas.choropleth-canvas",
     ) as HTMLCanvasElement;
     const svg = document.querySelector(
-      ".choropleth-wrapper > svg:not(.choropleth-city-overlay)",
+      ".primary-map .choropleth-wrapper > svg:not(.choropleth-city-overlay)",
     )!;
     return {
       width: c.width,
@@ -305,7 +417,9 @@ test("state-map renderer toggle swaps backends in place", async ({ page }) => {
   expect(await canvasPaintedPixels(page)).toBeGreaterThan(MIN_PAINTED);
   // Hover resolves through the picking canvas after the swap.
   const svgBox = (await page
-    .locator(".choropleth-wrapper > svg:not(.choropleth-city-overlay)")
+    .locator(
+      ".primary-map .choropleth-wrapper > svg:not(.choropleth-city-overlay)",
+    )
     .boundingBox())!;
   await page.mouse.move(
     svgBox.x + svgBox.width / 2,
@@ -315,15 +429,17 @@ test("state-map renderer toggle swaps backends in place", async ({ page }) => {
     svgBox.x + svgBox.width / 2 + 1,
     svgBox.y + svgBox.height / 2 + 1,
   );
-  await expect(page.locator(".chart-tooltip-content")).toBeVisible();
+  await expect(page.locator(".chart-tooltip-content").first()).toBeVisible();
 
   // Back to svg: path DOM and per-feature delegation return.
   await page
     .getByRole("group", { name: "Renderer" })
     .getByRole("button", { name: "SVG" })
     .click();
-  await expect(page.locator(".state-path").first()).toBeVisible();
-  await expect(page.locator("canvas.choropleth-canvas")).toHaveCount(0);
+  await expect(page.locator(".primary-map .state-path").first()).toBeVisible();
+  await expect(
+    page.locator(".primary-map canvas.choropleth-canvas"),
+  ).toHaveCount(0);
 });
 
 test("state-map shows cities with level-of-detail, without overlapping labels", async ({
@@ -332,14 +448,22 @@ test("state-map shows cities with level-of-detail, without overlapping labels", 
   await page.goto("/state-map?cities=on");
   // Tiered markers: the biggest cities (and the capital) show at the base
   // overview, more reveal as you zoom in.
-  await expect(page.locator(".choropleth-city-dot").first()).toBeVisible();
-  await expect(page.locator(".choropleth-city-star")).toHaveCount(0);
   await expect(
-    page.locator(".choropleth-city-label", { hasText: "Washington" }),
+    page.locator(".primary-map .choropleth-city-dot").first(),
+  ).toBeVisible();
+  await expect(page.locator(".primary-map .choropleth-city-star")).toHaveCount(
+    0,
+  );
+  await expect(
+    page.locator(".primary-map .choropleth-city-label", {
+      hasText: "Washington",
+    }),
   ).toHaveCount(1);
   // Level-of-detail keeps the base overview uncluttered — only the top tier,
   // far fewer than the full ~100-city set.
-  const baseCount = await page.locator(".choropleth-city-dot").count();
+  const baseCount = await page
+    .locator(".primary-map .choropleth-city-dot")
+    .count();
   expect(baseCount).toBeGreaterThan(0);
   expect(baseCount).toBeLessThan(15);
   expect(await canvasPaintedPixels(page)).toBeGreaterThan(MIN_PAINTED);
@@ -349,17 +473,17 @@ test("state-map shows cities with level-of-detail, without overlapping labels", 
   // fill) isn't masked by the decorative outline.
   const collided = await page.evaluate(() => {
     const INSET = 3;
-    const rects = [...document.querySelectorAll(".choropleth-city-label")].map(
-      (n) => {
-        const r = (n as SVGGraphicsElement).getBoundingClientRect();
-        return {
-          left: r.left + INSET,
-          right: r.right - INSET,
-          top: r.top + INSET,
-          bottom: r.bottom - INSET,
-        };
-      },
-    );
+    const rects = [
+      ...document.querySelectorAll(".primary-map .choropleth-city-label"),
+    ].map((n) => {
+      const r = (n as SVGGraphicsElement).getBoundingClientRect();
+      return {
+        left: r.left + INSET,
+        right: r.right - INSET,
+        top: r.top + INSET,
+        bottom: r.bottom - INSET,
+      };
+    });
     for (let i = 0; i < rects.length; i++) {
       for (let j = i + 1; j < rects.length; j++) {
         const a = rects[i];
@@ -384,7 +508,7 @@ test("city markers get the white halo and features the pointer cursor", async ({
   // created imperatively (no data-v attribute), so plain scoped child
   // rules silently stop matching.
   await page.goto("/state-map?cities=on&renderer=svg");
-  const dot = page.locator(".choropleth-city-dot").first();
+  const dot = page.locator(".primary-map .choropleth-city-dot").first();
   await dot.waitFor();
   const dotStyles = await dot.evaluate((el) => {
     const cs = getComputedStyle(el);
@@ -392,7 +516,7 @@ test("city markers get the white halo and features the pointer cursor", async ({
   });
   expect(dotStyles.fill).toBe("rgb(26, 26, 26)");
   expect(dotStyles.stroke).toBe("rgb(255, 255, 255)");
-  const label = page.locator(".choropleth-city-label").first();
+  const label = page.locator(".primary-map .choropleth-city-label").first();
   const labelStyles = await label.evaluate((el) => {
     const cs = getComputedStyle(el);
     return { stroke: cs.stroke, paintOrder: cs.paintOrder };
@@ -400,7 +524,7 @@ test("city markers get the white halo and features the pointer cursor", async ({
   expect(labelStyles.stroke).toBe("rgb(255, 255, 255)");
   expect(labelStyles.paintOrder).toBe("stroke");
   const cursor = await page
-    .locator(".state-path")
+    .locator(".primary-map .state-path")
     .first()
     .evaluate((el) => getComputedStyle(el).cursor);
   expect(cursor).toBe("pointer");
@@ -412,9 +536,13 @@ test("state-map cities overlay follows a drilled-in state's capital", async ({
   await page.goto("/state-map?selectedState=Texas&cities=on");
   // Austin is the Texas capital → emphasized label, no star glyph (visible at
   // load since the demo uses cities-min-zoom=0).
-  await expect(page.locator(".choropleth-city-star")).toHaveCount(0);
+  await expect(page.locator(".primary-map .choropleth-city-star")).toHaveCount(
+    0,
+  );
   await expect(
-    page.locator(".choropleth-city-label-capital", { hasText: "Austin" }),
+    page.locator(".primary-map .choropleth-city-label-capital", {
+      hasText: "Austin",
+    }),
   ).toHaveCount(1);
   expect(await canvasPaintedPixels(page)).toBeGreaterThan(MIN_PAINTED);
 });

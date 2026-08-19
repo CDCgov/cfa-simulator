@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { SelectBox, Button, ToggleGroup } from "@cfasim-ui/components";
 import { ChoroplethMap } from "@cfasim-ui/charts";
 import type {
@@ -74,6 +74,53 @@ const countyData: StateData[] = shapedRows(
 );
 const hsaData: StateData[] = shapedRows([...new Set(Object.values(fipsToHsa))]);
 
+// Broad west-to-east blocks for comparing boundary colors over very light,
+// very dark, and no-data fills. Counties in the remaining eastern states are
+// intentionally omitted so they use the map's grey fallback.
+const WHITE_STATES = new Set([
+  "02",
+  "04",
+  "06",
+  "15",
+  "16",
+  "32",
+  "41",
+  "49",
+  "53",
+]);
+const PURPLE_STATES = new Set([
+  "08",
+  "20",
+  "30",
+  "31",
+  "35",
+  "38",
+  "40",
+  "46",
+  "48",
+  "56",
+]);
+function outlineValue(id: string): number | null {
+  const state = id.slice(0, 2);
+  if (WHITE_STATES.has(state)) return 40;
+  if (PURPLE_STATES.has(state)) return 80;
+  return null;
+}
+
+const outlineCountyData: StateData[] = objects.counties.geometries.flatMap(
+  (g) => {
+    const id = String(g.id).padStart(5, "0");
+    const value = outlineValue(id);
+    return value == null ? [] : [{ id, value }];
+  },
+);
+const outlineHsaData: StateData[] = [
+  ...new Set(Object.values(fipsToHsa)),
+].flatMap((id) => {
+  const value = outlineValue(id);
+  return value == null ? [] : [{ id, value }];
+});
+
 const defaults = {
   // Empty = national view; a state name drills into that state.
   selectedState: "",
@@ -100,6 +147,12 @@ const { params } = useModelParams(defaults);
 
 const stateHsaView = computed(
   () => Boolean(params.selectedState) && params.geoType === "hsas",
+);
+const stateCountyView = computed(
+  () => Boolean(params.selectedState) && params.geoType === "counties",
+);
+const nationalMixedView = computed(
+  () => !params.selectedState && params.mixed === "on",
 );
 // National default: HSA-level data on county geography (county-level
 // hover/focus). Mixed mode re-tiles whole states, so it uses the HSA base.
@@ -130,29 +183,75 @@ const mapTheme = computed<MapTheme | undefined>(() => {
     theme.outline = "#bbb";
     theme.outlineWidth = 1;
   }
-  if (stateHsaView.value && params.hsaDetail !== "off") {
+  if (
+    (stateHsaView.value || nationalMixedView.value) &&
+    params.hsaDetail !== "off"
+  ) {
     theme.countyBorders = countyLineColor;
+    theme.countyBordersWidth = 0.25;
+  }
+  if (stateHsaView.value || nationalMixedView.value) {
+    theme.strokeWidth = 0.5;
+  }
+  if (stateHsaView.value) {
     theme.stroke = "#555";
   }
-  if (nationalCountyView.value) {
+  if (nationalCountyView.value || stateCountyView.value) {
     theme.hsaBorders = "#555";
-    theme.borders = "#555";
-    theme.bordersWidth = 0.5;
-    // County lines are the feature strokes; width 0 hides them.
+    theme.hsaBordersWidth = 0.5;
+    theme.borders = "#666";
+    theme.bordersWidth = 0.75;
+    // Data-bearing counties get their scale stop's stroke; no-data counties
+    // keep the neutral grey fallback. Width 0 hides both when detail is off.
     if (params.hsaDetail === "off") theme.strokeWidth = 0;
-    else theme.stroke = countyLineColor;
+    else theme.stroke = "#aaa";
     theme.highlight = "#000";
+  }
+  if (!params.selectedState && params.mixed === "on") {
+    theme.stroke = "#aaa";
+    theme.borders = "#666";
+    theme.bordersWidth = 0.75;
   }
   return Object.keys(theme).length ? theme : undefined;
 });
 
 // Epidemic-trend palette (Growing → Declining) as thresholds over 0-99.
 const rtColorScale: ThresholdStop[] = [
-  { min: 0, color: "#006166", label: "Declining" },
-  { min: 20, color: "#33958f", label: "Likely Declining" },
-  { min: 40, color: "#fff", label: "Not Changing" },
-  { min: 60, color: "#a14d8f", label: "Likely Growing" },
-  { min: 80, color: "#6d085a", label: "Growing" },
+  {
+    min: 0,
+    color: "#006166",
+    stroke: "#fff",
+    highlight: "#fff",
+    label: "Declining",
+  },
+  {
+    min: 20,
+    color: "#33958f",
+    stroke: "#fff",
+    highlight: "#111",
+    label: "Likely Declining",
+  },
+  {
+    min: 40,
+    color: "#fff",
+    stroke: "#ccc",
+    highlight: "#555",
+    label: "Not Changing",
+  },
+  {
+    min: 60,
+    color: "#a14d8f",
+    stroke: "#fff",
+    highlight: "#fff",
+    label: "Likely Growing",
+  },
+  {
+    min: 80,
+    color: "#6d085a",
+    stroke: "#9a4d88",
+    highlight: "#fff",
+    label: "Growing",
+  },
 ];
 
 const lastClicked = ref<{ id: string; name: string } | null>(null);
@@ -189,11 +288,49 @@ const mixedData: StateData[] = [
   })),
 ];
 
+const outlineMixedData: StateData[] = [
+  ...outlineHsaData,
+  ...MIXED_STATES.flatMap((id) => {
+    const value = outlineValue(id);
+    return value == null ? [] : [{ id, value, geoType: "states" as GeoType }];
+  }),
+];
+
 const mapData = computed(() => {
   if (params.selectedState)
     return params.geoType === "hsas" ? hsaData : countyData;
   return params.mixed === "on" ? mixedData : hsaData;
 });
+
+const outlineMapData = computed(() => {
+  if (params.selectedState) {
+    return params.geoType === "hsas" ? outlineHsaData : outlineCountyData;
+  }
+  return params.mixed === "on" ? outlineMixedData : outlineHsaData;
+});
+
+// Keep the second full map out of the critical first paint. Its host reserves
+// the final aspect ratio, so mounting it near the viewport causes no reflow.
+const outlineMapHost = ref<HTMLElement | null>(null);
+const showOutlineComparison = ref(false);
+let outlineMapObserver: IntersectionObserver | null = null;
+onMounted(() => {
+  if (!outlineMapHost.value || typeof IntersectionObserver === "undefined") {
+    showOutlineComparison.value = true;
+    return;
+  }
+  outlineMapObserver = new IntersectionObserver(
+    ([entry]) => {
+      if (!entry?.isIntersecting) return;
+      showOutlineComparison.value = true;
+      outlineMapObserver?.disconnect();
+      outlineMapObserver = null;
+    },
+    { threshold: 0.1 },
+  );
+  outlineMapObserver.observe(outlineMapHost.value);
+});
+onUnmounted(() => outlineMapObserver?.disconnect());
 
 // City overlay: national top-100 (+ DC) or, in a state view, that state's
 // capital + top cities. Undefined when the toggle is off.
@@ -305,7 +442,6 @@ const subtitle = computed(() => {
       ]"
     />
     <ToggleGroup
-      v-if="stateHsaView || nationalCountyView"
       v-model="params.hsaDetail"
       label="HSA detail"
       hint="Show county lines inside each HSA. In a state view, “At zoom” hides them until you zoom in 2× (countyBordersMinZoom)."
@@ -372,7 +508,10 @@ const subtitle = computed(() => {
   <div class="state-map-page">
     <p class="subtitle">{{ subtitle }}</p>
 
-    <div class="layout" :class="{ 'is-state': params.selectedState }">
+    <div
+      class="layout primary-map"
+      :class="{ 'is-state': params.selectedState }"
+    >
       <div class="map-container">
         <ChoroplethMap
           :topology="topology"
@@ -455,6 +594,49 @@ const subtitle = computed(() => {
         </aside>
       </Transition>
     </div>
+
+    <section class="outline-comparison">
+      <h2>Outline contrast test</h2>
+      <p class="subtitle">
+        Contiguous white, dark purple, and no-data grey regions for comparing
+        boundary colors.
+      </p>
+      <div
+        ref="outlineMapHost"
+        class="map-container outline-comparison-map"
+        :aria-busy="showOutlineComparison ? undefined : 'true'"
+      >
+        <ChoroplethMap
+          v-if="showOutlineComparison"
+          :topology="topology"
+          :state="params.selectedState"
+          :geo-type="mapGeoType"
+          :data-geo-type="mapDataGeoType"
+          :data="outlineMapData"
+          :color-scale="rtColorScale"
+          :renderer="params.renderer"
+          :focus="focus"
+          :focus-zoom="false"
+          :cities="cityMarkers"
+          :state-labels="params.labels === 'on'"
+          :theme="mapTheme"
+          zoom
+          :county-borders-min-zoom="params.hsaDetail === 'zoom' ? 2 : 1"
+          :tight-fit="params.fit === 'tight'"
+          :legend="false"
+          :menu="false"
+          tooltip-trigger="hover"
+          @state-click="onMapClick"
+          @state-hover="onMapHover"
+        >
+          <template v-if="nationalCountyView" #tooltip="{ id, name, value }">
+            <div class="tooltip-name">{{ name }}</div>
+            <div class="tooltip-hsa">{{ tooltipHsaLabel(String(id)) }}</div>
+            <div v-if="value != null">Value: {{ value }}</div>
+          </template>
+        </ChoroplethMap>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -545,6 +727,18 @@ const subtitle = computed(() => {
 .tooltip-hsa {
   opacity: 0.7;
   font-size: 0.85em;
+}
+
+.outline-comparison {
+  margin-top: 3rem;
+}
+
+.outline-comparison h2 {
+  margin-bottom: 0.75rem;
+}
+
+.outline-comparison-map {
+  aspect-ratio: 8 / 5;
 }
 
 /* Stack the info panel below the map when the container is narrow (mobile,

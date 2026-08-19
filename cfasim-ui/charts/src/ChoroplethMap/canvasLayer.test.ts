@@ -64,7 +64,10 @@ function scene3(): CanvasScene {
     items,
     indexById: new Map(items.map((it, i) => [it.id, i])),
     featureStrokes: new FakePath2D("M0M1M2") as unknown as Path2D,
+    alternateFeatureStrokes: new Map(),
     raisedStroke: null,
+    raisedStrokeColor: undefined,
+    raisedId: null,
     borders: new FakePath2D("Mborders") as unknown as Path2D,
     countyBorders: null,
     hsaBorders: null,
@@ -117,6 +120,21 @@ describe("buildScene", () => {
     // The exterior outline is attached later by the component.
     expect(scene.exterior).toBeNull();
   });
+
+  it("batches per-stop feature strokes by alternate color", () => {
+    const scene = buildScene(
+      [{ id: "01" }, { id: "02" }, { id: "03" }],
+      ((f: { id: string }) => `M${f.id}`) as never,
+      (id) => (id === "02" ? "#fff" : "#600"),
+      null,
+      null,
+      (id) => (id === "02" ? "#ccc" : undefined),
+    );
+    expect((scene.featureStrokes as unknown as FakePath2D).d).toBe("M01M03");
+    expect(
+      (scene.alternateFeatureStrokes.get("#ccc") as unknown as FakePath2D).d,
+    ).toBe("M02");
+  });
 });
 
 describe("drawScene", () => {
@@ -138,6 +156,23 @@ describe("drawScene", () => {
     // units; borders 1 CSS px → 0.5.
     expect(ctx.ops).toContain("stroke:M0M1M2:#fff@0.25");
     expect(ctx.ops).toContain("stroke:Mborders:#fff@0.5");
+  });
+
+  it("uses per-stop strokes and highlights for feature batches", () => {
+    const scene = buildScene(
+      [{ id: "dark" }, { id: "white" }],
+      ((f: { id: string }) => `M${f.id}`) as never,
+      (id) => (id === "white" ? "#fff" : "#600"),
+      null,
+      null,
+      (id) => (id === "white" ? "#ccc" : undefined),
+      (id) => (id === "white" ? "#555" : undefined),
+    );
+    const ctx = fakeCtx();
+    drawScene(ctx, scene, view, { ...baseState(), hoveredId: "white" });
+    expect(ctx.ops).toContain("stroke:Mdark:#fff@0.25");
+    expect(ctx.ops).toContain("stroke:Mwhite:#ccc@0.25");
+    expect(ctx.ops).toContain("stroke:Mwhite:#555@0.75");
   });
 
   it("draws fills, borders, overlays, then highlights last", () => {

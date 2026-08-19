@@ -290,7 +290,7 @@ Every channel's default routes through a `--choropleth-*` custom property, so a 
 
 ### Threshold color scale
 
-Use an array of `ThresholdStop` objects instead of a linear scale. Each stop defines a `min` threshold — values at or above that threshold get the stop's color. The highest matching stop wins.
+Use an array of `ThresholdStop` objects instead of a linear scale. Each stop defines a `min` threshold — values at or above that threshold get the stop's color. The highest matching stop wins. A stop can also override the feature `stroke` and hover/focus `highlight`; omit either to keep the corresponding theme color.
 
 <ComponentDemo>
   <ChoroplethMap
@@ -341,7 +341,7 @@ Use an array of `ThresholdStop` objects instead of a linear scale. Each stop def
 
 ### Categorical color scale
 
-Use an array of `CategoricalStop` objects to map string values to colors. Each stop defines a `value` to match and a `color` to apply.
+Use an array of `CategoricalStop` objects to map string values to colors. Each stop defines a `value` to match and a `color` to apply. As with threshold stops, optional `stroke` and `highlight` colors override the theme only for that category.
 
 <ComponentDemo>
   <ChoroplethMap
@@ -1457,6 +1457,10 @@ interface ThresholdStop {
   /** Lower bound (inclusive). Values at or above this get this color. */
   min: number;
   color: string;
+  /** Optional feature border; falls back to theme.stroke. */
+  stroke?: string;
+  /** Optional hover/focus border; falls back to theme.highlight. */
+  highlight?: string;
   /** Optional label for the legend (defaults to the min value) */
   label?: string;
 }
@@ -1472,6 +1476,10 @@ interface CategoricalStop {
   value: string;
   /** CSS color string */
   color: string;
+  /** Optional feature border; falls back to theme.stroke. */
+  stroke?: string;
+  /** Optional hover/focus border; falls back to theme.highlight. */
+  highlight?: string;
 }
 ```
 

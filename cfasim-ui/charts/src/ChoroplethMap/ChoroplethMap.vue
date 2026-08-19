@@ -29,6 +29,7 @@ import { saveSvg, savePng, saveCanvasPng } from "../ChartMenu/download.js";
 import {
   buildScene,
   buildPicking,
+  syncFeatureStyles,
   drawBase,
   drawHoverHighlight,
   pickIndexAt,
@@ -110,6 +111,10 @@ export interface ThresholdStop {
   min: number;
   /** Any CSS color, including `var()` and `light-dark()`. */
   color: string;
+  /** Optional feature border for values in this stop. Falls back to `theme.stroke`. */
+  stroke?: string;
+  /** Optional hover/focus border for values in this stop. Falls back to `theme.highlight`. */
+  highlight?: string;
   /** Optional label for the legend (defaults to the min value) */
   label?: string;
 }
@@ -119,6 +124,10 @@ export interface CategoricalStop {
   value: string;
   /** Any CSS color, including `var()` and `light-dark()`. */
   color: string;
+  /** Optional feature border for this category. Falls back to `theme.stroke`. */
+  stroke?: string;
+  /** Optional hover/focus border for this category. Falls back to `theme.highlight`. */
+  highlight?: string;
 }
 
 /**
@@ -1459,25 +1468,29 @@ function loadHsaModule() {
   }
   return hsaModulePromise;
 }
+const needsHsaModule = computed(() => {
+  if (props.geoType === "hsas" || props.dataGeoType === "hsas") return true;
+  // A mixed-level row can pull HSAs in (`data[].geoType`), and any state
+  // override on an HSA base map needs the table to place its features.
+  if (props.data?.some((d) => d.geoType === "hsas")) return true;
+  // The HSA-borders mesh groups counties by the table even when nothing
+  // else on the map is HSA-shaped.
+  if (
+    resolvedTheme.value.hsaBorders &&
+    (props.geoType === "counties" || props.geoType === "states")
+  ) {
+    return true;
+  }
+  const focus = props.focus;
+  if (!focus) return false;
+  const items = Array.isArray(focus) ? focus : [focus];
+  return items.some((f) => typeof f !== "string" && f.geoType === "hsas");
+});
+const hsaGeometryPending = computed(
+  () => needsHsaModule.value && hsaModule.value == null,
+);
 watch(
-  () => {
-    if (props.geoType === "hsas" || props.dataGeoType === "hsas") return true;
-    // A mixed-level row can pull HSAs in (`data[].geoType`), and any state
-    // override on an HSA base map needs the table to place its features.
-    if (props.data?.some((d) => d.geoType === "hsas")) return true;
-    // The HSA-borders mesh groups counties by the table even when nothing
-    // else on the map is HSA-shaped.
-    if (
-      resolvedTheme.value.hsaBorders &&
-      (props.geoType === "counties" || props.geoType === "states")
-    ) {
-      return true;
-    }
-    const focus = props.focus;
-    if (!focus) return false;
-    const items = Array.isArray(focus) ? focus : [focus];
-    return items.some((f) => typeof f !== "string" && f.geoType === "hsas");
-  },
+  needsHsaModule,
   (needsHsa) => {
     if (needsHsa) loadHsaModule();
   },
@@ -2122,28 +2135,57 @@ const thresholdStopsDesc = computed(() =>
     : null,
 );
 
-// Every colorScale color routed through the theme probe, so var() /
-// light-dark() endpoints and stop colors paint on both backends and
-// re-resolve on page theme flips. Order matches the mode's source array.
-// Raw colors double as their own fallbacks: a plain color still paints
-// where computed styles are unavailable.
-const scaleColorInputs = computed<string[]>(() => {
+type ResolvedStopStyle = {
+  color: string;
+  stroke?: string;
+  highlight?: string;
+};
+
+// Every scale color and optional stop style is routed through the theme
+// probe, so var() / light-dark() paints on both backends and re-resolves on
+// page theme flips. Stop entries are flattened as color/stroke/highlight.
+const scalePaintInputs = computed<string[]>(() => {
   if (isCategorical.value) {
-    return (props.colorScale as CategoricalStop[]).map((s) => s.color);
+    return (props.colorScale as CategoricalStop[]).flatMap((s) => [
+      s.color,
+      s.stroke ?? "transparent",
+      s.highlight ?? "transparent",
+    ]);
   }
   const thresholds = thresholdStopsDesc.value;
-  if (thresholds) return thresholds.map((s) => s.color);
+  if (thresholds) {
+    return thresholds.flatMap((s) => [
+      s.color,
+      s.stroke ?? "transparent",
+      s.highlight ?? "transparent",
+    ]);
+  }
   return [minColor.value, maxColor.value];
 });
 
-const resolvedScaleColors = computed(() => {
-  const colors = scaleColorInputs.value;
+const resolvedScalePaints = computed(() => {
+  const colors = scalePaintInputs.value;
   return mapTheme.resolvePalette(colors, colors);
 });
 
+function resolvedStopStyle(
+  stop: ThresholdStop | CategoricalStop,
+  index: number,
+): ResolvedStopStyle {
+  const resolved = resolvedScalePaints.value;
+  const offset = index * 3;
+  return {
+    color: resolved[offset] ?? stop.color,
+    stroke: stop.stroke ? (resolved[offset + 1] ?? stop.stroke) : undefined,
+    highlight: stop.highlight
+      ? (resolved[offset + 2] ?? stop.highlight)
+      : undefined,
+  };
+}
+
 // Unresolvable endpoint colors fall back to the default scale endpoints.
 function interpolateColor(t: number): string {
-  const resolved = resolvedScaleColors.value;
+  const resolved = resolvedScalePaints.value;
   const [r1, g1, b1] = parseRgb(resolved[0] ?? "") ?? [229, 240, 250];
   const [r2, g2, b2] = parseRgb(resolved[1] ?? "") ?? [8, 81, 156];
   const r = Math.round(r1 + (r2 - r1) * t);
@@ -2154,11 +2196,10 @@ function interpolateColor(t: number): string {
 
 const categoricalByValue = computed(() => {
   if (!isCategorical.value) return null;
-  const resolved = resolvedScaleColors.value;
-  const m = new Map<string, string>();
-  (props.colorScale as CategoricalStop[]).forEach((s, i) =>
-    m.set(s.value, resolved[i] ?? s.color),
-  );
+  const m = new Map<string, ResolvedStopStyle>();
+  (props.colorScale as CategoricalStop[]).forEach((s, i) => {
+    m.set(s.value, resolvedStopStyle(s, i));
+  });
   return m;
 });
 
@@ -2174,24 +2215,46 @@ function valueFor(featureId: string): number | string | undefined {
   return dataId == null ? undefined : dataMap.value.get(dataId);
 }
 
+function stopStyleFor(id: string): ResolvedStopStyle | undefined {
+  const value = valueFor(id);
+  if (value == null) return undefined;
+  const cat = categoricalByValue.value;
+  if (cat) return cat.get(String(value));
+  const thresholds = thresholdStopsDesc.value;
+  if (thresholds) {
+    const n = value as number;
+    for (let i = 0; i < thresholds.length; i++) {
+      if (n >= thresholds[i].min) {
+        return resolvedStopStyle(thresholds[i], i);
+      }
+    }
+  }
+  return undefined;
+}
+
 /** Single color-resolution path. Missing rows get the theme's base fill. */
 function colorFor(id: string): string {
   const value = valueFor(id);
   const noData = resolvedTheme.value.fill;
   if (value == null) return noData;
-  const cat = categoricalByValue.value;
-  if (cat) return cat.get(String(value)) ?? noData;
-  const thresholds = thresholdStopsDesc.value;
-  if (thresholds) {
-    const resolved = resolvedScaleColors.value;
-    const n = value as number;
-    for (let i = 0; i < thresholds.length; i++) {
-      if (n >= thresholds[i].min) return resolved[i] ?? thresholds[i].color;
-    }
-    return noData;
+  if (isCategorical.value || isThreshold.value) {
+    return stopStyleFor(id)?.color ?? noData;
   }
   const { min, max } = extent.value;
   return interpolateColor(((value as number) - min) / (max - min));
+}
+
+/** Per-stop feature stroke, or undefined for the theme default. */
+function alternateStrokeFor(id: string): string | undefined {
+  return stopStyleFor(id)?.stroke;
+}
+
+function strokeFor(id: string): string {
+  return alternateStrokeFor(id) ?? resolvedTheme.value.stroke;
+}
+
+function highlightFor(id: string): string | undefined {
+  return stopStyleFor(id)?.highlight;
 }
 
 const featureName = (
@@ -2812,7 +2875,9 @@ function applyHighlightStroke(pathEl: SVGPathElement, item?: FocusItem) {
     "stroke-width",
     String(highlightWidthFor(item) / strokeDivisor()),
   );
-  pathEl.style.stroke = item?.stroke ?? highlightInlineStroke.value;
+  const id = pathEl.getAttribute("data-feat-id") ?? "";
+  pathEl.style.stroke =
+    item?.stroke ?? highlightFor(id) ?? highlightInlineStroke.value;
   applyDasharray(pathEl, item?.style);
 }
 
@@ -2821,7 +2886,10 @@ function restoreDefaultStroke(pathEl: SVGPathElement) {
   // from the base group again.
   pathEl.removeAttribute("stroke-width");
   pathEl.style.stroke = "";
-  pathEl.setAttribute("stroke", resolvedTheme.value.stroke);
+  pathEl.setAttribute(
+    "stroke",
+    strokeFor(pathEl.getAttribute("data-feat-id") ?? ""),
+  );
   pathEl.removeAttribute("stroke-dasharray");
   pathEl.removeAttribute("stroke-linecap");
   // applyHighlightStroke raised the path above the borders mesh, the
@@ -3723,6 +3791,8 @@ function rebuildPaths() {
       colorFor,
       borders ? path(borders) : null,
       dcFeatureId.value,
+      alternateStrokeFor,
+      highlightFor,
     );
     syncCountyBordersPath();
     syncHsaBordersPath();
@@ -3742,7 +3812,6 @@ function rebuildPaths() {
     return;
   }
 
-  const stroke = resolvedTheme.value.stroke;
   const wantsTitleFallback = !hasInteractiveTooltip.value;
 
   // Single DocumentFragment append → one layout flush for the whole batch.
@@ -3758,7 +3827,7 @@ function rebuildPaths() {
     p.setAttribute("class", "state-path");
     p.setAttribute("data-feat-id", id);
     p.setAttribute("fill", colorFor(id));
-    p.setAttribute("stroke", stroke);
+    p.setAttribute("stroke", strokeFor(id));
     // Every feature is named for assistive tech regardless of tooltip
     // config — aria-label never triggers the browser's native tooltip, so
     // it can't double up with the interactive HTML tooltip. The <title>
@@ -3789,6 +3858,7 @@ function rebuildPaths() {
     b.setAttribute("stroke", resolvedTheme.value.borders);
     b.setAttribute("stroke-linejoin", "round");
     b.setAttribute("pointer-events", "none");
+    b.setAttribute("class", "choropleth-state-borders");
     frag.appendChild(b);
     bordersPathEl = b;
   }
@@ -3950,7 +4020,7 @@ const fillDeps = () =>
     dataMap.value,
     props.colorScale,
     props.dataGeoType,
-    resolvedScaleColors.value,
+    resolvedScalePaints.value,
     resolvedTheme.value.fill,
   ] as const;
 const strokeDeps = () =>
@@ -3994,6 +4064,7 @@ function updateFills() {
   if (isCanvas.value) {
     if (scene) {
       for (const item of scene.items) item.fill = colorFor(item.id);
+      syncFeatureStyles(scene, alternateStrokeFor, highlightFor);
     }
     for (const [id, entry] of tooltipDataById) entry.value = valueFor(id);
     markBaseDirty();
@@ -4004,6 +4075,9 @@ function updateFills() {
     const value = valueFor(id);
     const entry = tooltipDataById.get(id);
     p.setAttribute("fill", colorFor(id));
+    if (p !== hoveredEl && !focusedPathStyles.has(p)) {
+      p.setAttribute("stroke", strokeFor(id));
+    }
     // Refresh cached tooltip payload so a later hover (and the per-feature
     // accessible name below) reflects the new value.
     if (entry) {
@@ -4016,12 +4090,16 @@ function updateFills() {
       if (title) title.textContent = label;
     }
   }
+  refreshHighlights();
 }
 
 function updateStrokes() {
   if (isCanvas.value) {
     // Stroke params are read at render time; the base strokes change, so the
     // cache is stale.
+    if (scene) {
+      syncFeatureStyles(scene, alternateStrokeFor, highlightFor);
+    }
     markBaseDirty();
     requestRedraw();
     return;
@@ -4231,7 +4309,7 @@ watch(
 // Data or scale → repaint fills (and refresh fallback <title>s). Reading
 // `props.dataGeoType` directly so a change to the parent-mapping mode
 // re-evaluates every county's color even when `dataMap` itself
-// (data-id keyed) is unchanged. `resolvedScaleColors` and the theme's
+// (data-id keyed) is unchanged. `resolvedScalePaints` and the theme's
 // base fill make a page theme flip repaint both backends.
 watch(fillDeps, (deps) => {
   if (samePaint(deps, paintedFillDeps)) return;
@@ -4363,11 +4441,13 @@ watch(
         {
           pannable: isPannable,
           'is-fullscreen': fullscreen.isFullscreen.value,
+          'is-geometry-pending': hsaGeometryPending,
         },
       ]"
       :style="fullscreen.fullscreenStyle.value"
       :role="chartRole || undefined"
       :aria-label="chartAriaLabel || undefined"
+      :aria-busy="hsaGeometryPending ? 'true' : undefined"
     >
       <!-- Rendered while expanded even with `menu` off — the ✕ close
       button it swaps to is the way back from the tap-to-expand view. -->
@@ -4549,6 +4629,12 @@ watch(
   width: 100%;
   /* Size container so the zoom hint can reposition on narrow maps. */
   container-type: inline-size;
+}
+
+/* HSA geometry and county→HSA lookups load lazily. Keep the SVG's full
+ * intrinsic footprint while suppressing the incomplete grey/empty frame. */
+.choropleth-wrapper.is-geometry-pending {
+  visibility: hidden;
 }
 
 .choropleth-wrapper svg {

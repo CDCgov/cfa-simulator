@@ -11,6 +11,10 @@ export interface SceneItem {
   id: string;
   path: Path2D;
   fill: string;
+  /** Per-scale-stop feature stroke; undefined uses the theme default. */
+  stroke?: string;
+  /** Per-feature hover/focus stroke; undefined uses the theme highlight. */
+  highlight?: string;
 }
 
 export interface CanvasScene {
@@ -22,12 +26,18 @@ export interface CanvasScene {
    * canvas2D especially).
    */
   featureStrokes: Path2D | null;
+  /** Feature paths grouped by an alternate per-stop stroke color. */
+  alternateFeatureStrokes: Map<string, Path2D>;
   /**
    * Stroke for a feature kept OUT of `featureStrokes` because its geometry
    * is swapped at runtime (the zoom-aware enlarged DC): a concatenated
    * Path2D can't be edited, so this one strokes separately after it.
    */
   raisedStroke: Path2D | null;
+  /** Alternate color for `raisedStroke`; undefined uses the base stroke. */
+  raisedStrokeColor: string | undefined;
+  /** Feature id excluded from the concatenated paths for runtime scaling. */
+  raisedId: string | null;
   /** State-borders mesh (counties / hsas mode). */
   borders: Path2D | null;
   /**
@@ -147,12 +157,11 @@ export function buildScene(
   colorFor: (id: string) => string,
   bordersD?: string | null,
   raisedId?: string | null,
+  alternateStrokeFor?: (id: string) => string | undefined,
+  highlightFor?: (id: string) => string | undefined,
 ): CanvasScene {
   const items: SceneItem[] = [];
   const indexById = new Map<string, number>();
-  const featureStrokes = new Path2D();
-  let strokeCount = 0;
-  let raisedStroke: Path2D | null = null;
   for (const feat of features) {
     const d = pathFor(feat as never);
     if (!d) continue;
@@ -160,23 +169,58 @@ export function buildScene(
     const path = new Path2D(d);
     indexById.set(id, items.length);
     items.push({ id, path, fill: colorFor(id) });
-    if (raisedId != null && id === raisedId) {
-      raisedStroke = path;
-    } else if (typeof featureStrokes.addPath === "function") {
-      featureStrokes.addPath(path);
-      strokeCount++;
-    }
   }
-  return {
+  const scene: CanvasScene = {
     items,
     indexById,
-    featureStrokes: strokeCount ? featureStrokes : null,
-    raisedStroke,
+    featureStrokes: null,
+    alternateFeatureStrokes: new Map(),
+    raisedStroke: null,
+    raisedStrokeColor: undefined,
+    raisedId: raisedId ?? null,
     borders: bordersD ? new Path2D(bordersD) : null,
     countyBorders: null,
     hsaBorders: null,
     exterior: null,
   };
+  syncFeatureStyles(scene, alternateStrokeFor, highlightFor);
+  return scene;
+}
+
+/** Rebuild batched strokes and per-feature highlights after scale changes. */
+export function syncFeatureStyles(
+  scene: CanvasScene,
+  alternateStrokeFor?: (id: string) => string | undefined,
+  highlightFor?: (id: string) => string | undefined,
+): void {
+  const base = new Path2D();
+  let baseCount = 0;
+  const alternates = new Map<string, Path2D>();
+  scene.raisedStroke = null;
+  scene.raisedStrokeColor = undefined;
+  for (const item of scene.items) {
+    const alternate = alternateStrokeFor?.(item.id);
+    item.stroke = alternate;
+    item.highlight = highlightFor?.(item.id);
+    if (item.id === scene.raisedId) {
+      scene.raisedStroke = item.path;
+      scene.raisedStrokeColor = alternate;
+      continue;
+    }
+    if (alternate) {
+      let path = alternates.get(alternate);
+      if (!path) {
+        path = new Path2D();
+        alternates.set(alternate, path);
+      }
+      if (typeof path.addPath === "function") path.addPath(item.path);
+    } else if (typeof base.addPath === "function") {
+      base.addPath(item.path);
+      baseCount++;
+    }
+  }
+  scene.featureStrokes = baseCount ? base : null;
+  scene.alternateFeatureStrokes = alternates;
 }
 
 function highlightOne(
@@ -194,7 +238,7 @@ function highlightOne(
   // the SVG renderer's appendChild raise.
   ctx.fillStyle = it.fill;
   ctx.fill(it.path);
-  ctx.strokeStyle = item?.stroke ?? state.highlightStroke;
+  ctx.strokeStyle = item?.stroke ?? it.highlight ?? state.highlightStroke;
   ctx.lineWidth = lw(item?.strokeWidth ?? state.strokeWidth + 1);
   applyLineDash(ctx, lw, item?.style);
   ctx.stroke(it.path);
@@ -257,10 +301,19 @@ function finishBasePass(
     ctx.strokeStyle = state.strokeColor;
     if (scene.featureStrokes) {
       ctx.stroke(scene.featureStrokes);
-    } else {
-      for (const item of scene.items) ctx.stroke(item.path);
+    } else if (scene.alternateFeatureStrokes.size === 0) {
+      for (const item of scene.items) {
+        if (item.id === scene.raisedId) continue;
+        ctx.strokeStyle = item.stroke ?? state.strokeColor;
+        ctx.stroke(item.path);
+      }
     }
-    if (scene.raisedStroke && scene.featureStrokes) {
+    for (const [color, path] of scene.alternateFeatureStrokes) {
+      ctx.strokeStyle = color;
+      ctx.stroke(path);
+    }
+    if (scene.raisedStroke) {
+      ctx.strokeStyle = scene.raisedStrokeColor ?? state.strokeColor;
       ctx.stroke(scene.raisedStroke);
     }
   }

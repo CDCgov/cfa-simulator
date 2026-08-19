@@ -284,7 +284,7 @@ describe("ChoroplethMap", () => {
     expect(ny!.attributes("fill")).toBe("#low");
   });
 
-  it("applies categorical color scale with string values", () => {
+  it("applies categorical color scale with optional stop styling", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         topology: statesTopo,
@@ -298,7 +298,12 @@ describe("ChoroplethMap", () => {
         colorScale: [
           { value: "low", color: "#green1" },
           { value: "medium", color: "#yellow1" },
-          { value: "high", color: "#red1" },
+          {
+            value: "high",
+            color: "#red1",
+            stroke: "#red2",
+            highlight: "#red3",
+          },
         ],
       },
     });
@@ -312,8 +317,11 @@ describe("ChoroplethMap", () => {
       .findAll(".state-path")
       .find((p) => p.find("title").text().includes("Texas"));
     expect(california!.attributes("fill")).toBe("#red1");
+    expect(california!.attributes("stroke")).toBe("#red2");
     expect(ny!.attributes("fill")).toBe("#green1");
     expect(tx!.attributes("fill")).toBe("#yellow1");
+    await california!.trigger("mouseover");
+    expect(strokeStyle(california!)).toBe("#red3");
   });
 
   it("categorical scale returns noDataColor for unmatched values", () => {
@@ -563,27 +571,14 @@ describe("ChoroplethMap", () => {
         geoType: "counties",
       },
     });
-    // State borders path rendered after the county paths group
-    const allPaths = wrapper.findAll("path");
-    const borderPath = allPaths.find(
-      (p) =>
-        p.attributes("fill") === "none" &&
-        p.attributes("pointer-events") === "none",
-    );
-    expect(borderPath).toBeDefined();
+    expect(wrapper.find(".choropleth-state-borders").exists()).toBe(true);
   });
 
   it("does not render state borders in states mode", () => {
     const wrapper = mount(ChoroplethMap, {
       props: { topology: statesTopo, width: 600, height: 400 },
     });
-    const allPaths = wrapper.findAll("path");
-    const borderPath = allPaths.find(
-      (p) =>
-        p.attributes("fill") === "none" &&
-        p.attributes("pointer-events") === "none",
-    );
-    expect(borderPath).toBeUndefined();
+    expect(wrapper.find(".choropleth-state-borders").exists()).toBe(false);
   });
 
   it("renders HSA paths when geoType is hsas", async () => {
@@ -595,7 +590,19 @@ describe("ChoroplethMap", () => {
         geoType: "hsas",
       },
     });
+    expect(wrapper.find(".choropleth-wrapper").classes()).toContain(
+      "is-geometry-pending",
+    );
+    expect(wrapper.find(".choropleth-wrapper").attributes("aria-busy")).toBe(
+      "true",
+    );
     await flushDynamicImports();
+    expect(wrapper.find(".choropleth-wrapper").classes()).not.toContain(
+      "is-geometry-pending",
+    );
+    expect(
+      wrapper.find(".choropleth-wrapper").attributes("aria-busy"),
+    ).toBeUndefined();
     const paths = wrapper.findAll(".state-path");
     // 949 unique HSAs
     expect(paths.length).toBeGreaterThanOrEqual(900);
@@ -635,13 +642,7 @@ describe("ChoroplethMap", () => {
     // Borders arrive with the features, once the lazy HSA module resolves
     // (nothing renders through the unfittable pre-module projection).
     await flushDynamicImports();
-    const allPaths = wrapper.findAll("path");
-    const borderPath = allPaths.find(
-      (p) =>
-        p.attributes("fill") === "none" &&
-        p.attributes("pointer-events") === "none",
-    );
-    expect(borderPath).toBeDefined();
+    expect(wrapper.find(".choropleth-state-borders").exists()).toBe(true);
   });
 
   it("emits stateHover on mouseover/mouseout", async () => {
@@ -2985,6 +2986,36 @@ describe("ChoroplethMap mixed geographic levels", () => {
     wrapper.unmount();
   });
 
+  it("applies per-stop strokes and highlights to mixed-level features", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: countiesTopo,
+        geoType: "counties" as const,
+        width: 600,
+        height: 400,
+        data: [{ id: "06", value: 80, geoType: "states" as const }],
+        colorScale: [
+          { min: 0, color: "#fff", stroke: "#ccc" },
+          {
+            min: 60,
+            color: "#6d085a",
+            stroke: "#3d0032",
+            highlight: "#fff",
+          },
+        ],
+        theme: { stroke: "#aaa" },
+      },
+    });
+    const merged = wrapper.find('.state-path[data-feat-id="06"]');
+    const noData = wrapper.find('.state-path[data-feat-id="36061"]');
+    expect(merged.attributes("fill")).toBe("#6d085a");
+    expect(merged.attributes("stroke")).toBe("#3d0032");
+    expect(noData.attributes("stroke")).toBe("#aaa");
+    await merged.trigger("mouseover");
+    expect(strokeStyle(merged)).toBe("#fff");
+    wrapper.unmount();
+  });
+
   it("splits one state into counties on a state map", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
@@ -3745,16 +3776,8 @@ describe("ChoroplethMap theming", () => {
   const mapSvg = (wrapper: ReturnType<typeof mount>) =>
     wrapper.find(".choropleth-wrapper > svg");
 
-  // The state-borders mesh path: fill="none", not the outline or an overlay.
   const bordersPath = (wrapper: ReturnType<typeof mount>) =>
-    mapSvg(wrapper)
-      .findAll("path")
-      .find(
-        (p) =>
-          p.attributes("fill") === "none" &&
-          !p.classes("choropleth-outline") &&
-          !p.classes("focus-overlay"),
-      );
+    mapSvg(wrapper).find(".choropleth-state-borders");
 
   it("applies theme.stroke to feature paths", () => {
     const wrapper = mount(ChoroplethMap, {
@@ -3768,6 +3791,48 @@ describe("ChoroplethMap theming", () => {
     for (const p of wrapper.findAll(".state-path")) {
       expect(p.attributes("stroke")).toBe("#333");
     }
+  });
+
+  it("uses per-stop strokes and highlights with theme fallbacks", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        data: [
+          { id: "06", value: 40 },
+          { id: "36", value: 80 },
+        ],
+        colorScale: [
+          { min: 0, color: "#fff", stroke: "#ccc", highlight: "#555" },
+          {
+            min: 60,
+            color: "#6d085a",
+            stroke: "#fff",
+            highlight: "#eee",
+          },
+        ],
+        theme: { stroke: "#aaa", highlight: "#111" },
+      },
+    });
+    const path = (id: string) =>
+      wrapper.find(`.state-path[data-feat-id="${id}"]`);
+    expect(path("06").attributes("stroke")).toBe("#ccc");
+    expect(path("36").attributes("stroke")).toBe("#fff");
+    expect(path("01").attributes("stroke")).toBe("#aaa");
+    await path("06").trigger("mouseover");
+    expect(strokeStyle(path("06"))).toBe("#555");
+    await path("06").trigger("mouseout");
+
+    await wrapper.setProps({
+      data: [
+        { id: "06", value: 80 },
+        { id: "36", value: 80 },
+      ],
+    });
+    expect(path("06").attributes("stroke")).toBe("#fff");
+    await path("06").trigger("mouseover");
+    expect(strokeStyle(path("06"))).toBe("#eee");
   });
 
   it("defaults feature strokes to the light constant in test DOMs", () => {
