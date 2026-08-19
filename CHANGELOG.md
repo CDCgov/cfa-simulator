@@ -1,6 +1,16 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.7] - 2026-08-19
+
+### Bug Fixes
+
+- **charts:** Name every map feature for assistive tech even when an interactive tooltip is set
+
+### Features
+
+- **charts:** Add county and HSA border overlays
+
 ## [0.8.6] - 2026-07-29
 
 ### Bug Fixes
