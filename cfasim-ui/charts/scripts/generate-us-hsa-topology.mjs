@@ -11,9 +11,8 @@
 // roughly half the size.
 //
 // Counties with no fipsToHsa entry are dropped: the island territories (PR,
-// AS, GU, MP, VI), which geoAlbersUsa cannot project, and the five NYC
-// boroughs, which the mapping currently lacks — the runtime merge skips all
-// of them too, so rendering matches.
+// AS, GU, MP, VI), which geoAlbersUsa cannot project. The runtime merge skips
+// them too, so rendering matches.
 //
 // Run from the charts package root:  node scripts/generate-us-hsa-topology.mjs
 //
@@ -31,13 +30,6 @@ const require = createRequire(import.meta.url);
 
 // Matches the us-atlas quantization so the round-trip reproduces its grid.
 const QUANTIZATION = 1e5;
-
-// The only counties allowed to lack a fipsToHsa entry: the island territories
-// (by state FIPS prefix) and the five NYC boroughs. Anything else dropping out
-// means the mapping regressed, and silently emitting a holey map would slip
-// past the equality tests (they derive expectations from the same inputs).
-const TERRITORY_PREFIXES = new Set(["60", "66", "69", "72", "78"]);
-const NYC_BOROUGHS = new Set(["36005", "36047", "36061", "36081", "36085"]);
 
 /** Applies the topology's transform to every arc, making coordinates absolute. */
 export function dequantize(topo) {
@@ -90,8 +82,13 @@ export function pruneArcs(topo) {
 /**
  * Builds the pre-merged HSA topology from a us-atlas counties topology and
  * the county→HSA mapping. Pure, so tests can pin it against the runtime merge.
+ *
+ * Counties under `territoryPrefixes` are the only ones allowed to lack a
+ * fipsToHsa entry. Anything else dropping out means the mapping regressed, and
+ * silently emitting a holey map would slip past the equality tests (they derive
+ * expectations from the same inputs).
  */
-export function buildHsaTopology(countiesTopo, fipsToHsa) {
+export function buildHsaTopology(countiesTopo, fipsToHsa, territoryPrefixes) {
   const topo = structuredClone(countiesTopo);
 
   const groups = new Map();
@@ -114,8 +111,7 @@ export function buildHsaTopology(countiesTopo, fipsToHsa) {
   }
 
   const unexpected = dropped.filter(
-    (fips) =>
-      !TERRITORY_PREFIXES.has(fips.slice(0, 2)) && !NYC_BOROUGHS.has(fips),
+    (fips) => !territoryPrefixes.has(fips.slice(0, 2)),
   );
   if (unexpected.length) {
     throw new Error(
@@ -148,11 +144,13 @@ export function buildHsaTopology(countiesTopo, fipsToHsa) {
 
 async function main() {
   const countiesTopo = require("us-atlas/counties-10m.json");
-  const { fipsToHsa } = await import("../src/ChoroplethMap/hsaMapping.ts");
+  const { fipsToHsa, TERRITORY_PREFIXES } =
+    await import("../src/ChoroplethMap/hsaMapping.ts");
 
   const { topology, hsaCount, dropped } = buildHsaTopology(
     countiesTopo,
     fipsToHsa,
+    TERRITORY_PREFIXES,
   );
   console.log(
     `merged ${countiesTopo.objects.counties.geometries.length} counties into ` +

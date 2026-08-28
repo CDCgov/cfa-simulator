@@ -1,3 +1,10 @@
+/**
+ * State FIPS prefixes with no HSA coverage: the island territories (AS, GU,
+ * MP, PR, VI). Every other us-atlas county has a `fipsToHsa` entry, an
+ * invariant the topology generator throws on and the tests assert.
+ */
+export const TERRITORY_PREFIXES = new Set(["60", "66", "69", "72", "78"]);
+
 /** County FIPS code to HSA code mapping */
 export const fipsToHsa: Record<string, string> = {
   "01013": "010259",
@@ -1861,6 +1868,13 @@ export const fipsToHsa: Record<string, string> = {
   "36121": "360054",
   "36035": "360076",
   "36057": "360076",
+  "36005": "360094",
+  "36047": "360094",
+  "36061": "360094",
+  "36081": "360094",
+  "36085": "360094",
+  // Not a county FIPS: an aggregate id for upstream data that reports the
+  // five boroughs as one NYC unit. Kept so such rows still resolve.
   "36NYC": "360094",
   "36043": "360059",
   "36053": "360059",

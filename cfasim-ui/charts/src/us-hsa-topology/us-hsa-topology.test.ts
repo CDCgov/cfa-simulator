@@ -2,7 +2,11 @@ import { describe, it, expect } from "vitest";
 import { feature, merge } from "topojson-client";
 import type { Topology } from "topojson-specification";
 import usCounties from "us-atlas/counties-10m.json";
-import { fipsToHsa, hsaNames } from "../ChoroplethMap/hsaMapping.js";
+import {
+  fipsToHsa,
+  hsaNames,
+  TERRITORY_PREFIXES,
+} from "../ChoroplethMap/hsaMapping.js";
 import { usHsaTopology } from "./index.js";
 
 // These tests pin the committed artifact (data.ts) to the runtime merge
@@ -31,6 +35,31 @@ function mappableHsaCodes(): Set<string> {
   }
   return codes;
 }
+
+describe("fipsToHsa coverage", () => {
+  // Both directions of the pairing the artifact is built from. A county
+  // missing an entry is a hole in every HSA map (that was the five NYC
+  // boroughs); an HSA code with no member county is a region consumers can
+  // select but nothing can draw (that was 360094).
+  const countyIds = objects(countiesTopo).counties.geometries.map((g) =>
+    String(g.id).padStart(5, "0"),
+  );
+
+  it("covers every us-atlas county outside the island territories", () => {
+    const unmapped = countyIds.filter(
+      (id) => !TERRITORY_PREFIXES.has(id.slice(0, 2)) && !fipsToHsa[id],
+    );
+    expect(unmapped).toEqual([]);
+  });
+
+  it("gives every HSA code at least one us-atlas county", () => {
+    const drawable = mappableHsaCodes();
+    const orphans = [...new Set(Object.values(fipsToHsa))].filter(
+      (code) => !drawable.has(code),
+    );
+    expect(orphans).toEqual([]);
+  });
+});
 
 describe("usHsaTopology", () => {
   it("contains merged HSAs plus the unchanged states object, nothing else", () => {
@@ -77,7 +106,7 @@ describe("usHsaTopology", () => {
         countiesTopo,
         groups.get(String(f.id)) as Parameters<typeof merge>[1],
       );
-      // Stringified compare: cheap for 948 coordinate trees, and exact — the
+      // Stringified compare: cheap for every merged HSA, and exact — the
       // artifact reuses the us-atlas quantization grid, so the round-trip
       // through the generator is lossless.
       expect(JSON.stringify(f.geometry)).toBe(JSON.stringify(legacy));
