@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.10] - 2026-08-28
+
+### Bug Fixes
+
+- **charts:** Map the five NYC boroughs to HSA 360094
+
 ## [0.8.9] - 2026-08-19
 
 ### Chores
