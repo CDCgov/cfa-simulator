@@ -16,6 +16,10 @@ const ageRange = ref([18, 65])
 const coverageRange = ref([0.2, 0.8])
 const minAge = ref(18)
 const maxAge = ref(65)
+const cutpoints = ref([10, 40, 75])
+const tiers = ref([25, 50, 80])
+const barSegments = ref([20, 45, 70])
+const barNone = ref(60)
 const dayMs = 24 * 60 * 60 * 1000
 const dateStart = Date.UTC(2024, 0, 1)
 const dateEnd = Date.UTC(2024, 11, 31)
@@ -231,6 +235,182 @@ Range mode works with `percent` and `live` as well:
 
   </template>
 </ComponentDemo>
+
+### Multiple handles
+
+Bind `v-model:values` with a `number[]` to get one handle per entry. Any
+number of handles is supported, and the array length can change at runtime.
+Like range mode, it's enabled by the binding alone and replaces the text
+input with a slider.
+
+<ComponentDemo>
+  <div style="width: 300px">
+    <NumberInput
+      v-model:values="cutpoints"
+      label="Age cutpoints"
+      :min="0"
+      :max="100"
+      number-type="integer"
+    />
+  </div>
+
+<template #code>
+
+```vue
+<script setup>
+import { ref } from "vue";
+const cutpoints = ref([10, 40, 75]);
+</script>
+
+<NumberInput
+  v-model:values="cutpoints"
+  label="Age cutpoints"
+  :min="0"
+  :max="100"
+  number-type="integer"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+Handles stay sorted, and each one is labeled by position for screen readers
+(`Age cutpoints (handle 2 of 3)`); validation errors name the failing handle
+the same way. `v-model:values` takes precedence over the range bindings if
+both are present.
+
+### Bar styles
+
+`bar` controls how the track is filled. The default, `"range"`, fills
+between the outermost handles (from the minimum to the handle in single
+mode). `"segments"` paints one band per handle — minimum to the first, first
+to the second, and so on — leaving the track past the last handle empty.
+`"none"` paints no fill at all.
+
+<ComponentDemo>
+  <div style="width: 300px">
+    <NumberInput
+      v-model:values="barSegments"
+      label="Segments"
+      bar="segments"
+      :min="0"
+      :max="100"
+      number-type="integer"
+    />
+    <NumberInput
+      v-model="barNone"
+      label="No bar"
+      slider
+      bar="none"
+      :min="0"
+      :max="100"
+    />
+  </div>
+
+<template #code>
+
+```vue
+<script setup>
+import { ref } from "vue";
+const barSegments = ref([20, 45, 70]);
+const barNone = ref(60);
+</script>
+
+<NumberInput
+  v-model:values="barSegments"
+  label="Segments"
+  bar="segments"
+  :min="0"
+  :max="100"
+  number-type="integer"
+/>
+<NumberInput
+  v-model="barNone"
+  label="No bar"
+  slider
+  bar="none"
+  :min="0"
+  :max="100"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+Segments default to a ramp of `--color-primary`, from full strength for the
+first band down to 45% for the last. Pass `segment-colors` to paint them
+yourself — any CSS colors, cycled if the array is shorter than the number of
+segments.
+
+<ComponentDemo>
+  <div style="width: 300px">
+    <NumberInput
+      v-model:values="tiers"
+      label="Risk tiers"
+      bar="segments"
+      :segment-colors="[
+        'var(--color-success)',
+        'var(--color-warning)',
+        'var(--color-error)',
+      ]"
+      :min="0"
+      :max="100"
+      number-type="integer"
+    />
+  </div>
+
+<template #code>
+
+```vue
+<script setup>
+import { ref } from "vue";
+const tiers = ref([25, 50, 80]);
+</script>
+
+<NumberInput
+  v-model:values="tiers"
+  label="Risk tiers"
+  bar="segments"
+  :segment-colors="[
+    'var(--color-success)',
+    'var(--color-warning)',
+    'var(--color-error)',
+  ]"
+  :min="0"
+  :max="100"
+  number-type="integer"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+`bar` works in every mode, so a plain `slider` or a two-handle range can use
+`"none"` or `"segments"` too.
+
+### Accessibility
+
+Every handle is its own `role="slider"`, focusable and steerable with the
+arrow keys, <kbd>Home</kbd> and <kbd>End</kbd>. Two or more handles are
+wrapped in a named `role="group"`, following the WAI-ARIA multi-thumb slider
+pattern, and each one is named from the field: `Age cutpoints (handle 2 of
+3)`, or `(lower)`/`(upper)` for a range. With no visible `label`, the name
+falls back to `aria-label`.
+
+`aria-valuenow` can only hold the raw number, so handles also carry
+`aria-valuetext` with the value as displayed — `20%` rather than `0.2`,
+`2024-03-01` rather than an epoch. Validation errors are announced with
+`role="alert"` and referenced by `aria-describedby` on every handle, with
+`aria-invalid` on the one that is out of range.
+
+Segment bands are `aria-hidden` decoration: the handles carry the
+information, and each boundary is marked by a high-contrast thumb. The
+default shade ramp does not meet the 3:1 non-text contrast ratio between
+adjacent bands — no single-hue ramp of three or more steps can — so don't
+rely on shade alone to tell bins apart. Pass `segment-colors` when the bands
+themselves have to be distinguishable. Under Windows High Contrast the ramp
+collapses to system colors, so bands are separated by hairline dividers
+instead.
 
 ### Custom display format
 

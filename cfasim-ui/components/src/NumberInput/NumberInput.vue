@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted, getCurrentInstance } from "vue";
-import { SliderRoot, SliderTrack, SliderRange, SliderThumb } from "reka-ui";
+import {
+  SliderRoot,
+  SliderTrack,
+  SliderRange,
+  SliderThumb,
+  useId,
+} from "reka-ui";
 import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import Hint from "../Hint/Hint.vue";
 import type { FieldProps } from "../_internal/field";
@@ -17,6 +23,8 @@ const model = defineModel<number>();
 const range = defineModel<NumberRange>("range");
 const lower = defineModel<number>("lower");
 const upper = defineModel<number>("upper");
+// Multi-handle mode: an arbitrary-length array of handle positions.
+const values = defineModel<number[]>("values");
 
 interface Props extends FieldProps {
   placeholder?: string;
@@ -26,6 +34,14 @@ interface Props extends FieldProps {
   percent?: boolean;
   slider?: boolean;
   live?: boolean;
+  // How the track is filled. "range" (default) fills between the outermost
+  // handles (min to the handle in single mode); "segments" paints one band
+  // per handle — min to the first, first to the second, and so on, leaving
+  // the track past the last handle empty; "none" paints no fill at all.
+  bar?: "range" | "segments" | "none";
+  // Per-segment colors for `bar="segments"`, cycled if shorter than the
+  // segment count. Defaults to a ramp of --color-primary.
+  segmentColors?: string[];
   numberType?: "integer" | "float";
   required?: boolean;
   decimals?: number;
@@ -45,6 +61,8 @@ interface Props extends FieldProps {
 
 const props = defineProps<Props>();
 
+const errorId = `${useId()}-error`;
+
 function isRangeValue(v: unknown): v is NumberRange {
   return Array.isArray(v) && v.length === 2;
 }
@@ -55,23 +73,32 @@ function isRangeValue(v: unknown): v is NumberRange {
 // Determined once at setup; mode doesn't change for the component's life.
 const instance = getCurrentInstance();
 const vnodeProps = instance?.vnode.props;
-const isRange =
+const isMulti =
+  !!vnodeProps?.["onUpdate:values"] || Array.isArray(values.value);
+const hasRangeBinding =
   !!vnodeProps?.["onUpdate:range"] ||
   !!vnodeProps?.["onUpdate:lower"] ||
   !!vnodeProps?.["onUpdate:upper"] ||
   range.value !== undefined ||
   lower.value !== undefined ||
   upper.value !== undefined;
+const isRange = !isMulti && hasRangeBinding;
 
-// Range implies slider — a two-handle range has no sensible text-input form.
-const isSlider = computed(() => !!props.slider || isRange);
+// Range and multi both imply slider — several handles have no sensible
+// text-input form.
+const isSlider = computed(() => !!props.slider || isRange || isMulti);
 
-// Warn if the parent bound the default `v-model` in range mode — it will
-// never receive updates, which is almost always a bug.
+// Warn if the parent bound a v-model that will never receive updates in the
+// mode it selected — almost always a bug.
 onMounted(() => {
-  if (isRange && !!vnodeProps?.["onUpdate:modelValue"]) {
+  if ((isRange || isMulti) && !!vnodeProps?.["onUpdate:modelValue"]) {
     console.warn(
-      "[NumberInput] In range mode, the default `v-model` is unused. Bind `v-model:range` or `v-model:lower`/`v-model:upper` instead.",
+      `[NumberInput] In ${isMulti ? "multi-handle" : "range"} mode, the default \`v-model\` is unused. Bind \`v-model:${isMulti ? "values" : "range"}\` instead.`,
+    );
+  }
+  if (isMulti && hasRangeBinding) {
+    console.warn(
+      "[NumberInput] `v-model:values` takes precedence — the range bindings are unused.",
     );
   }
 });
@@ -183,11 +210,13 @@ function stripCommas(s: string): string {
 }
 
 // Resolve the current value across all bindings:
+// - In multi-handle mode: the `values` array.
 // - In range mode: lower/upper take precedence; falls back per-side to
 //   `range`; finally to slider min/max. The default `v-model` is
 //   unused in this mode.
 // - In single mode: just the default `v-model`.
-function effectiveValue(): number | NumberRange | undefined {
+function effectiveValue(): number | number[] | undefined {
+  if (isMulti) return values.value;
   if (isRange) {
     const tuple = range.value;
     const lo = lower.value ?? tuple?.[0];
@@ -208,8 +237,17 @@ const initialSingle =
 const local = ref(formatForDisplay(toDisplay(initialSingle)));
 
 // Slider state is always an array, even in single mode (reka-ui's API).
-// In range mode it holds [low, high]; in single mode it holds [value].
-function modelToSliderArray(v: number | NumberRange | undefined): number[] {
+// In multi mode it holds every handle; in range mode [low, high]; in single
+// mode [value].
+function modelToSliderArray(v: number | number[] | undefined): number[] {
+  if (isMulti) {
+    // Sorted on the way in: thumb order, `handle N of M` labels and the
+    // segment bands all index the same array, and reka-ui hands values back
+    // sorted anyway. An empty or unbound array still needs one handle to be
+    // draggable.
+    if (Array.isArray(v) && v.length > 0) return [...v].sort((a, b) => a - b);
+    return [sliderMin.value];
+  }
   if (isRange) {
     if (isRangeValue(v)) return [v[0], v[1]];
     return [sliderMin.value, sliderMax.value];
@@ -220,14 +258,20 @@ function modelToSliderArray(v: number | NumberRange | undefined): number[] {
 const sliderArrayLocal = ref<number[]>(modelToSliderArray(initialEffective));
 const validationError = ref<string>();
 
-watch([model, range, lower, upper], () => {
-  const v = effectiveValue();
-  if (!isRange && !isRangeValue(v)) {
-    local.value = formatForDisplay(toDisplay(v as number | undefined));
-  }
-  sliderArrayLocal.value = modelToSliderArray(v);
-  validationError.value = validate(v);
-});
+// Deep: `values`/`range` are arrays the parent may mutate in place, and a
+// ref source alone only fires when the whole array is replaced.
+watch(
+  [model, range, lower, upper, values],
+  () => {
+    const v = effectiveValue();
+    if (!isRange && !isMulti && !Array.isArray(v)) {
+      local.value = formatForDisplay(toDisplay(v));
+    }
+    sliderArrayLocal.value = modelToSliderArray(v);
+    validationError.value = validate(v);
+  },
+  { deep: true },
+);
 
 // Characters that can appear in a valid JS number literal: digits, thousands
 // separators (commas), decimal point, sign, and scientific-notation exponent.
@@ -299,15 +343,17 @@ function validateScalar(v: number): string | undefined {
 }
 
 // Single source of truth for required / min / max errors — used on commit,
-// programmatic updates, and arrow-key stepping. In range mode, returns the
-// first failing handle's error, suffixed with "(lower)" or "(upper)".
-function validate(v: number | NumberRange | undefined): string | undefined {
-  if (v == null) return props.required ? "Required" : undefined;
-  if (isRangeValue(v)) {
-    const lo = validateScalar(v[0]);
-    if (lo) return `${lo} (lower)`;
-    const hi = validateScalar(v[1]);
-    if (hi) return `${hi} (upper)`;
+// programmatic updates, and arrow-key stepping. With several handles,
+// returns the first failing handle's error, suffixed with which one it is.
+function validate(v: number | number[] | undefined): string | undefined {
+  if (v == null || (Array.isArray(v) && v.length === 0)) {
+    return props.required ? "Required" : undefined;
+  }
+  if (Array.isArray(v)) {
+    for (let i = 0; i < v.length; i++) {
+      const error = validateScalar(v[i]);
+      if (error) return `${error} (${handleName(i, v.length)})`;
+    }
     return undefined;
   }
   return validateScalar(v);
@@ -357,11 +403,13 @@ function commit() {
 function commitSliderArray(v: number[], asModel: boolean): void {
   const coerced = v.map(coerceInteger);
   sliderArrayLocal.value = coerced;
-  if (!isRange) {
+  if (!isRange && !isMulti) {
     local.value = formatForDisplay(toDisplay(coerced[0]));
   }
   if (asModel) {
-    if (isRange) {
+    if (isMulti) {
+      values.value = coerced;
+    } else if (isRange) {
       // Emit to all range sinks; consumers without a matching v-model just
       // ignore their `update:*` event. The default `v-model` is unused in
       // range mode.
@@ -374,11 +422,72 @@ function commitSliderArray(v: number[], asModel: boolean): void {
   }
 }
 
-function thumbAriaLabel(i: number): string | undefined {
-  if (!props.label) return undefined;
-  if (!isRange) return props.label;
-  return i === 0 ? `${props.label} (lower)` : `${props.label} (upper)`;
+// Names a handle for aria-labels and validation errors: "lower"/"upper" for
+// a two-handle range, "handle N of M" for anything wider.
+function handleName(i: number, count: number): string {
+  if (isRange) return i === 0 ? "lower" : "upper";
+  return `handle ${i + 1} of ${count}`;
 }
+
+// The field's accessible name. Falls back to `ariaLabel` when the label is
+// not rendered, so thumbs never drop to reka-ui's generic "Value 1 of 3".
+const fieldName = computed(() => props.label || props.ariaLabel);
+
+function thumbAriaLabel(i: number): string | undefined {
+  const name = fieldName.value;
+  if (!name) return undefined;
+  if (!isRange && !isMulti) return name;
+  return `${name} (${handleName(i, sliderArrayLocal.value.length)})`;
+}
+
+// aria-valuenow carries the raw number, which is meaningless once `percent`
+// or `format` reshapes it (0.5 for "50%", an epoch for "Mar 1"). valuetext
+// announces what's actually on screen.
+function thumbValueText(v: number): string | undefined {
+  const text = formatSliderValue(v);
+  return text === String(v) ? undefined : text;
+}
+
+// Which handle tripped min/max, so the error can be pinned to that thumb
+// rather than the whole slider.
+function handleIsInvalid(i: number): true | undefined {
+  const v = sliderArrayLocal.value[i];
+  return v !== undefined && validateScalar(v) ? true : undefined;
+}
+
+// A slider with several thumbs is a group of sliders (WAI-ARIA multi-thumb
+// pattern), so it needs its own name.
+const isMultiHandle = computed(() => sliderArrayLocal.value.length > 1);
+
+const barMode = computed(() => props.bar ?? "range");
+
+function segmentColor(i: number, count: number): string {
+  const custom = props.segmentColors;
+  if (custom && custom.length > 0) return custom[i % custom.length];
+  if (count <= 1) return "var(--color-primary)";
+  // Ramp from full primary down to 45%, mixed toward the track color so the
+  // lighter bands stay opaque against whatever sits behind the slider.
+  const weight = Math.round(100 - (i * 55) / (count - 1));
+  return `color-mix(in srgb, var(--color-primary) ${weight}%, var(--color-bg-3))`;
+}
+
+// One band per handle: min → first, first → second, …, leaving the track
+// past the last handle empty.
+const segments = computed(() => {
+  const span = sliderMax.value - sliderMin.value;
+  if (!(span > 0)) return [];
+  const stops = [sliderMin.value, ...sliderArrayLocal.value];
+  const pct = (v: number) =>
+    Math.min(100, Math.max(0, ((v - sliderMin.value) / span) * 100));
+  return stops.slice(1).map((_, i) => {
+    const start = pct(stops[i]);
+    return {
+      left: start,
+      width: Math.max(0, pct(stops[i + 1]) - start),
+      color: segmentColor(i, stops.length - 1),
+    };
+  });
+});
 
 function onSliderUpdate(v: number[] | undefined) {
   if (!v) return;
@@ -428,6 +537,7 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
         :placeholder="props.placeholder"
         :aria-label="!props.label ? props.ariaLabel : undefined"
         :aria-invalid="!!validationError"
+        :aria-describedby="validationError ? errorId : undefined"
         :aria-required="props.required || undefined"
         :required="props.required"
         @blur="onBlur"
@@ -442,12 +552,14 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
       />
       <span v-if="props.percent" class="input-suffix">%</span>
     </span>
-    <span v-if="validationError" class="input-error" role="alert">
+    <span v-if="validationError" :id="errorId" class="input-error" role="alert">
       {{ validationError }}
     </span>
     <div v-if="isSlider" class="slider-container">
       <SliderRoot
         class="slider-root"
+        :role="isMultiHandle ? 'group' : undefined"
+        :aria-label="isMultiHandle ? fieldName : undefined"
         :model-value="sliderArrayLocal"
         :min="sliderMin"
         :max="sliderMax"
@@ -455,14 +567,31 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
         @update:model-value="onSliderUpdate"
         @value-commit="onSliderCommit"
       >
-        <SliderTrack class="slider-track">
-          <SliderRange class="slider-range" />
+        <SliderTrack
+          class="slider-track"
+          :class="{ 'slider-track-segmented': barMode === 'segments' }"
+        >
+          <SliderRange v-if="barMode === 'range'" class="slider-range" />
+          <span
+            v-for="(segment, i) in barMode === 'segments' ? segments : []"
+            :key="i"
+            class="slider-segment"
+            aria-hidden="true"
+            :style="{
+              left: `${segment.left}%`,
+              width: `${segment.width}%`,
+              '--segment-color': segment.color,
+            }"
+          />
         </SliderTrack>
         <SliderThumb
           v-for="(v, i) in sliderArrayLocal"
           :key="i"
           class="slider-thumb"
           :aria-label="thumbAriaLabel(i)"
+          :aria-valuetext="thumbValueText(v)"
+          :aria-invalid="handleIsInvalid(i)"
+          :aria-describedby="validationError ? errorId : undefined"
         >
           <span class="slider-current">
             {{ formatSliderValue(v) }}
@@ -542,6 +671,31 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
   height: 100%;
   background-color: var(--color-primary);
   border-radius: var(--radius-full);
+}
+
+/* Clip square-cornered segments to the track's rounded ends. */
+.slider-track-segmented {
+  overflow: hidden;
+}
+
+.slider-segment {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background-color: var(--segment-color, var(--color-primary));
+}
+
+/* Windows High Contrast forces every background to the system palette, so
+   the shade ramp collapses to one block — keep the divisions as hairlines. */
+@media (forced-colors: active) {
+  .slider-segment {
+    background-color: Highlight;
+    border-inline-end: 1px solid CanvasText;
+  }
+
+  .slider-range {
+    background-color: Highlight;
+  }
 }
 
 .slider-thumb {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
+import { nextTick, reactive } from "vue";
 import NumberInput, { type NumberRange } from "./NumberInput.vue";
 
 describe("NumberInput", () => {
@@ -1198,6 +1199,445 @@ describe("NumberInput", () => {
         expect(warn).not.toHaveBeenCalled();
         warn.mockRestore();
       });
+    });
+  });
+
+  describe("multi-handle mode", () => {
+    it("renders one thumb per bound value", () => {
+      const wrapper = mount(NumberInput, {
+        props: { values: [10, 40, 75], min: 0, max: 100 },
+      });
+      expect(wrapper.findAllComponents({ name: "SliderThumb" }).length).toBe(3);
+    });
+
+    it("implies slider — no text input is rendered", () => {
+      const wrapper = mount(NumberInput, {
+        props: { values: [10, 40, 75], min: 0, max: 100 },
+      });
+      expect(wrapper.find("input").exists()).toBe(false);
+      expect(wrapper.findComponent({ name: "SliderRoot" }).exists()).toBe(true);
+    });
+
+    it("emits the full array on commit", () => {
+      const wrapper = mount(NumberInput, {
+        props: { values: [10, 40, 75], min: 0, max: 100 },
+      });
+      const slider = wrapper.findComponent({ name: "SliderRoot" });
+      slider.vm.$emit("valueCommit", [15, 40, 80]);
+      const emits = wrapper.emitted("update:values");
+      expect(emits?.[emits.length - 1]).toEqual([[15, 40, 80]]);
+    });
+
+    it("does not emit on drag without live", () => {
+      const wrapper = mount(NumberInput, {
+        props: { values: [10, 40, 75], min: 0, max: 100 },
+      });
+      const slider = wrapper.findComponent({ name: "SliderRoot" });
+      slider.vm.$emit("update:modelValue", [12, 40, 75]);
+      expect(wrapper.emitted("update:values")).toBeUndefined();
+    });
+
+    it("emits while dragging when live", () => {
+      const wrapper = mount(NumberInput, {
+        props: { values: [10, 40, 75], live: true, min: 0, max: 100 },
+      });
+      const slider = wrapper.findComponent({ name: "SliderRoot" });
+      slider.vm.$emit("update:modelValue", [12, 40, 75]);
+      const emits = wrapper.emitted("update:values");
+      expect(emits?.[emits.length - 1]).toEqual([[12, 40, 75]]);
+    });
+
+    it("coerces every handle to integer when numberType is integer", () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          values: [10, 40, 75],
+          numberType: "integer" as const,
+          min: 0,
+          max: 100,
+        },
+      });
+      const slider = wrapper.findComponent({ name: "SliderRoot" });
+      slider.vm.$emit("valueCommit", [10.7, 40.2, 75.9]);
+      const emits = wrapper.emitted("update:values");
+      expect(emits?.[emits.length - 1]).toEqual([[10, 40, 75]]);
+    });
+
+    it("reacts to a changed handle count", async () => {
+      const wrapper = mount(NumberInput, {
+        props: { values: [10, 40], min: 0, max: 100 },
+      });
+      expect(wrapper.findAll(".slider-thumb").length).toBe(2);
+      await wrapper.setProps({ values: [10, 40, 70, 90] });
+      expect(wrapper.findAll(".slider-thumb").length).toBe(4);
+    });
+
+    it("labels thumbs by position for accessibility", () => {
+      const wrapper = mount(NumberInput, {
+        props: { values: [10, 40, 75], label: "Cutpoints", min: 0, max: 100 },
+      });
+      const thumbs = wrapper.findAll(".slider-thumb");
+      expect(thumbs[0].attributes("aria-label")).toBe(
+        "Cutpoints (handle 1 of 3)",
+      );
+      expect(thumbs[2].attributes("aria-label")).toBe(
+        "Cutpoints (handle 3 of 3)",
+      );
+    });
+
+    it("names the failing handle in validation errors", async () => {
+      const wrapper = mount(NumberInput, {
+        props: { values: [20, 50, 80], min: 10, max: 90 },
+      });
+      expect(wrapper.find(".input-error").exists()).toBe(false);
+
+      await wrapper.setProps({ values: [20, 50, 95] });
+      expect(wrapper.find(".input-error").text()).toBe(
+        "Max 90 (handle 3 of 3)",
+      );
+
+      await wrapper.setProps({ values: [5, 50, 80] });
+      expect(wrapper.find(".input-error").text()).toBe(
+        "Min 10 (handle 1 of 3)",
+      );
+    });
+
+    it("falls back to a single handle at min when values is bound but empty", () => {
+      const wrapper = mount(NumberInput, {
+        props: { "onUpdate:values": () => {}, min: 10, max: 90 },
+      });
+      const slider = wrapper.findComponent({ name: "SliderRoot" });
+      expect(slider.props("modelValue")).toEqual([10]);
+    });
+
+    it("takes precedence over range bindings and warns", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const wrapper = mount(NumberInput, {
+        props: {
+          values: [10, 40, 75],
+          range: [20, 80] as NumberRange,
+          min: 0,
+          max: 100,
+        },
+      });
+      expect(wrapper.findAll(".slider-thumb").length).toBe(3);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("`v-model:values` takes precedence"),
+      );
+      warn.mockRestore();
+    });
+
+    it("warns when the default v-model is bound", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      mount(NumberInput, {
+        props: {
+          values: [10, 40],
+          "onUpdate:modelValue": () => {},
+          min: 0,
+          max: 100,
+        },
+      });
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("In multi-handle mode"),
+      );
+      warn.mockRestore();
+    });
+  });
+
+  describe("bar prop", () => {
+    it("renders the range fill by default", () => {
+      const wrapper = mount(NumberInput, {
+        props: { values: [10, 40, 75], min: 0, max: 100 },
+      });
+      expect(wrapper.find(".slider-range").exists()).toBe(true);
+      expect(wrapper.find(".slider-segment").exists()).toBe(false);
+    });
+
+    it("renders no fill with bar=none", () => {
+      const wrapper = mount(NumberInput, {
+        props: { modelValue: 40, slider: true, bar: "none" as const },
+      });
+      expect(wrapper.find(".slider-range").exists()).toBe(false);
+      expect(wrapper.find(".slider-segment").exists()).toBe(false);
+    });
+
+    it("paints one segment per handle, stopping at the last one", () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          values: [10, 40, 75],
+          bar: "segments" as const,
+          min: 0,
+          max: 100,
+        },
+      });
+      const segments = wrapper.findAll(".slider-segment");
+      expect(segments.length).toBe(3);
+      expect(wrapper.find(".slider-range").exists()).toBe(false);
+      expect(segments[0].attributes("style")).toContain("left: 0%");
+      expect(segments[0].attributes("style")).toContain("width: 10%");
+      expect(segments[1].attributes("style")).toContain("left: 10%");
+      expect(segments[1].attributes("style")).toContain("width: 30%");
+      expect(segments[2].attributes("style")).toContain("left: 40%");
+      expect(segments[2].attributes("style")).toContain("width: 35%");
+    });
+
+    it("positions segments relative to a non-zero min", () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          values: [60, 80],
+          bar: "segments" as const,
+          min: 50,
+          max: 100,
+        },
+      });
+      const segments = wrapper.findAll(".slider-segment");
+      expect(segments[0].attributes("style")).toContain("left: 0%");
+      expect(segments[0].attributes("style")).toContain("width: 20%");
+      expect(segments[1].attributes("style")).toContain("left: 20%");
+      expect(segments[1].attributes("style")).toContain("width: 40%");
+    });
+
+    it("segments a single-handle slider from min to the handle", () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          modelValue: 25,
+          slider: true,
+          bar: "segments" as const,
+          min: 0,
+          max: 100,
+        },
+      });
+      const segments = wrapper.findAll(".slider-segment");
+      expect(segments.length).toBe(1);
+      expect(segments[0].attributes("style")).toContain("width: 25%");
+      expect(segments[0].attributes("style")).toContain(
+        "--segment-color: var(--color-primary)",
+      );
+    });
+
+    it("ramps segment shades of the primary color", () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          values: [25, 50, 75],
+          bar: "segments" as const,
+          min: 0,
+          max: 100,
+        },
+      });
+      const styles = wrapper
+        .findAll(".slider-segment")
+        .map((s) => s.attributes("style"));
+      expect(styles[0]).toContain(
+        "--segment-color: color-mix(in srgb, var(--color-primary) 100%, var(--color-bg-3))",
+      );
+      expect(styles[1]).toContain("var(--color-primary) 73%");
+      expect(styles[2]).toContain("var(--color-primary) 45%");
+    });
+
+    it("uses segmentColors when provided, cycling if short", () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          values: [25, 50, 75],
+          bar: "segments" as const,
+          segmentColors: ["red", "blue"],
+          min: 0,
+          max: 100,
+        },
+      });
+      const styles = wrapper
+        .findAll(".slider-segment")
+        .map((s) => s.attributes("style"));
+      expect(styles[0]).toContain("--segment-color: red");
+      expect(styles[1]).toContain("--segment-color: blue");
+      expect(styles[2]).toContain("--segment-color: red");
+    });
+
+    it("tracks segments as handles move", async () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          values: [10, 40],
+          bar: "segments" as const,
+          live: true,
+          min: 0,
+          max: 100,
+        },
+      });
+      const slider = wrapper.findComponent({ name: "SliderRoot" });
+      slider.vm.$emit("update:modelValue", [30, 40]);
+      await wrapper.vm.$nextTick();
+      const segments = wrapper.findAll(".slider-segment");
+      expect(segments[0].attributes("style")).toContain("width: 30%");
+      expect(segments[1].attributes("style")).toContain("left: 30%");
+      expect(segments[1].attributes("style")).toContain("width: 10%");
+    });
+  });
+
+  describe("multi-handle ordering and reactivity", () => {
+    it("sorts handles so thumbs, labels and segments share an order", () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          values: [75, 10, 40],
+          bar: "segments" as const,
+          label: "Cutpoints",
+          min: 0,
+          max: 100,
+        },
+      });
+      const thumbs = wrapper.findAll(".slider-thumb");
+      expect(thumbs.map((t) => t.text())).toEqual(["10", "40", "75"]);
+      expect(thumbs[0].attributes("aria-label")).toBe(
+        "Cutpoints (handle 1 of 3)",
+      );
+      const widths = wrapper
+        .findAll(".slider-segment")
+        .map((seg) => (seg.element as HTMLElement).style.width);
+      expect(widths).toEqual(["10%", "30%", "35%"]);
+    });
+
+    it("picks up in-place mutation of the bound array", async () => {
+      const values = reactive([10, 40]);
+      const wrapper = mount(NumberInput, {
+        props: { values, min: 0, max: 100 },
+      });
+      expect(wrapper.findAll(".slider-thumb").length).toBe(2);
+
+      values.push(80);
+      await nextTick();
+      expect(wrapper.findAll(".slider-thumb").length).toBe(3);
+
+      values[0] = 5;
+      await nextTick();
+      expect(wrapper.findAll(".slider-thumb")[0].text()).toBe("5");
+    });
+
+    it("treats an empty array as nothing chosen when required", async () => {
+      const wrapper = mount(NumberInput, {
+        props: { values: [10], required: true, min: 0, max: 100 },
+      });
+      await wrapper.setProps({ values: [] });
+      expect(wrapper.find(".input-error").text()).toBe("Required");
+    });
+
+    it("does not report an empty array as an error unless required", async () => {
+      const wrapper = mount(NumberInput, {
+        props: { values: [10], min: 0, max: 100 },
+      });
+      await wrapper.setProps({ values: [] });
+      expect(wrapper.find(".input-error").exists()).toBe(false);
+    });
+  });
+
+  describe("slider accessibility", () => {
+    it("announces the formatted value with aria-valuetext", () => {
+      const wrapper = mount(NumberInput, {
+        props: { values: [0.25, 0.5], percent: true, min: 0, max: 1 },
+      });
+      const thumbs = wrapper.findAll(".slider-thumb");
+      expect(thumbs[0].attributes("aria-valuetext")).toBe("25%");
+      expect(thumbs[1].attributes("aria-valuetext")).toBe("50%");
+    });
+
+    it("uses aria-valuetext for a custom format", () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          values: [Date.UTC(2024, 2, 1)],
+          min: Date.UTC(2024, 0, 1),
+          max: Date.UTC(2024, 11, 31),
+          format: (v: number) => new Date(v).toISOString().slice(0, 10),
+        },
+      });
+      expect(wrapper.find(".slider-thumb").attributes("aria-valuetext")).toBe(
+        "2024-03-01",
+      );
+    });
+
+    it("omits aria-valuetext when it would repeat aria-valuenow", () => {
+      const wrapper = mount(NumberInput, {
+        props: { modelValue: 40, slider: true, min: 0, max: 100 },
+      });
+      const thumb = wrapper.find(".slider-thumb");
+      expect(thumb.attributes("aria-valuetext")).toBeUndefined();
+    });
+
+    it("names thumbs from ariaLabel when no visible label is rendered", () => {
+      const wrapper = mount(NumberInput, {
+        props: { values: [10, 40], ariaLabel: "Cutpoints", min: 0, max: 100 },
+      });
+      const thumbs = wrapper.findAll(".slider-thumb");
+      expect(thumbs[0].attributes("aria-label")).toBe(
+        "Cutpoints (handle 1 of 2)",
+      );
+    });
+
+    it("groups several thumbs under one named group", () => {
+      const wrapper = mount(NumberInput, {
+        props: { values: [10, 40, 75], label: "Cutpoints", min: 0, max: 100 },
+      });
+      const root = wrapper.find(".slider-root");
+      expect(root.attributes("role")).toBe("group");
+      expect(root.attributes("aria-label")).toBe("Cutpoints");
+    });
+
+    it("does not group a single-handle slider", () => {
+      const wrapper = mount(NumberInput, {
+        props: { modelValue: 40, slider: true, label: "Days" },
+      });
+      const root = wrapper.find(".slider-root");
+      expect(root.attributes("role")).toBeUndefined();
+      expect(root.attributes("aria-label")).toBeUndefined();
+    });
+
+    it("hides decorative segments from assistive tech", () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          values: [10, 40],
+          bar: "segments" as const,
+          min: 0,
+          max: 100,
+        },
+      });
+      const segments = wrapper.findAll(".slider-segment");
+      expect(segments.length).toBe(2);
+      for (const segment of segments) {
+        expect(segment.attributes("aria-hidden")).toBe("true");
+      }
+    });
+
+    it("points the offending thumb at the error message", async () => {
+      const wrapper = mount(NumberInput, {
+        props: { values: [20, 50], label: "Cutpoints", min: 10, max: 90 },
+      });
+      await wrapper.setProps({ values: [5, 50] });
+      const errorId = wrapper.find(".input-error").attributes("id");
+      expect(errorId).toBeTruthy();
+
+      const thumbs = wrapper.findAll(".slider-thumb");
+      expect(thumbs[0].attributes("aria-invalid")).toBe("true");
+      expect(thumbs[1].attributes("aria-invalid")).toBeUndefined();
+      expect(thumbs[0].attributes("aria-describedby")).toBe(errorId);
+      expect(thumbs[1].attributes("aria-describedby")).toBe(errorId);
+    });
+
+    it("drops the description when there is no error", () => {
+      const wrapper = mount(NumberInput, {
+        props: { values: [20, 50], min: 10, max: 90 },
+      });
+      expect(wrapper.find(".input-error").exists()).toBe(false);
+      expect(
+        wrapper.find(".slider-thumb").attributes("aria-describedby"),
+      ).toBeUndefined();
+    });
+
+    it("describes the text input by its error too", async () => {
+      const wrapper = mount(NumberInput, {
+        props: { modelValue: 5, min: 10, max: 90 },
+      });
+      const input = wrapper.find("input");
+      expect(input.attributes("aria-describedby")).toBeUndefined();
+
+      await wrapper.setProps({ modelValue: 200 });
+      const errorId = wrapper.find(".input-error").attributes("id");
+      expect(input.attributes("aria-describedby")).toBe(errorId);
+      expect(input.attributes("aria-invalid")).toBe("true");
     });
   });
 });
