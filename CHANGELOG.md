@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.11] - 2026-09-08
+
+### Features
+
+- **components:** Add multi-handle NumberInput slider with bar styles
+
 ## [0.8.10] - 2026-08-28
 
 ### Bug Fixes
