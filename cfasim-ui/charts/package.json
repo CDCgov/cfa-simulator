@@ -71,6 +71,6 @@
     "happy-dom": "20.10.6",
     "us-atlas": "3.0.1",
     "vite-plugin-dts": "5.0.3",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   }
 }
