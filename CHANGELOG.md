@@ -1,6 +1,20 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.12] - 2026-10-01
+
+### Chores
+
+- Raise charts JS bundle size limit to 55 KB
+
+### Features
+
+- **charts:** Add drag-to-zoom to LineChart and BarChart
+
+### Tests
+
+- **models:** Wait for map visibility before reading bounding box
+
 ## [0.8.11] - 2026-09-08
 
 ### Features
