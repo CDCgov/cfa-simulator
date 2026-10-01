@@ -363,9 +363,13 @@ test("state-map mixed levels pick and tooltip on the canvas renderer", async ({
   // Take California's screen position from the SVG rendering (same
   // projection, same box) so the canvas hover has a point to aim at.
   await page.goto("/state-map?renderer=svg&mixed=on");
-  const box = (await page
-    .locator('.primary-map .state-path[data-feat-id="06"]')
-    .boundingBox())!;
+  const california = page.locator(
+    '.primary-map .state-path[data-feat-id="06"]',
+  );
+  // The map stays hidden until the lazy HSA mapping resolves, and a hidden
+  // element has no bounding box.
+  await expect(california).toBeVisible();
+  const box = (await california.boundingBox())!;
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
 
