@@ -2028,4 +2028,164 @@ describe("BarChart", () => {
       );
     });
   });
+
+  describe("zoom", () => {
+    // 10 categories across a 540px plot starting at x = 50 → 54px slots.
+    const zoomProps = {
+      data: [1, 2, 3, 4, 50, 6, 7, 8, 9, 10],
+      width: 600,
+      height: 300,
+      menu: false,
+      zoom: true,
+    };
+    const overlay = (w: ReturnType<typeof mount>) =>
+      w.find('[data-testid="chart-overlay"]');
+
+    async function brush(
+      w: ReturnType<typeof mount>,
+      from: { clientX?: number; clientY?: number },
+      to: { clientX?: number; clientY?: number },
+    ) {
+      await overlay(w).trigger("pointerdown", { ...from, button: 0 });
+      window.dispatchEvent(new MouseEvent("pointermove", to));
+      window.dispatchEvent(new MouseEvent("pointerup", to));
+      await w.vm.$nextTick();
+    }
+
+    it("zooms to the brushed categories and rescales the value axis", async () => {
+      const wrapper = mount(BarChart, { props: zoomProps });
+      expect(bars(wrapper).length).toBe(10);
+
+      // Mid-slot 1 → mid-slot 3
+      await brush(
+        wrapper,
+        { clientX: 50 + 54 * 1.5 },
+        { clientX: 50 + 54 * 3.5 },
+      );
+      const visible = bars(wrapper);
+      expect(visible.map((b) => b.attributes("data-category"))).toEqual([
+        "1",
+        "2",
+        "3",
+      ]);
+      // The three bars now share the full plot width.
+      expect(Number(visible[0].attributes("x"))).toBeGreaterThanOrEqual(50);
+      expect(Number(visible[0].attributes("width"))).toBeGreaterThan(54);
+      const ticks = wrapper
+        .findAll('[data-testid="value-tick"]')
+        .map((t) => Number(t.text()));
+      expect(Math.max(...ticks)).toBeLessThanOrEqual(4);
+      expect(
+        wrapper.findAll('[data-testid="category-tick"]').map((t) => t.text()),
+      ).toEqual(["1", "2", "3"]);
+    });
+
+    it("resets from the reset button and on double-click", async () => {
+      const wrapper = mount(BarChart, { props: zoomProps });
+      await brush(wrapper, { clientX: 140 }, { clientX: 240 });
+      expect(bars(wrapper).length).toBeLessThan(10);
+      await wrapper.find('[aria-label="Reset zoom"]').trigger("click");
+      expect(bars(wrapper).length).toBe(10);
+      expect(wrapper.find('[aria-label="Reset zoom"]').exists()).toBe(false);
+
+      await brush(wrapper, { clientX: 140 }, { clientX: 240 });
+      await overlay(wrapper).trigger("dblclick");
+      expect(bars(wrapper).length).toBe(10);
+    });
+
+    it("brushes along the y axis in horizontal orientation", async () => {
+      const wrapper = mount(BarChart, {
+        props: { ...zoomProps, orientation: "horizontal" },
+      });
+      const first = bars(wrapper)[0];
+      const slot =
+        Number(bars(wrapper)[1].attributes("y")) -
+        Number(first.attributes("y"));
+      const top = Number(first.attributes("y"));
+      await brush(
+        wrapper,
+        { clientY: top + slot * 2 },
+        { clientY: top + slot * 4 },
+      );
+      expect(bars(wrapper).map((b) => b.attributes("data-category"))).toEqual([
+        "2",
+        "3",
+        "4",
+      ]);
+    });
+
+    it("zooms categories and values to a box when the drag is tall enough", async () => {
+      const wrapper = mount(BarChart, { props: zoomProps });
+      const overlayRect = overlay(wrapper);
+      const top = Number(overlayRect.attributes("y"));
+      const h = Number(overlayRect.attributes("height"));
+      // Categories 3..5 (includes the 50 spike), bottom half of the axis.
+      await brush(
+        wrapper,
+        { clientX: 50 + 54 * 3.5, clientY: top + h / 2 },
+        { clientX: 50 + 54 * 5.5, clientY: top + h },
+      );
+      expect(bars(wrapper).map((b) => b.attributes("data-category"))).toEqual([
+        "3",
+        "4",
+        "5",
+      ]);
+      const ticks = wrapper
+        .findAll('[data-testid="value-tick"]')
+        .map((t) => Number(t.text()));
+      // The axis stops at half the full extent rather than rescaling to 50.
+      expect(Math.max(...ticks)).toBeLessThanOrEqual(25);
+      expect(wrapper.find("clipPath").exists()).toBe(true);
+    });
+
+    it("keeps a summary line aligned with the box-zoomed value axis", async () => {
+      // The line's own scale is 0..1 over the full plot height.
+      const wrapper = mount(BarChart, {
+        props: {
+          ...zoomProps,
+          summaryLines: [{ data: Array(10).fill(0.25), valueMax: 1 }],
+        },
+      });
+      const lineY = () =>
+        Number(
+          wrapper
+            .find('[data-testid="summary-line"]')
+            .attributes("d")!
+            .match(/^M[^,]+,([^L]+)/)![1],
+        );
+      const overlayRect = overlay(wrapper);
+      const top = Number(overlayRect.attributes("y"));
+      const h = Number(overlayRect.attributes("height"));
+      expect(lineY()).toBeCloseTo(top + h * 0.75);
+      // Zoom to the bottom half: 0.25 of the plot becomes its midpoint.
+      await brush(
+        wrapper,
+        { clientX: 50 + 54 * 3.5, clientY: top + h / 2 },
+        { clientX: 50 + 54 * 5.5, clientY: top + h },
+      );
+      expect(lineY()).toBeCloseTo(top + h * 0.5);
+    });
+
+    it('rescales values instead of boxing with zoom="x"', async () => {
+      const wrapper = mount(BarChart, {
+        props: { ...zoomProps, zoom: "x" as const },
+      });
+      await brush(
+        wrapper,
+        { clientX: 50 + 54 * 3.5, clientY: 100 },
+        { clientX: 50 + 54 * 5.5, clientY: 250 },
+      );
+      const ticks = wrapper
+        .findAll('[data-testid="value-tick"]')
+        .map((t) => Number(t.text()));
+      expect(Math.max(...ticks)).toBe(50);
+    });
+
+    it("renders no overlay unless zoom or a tooltip is enabled", () => {
+      const wrapper = mount(BarChart, {
+        props: { ...zoomProps, zoom: false },
+      });
+      expect(overlay(wrapper).exists()).toBe(false);
+    });
+  });
 });

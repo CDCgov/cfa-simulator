@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   scaleFraction,
+  zoomExtent,
   clampExtentForScale,
   computeLogTickValues,
   LOG_FLOOR,
@@ -94,5 +95,45 @@ describe("computeLogTickValues", () => {
     expect(computeLogTickValues({ min: 1, max: 1 })).toEqual([]);
     expect(computeLogTickValues({ min: 0, max: 10 })).toEqual([]);
     expect(computeLogTickValues({ min: -1, max: 10 })).toEqual([]);
+  });
+});
+
+describe("zoomExtent", () => {
+  const full = { min: 0, max: 100 };
+
+  it("maps a fraction span of the current extent", () => {
+    expect(zoomExtent(0.25, 0.5, full, full, "linear", 1e4)).toEqual({
+      min: 25,
+      max: 50,
+    });
+    expect(
+      zoomExtent(0.5, 1, { min: 20, max: 40 }, full, "linear", 1e4),
+    ).toEqual({ min: 30, max: 40 });
+  });
+
+  it("maps through log space on a log axis", () => {
+    const z = zoomExtent(
+      0,
+      0.5,
+      { min: 1, max: 100 },
+      { min: 1, max: 1000 },
+      "log",
+      1e4,
+    );
+    expect(z.min).toBeCloseTo(1);
+    expect(z.max).toBeCloseTo(10);
+  });
+
+  it("widens a span narrower than 1 / maxZoom of the full extent", () => {
+    const z = zoomExtent(0.5, 0.5001, full, full, "linear", 100);
+    expect(z.max - z.min).toBeCloseTo(1);
+    expect(z.min).toBeLessThan(50);
+    expect(z.max).toBeGreaterThan(50);
+  });
+
+  it("keeps a widened span inside the full extent", () => {
+    const z = zoomExtent(0.9999, 1, full, full, "linear", 100);
+    expect(z.min).toBeCloseTo(99);
+    expect(z.max).toBeCloseTo(100);
   });
 });

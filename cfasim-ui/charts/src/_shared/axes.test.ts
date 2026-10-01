@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { snap, niceStep, intervalValues, formatTick } from "./axes.js";
+import {
+  snap,
+  niceStep,
+  intervalValues,
+  formatTick,
+  tickDecimals,
+} from "./axes.js";
 
 describe("snap", () => {
   it("rounds to nearest half-pixel", () => {
@@ -75,5 +81,23 @@ describe("formatTick", () => {
     expect(formatTick(1000)).toBe("1,000");
     expect(formatTick(1234567)).toBe("1,234,567");
     expect(formatTick(-5000)).toBe("-5,000");
+  });
+});
+
+describe("tickDecimals", () => {
+  it("returns the decimals needed to tell ticks apart", () => {
+    expect(tickDecimals([0, 10, 20])).toBe(0);
+    expect(tickDecimals([0, 0.5, 1])).toBe(1);
+    expect(tickDecimals([0.01, 0.02, 0.03])).toBe(2);
+    expect(tickDecimals([5.0002, 5.0004])).toBe(4);
+    expect(tickDecimals([7])).toBe(0);
+  });
+
+  it("lets formatTick keep close ticks distinct", () => {
+    const ticks = [5.0002, 5.0004];
+    const d = tickDecimals(ticks);
+    expect(ticks.map((t) => formatTick(t, d))).toEqual(["5.0002", "5.0004"]);
+    expect(formatTick(0.5)).toBe("0.5");
+    expect(formatTick(3, 4)).toBe("3");
   });
 });

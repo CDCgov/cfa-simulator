@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, ref, useId } from "vue";
 import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import {
   snap,
   formatTick,
+  tickDecimals,
+  zoomExtent,
   computeTickValues,
   computeLogTickValues,
   scaleFraction,
@@ -17,6 +19,9 @@ import {
   ChartAnnotations,
   ChartAxisLabels,
   ChartTitle,
+  ChartZoomControls,
+  ChartPlotClip,
+  ChartBrushRect,
   positionLegendItems,
   layoutMarkerLabels,
   markerDashArray,
@@ -39,6 +44,7 @@ import {
   type ChartMarker,
   type ChartMarkerDragPayload,
   type ChartPadding,
+  type BrushBox,
 } from "../_shared/index.js";
 
 /**
@@ -455,13 +461,139 @@ const xExtent = computed(() => {
   return { min, max };
 });
 
+/** Brushed x-window in internal x units; null shows the full extent. */
+const zoomX = ref<{ min: number; max: number } | null>(null);
+/** Brushed y-window from a box zoom; null rescales y to the visible data. */
+const zoomY = ref<{ min: number; max: number } | null>(null);
+
+/** Visible x-range: the zoom window clamped to the data, else the full extent. */
+const xDomain = computed(() => {
+  const full = xExtent.value;
+  const z = props.zoom ? zoomX.value : null;
+  if (!z) return full;
+  const min = Math.max(full.min, z.min);
+  const max = Math.min(full.max, z.max);
+  return max > min ? { min, max } : full;
+});
+
+const xZoomed = computed(
+  () =>
+    xDomain.value.min !== xExtent.value.min ||
+    xDomain.value.max !== xExtent.value.max,
+);
+
+/** Active box-zoom y-window (box zoom needs `zoom === true`). */
+const yWindow = computed(() => (props.zoom === true ? zoomY.value : null));
+
+const isZoomed = computed(() => xZoomed.value || yWindow.value !== null);
+
+const clipId = useId();
+
+/** Deepest zoom per axis, as a multiple of that axis's full range. */
+const MAX_ZOOM = 1e4;
+
+function onZoomSelect(box: BrushBox) {
+  if (!(xDomain.value.max > xDomain.value.min)) return;
+  if (innerW.value <= 0 || innerH.value <= 0) return;
+  const left = padding.value.left;
+  const bottom = padding.value.top + innerH.value;
+  // Read the current y extent before the x-window changes under it.
+  const nextY = box.band
+    ? zoomY.value
+    : zoomExtent(
+        (bottom - box.y1) / innerH.value,
+        (bottom - box.y0) / innerH.value,
+        extent.value,
+        fullYExtent.value,
+        props.yScaleType,
+        MAX_ZOOM,
+      );
+  zoomX.value = zoomExtent(
+    (box.x0 - left) / innerW.value,
+    (box.x1 - left) / innerW.value,
+    xDomain.value,
+    xExtent.value,
+    "linear",
+    MAX_ZOOM,
+  );
+  zoomY.value = nextY;
+}
+
+function resetZoom() {
+  zoomX.value = null;
+  zoomY.value = null;
+}
+
 function xPixel(v: number): number {
-  const { min, max } = xExtent.value;
+  const { min, max } = xDomain.value;
   const range = max - min || 1;
   return padding.value.left + ((v - min) / range) * innerW.value;
 }
 
-const extent = computed(() => {
+/**
+ * Visit the y-values a line shows inside an x-window: every point in the
+ * window, plus the interpolated value where a segment crosses either edge.
+ */
+function visitWindow(
+  data: LineChartData,
+  xAt: (i: number) => number,
+  win: { min: number; max: number },
+  visit: (v: number) => void,
+) {
+  let px = NaN;
+  let py = NaN;
+  for (let i = 0; i < data.length; i++) {
+    const x = xAt(i);
+    const y = Number(data[i]);
+    if (!isFinite(x) || !isFinite(y)) {
+      px = NaN;
+      continue;
+    }
+    if (x >= win.min && x <= win.max) visit(y);
+    if (isFinite(px)) {
+      if ((win.min - px) * (win.min - x) < 0) {
+        visit(py + ((win.min - px) / (x - px)) * (y - py));
+      }
+      if ((win.max - px) * (win.max - x) < 0) {
+        visit(py + ((win.max - px) / (x - px)) * (y - py));
+      }
+    }
+    px = x;
+    py = y;
+  }
+}
+
+/**
+ * Whether point `i`, or a segment joining it to a neighbor, can reach the
+ * x-window. Lets path building skip offscreen points while zoomed.
+ */
+function nearWindow(
+  xAt: (i: number) => number,
+  i: number,
+  n: number,
+  win: { min: number; max: number },
+): boolean {
+  const x = xAt(i);
+  let lo = x;
+  let hi = x;
+  if (i > 0) {
+    const p = xAt(i - 1);
+    if (p < lo) lo = p;
+    else if (p > hi) hi = p;
+  }
+  if (i < n - 1) {
+    const q = xAt(i + 1);
+    if (q < lo) lo = q;
+    else if (q > hi) hi = q;
+  }
+  return hi >= win.min && lo <= win.max;
+}
+
+/** Zoom window for culling path geometry; null when showing everything. */
+const cullWindow = computed(() => (xZoomed.value ? xDomain.value : null));
+
+/** Y extent of the data, optionally limited to what an x-window shows. */
+function dataYExtent(win: { min: number; max: number } | null) {
   let min = Infinity;
   let max = -Infinity;
   let smallestPositive = Infinity;
@@ -471,10 +603,15 @@ const extent = computed(() => {
     if (v > max) max = v;
     if (v > 0 && v < smallestPositive) smallestPositive = v;
   };
-  for (const s of allSeries.value) for (const v of s.data) visit(v);
+  for (const s of allSeries.value) {
+    if (win) visitWindow(s.data, (i) => seriesXAt(s, i), win, visit);
+    else for (const v of s.data) visit(v);
+  }
   for (const a of allAreas.value) {
-    for (const v of a.upper) visit(v);
-    for (const v of a.lower) visit(v);
+    for (const band of [a.upper, a.lower]) {
+      if (win) visitWindow(band, (i) => areaXAt(a, i), win, visit);
+      else for (const v of band) visit(v);
+    }
   }
   if (!isFinite(min)) return { min: 0, max: 0, range: 1 };
   if (props.yMin != null && props.yMin < min) min = props.yMin;
@@ -489,6 +626,18 @@ const extent = computed(() => {
     max: clamped.max,
     range: clamped.max - clamped.min || 1,
   };
+}
+
+const fullYExtent = computed(() => dataYExtent(null));
+
+/**
+ * Visible y extent: a box zoom's window, else the data's extent. While
+ * only x is zoomed, y rescales to what the x-window shows.
+ */
+const extent = computed(() => {
+  const y = yWindow.value;
+  if (y) return { min: y.min, max: y.max, range: y.max - y.min || 1 };
+  return xZoomed.value ? dataYExtent(xDomain.value) : fullYExtent.value;
 });
 
 function yPixel(v: number): number {
@@ -500,11 +649,17 @@ function yPixel(v: number): number {
 function toPath(s: ResolvedSeries): string {
   const data = s.data;
   if (data.length === 0) return "";
+  const win = cullWindow.value;
+  const xAt = (i: number) => seriesXAt(s, i);
   let d = "";
   let inSegment = false;
   for (let i = 0; i < data.length; i++) {
     const xv = seriesXAt(s, i);
-    if (!isFinite(data[i]) || !isFinite(xv)) {
+    if (
+      !isFinite(data[i]) ||
+      !isFinite(xv) ||
+      (win && !nearWindow(xAt, i, data.length, win))
+    ) {
       inSegment = false;
       continue;
     }
@@ -519,9 +674,12 @@ function toPath(s: ResolvedSeries): string {
 function toPoints(s: ResolvedSeries): { x: number; y: number }[] {
   const data = s.data;
   const pts: { x: number; y: number }[] = [];
+  const win = cullWindow.value;
+  const xAt = (i: number) => seriesXAt(s, i);
   for (let i = 0; i < data.length; i++) {
     const xv = seriesXAt(s, i);
     if (!isFinite(data[i]) || !isFinite(xv)) continue;
+    if (win && !nearWindow(xAt, i, data.length, win)) continue;
     pts.push({ x: xPixel(xv), y: yPixel(data[i]) });
   }
   return pts;
@@ -533,11 +691,14 @@ function toAreaPath(a: ResolvedArea): string {
   // Collect contiguous segments where both upper/lower and x are finite
   const segments: number[][] = [];
   let seg: number[] = [];
+  const win = cullWindow.value;
+  const xAt = (i: number) => areaXAt(a, i);
   for (let i = 0; i < len; i++) {
     if (
       isFinite(a.upper[i]) &&
       isFinite(a.lower[i]) &&
-      isFinite(areaXAt(a, i))
+      isFinite(areaXAt(a, i)) &&
+      (!win || nearWindow(xAt, i, len, win))
     ) {
       seg.push(i);
     } else if (seg.length) {
@@ -669,6 +830,7 @@ const sectionLabels = computed<{
   if (!sections?.length) return { labels: [], extraHeight: 0 };
 
   const items: PositionedSectionLabel[] = [];
+  const chartLeft = padding.value.left;
   const chartRight = padding.value.left + innerW.value;
   for (const sec of sections) {
     if (!sec.label && !sec.description) continue;
@@ -682,8 +844,14 @@ const sectionLabels = computed<{
     // section's start pixel. Clamp so the label's right edge stays within
     // the chart if it would otherwise overflow.
     const startPx = sectionXPixel(sec, "start");
+    // Zoomed past this section entirely: drop its label.
+    if (
+      isZoomed.value &&
+      (startPx > chartRight || sectionXPixel(sec, "end") < chartLeft)
+    )
+      continue;
     const labelRightPad = 8;
-    const preferred = startPx + textWidth / 2 + 2;
+    const preferred = Math.max(startPx, chartLeft) + textWidth / 2 + 2;
     const maxCx = chartRight - textWidth / 2 - labelRightPad;
     const cx = Math.min(preferred, maxCx);
     const color = sectionColor(sec);
@@ -797,10 +965,11 @@ const sectionLabelBaseY = computed(
 
 const yTickItems = computed(() => {
   const { min, max } = extent.value;
+  let decimals = 0;
   const fmt = (v: number) =>
     props.yTickFormat !== undefined
       ? formatNumber(v, props.yTickFormat)
-      : formatTick(v);
+      : formatTick(v, decimals);
 
   if (min === max) {
     return [{ value: fmt(min), y: snap(padding.value.top + innerH.value / 2) }];
@@ -815,6 +984,7 @@ const yTickItems = computed(() => {
           ticks: props.yTicks,
           targetTickCount: innerH.value / 50,
         });
+  decimals = tickDecimals(values);
   return values.map((v) => ({ value: fmt(v), y: snap(yPixel(v)) }));
 });
 
@@ -825,7 +995,12 @@ const yTickItems = computed(() => {
  * preset choice (year-tick → "year", month-tick → "month-year", etc.);
  * the tooltip path leaves it undefined and gets the ISO default.
  */
-function formatXValue(v: number, i: number, unit?: DateTickUnit): string {
+function formatXValue(
+  v: number,
+  i: number,
+  unit?: DateTickUnit,
+  decimals = 0,
+): string {
   const xf = props.xTickFormat;
   if (xIsDate.value) {
     if (typeof xf === "function") {
@@ -848,11 +1023,11 @@ function formatXValue(v: number, i: number, unit?: DateTickUnit): string {
   ) {
     return props.xLabels[v];
   }
-  return formatTick(display);
+  return formatTick(display, decimals);
 }
 
 const xTickItems = computed(() => {
-  const { min: xMin, max: xMax } = xExtent.value;
+  const { min: xMin, max: xMax } = xDomain.value;
   if (xMin === xMax) return [];
   const isDate = xIsDate.value;
   // `xMin` (display offset) is meaningless on a date axis — every x
@@ -880,9 +1055,11 @@ const xTickItems = computed(() => {
     // bucket gets at most one tick. Date mode supersedes xLabels — if
     // both are supplied, only the date axis is used.
     const targetTicks = Math.max(3, Math.floor(targetTickCount));
-    const step = Math.max(1, Math.round((len - 1) / targetTicks));
+    const lo = Math.ceil(xMin);
+    const hi = Math.floor(xMax);
+    const step = Math.max(1, Math.round((hi - lo) / targetTicks));
     values = [];
-    for (let i = 0; i < len; i += step) values.push(i);
+    for (let i = lo; i <= hi; i += step) values.push(i);
   } else {
     values = computeTickValues({
       min: xMin,
@@ -893,6 +1070,7 @@ const xTickItems = computed(() => {
     });
   }
 
+  const decimals = isDate ? 0 : tickDecimals(values);
   const leftEdge = padding.value.left;
   const rightEdge = padding.value.left + innerW.value;
   const edgeSnapPx = 1;
@@ -901,7 +1079,7 @@ const xTickItems = computed(() => {
     let anchor: "start" | "middle" | "end" = "middle";
     if (x - leftEdge <= edgeSnapPx) anchor = "start";
     else if (rightEdge - x <= edgeSnapPx) anchor = "end";
-    return { value: formatXValue(v, i, unit), x, anchor };
+    return { value: formatXValue(v, i, unit, decimals), x, anchor };
   });
 });
 
@@ -920,6 +1098,21 @@ const hoverDataX = computed(() => {
 const hoverX = computed(() =>
   hoverDataX.value === null ? 0 : xPixel(hoverDataX.value),
 );
+
+/** Whether a pixel x falls inside the plot (hover marks can sit past a zoom window). */
+function inPlotX(px: number): boolean {
+  return (
+    px >= padding.value.left - 0.5 &&
+    px <= padding.value.left + innerW.value + 0.5
+  );
+}
+
+function inPlotY(py: number): boolean {
+  return (
+    py >= padding.value.top - 0.5 &&
+    py <= padding.value.top + innerH.value + 0.5
+  );
+}
 
 /** Index of the series point closest to the given data-space x. */
 function nearestIndex(s: ResolvedSeries, targetX: number): number | null {
@@ -972,7 +1165,9 @@ const hoverPoints = computed(() => {
 });
 
 const hoverDots = computed(() =>
-  hoverPoints.value.filter((p) => isFinite(p.value)),
+  hoverPoints.value.filter(
+    (p) => isFinite(p.value) && inPlotX(p.x) && inPlotY(p.y),
+  ),
 );
 
 const hoverSlotProps = computed(() => {
@@ -999,6 +1194,11 @@ function projectAnnotation(
 ): { x: number; y: number } | null {
   if (!isFinite(x) || !isFinite(y)) return null;
   const internalX = x - xDisplayOffset.value;
+  if (isZoomed.value) {
+    const { min, max } = xDomain.value;
+    if (internalX < min || internalX > max) return null;
+    if (y < extent.value.min || y > extent.value.max) return null;
+  }
   return { x: xPixel(internalX), y: yPixel(y) };
 }
 
@@ -1007,7 +1207,7 @@ function indexFromPointer(clientX: number): number | null {
   if (!rect) return null;
   const s0 = allSeries.value[0];
   if (!s0 || s0.data.length === 0) return null;
-  const { min: xMin, max: xMax } = xExtent.value;
+  const { min: xMin, max: xMax } = xDomain.value;
   const range = xMax - xMin || 1;
   const mouseX = clientX - rect.left;
   const targetX = xMin + ((mouseX - padding.value.left) / innerW.value) * range;
@@ -1058,7 +1258,8 @@ const {
   hoverIndex,
   tooltipRef,
   tooltipPos,
-  tooltipHandlers,
+  overlayHandlers,
+  brushRect,
   menuItems,
   downloadLinkText,
   csvHref,
@@ -1091,6 +1292,11 @@ const {
   pointerToIndex: indexFromPointer,
   onHover: (payload) => emit("hover", payload),
   extraBelowHeight: () => sectionLabels.value.extraHeight,
+  zoom: {
+    mode: () => (props.zoom ? { axis: "x", box: props.zoom === true } : null),
+    onSelect: onZoomSelect,
+    onReset: resetZoom,
+  },
 });
 
 const positionedLegendItems = computed(() =>
@@ -1153,6 +1359,7 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
   const ms = props.markers ?? [];
   if (ms.length === 0) return [];
   const { min, max } = xExtent.value;
+  const view = xDomain.value;
   const drag = markerDragState.value;
   const off = xIsDate.value ? 0 : xDisplayOffset.value;
   const out: RenderedMarker[] = [];
@@ -1161,6 +1368,8 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
     let xv = drag?.index === i ? drag.x : markerInternalX(m);
     if (!isFinite(xv)) continue;
     xv = Math.min(max, Math.max(min, xv));
+    // Markers outside a zoom window are hidden, not pinned to its edge.
+    if (xv < view.min || xv > view.max) continue;
     const style = resolveLabelStyle(m.labelStyle, {
       fontSize: MARKER_LABEL_FONT_SIZE,
     });
@@ -1218,7 +1427,7 @@ onBeforeUnmount(() => markerDragCleanup?.());
 function markerPointerX(clientX: number): number {
   const rect = svgRef.value?.getBoundingClientRect();
   const left = rect?.left ?? 0;
-  const { min, max } = xExtent.value;
+  const { min, max } = xDomain.value;
   const range = max - min || 1;
   return (
     min + ((clientX - left - padding.value.left) / (innerW.value || 1)) * range
@@ -1226,7 +1435,7 @@ function markerPointerX(clientX: number): number {
 }
 
 function clampMarkerX(xv: number): number {
-  const { min, max } = xExtent.value;
+  const { min, max } = xDomain.value;
   return Math.min(max, Math.max(min, xv));
 }
 
@@ -1305,7 +1514,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
   const m = (props.markers ?? [])[index];
   if (!m || m.draggable === false) return;
   e.preventDefault();
-  const { min, max } = xExtent.value;
+  const { min, max } = xDomain.value;
   const base =
     !xIsDate.value && !hasExplicitX.value ? 1 : (max - min) / 100 || 1;
   const xv = clampMarkerX(
@@ -1340,6 +1549,13 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
         :role="chartRole || undefined"
         :aria-label="chartAriaLabel || undefined"
       >
+        <ChartPlotClip
+          v-if="isZoomed"
+          :id="clipId"
+          :padding="padding"
+          :inner-w="innerW"
+          :inner-h="innerH"
+        />
         <ChartTitle :title="title" :title-style="titleStyle" :bounds="bounds" />
         <!-- inline legend -->
         <g v-if="positionedLegendItems.length > 0">
@@ -1475,97 +1691,100 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
         >
           {{ tick.value }}
         </text>
-        <!-- areas -->
-        <path
-          v-for="({ a, path }, i) in areaRender"
-          :key="'area' + i"
-          :d="path"
-          :fill="a.color ?? 'currentColor'"
-          :fill-opacity="a.opacity ?? 0.2"
-          stroke="none"
-          :style="a.blendMode ? { mixBlendMode: a.blendMode } : undefined"
-        />
-        <!-- data lines and dots -->
-        <template v-for="({ s, path, points }, i) in seriesRender" :key="i">
+        <!-- plot marks, clipped to the plot while zoomed -->
+        <g :clip-path="isZoomed ? `url(#${clipId})` : undefined">
+          <!-- areas -->
           <path
-            v-if="s.line !== false && s.outline"
+            v-for="({ a, path }, i) in areaRender"
+            :key="'area' + i"
             :d="path"
-            fill="none"
-            :stroke="s.outlineColor ?? 'var(--color-bg-0, #fff)'"
-            :stroke-width="(s.strokeWidth ?? 1.5) + (s.outlineWidth ?? 4)"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            data-testid="line-outline"
+            :fill="a.color ?? 'currentColor'"
+            :fill-opacity="a.opacity ?? 0.2"
+            stroke="none"
+            :style="a.blendMode ? { mixBlendMode: a.blendMode } : undefined"
           />
-          <path
-            v-if="s.line !== false"
-            :d="path"
-            fill="none"
-            :stroke="s.color ?? 'currentColor'"
-            :stroke-width="s.strokeWidth ?? 1.5"
-            :stroke-opacity="s.lineOpacity ?? s.opacity ?? lineOpacity"
-            :stroke-dasharray="s.dashed ? '6 3' : undefined"
-            :style="s.blendMode ? { mixBlendMode: s.blendMode } : undefined"
-          />
-          <template v-if="s.dots">
-            <circle
-              v-for="(pt, j) in points"
-              :key="j"
-              :cx="pt.x"
-              :cy="pt.y"
-              :r="s.dotRadius ?? (s.strokeWidth ?? 1.5) + 1"
-              :fill="s.dotFill ?? s.color ?? 'currentColor'"
-              :fill-opacity="s.dotOpacity ?? s.opacity ?? lineOpacity"
-              :stroke="s.dotStroke ?? 'none'"
+          <!-- data lines and dots -->
+          <template v-for="({ s, path, points }, i) in seriesRender" :key="i">
+            <path
+              v-if="s.line !== false && s.outline"
+              :d="path"
+              fill="none"
+              :stroke="s.outlineColor ?? 'var(--color-bg-0, #fff)'"
+              :stroke-width="(s.strokeWidth ?? 1.5) + (s.outlineWidth ?? 4)"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              data-testid="line-outline"
+            />
+            <path
+              v-if="s.line !== false"
+              :d="path"
+              fill="none"
+              :stroke="s.color ?? 'currentColor'"
+              :stroke-width="s.strokeWidth ?? 1.5"
+              :stroke-opacity="s.lineOpacity ?? s.opacity ?? lineOpacity"
+              :stroke-dasharray="s.dashed ? '6 3' : undefined"
               :style="s.blendMode ? { mixBlendMode: s.blendMode } : undefined"
             />
+            <template v-if="s.dots">
+              <circle
+                v-for="(pt, j) in points"
+                :key="j"
+                :cx="pt.x"
+                :cy="pt.y"
+                :r="s.dotRadius ?? (s.strokeWidth ?? 1.5) + 1"
+                :fill="s.dotFill ?? s.color ?? 'currentColor'"
+                :fill-opacity="s.dotOpacity ?? s.opacity ?? lineOpacity"
+                :stroke="s.dotStroke ?? 'none'"
+                :style="s.blendMode ? { mixBlendMode: s.blendMode } : undefined"
+              />
+            </template>
           </template>
-        </template>
-        <!-- area sections (rendered above series) -->
-        <template v-for="(r, i) in sectionRender" :key="'areasec' + i">
-          <path
-            :d="r.fillPath"
-            :fill="r.color"
-            :fill-opacity="r.sec.opacity ?? 0.15"
-            stroke="none"
-          />
-          <path
-            v-if="r.sec.seriesIndex != null"
-            :d="r.linePath"
-            fill="none"
-            :stroke="r.color"
-            :stroke-width="r.sec.strokeWidth ?? 2"
-            :stroke-dasharray="r.sec.dashed ? '6 3' : undefined"
-          />
-          <!-- vertical edge lines for full-height sections -->
-          <template v-if="r.sec.seriesIndex == null">
-            <line
-              v-for="(x, j) in [r.startX, r.endX]"
-              :key="j"
-              :x1="x"
-              :y1="padding.top"
-              :x2="x"
-              :y2="padding.top + innerH"
+          <!-- area sections (rendered above series) -->
+          <template v-for="(r, i) in sectionRender" :key="'areasec' + i">
+            <path
+              :d="r.fillPath"
+              :fill="r.color"
+              :fill-opacity="r.sec.opacity ?? 0.15"
+              stroke="none"
+            />
+            <path
+              v-if="r.sec.seriesIndex != null"
+              :d="r.linePath"
+              fill="none"
               :stroke="r.color"
               :stroke-width="r.sec.strokeWidth ?? 2"
               :stroke-dasharray="r.sec.dashed ? '6 3' : undefined"
             />
+            <!-- vertical edge lines for full-height sections -->
+            <template v-if="r.sec.seriesIndex == null">
+              <line
+                v-for="(x, j) in [r.startX, r.endX]"
+                :key="j"
+                :x1="x"
+                :y1="padding.top"
+                :x2="x"
+                :y2="padding.top + innerH"
+                :stroke="r.color"
+                :stroke-width="r.sec.strokeWidth ?? 2"
+                :stroke-dasharray="r.sec.dashed ? '6 3' : undefined"
+              />
+            </template>
+            <!-- tick marks at section boundaries -->
+            <line
+              v-for="(x, j) in [r.startX, r.endX]"
+              :key="'t' + j"
+              :x1="x"
+              :y1="padding.top + innerH - 4"
+              :x2="x"
+              :y2="padding.top + innerH + 4"
+              stroke="currentColor"
+              stroke-opacity="0.4"
+            />
           </template>
-          <!-- tick marks at section boundaries -->
-          <line
-            v-for="(x, j) in [r.startX, r.endX]"
-            :key="'t' + j"
-            :x1="x"
-            :y1="padding.top + innerH - 4"
-            :x2="x"
-            :y2="padding.top + innerH + 4"
-            stroke="currentColor"
-            stroke-opacity="0.4"
-          />
-        </template>
+        </g>
         <!-- Tooltip: crosshair line -->
         <line
-          v-if="hasTooltipSlot && hoverIndex !== null"
+          v-if="hasTooltipSlot && hoverIndex !== null && inPlotX(hoverX)"
           :x1="snap(hoverX)"
           :y1="padding.top"
           :x2="snap(hoverX)"
@@ -1587,16 +1806,19 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           stroke-width="2"
           pointer-events="none"
         />
-        <!-- Tooltip: interaction overlay -->
+        <!-- drag-to-zoom selection -->
+        <ChartBrushRect v-if="brushRect" :rect="brushRect" />
+        <!-- Tooltip / zoom: interaction overlay -->
         <rect
-          v-if="hasTooltipSlot"
+          v-if="hasTooltipSlot || zoom"
+          data-testid="chart-overlay"
           :x="padding.left"
           :y="padding.top"
           :width="innerW"
           :height="innerH"
           fill="transparent"
           style="cursor: crosshair; touch-action: pan-y"
-          v-on="tooltipHandlers"
+          v-on="overlayHandlers"
         />
         <!-- annotations (top layer) -->
         <ChartAnnotations
@@ -1706,6 +1928,13 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           </text>
         </g>
       </svg>
+      <ChartZoomControls
+        v-if="isZoomed"
+        reset-only
+        :position="menu ? 'beside-menu' : 'right'"
+        :is-fullscreen="isFullscreen"
+        @reset="resetZoom"
+      />
       <!-- Tooltip floating content -->
       <div
         v-if="hasTooltipSlot && hoverIndex !== null && hoverSlotProps"

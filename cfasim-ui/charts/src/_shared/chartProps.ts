@@ -173,6 +173,17 @@ export interface ChartCommonProps {
    * the document root (e.g. inside a shadow root or a dedicated overlay).
    */
   fullscreenTarget?: string | HTMLElement;
+  /**
+   * Enable drag-to-zoom. Default `false`. With `true`, a roughly straight
+   * drag along the main axis (x, or the category axis of a BarChart) zooms
+   * that axis only and the value axis rescales to the visible data; a
+   * drag that also covers some distance on the other axis draws a box and
+   * zooms both axes to it. `"x"` restricts zooming to the main axis. A
+   * reset button appears while zoomed, and double-clicking the plot also
+   * resets. Mouse only: touch and pen drags keep scrubbing the tooltip
+   * and scrolling the page.
+   */
+  zoom?: boolean | "x";
   /** Annotations rendered as the top layer of the chart. */
   annotations?: readonly ChartAnnotation[];
   /**

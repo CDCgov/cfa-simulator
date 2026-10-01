@@ -21,3 +21,30 @@ test("BarChart thins crowded categorical labels", async ({ page }) => {
   expect(await ticks.count()).toBeLessThan(14);
   expect(await ticks.count()).toBeGreaterThan(0);
 });
+
+test("drag zooms to the brushed categories and reset restores them", async ({
+  page,
+}) => {
+  await page.goto("./cfasim-ui/charts/bar-chart");
+  const chart = page.locator('[data-testid="zoom-bar-chart"]');
+  await chart.scrollIntoViewIfNeeded();
+  const overlay = chart.locator('[data-testid="chart-overlay"]');
+  const bars = chart.locator('[data-testid="bar"]');
+  await expect(bars).toHaveCount(40);
+
+  const box = (await overlay.boundingBox())!;
+  const y = box.y + box.height / 2;
+  // Mid-slot 10 → mid-slot 19 of 40.
+  await page.mouse.move(box.x + (box.width * 10.5) / 40, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + (box.width * 19.5) / 40, y, { steps: 5 });
+  await expect(chart.locator('[data-testid="zoom-brush"]')).toBeVisible();
+  await page.mouse.up();
+
+  await expect(bars).toHaveCount(10);
+  await expect(bars.first()).toHaveAttribute("data-category", "10");
+  await expect(bars.last()).toHaveAttribute("data-category", "19");
+
+  await chart.getByRole("button", { name: "Reset zoom" }).click();
+  await expect(bars).toHaveCount(40);
+});

@@ -4,6 +4,11 @@ import { formatTick } from "./axes.js";
 import { useChartSize } from "./useChartSize.js";
 import { useChartPadding, type ChartPadding } from "./useChartPadding.js";
 import { useChartTooltip } from "./useChartTooltip.js";
+import {
+  useChartBrush,
+  type BrushBox,
+  type BrushMode,
+} from "./useChartBrush.js";
 import type { TooltipClamp } from "../tooltip-position.js";
 import { useChartMenu } from "./useChartMenu.js";
 import type { TitleStyle } from "./chartProps.js";
@@ -51,6 +56,17 @@ export interface ChartFoundationOptions {
    * height matched to the container when fullscreen.
    */
   extraBelowHeight?: () => number;
+  /**
+   * Drag-to-zoom wiring. The composable owns the brush gesture and the
+   * selection rectangle; the chart maps the brushed svg-pixel box to its
+   * own data domain in `onSelect`.
+   */
+  zoom?: {
+    /** Brush behavior, or null when zoom is off. */
+    mode: () => BrushMode | null;
+    onSelect: (box: BrushBox) => void;
+    onReset: () => void;
+  };
 }
 
 /**
@@ -128,7 +144,52 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     onHover: opts.onHover,
   });
 
+  const zoomMode = () => opts.zoom?.mode() ?? null;
+  const zoomEnabled = () => zoomMode() !== null;
+
+  const brush = useChartBrush({
+    mode: zoomMode,
+    originRef: svgRef,
+    bounds: () => ({
+      x0: padding.value.left,
+      x1: padding.value.left + innerW.value,
+      y0: padding.value.top,
+      y1: padding.value.top + innerH.value,
+    }),
+    // Drop the hover tooltip so it doesn't trail the brush.
+    onStart: () => tooltipHandlers.mouseleave(),
+    onSelect: (box) => opts.zoom?.onSelect(box),
+  });
+
+  /** Selection rectangle in svg pixels while a brush is in progress. */
+  const brushRect = computed(() => {
+    const s = brush.selection.value;
+    if (!s) return null;
+    return { x: s.x0, y: s.y0, width: s.x1 - s.x0, height: s.y1 - s.y0 };
+  });
+
+  /** Handlers for the plot's hit-test overlay: tooltip plus drag-to-zoom. */
+  const overlayHandlers = {
+    ...tooltipHandlers,
+    mousemove: (e: MouseEvent) => {
+      if (!brush.selection.value) tooltipHandlers.mousemove(e);
+    },
+    click: (e: MouseEvent) => {
+      if (!brush.shouldSwallowClick()) tooltipHandlers.click(e);
+    },
+    pointerdown: brush.onPointerDown,
+    // Keeps the drag from starting a text selection.
+    mousedown: (e: MouseEvent) => {
+      if (zoomEnabled()) e.preventDefault();
+    },
+    dblclick: () => {
+      if (zoomEnabled()) opts.zoom?.onReset();
+    },
+  };
+
   return {
+    overlayHandlers,
+    brushRect,
     containerRef,
     svgRef,
     width,

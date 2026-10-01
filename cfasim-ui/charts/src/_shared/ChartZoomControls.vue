@@ -8,8 +8,22 @@ withDefaults(
     /** Insets the stack further from the corner while the chart fills the
      * window, matching the ChartMenu trigger area. */
     isFullscreen?: boolean;
+    /** Render only the reset button (charts that zoom by dragging). */
+    resetOnly?: boolean;
+    /**
+     * Corner the stack sits in. `"beside-menu"` is top-right, shifted left
+     * to clear the ChartMenu trigger.
+     */
+    position?: "left" | "right" | "beside-menu";
   }>(),
-  { canZoomIn: true, canZoomOut: true, canReset: true, isFullscreen: false },
+  {
+    canZoomIn: true,
+    canZoomOut: true,
+    canReset: true,
+    isFullscreen: false,
+    resetOnly: false,
+    position: "left",
+  },
 );
 
 const emit = defineEmits<{
@@ -22,9 +36,13 @@ const emit = defineEmits<{
 <template>
   <div
     class="chart-zoom-controls"
-    :class="{ 'chart-zoom-controls--expanded': isFullscreen }"
+    :class="[
+      `chart-zoom-controls--${position}`,
+      { 'chart-zoom-controls--expanded': isFullscreen },
+    ]"
   >
     <button
+      v-if="!resetOnly"
       type="button"
       class="chart-zoom-button"
       aria-label="Zoom in"
@@ -45,6 +63,7 @@ const emit = defineEmits<{
       </svg>
     </button>
     <button
+      v-if="!resetOnly"
       type="button"
       class="chart-zoom-button"
       aria-label="Zoom out"
@@ -67,7 +86,7 @@ const emit = defineEmits<{
     <button
       type="button"
       class="chart-zoom-button"
-      aria-label="Reset view"
+      :aria-label="resetOnly ? 'Reset zoom' : 'Reset view'"
       :disabled="!canReset"
       @click="emit('reset')"
     >
@@ -95,8 +114,8 @@ const emit = defineEmits<{
 <style scoped>
 .chart-zoom-controls {
   position: absolute;
-  top: 0.5em;
-  left: 0.5em;
+  --zoom-controls-inset: 0.5em;
+  top: var(--zoom-controls-inset);
   z-index: 1;
   display: flex;
   flex-direction: column;
@@ -107,8 +126,20 @@ const emit = defineEmits<{
    window the wrapper's padding doesn't move absolute children, so inset
    further for modal-style breathing room. */
 .chart-zoom-controls--expanded {
-  top: 1.25em;
-  left: 1.25em;
+  --zoom-controls-inset: 1.25em;
+}
+
+.chart-zoom-controls--left {
+  left: var(--zoom-controls-inset);
+}
+
+.chart-zoom-controls--right {
+  right: var(--zoom-controls-inset);
+}
+
+/* Menu trigger is 28px wide; leave the same 4px gap the stack uses. */
+.chart-zoom-controls--beside-menu {
+  right: calc(var(--zoom-controls-inset) + 32px);
 }
 
 /* Same look as .chart-menu-button, but always visible — no hover reveal. */

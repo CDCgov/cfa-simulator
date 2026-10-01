@@ -1,7 +1,8 @@
-export { snap, formatTick, type ChartData } from "./axes.js";
+export { snap, formatTick, tickDecimals, type ChartData } from "./axes.js";
 export { computeTickValues, type TickValueOptions } from "./computeTicks.js";
 export {
   scaleFraction,
+  zoomExtent,
   clampExtentForScale,
   computeLogTickValues,
   type ScaleType,
@@ -28,10 +29,13 @@ export {
   useChartTooltip,
   type ChartTooltipOptions,
 } from "./useChartTooltip.js";
+export type { BrushBox } from "./useChartBrush.js";
 export { useChartMenu, type ChartMenuOptions } from "./useChartMenu.js";
 export { useChartFullscreen } from "./useChartFullscreen.js";
 export { isTouchDevice } from "./touch.js";
 export { default as ChartZoomControls } from "./ChartZoomControls.vue";
+export { default as ChartPlotClip } from "./ChartPlotClip.vue";
+export { default as ChartBrushRect } from "./ChartBrushRect.vue";
 export {
   seriesToCsv,
   categoricalToCsv,

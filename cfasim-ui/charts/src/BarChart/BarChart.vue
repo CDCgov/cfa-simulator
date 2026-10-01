@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, useId } from "vue";
 import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import {
   snap,
   formatTick,
+  tickDecimals,
+  zoomExtent,
   computeTickValues,
   computeLogTickValues,
   scaleFraction,
@@ -17,6 +19,9 @@ import {
   ChartAnnotations,
   ChartAxisLabels,
   ChartTitle,
+  ChartZoomControls,
+  ChartPlotClip,
+  ChartBrushRect,
   positionLegendItems,
   TICK_LABEL_FONT_SIZE,
   pickContrastColor,
@@ -34,6 +39,7 @@ import {
   type LineMarkStyle,
   type LabelStyle,
   type ChartPadding,
+  type BrushBox,
 } from "../_shared/index.js";
 
 export type BarChartData = ChartData;
@@ -378,8 +384,97 @@ const categoryDatesMs = computed<number[] | null>(() => {
 
 const isVertical = computed(() => props.orientation === "vertical");
 
-/** Extent of the value axis (across all series, accounting for stacking). */
-const valueExtent = computed(() => {
+/** Brushed category window (inclusive indices); null shows every category. */
+const zoomRange = ref<{ start: number; end: number } | null>(null);
+/** Brushed value window from a box zoom; null rescales to the visible bars. */
+const zoomValue = ref<{ min: number; max: number } | null>(null);
+
+/** Visible categories: the zoom window clamped to the data, else all of them. */
+const visibleRange = computed(() => {
+  const full = { start: 0, end: categoryCount.value - 1 };
+  const z = props.zoom ? zoomRange.value : null;
+  if (!z) return full;
+  const start = Math.max(full.start, z.start);
+  const end = Math.min(full.end, z.end);
+  return end >= start ? { start, end } : full;
+});
+
+const visibleCount = computed(
+  () => visibleRange.value.end - visibleRange.value.start + 1,
+);
+
+/** Active box-zoom value window (box zoom needs `zoom === true`). */
+const valueWindow = computed(() =>
+  props.zoom === true ? zoomValue.value : null,
+);
+
+const isZoomed = computed(
+  () => visibleCount.value < categoryCount.value || valueWindow.value !== null,
+);
+
+/**
+ * The box-zoomed value window as a [0, 1] slice of the unzoomed value
+ * axis; null when the value axis isn't box-zoomed.
+ */
+const valueZoomSlice = computed(() => {
+  const w = valueWindow.value;
+  if (!w) return null;
+  const { min, max } = fullValueExtent.value;
+  const lo = scaleFraction(w.min, min, max, props.valueScaleType);
+  const hi = scaleFraction(w.max, min, max, props.valueScaleType);
+  return hi > lo ? { lo, hi } : null;
+});
+
+/** Deepest value-axis zoom, as a multiple of the full value range. */
+const MAX_VALUE_ZOOM = 1e4;
+
+const clipId = useId();
+
+function onZoomSelect(box: BrushBox) {
+  const slot = slotSize.value;
+  if (slot <= 0 || valueSize.value <= 0) return;
+  const { start, end } = visibleRange.value;
+  const vertical = isVertical.value;
+  const base = vertical ? padding.value.left : padding.value.top;
+  const loPx = vertical ? box.x0 : box.y0;
+  const hiPx = vertical ? box.x1 : box.y1;
+  if (!box.band) {
+    // Read the current value extent before the category window changes.
+    const bottom = padding.value.top + innerH.value;
+    const f0 = vertical
+      ? (bottom - box.y1) / innerH.value
+      : (box.x0 - padding.value.left) / innerW.value;
+    const f1 = vertical
+      ? (bottom - box.y0) / innerH.value
+      : (box.x1 - padding.value.left) / innerW.value;
+    zoomValue.value = zoomExtent(
+      f0,
+      f1,
+      valueExtent.value,
+      fullValueExtent.value,
+      props.valueScaleType,
+      MAX_VALUE_ZOOM,
+    );
+  }
+  const clamp = (i: number) => Math.max(start, Math.min(end, i));
+  // Every slot the brush touches; ceil - 1 keeps a brush that ends exactly
+  // on a slot boundary from pulling in the next category.
+  zoomRange.value = {
+    start: clamp(start + Math.floor((loPx - base) / slot)),
+    end: clamp(start + Math.ceil((hiPx - base) / slot) - 1),
+  };
+}
+
+function resetZoom() {
+  zoomRange.value = null;
+  zoomValue.value = null;
+}
+
+/**
+ * Value extent across all series (accounting for stacking) for the
+ * categories `start..end`.
+ */
+function dataValueExtent(start: number, end: number) {
   let min = Infinity;
   let max = -Infinity;
   let smallestPositive = Infinity;
@@ -387,8 +482,7 @@ const valueExtent = computed(() => {
     if (v > 0 && v < smallestPositive) smallestPositive = v;
   };
   if (props.layout === "stacked") {
-    const n = categoryCount.value;
-    for (let i = 0; i < n; i++) {
+    for (let i = start; i <= end; i++) {
       let pos = 0;
       let neg = 0;
       for (const s of allSeries.value) {
@@ -404,8 +498,9 @@ const valueExtent = computed(() => {
     }
   } else {
     for (const s of allSeries.value) {
-      for (const v of s.data) {
-        const n = Number(v);
+      const last = Math.min(end, s.data.length - 1);
+      for (let i = start; i <= last; i++) {
+        const n = Number(s.data[i]);
         if (!isFinite(n)) continue;
         visitPositive(n);
         if (n < min) min = n;
@@ -435,6 +530,21 @@ const valueExtent = computed(() => {
     max: clamped.max,
     range: clamped.max - clamped.min || 1,
   };
+}
+
+const fullValueExtent = computed(() =>
+  dataValueExtent(0, categoryCount.value - 1),
+);
+
+/**
+ * Visible value extent: a box zoom's window, else the extent of the
+ * visible categories (so the axis rescales while zoomed along them).
+ */
+const valueExtent = computed(() => {
+  const w = valueWindow.value;
+  if (w) return { min: w.min, max: w.max, range: w.max - w.min || 1 };
+  const { start, end } = visibleRange.value;
+  return dataValueExtent(start, end);
 });
 
 /** Size (in pixels) of the categorical axis. */
@@ -447,7 +557,7 @@ const valueSize = computed(() =>
 );
 
 const slotSize = computed(() => {
-  const n = categoryCount.value;
+  const n = visibleCount.value;
   return n > 0 ? categoricalSize.value / n : 0;
 });
 
@@ -466,7 +576,7 @@ const barWidth = computed(() => {
 /** Pixel position of the start of category slot `i` along the categorical axis. */
 function slotStart(i: number): number {
   const base = isVertical.value ? padding.value.left : padding.value.top;
-  return base + i * slotSize.value;
+  return base + (i - visibleRange.value.start) * slotSize.value;
 }
 
 /**
@@ -556,14 +666,14 @@ const bars = computed<BarRect[]>(() => {
   const seriesList = allSeries.value;
   const k = seriesList.length;
   if (k === 0) return out;
-  const n = categoryCount.value;
+  const { start, end } = visibleRange.value;
   const slot = slotSize.value;
   const group = groupWidth.value;
   const bw = barWidth.value;
   const innerOffset = (slot - group) / 2;
   const baseline = groupedBaselinePixel.value;
 
-  for (let i = 0; i < n; i++) {
+  for (let i = start; i <= end; i++) {
     const groupStart = slotStart(i) + innerOffset;
     if (props.layout === "stacked") {
       let posCursor = 0;
@@ -699,10 +809,13 @@ function projectLinePoint(
   y: number,
   extent: { min: number; max: number },
 ): { x: number; y: number } {
-  const base = isVertical.value ? padding.value.left : padding.value.top;
-  const categoricalPx = base + (x + 0.5) * slotSize.value;
+  const categoricalPx = slotStart(x + 0.5);
   const span = extent.max - extent.min || 1;
-  const frac = (y - extent.min) / span;
+  let frac = (y - extent.min) / span;
+  // A line has its own scale spanning the full plot; under a box zoom it
+  // follows the same slice of the plot the bars' value axis shows.
+  const slice = valueZoomSlice.value;
+  if (slice) frac = (frac - slice.lo) / (slice.hi - slice.lo);
   if (isVertical.value) {
     return {
       x: categoricalPx,
@@ -789,10 +902,11 @@ const formatTooltipValue = makeTooltipValueFormatter(
 
 const valueTickItems = computed(() => {
   const { min, max } = valueExtent.value;
+  let decimals = 0;
   const fmt = (v: number) =>
     props.valueTickFormat !== undefined
       ? formatNumber(v, props.valueTickFormat)
-      : formatTick(v);
+      : formatTick(v, decimals);
   if (min === max) {
     return [
       {
@@ -811,6 +925,7 @@ const valueTickItems = computed(() => {
           ticks: props.valueTicks,
           targetTickCount: valueSize.value / targetTickPixels,
         });
+  decimals = tickDecimals(values);
   return values.map((v) => ({
     value: fmt(v),
     pos: snap(valuePixel(v)),
@@ -825,6 +940,7 @@ interface CategoryTickItem {
 
 const categoryTickItems = computed<CategoryTickItem[]>(() => {
   const n = categoryCount.value;
+  const { start, end } = visibleRange.value;
   const dateMs = categoryDatesMs.value;
 
   // Date mode: thin labels to the closest category index for each
@@ -833,7 +949,9 @@ const categoryTickItems = computed<CategoryTickItem[]>(() => {
   if (dateMs && dateMs.length > 0) {
     let min = Infinity;
     let max = -Infinity;
-    for (const m of dateMs) {
+    const last = Math.min(end, dateMs.length - 1);
+    for (let i = start; i <= last; i++) {
+      const m = dateMs[i];
       if (!Number.isFinite(m)) continue;
       if (m < min) min = m;
       if (m > max) max = m;
@@ -848,7 +966,7 @@ const categoryTickItems = computed<CategoryTickItem[]>(() => {
     for (const tickMs of picked.values) {
       let nearest = -1;
       let best = Infinity;
-      for (let i = 0; i < dateMs.length; i++) {
+      for (let i = start; i <= last; i++) {
         const d = Math.abs(dateMs[i] - tickMs);
         if (d < best) {
           best = d;
@@ -871,7 +989,7 @@ const categoryTickItems = computed<CategoryTickItem[]>(() => {
     props.categoryFormat ? props.categoryFormat(label, i) : label;
   const formatted = new Array<string>(n);
   let maxLen = 0;
-  for (let i = 0; i < n; i++) {
+  for (let i = start; i <= end; i++) {
     formatted[i] = fmt(categoryLabels.value[i], i);
     if (formatted[i].length > maxLen) maxLen = formatted[i].length;
   }
@@ -888,7 +1006,7 @@ const categoryTickItems = computed<CategoryTickItem[]>(() => {
     slotSize.value > 0
       ? Math.max(1, Math.ceil(needPerLabel / slotSize.value))
       : 1;
-  for (let i = 0; i < n; i += stride) {
+  for (let i = start; i <= end; i += stride) {
     const center = slotStart(i) + slotSize.value / 2;
     out.push({
       label: formatted[i],
@@ -948,8 +1066,12 @@ function projectAnnotation(
 ): { x: number; y: number } | null {
   if (!isFinite(x) || !isFinite(y)) return null;
   if (slotSize.value === 0) return null;
-  const base = isVertical.value ? padding.value.left : padding.value.top;
-  const categoricalPx = base + (x + 0.5) * slotSize.value;
+  if (isZoomed.value) {
+    const { start, end } = visibleRange.value;
+    if (x < start - 0.5 || x > end + 0.5) return null;
+    if (y < valueExtent.value.min || y > valueExtent.value.max) return null;
+  }
+  const categoricalPx = slotStart(x + 0.5);
   const valuePx = valuePixel(y);
   return isVertical.value
     ? { x: categoricalPx, y: valuePx }
@@ -959,12 +1081,15 @@ function projectAnnotation(
 function pointerToIndex(clientX: number, clientY: number): number | null {
   const rect = containerRef.value?.getBoundingClientRect();
   if (!rect) return null;
-  const n = categoryCount.value;
-  if (n === 0 || slotSize.value === 0) return null;
+  if (categoryCount.value === 0 || slotSize.value === 0) return null;
+  const { start, end } = visibleRange.value;
   const local = isVertical.value
     ? clientX - rect.left - padding.value.left
     : clientY - rect.top - padding.value.top;
-  return Math.max(0, Math.min(n - 1, Math.floor(local / slotSize.value)));
+  return Math.max(
+    start,
+    Math.min(end, start + Math.floor(local / slotSize.value)),
+  );
 }
 
 /** Height reserved above the plot for the category/value column headers. */
@@ -1002,7 +1127,8 @@ const {
   hoverIndex,
   tooltipRef,
   tooltipPos,
-  tooltipHandlers,
+  overlayHandlers,
+  brushRect,
   menuItems,
   downloadLinkText,
   csvHref,
@@ -1037,6 +1163,14 @@ const {
   // (keep vertical page scroll), horizontal orientation scrubs down Y.
   scrubAxis: () => (isVertical.value ? "x" : "y"),
   onHover: (payload) => emit("hover", payload),
+  zoom: {
+    mode: () =>
+      props.zoom
+        ? { axis: isVertical.value ? "x" : "y", box: props.zoom === true }
+        : null,
+    onSelect: onZoomSelect,
+    onReset: resetZoom,
+  },
 });
 
 /** Small inset from the chart's left edge for start-aligned category labels. */
@@ -1445,6 +1579,13 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
         :role="chartRole || undefined"
         :aria-label="chartAriaLabel || undefined"
       >
+        <ChartPlotClip
+          v-if="isZoomed"
+          :id="clipId"
+          :padding="padding"
+          :inner-w="innerW"
+          :inner-h="innerH"
+        />
         <ChartTitle
           :title="title"
           :title-style="titleStyle"
@@ -1620,79 +1761,85 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
             {{ tick.label }}
           </text>
         </template>
-        <!-- bars -->
-        <rect
-          v-for="(bar, i) in bars"
-          :key="'bar' + i"
-          data-testid="bar"
-          :data-category="bar.categoryIndex"
-          :data-series="bar.seriesIndex"
-          :x="bar.x"
-          :y="bar.y"
-          :width="bar.w"
-          :height="bar.h"
-          :fill="bar.color"
-          :fill-opacity="bar.opacity"
-          :style="bar.blendMode ? { mixBlendMode: bar.blendMode } : undefined"
-        />
-        <!-- value-on-bar labels -->
-        <text
-          v-for="item in barLabelItems"
-          :key="'blbl' + item.key"
-          data-testid="bar-label"
-          :x="item.x"
-          :y="item.y"
-          :text-anchor="item.anchor"
-          dominant-baseline="middle"
-          :font-size="item.fontSize"
-          :font-weight="item.fontWeight"
-          :fill="item.fill"
-          pointer-events="none"
-        >
-          {{ item.text }}
-        </text>
-        <!-- summary lines (drawn above bars, below annotations) -->
-        <template v-for="(line, i) in summaryLinesResolved" :key="'sl' + i">
-          <path
-            v-if="line.pathD"
-            data-testid="summary-line"
-            :d="line.pathD"
-            fill="none"
-            :stroke="line.color"
-            :stroke-width="line.strokeWidth"
-            :stroke-opacity="line.opacity"
-            :stroke-dasharray="line.dashed ? '6 3' : undefined"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            :style="
-              line.blendMode ? { mixBlendMode: line.blendMode } : undefined
-            "
+        <!-- plot marks, clipped to the plot while zoomed -->
+        <g :clip-path="isZoomed ? `url(#${clipId})` : undefined">
+          <!-- bars -->
+          <rect
+            v-for="(bar, i) in bars"
+            :key="'bar' + i"
+            data-testid="bar"
+            :data-category="bar.categoryIndex"
+            :data-series="bar.seriesIndex"
+            :x="bar.x"
+            :y="bar.y"
+            :width="bar.w"
+            :height="bar.h"
+            :fill="bar.color"
+            :fill-opacity="bar.opacity"
+            :style="bar.blendMode ? { mixBlendMode: bar.blendMode } : undefined"
           />
-          <template v-if="line.dots">
-            <circle
-              v-for="(pt, j) in line.points"
-              :key="'sld' + i + '-' + j"
-              :cx="pt.x"
-              :cy="pt.y"
-              :r="line.dotRadius"
-              :fill="line.color"
-              :fill-opacity="line.opacity"
+          <!-- value-on-bar labels -->
+          <text
+            v-for="item in barLabelItems"
+            :key="'blbl' + item.key"
+            data-testid="bar-label"
+            :x="item.x"
+            :y="item.y"
+            :text-anchor="item.anchor"
+            dominant-baseline="middle"
+            :font-size="item.fontSize"
+            :font-weight="item.fontWeight"
+            :fill="item.fill"
+            pointer-events="none"
+          >
+            {{ item.text }}
+          </text>
+          <!-- summary lines (drawn above bars, below annotations) -->
+          <template v-for="(line, i) in summaryLinesResolved" :key="'sl' + i">
+            <path
+              v-if="line.pathD"
+              data-testid="summary-line"
+              :d="line.pathD"
+              fill="none"
+              :stroke="line.color"
+              :stroke-width="line.strokeWidth"
+              :stroke-opacity="line.opacity"
+              :stroke-dasharray="line.dashed ? '6 3' : undefined"
+              stroke-linecap="round"
+              stroke-linejoin="round"
               :style="
                 line.blendMode ? { mixBlendMode: line.blendMode } : undefined
               "
             />
+            <template v-if="line.dots">
+              <circle
+                v-for="(pt, j) in line.points"
+                :key="'sld' + i + '-' + j"
+                :cx="pt.x"
+                :cy="pt.y"
+                :r="line.dotRadius"
+                :fill="line.color"
+                :fill-opacity="line.opacity"
+                :style="
+                  line.blendMode ? { mixBlendMode: line.blendMode } : undefined
+                "
+              />
+            </template>
           </template>
-        </template>
-        <!-- Tooltip: interaction overlay -->
+        </g>
+        <!-- drag-to-zoom selection -->
+        <ChartBrushRect v-if="brushRect" :rect="brushRect" />
+        <!-- Tooltip / zoom: interaction overlay -->
         <rect
-          v-if="hasTooltipSlot"
+          v-if="hasTooltipSlot || zoom"
+          data-testid="chart-overlay"
           :x="padding.left"
           :y="padding.top"
           :width="innerW"
           :height="innerH"
           fill="transparent"
           :style="`cursor: crosshair; touch-action: ${isVertical ? 'pan-y' : 'pan-x'}`"
-          v-on="tooltipHandlers"
+          v-on="overlayHandlers"
         />
         <!-- annotations (top layer) -->
         <ChartAnnotations
@@ -1702,6 +1849,13 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
           :bounds="bounds"
         />
       </svg>
+      <ChartZoomControls
+        v-if="isZoomed"
+        reset-only
+        :position="menu ? 'beside-menu' : 'right'"
+        :is-fullscreen="isFullscreen"
+        @reset="resetZoom"
+      />
       <!-- Tooltip floating content -->
       <div
         v-if="hasTooltipSlot && hoverIndex !== null && hoverSlotProps"

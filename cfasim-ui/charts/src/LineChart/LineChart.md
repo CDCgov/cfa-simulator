@@ -1281,6 +1281,54 @@ it's keyboard-focusable, and <kbd>←</kbd>/<kbd>→</kbd> move it one step
 from assistive tech — pass `role="figure"` if screen-reader users should
 reach them.
 
+### Zoom
+
+Set `zoom` to let readers click and drag on the plot to zoom. One gesture
+covers two kinds of zoom:
+
+- **Along x:** a roughly straight horizontal drag selects a full-height
+  band. The chart zooms to that x-range and the y axis rescales to the
+  data visible in it.
+- **Box:** once the drag also covers about 24px vertically, the selection
+  becomes a box and the chart zooms both axes to it.
+
+Pass `zoom="x"` to allow only the x-range zoom, whatever the drag's
+height. While zoomed, marks outside the window are clipped and a reset
+button appears at the top right; double-clicking the plot also resets,
+and <kbd>Esc</kbd> cancels a drag in progress. Repeated drags zoom
+further in, up to 10,000× per axis.
+
+Drag-to-zoom is a mouse gesture. On touch screens (and with a pen) a drag
+keeps scrubbing the tooltip and scrolling the page, so the chart stays at
+its full extent there.
+
+<ComponentDemo>
+  <LineChart
+    data-testid="zoom-line-chart"
+    :data="Array.from({ length: 120 }, (_, i) => Math.round(400 * Math.exp(-((i - 45) ** 2) / 300) + 150 * Math.exp(-((i - 95) ** 2) / 80)))"
+    :height="220"
+    x-label="Days"
+    y-label="Cases"
+    tooltip-trigger="hover"
+    zoom
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :data="cases"
+  :height="220"
+  x-label="Days"
+  y-label="Cases"
+  tooltip-trigger="hover"
+  zoom
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Chart menu
 
 The chart menu (top-right) leads with Fullscreen and then Save as SVG,

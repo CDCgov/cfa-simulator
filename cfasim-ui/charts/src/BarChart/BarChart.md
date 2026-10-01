@@ -715,6 +715,54 @@ anchor. `lineColor`, `lineWidth`, and `lineDash` style the line.
   </template>
 </ComponentDemo>
 
+### Zoom
+
+Set `zoom` to let readers click and drag on the plot to zoom. One gesture
+covers two kinds of zoom:
+
+- **Along the categories:** a roughly straight drag along the category
+  axis (horizontal for vertical bars, vertical for horizontal bars)
+  selects a run of whole categories. The value axis rescales to the
+  visible bars.
+- **Box:** once the drag also covers about 24px on the value axis, the
+  selection becomes a box and the value axis zooms to it too.
+
+Pass `zoom="x"` to allow only the category zoom, whatever the drag's
+shape. While zoomed, a reset button appears at the top right;
+double-clicking the plot also resets, and <kbd>Esc</kbd> cancels a drag
+in progress.
+
+Drag-to-zoom is a mouse gesture. On touch screens (and with a pen) a drag
+keeps scrubbing the tooltip and scrolling the page, so the chart stays at
+its full extent there.
+
+<ComponentDemo>
+  <BarChart
+    data-testid="zoom-bar-chart"
+    :data="Array.from({ length: 40 }, (_, i) => Math.round(200 * Math.exp(-((i - 14) ** 2) / 40) + 5))"
+    :height="220"
+    x-label="Week"
+    y-label="Cases"
+    tooltip-trigger="hover"
+    zoom
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :data="weeklyCases"
+  :height="220"
+  x-label="Week"
+  y-label="Cases"
+  tooltip-trigger="hover"
+  zoom
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ## Accessibility
 
 The chart's `<svg>` is exposed as a single labeled image so screen readers

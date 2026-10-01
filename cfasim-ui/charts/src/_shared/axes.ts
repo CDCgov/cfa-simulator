@@ -44,10 +44,30 @@ export function intervalValues(
 
 const numFmt = new Intl.NumberFormat();
 
-export function formatTick(v: number): string {
-  if (Math.abs(v) >= 1000) return numFmt.format(v);
+/**
+ * Default tick label. `decimals` (see `tickDecimals`) raises the
+ * precision when ticks sit closer together than the default rounding can
+ * tell apart, e.g. on a deeply zoomed axis.
+ */
+export function formatTick(v: number, decimals = 0): string {
+  if (Math.abs(v) >= 1000) {
+    return decimals > 3
+      ? v.toLocaleString(undefined, { maximumFractionDigits: decimals })
+      : numFmt.format(v);
+  }
   if (Number.isInteger(v)) return v.toString();
-  return v.toFixed(1);
+  return v.toFixed(Math.max(1, decimals));
+}
+
+/** Decimal places needed to tell apart the given (sorted) tick values. */
+export function tickDecimals(values: readonly number[]): number {
+  let step = Infinity;
+  for (let i = 1; i < values.length; i++) {
+    const d = Math.abs(values[i] - values[i - 1]);
+    if (d > 0 && d < step) step = d;
+  }
+  if (!isFinite(step)) return 0;
+  return Math.max(0, Math.min(12, Math.ceil(-Math.log10(step) - 1e-9)));
 }
 
 /**

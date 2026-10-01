@@ -33,6 +33,48 @@ export function scaleFraction(
   return (v - min) / range;
 }
 
+/** Inverse of `scaleFraction`: the value at a [0, 1] fraction of the axis. */
+export function scaleInvert(
+  frac: number,
+  min: number,
+  max: number,
+  type: ScaleType,
+): number {
+  if (type === "log") {
+    const lmin = Math.log10(min);
+    return Math.pow(10, lmin + frac * (Math.log10(max) - lmin));
+  }
+  return min + frac * (max - min);
+}
+
+/**
+ * Extent selected by brushing the fraction span `[f0, f1]` of `current`.
+ * The result is never narrower than `1 / maxZoom` of `full`: past that,
+ * tick spacing and pixel coordinates run out of floating-point precision,
+ * so a too-small brush is widened around its center instead.
+ */
+export function zoomExtent(
+  f0: number,
+  f1: number,
+  current: { min: number; max: number },
+  full: { min: number; max: number },
+  type: ScaleType,
+  maxZoom: number,
+): { min: number; max: number } {
+  const lo = scaleInvert(f0, current.min, current.max, type);
+  const hi = scaleInvert(f1, current.min, current.max, type);
+  if (!(full.max > full.min)) return { min: lo, max: hi };
+  const minSpan = 1 / maxZoom;
+  let g0 = scaleFraction(lo, full.min, full.max, type);
+  const g1 = scaleFraction(hi, full.min, full.max, type);
+  if (g1 - g0 >= minSpan) return { min: lo, max: hi };
+  g0 = Math.max(0, Math.min(1 - minSpan, (g0 + g1 - minSpan) / 2));
+  return {
+    min: scaleInvert(g0, full.min, full.max, type),
+    max: scaleInvert(g0 + minSpan, full.min, full.max, type),
+  };
+}
+
 /**
  * Clamp the lower bound of a data extent so it's safe for log scale.
  * For linear scales the inputs are returned unchanged. For log scales,

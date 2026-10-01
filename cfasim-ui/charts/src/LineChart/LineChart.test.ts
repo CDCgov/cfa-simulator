@@ -2953,4 +2953,229 @@ describe("LineChart", () => {
       expect(wrapper.findAll('[data-testid="marker-line"]').length).toBe(1);
     });
   });
+
+  describe("zoom", () => {
+    // 11 points at x = 0..10. happy-dom rects are all zeros, so clientX
+    // maps through padding.left directly: x = (clientX - 50) / 540 * 10.
+    const zoomProps = {
+      data: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+      width: 600,
+      height: 300,
+      menu: false,
+      zoom: true,
+    };
+    const overlay = (w: ReturnType<typeof mount>) =>
+      w.find('[data-testid="chart-overlay"]');
+    const tickNumbers = (w: ReturnType<typeof mount>, id: string) =>
+      w.findAll(`[data-testid="${id}"]`).map((t) => Number(t.text()));
+
+    async function brush(
+      w: ReturnType<typeof mount>,
+      from: number,
+      to: number,
+    ) {
+      await overlay(w).trigger("pointerdown", { clientX: from, button: 0 });
+      window.dispatchEvent(new MouseEvent("pointermove", { clientX: to }));
+      await w.vm.$nextTick();
+    }
+    async function release(w: ReturnType<typeof mount>, at: number) {
+      window.dispatchEvent(new MouseEvent("pointerup", { clientX: at }));
+      await w.vm.$nextTick();
+    }
+
+    it("renders no overlay or reset button unless zoom is enabled", () => {
+      const wrapper = mount(LineChart, {
+        props: { ...zoomProps, zoom: false },
+      });
+      expect(overlay(wrapper).exists()).toBe(false);
+      expect(wrapper.find('[aria-label="Reset zoom"]').exists()).toBe(false);
+    });
+
+    it("shows the selection while dragging, then zooms both axes on release", async () => {
+      const wrapper = mount(LineChart, { props: zoomProps });
+      expect(wrapper.find('[aria-label="Reset zoom"]').exists()).toBe(false);
+
+      // x = 2 → 6
+      await brush(wrapper, 158, 374);
+      const rect = wrapper.find('[data-testid="zoom-brush"]');
+      expect(rect.attributes("x")).toBe("158");
+      expect(rect.attributes("width")).toBe("216");
+
+      await release(wrapper, 374);
+      expect(wrapper.find('[data-testid="zoom-brush"]').exists()).toBe(false);
+      const xs = tickNumbers(wrapper, "x-tick");
+      expect(Math.min(...xs)).toBeGreaterThanOrEqual(2);
+      expect(Math.max(...xs)).toBeLessThanOrEqual(6);
+      // y rescales to the values visible in the window (20..60)
+      const ys = tickNumbers(wrapper, "y-tick");
+      expect(Math.min(...ys)).toBeGreaterThanOrEqual(20);
+      expect(Math.max(...ys)).toBeLessThanOrEqual(60);
+      expect(wrapper.find("clipPath").exists()).toBe(true);
+    });
+
+    it("resets from the reset button and on double-click", async () => {
+      const wrapper = mount(LineChart, { props: zoomProps });
+      const full = tickNumbers(wrapper, "x-tick");
+
+      await brush(wrapper, 158, 374);
+      await release(wrapper, 374);
+      await wrapper.find('[aria-label="Reset zoom"]').trigger("click");
+      expect(tickNumbers(wrapper, "x-tick")).toEqual(full);
+      expect(wrapper.find('[aria-label="Reset zoom"]').exists()).toBe(false);
+      expect(wrapper.find("clipPath").exists()).toBe(false);
+
+      await brush(wrapper, 158, 374);
+      await release(wrapper, 374);
+      await overlay(wrapper).trigger("dblclick");
+      expect(tickNumbers(wrapper, "x-tick")).toEqual(full);
+    });
+
+    it("ignores a press that barely moves", async () => {
+      const wrapper = mount(LineChart, { props: zoomProps });
+      await brush(wrapper, 158, 160);
+      expect(wrapper.find('[data-testid="zoom-brush"]').exists()).toBe(false);
+      await release(wrapper, 160);
+      expect(wrapper.find('[aria-label="Reset zoom"]').exists()).toBe(false);
+    });
+
+    it("cancels an in-progress drag on Escape", async () => {
+      const wrapper = mount(LineChart, { props: zoomProps });
+      await brush(wrapper, 158, 374);
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      await release(wrapper, 374);
+      expect(wrapper.find('[data-testid="zoom-brush"]').exists()).toBe(false);
+      expect(wrapper.find('[aria-label="Reset zoom"]').exists()).toBe(false);
+    });
+
+    it.each(["touch", "pen"])(
+      "does not start a brush from a %s pointer",
+      async (pointerType) => {
+        const wrapper = mount(LineChart, { props: zoomProps });
+        await overlay(wrapper).trigger("pointerdown", {
+          clientX: 158,
+          button: 0,
+          pointerType,
+        });
+        window.dispatchEvent(new MouseEvent("pointermove", { clientX: 374 }));
+        await release(wrapper, 374);
+        expect(wrapper.find('[aria-label="Reset zoom"]').exists()).toBe(false);
+      },
+    );
+
+    it("caps how deep repeated zooms can go", async () => {
+      const wrapper = mount(LineChart, { props: zoomProps });
+      for (let i = 0; i < 12; i++) {
+        await brush(wrapper, 300, 310);
+        await release(wrapper, 310);
+      }
+      // Window bottoms out at 1/10,000 of the 0..10 range.
+      const xs = tickNumbers(wrapper, "x-tick");
+      expect(xs.length).toBeGreaterThan(0);
+      expect(xs.length).toBeLessThan(20);
+      expect(new Set(xs).size).toBe(xs.length);
+    });
+
+    it("only builds path geometry near the zoom window", async () => {
+      const wrapper = mount(LineChart, { props: zoomProps });
+      const pathPoints = () =>
+        wrapper
+          .find('path[stroke="currentColor"]')
+          .attributes("d")!
+          .split(/[ML]/).length - 1;
+      expect(pathPoints()).toBe(11);
+      // x = 2 → 6: points 2..6 plus one neighbor on each side
+      await brush(wrapper, 158, 374);
+      await release(wrapper, 374);
+      expect(pathPoints()).toBe(7);
+    });
+
+    async function boxBrush(
+      w: ReturnType<typeof mount>,
+      from: { clientX: number; clientY: number },
+      to: { clientX: number; clientY: number },
+    ) {
+      await overlay(w).trigger("pointerdown", { ...from, button: 0 });
+      window.dispatchEvent(new MouseEvent("pointermove", to));
+      await w.vm.$nextTick();
+      const rect = w.find('[data-testid="zoom-brush"]');
+      const drawn = {
+        y: Number(rect.attributes("y")),
+        height: Number(rect.attributes("height")),
+      };
+      window.dispatchEvent(new MouseEvent("pointerup", to));
+      await w.vm.$nextTick();
+      return drawn;
+    }
+
+    it("zooms both axes to a box when the drag is tall enough", async () => {
+      const wrapper = mount(LineChart, { props: zoomProps });
+      // Plot spans y = 10..270 for values 100..0.
+      const drawn = await boxBrush(
+        wrapper,
+        { clientX: 158, clientY: 62 },
+        { clientX: 374, clientY: 166 },
+      );
+      expect(drawn).toEqual({ y: 62, height: 104 });
+      const xs = tickNumbers(wrapper, "x-tick");
+      expect(Math.min(...xs)).toBeGreaterThanOrEqual(2);
+      expect(Math.max(...xs)).toBeLessThanOrEqual(6);
+      // y = 62px → 80, y = 166px → 40
+      const ys = tickNumbers(wrapper, "y-tick");
+      expect(Math.min(...ys)).toBeGreaterThanOrEqual(40);
+      expect(Math.max(...ys)).toBeLessThanOrEqual(80);
+      expect(ys).toContain(80);
+
+      await wrapper.find('[aria-label="Reset zoom"]').trigger("click");
+      expect(Math.max(...tickNumbers(wrapper, "y-tick"))).toBe(100);
+    });
+
+    it("treats a nearly straight drag as an x-only zoom", async () => {
+      const wrapper = mount(LineChart, { props: zoomProps });
+      const drawn = await boxBrush(
+        wrapper,
+        { clientX: 158, clientY: 100 },
+        { clientX: 374, clientY: 115 },
+      );
+      // Full-height band, and y rescales to the window's data (20..60).
+      expect(drawn).toEqual({ y: 10, height: 260 });
+      const ys = tickNumbers(wrapper, "y-tick");
+      expect(Math.min(...ys)).toBe(20);
+      expect(Math.max(...ys)).toBe(60);
+    });
+
+    it('never draws a box with zoom="x"', async () => {
+      const wrapper = mount(LineChart, {
+        props: { ...zoomProps, zoom: "x" as const },
+      });
+      const drawn = await boxBrush(
+        wrapper,
+        { clientX: 158, clientY: 62 },
+        { clientX: 374, clientY: 166 },
+      );
+      expect(drawn).toEqual({ y: 10, height: 260 });
+      const ys = tickNumbers(wrapper, "y-tick");
+      expect(Math.min(...ys)).toBe(20);
+      expect(Math.max(...ys)).toBe(60);
+    });
+
+    it("hides markers outside the zoom window", async () => {
+      const wrapper = mount(LineChart, {
+        props: { ...zoomProps, markers: [{ x: 1 }, { x: 4 }] },
+      });
+      expect(wrapper.findAll('[data-testid="marker-line"]').length).toBe(2);
+      await brush(wrapper, 158, 374);
+      await release(wrapper, 374);
+      expect(wrapper.findAll('[data-testid="marker-line"]').length).toBe(1);
+    });
+
+    it("does not toggle a click-triggered tooltip when a brush ends", async () => {
+      const wrapper = mount(LineChart, {
+        props: { ...zoomProps, tooltipTrigger: "click" },
+      });
+      await brush(wrapper, 158, 374);
+      await release(wrapper, 374);
+      await overlay(wrapper).trigger("click", { clientX: 374 });
+      expect(wrapper.emitted("hover")).toBeUndefined();
+    });
+  });
 });
