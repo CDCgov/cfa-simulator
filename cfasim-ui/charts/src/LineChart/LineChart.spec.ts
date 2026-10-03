@@ -179,3 +179,51 @@ test("a tall drag box-zooms both axes; a flat drag zooms x only", async ({
   await expect(chart.getByRole("button", { name: "Reset zoom" })).toBeVisible();
   expect(Math.max(...(await yTicks()))).toBeLessThanOrEqual(200);
 });
+
+test("legend buttons toggle series by keyboard and keep working expanded", async ({
+  page,
+}) => {
+  await page.goto("./cfasim-ui/charts/line-chart");
+  const chart = page.locator('[data-testid="legend-toggle-line-chart"]');
+  await chart.scrollIntoViewIfNeeded();
+  const yMax = async () =>
+    Math.max(
+      ...(await chart.locator('[data-testid="y-tick"]').allTextContents()).map(
+        Number,
+      ),
+    );
+  const group = chart.getByRole("group", { name: "Show or hide series" });
+  const baseline = group.getByRole("button", { name: "Baseline" });
+  await expect(group.getByRole("button")).toHaveCount(3);
+  await expect(baseline).toHaveAttribute("aria-pressed", "true");
+  expect(await yMax()).toBeGreaterThan(500);
+
+  // Each button covers its legend label in the svg.
+  const overLabel = async () => {
+    const b = (await baseline.boundingBox())!;
+    const t = (await chart
+      .locator("svg text", { hasText: /^\s*Baseline\s*$/ })
+      .boundingBox())!;
+    expect(t.x).toBeGreaterThanOrEqual(b.x);
+    expect(t.x + t.width).toBeLessThanOrEqual(b.x + b.width);
+    expect(b.x + b.width - (t.x + t.width)).toBeLessThanOrEqual(6);
+    expect(t.y).toBeGreaterThanOrEqual(b.y - 1);
+    expect(t.y + t.height).toBeLessThanOrEqual(b.y + b.height + 1);
+  };
+  await overLabel();
+
+  await baseline.focus();
+  await page.keyboard.press("Enter");
+  await expect(baseline).toHaveAttribute("aria-pressed", "false");
+  expect(await yMax()).toBeLessThanOrEqual(500);
+  await page.keyboard.press("Space");
+  await expect(baseline).toHaveAttribute("aria-pressed", "true");
+
+  await chart.getByRole("button", { name: "Chart options" }).click();
+  await page.getByRole("menuitem", { name: "Fullscreen" }).click();
+  await expect(chart).toHaveClass(/is-fullscreen/);
+  await overLabel();
+  await baseline.click();
+  await expect(baseline).toHaveAttribute("aria-pressed", "false");
+  expect(await yMax()).toBeLessThanOrEqual(500);
+});

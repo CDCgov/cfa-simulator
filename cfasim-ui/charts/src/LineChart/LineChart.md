@@ -1329,6 +1329,56 @@ its full extent there.
   </template>
 </ComponentDemo>
 
+### Toggle series from the legend
+
+Set `legend-toggle` to let readers show and hide marks by clicking their
+legend item. Every series and area with a `legend` label becomes
+toggleable; marks that share a label toggle together. A hidden mark leaves
+the plot and the tooltip, its legend item dims with a strikethrough, and
+the y axis rescales to what is still shown. CSV downloads always include
+every series.
+
+The chart tracks the hidden labels itself. Bind `v-model:hidden-series` (an
+array of legend labels) to read the state, set an initial selection, or
+drive it from your own controls; `hidden-series` works without
+`legend-toggle` too.
+
+<ComponentDemo>
+  <LineChart
+    data-testid="legend-toggle-line-chart"
+    :series="[
+      { data: Array.from({ length: 60 }, (_, i) => Math.round(900 * Math.exp(-((i - 25) ** 2) / 120))), legend: 'Baseline', color: '#0057b7' },
+      { data: Array.from({ length: 60 }, (_, i) => Math.round(400 * Math.exp(-((i - 32) ** 2) / 200))), legend: 'Vaccination', color: '#fb7e38' },
+      { data: Array.from({ length: 60 }, (_, i) => Math.round(60 * Math.exp(-((i - 40) ** 2) / 260))), legend: 'Vaccination + masks', color: '#2e8540' },
+    ]"
+    :height="220"
+    x-label="Days"
+    y-label="Cases"
+    tooltip-trigger="hover"
+    legend-toggle
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    { data: baseline, legend: 'Baseline', color: '#0057b7' },
+    { data: vaccination, legend: 'Vaccination', color: '#fb7e38' },
+    { data: combined, legend: 'Vaccination + masks', color: '#2e8540' },
+  ]"
+  :height="220"
+  x-label="Days"
+  y-label="Cases"
+  tooltip-trigger="hover"
+  legend-toggle
+  v-model:hidden-series="hidden"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Chart menu
 
 The chart menu (top-right) leads with Fullscreen and then Save as SVG,
@@ -1416,6 +1466,12 @@ Set `ariaLabel` to give screen readers a fuller summary than the visible title
 
 Pass `role` to override the default `"img"` (e.g. `role="figure"`, or a role of
 your own).
+
+With `legend-toggle`, each toggleable legend item is a real `<button>` laid
+over the legend, outside the `<svg>`. The buttons sit in a group named "Show
+or hide series", are reachable with <kbd>Tab</kbd>, activate with
+<kbd>Enter</kbd> or <kbd>Space</kbd>, and report whether the mark is shown
+through `aria-pressed`. They stay in place while the chart is expanded.
 
 <!--@include: ./_api/line-chart.md-->
 

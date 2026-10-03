@@ -124,6 +124,21 @@ export interface ChartCommonProps {
   tickLabelStyle?: LabelStyle;
   /** Styling for the inline legend item labels. */
   legendStyle?: LabelStyle;
+  /**
+   * Let readers show and hide marks by clicking their inline legend
+   * item. Default `false`. Each toggleable item gets a real `<button>`
+   * (keyboard focusable, state exposed via `aria-pressed`). Hidden marks
+   * leave the plot and the tooltip, and the value axis rescales to what
+   * remains; CSV downloads keep every series.
+   */
+  legendToggle?: boolean;
+  /**
+   * Legend labels of the marks currently hidden. Marks sharing a
+   * `legend` label hide together. Bind with `v-model:hidden-series` to
+   * control or observe the state; when omitted the chart tracks it
+   * internally. Applies whether or not `legendToggle` is set.
+   */
+  hiddenSeries?: string[];
   xLabel?: string;
   yLabel?: string;
   debounce?: number;

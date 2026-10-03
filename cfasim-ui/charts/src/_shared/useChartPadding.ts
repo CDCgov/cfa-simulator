@@ -48,7 +48,7 @@ export function resolveLabelStyle(
  */
 const LEGEND_CHAR_WIDTH = 7;
 /** X offset of legend text from the start of its row slot. */
-const LEGEND_TEXT_INDENT = 18;
+export const LEGEND_TEXT_INDENT = 18;
 /** Horizontal gap between adjacent legend items on the same row. */
 const LEGEND_ITEM_GAP = 16;
 

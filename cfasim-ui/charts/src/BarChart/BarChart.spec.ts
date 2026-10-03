@@ -48,3 +48,17 @@ test("drag zooms to the brushed categories and reset restores them", async ({
   await chart.getByRole("button", { name: "Reset zoom" }).click();
   await expect(bars).toHaveCount(40);
 });
+
+test("legend buttons hide and restore bar series", async ({ page }) => {
+  await page.goto("./cfasim-ui/charts/bar-chart");
+  const chart = page.locator('[data-testid="legend-toggle-bar-chart"]');
+  await chart.scrollIntoViewIfNeeded();
+  const bars = chart.locator('[data-testid="bar"]');
+  await expect(bars).toHaveCount(8);
+  const toggle = chart.getByRole("button", { name: "Unvaccinated" });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(bars).toHaveCount(4);
+  await toggle.click();
+  await expect(bars).toHaveCount(8);
+});

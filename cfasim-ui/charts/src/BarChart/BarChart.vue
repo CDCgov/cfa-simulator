@@ -22,6 +22,8 @@ import {
   ChartZoomControls,
   ChartPlotClip,
   ChartBrushRect,
+  ChartLegendToggles,
+  useLegendToggle,
   positionLegendItems,
   TICK_LABEL_FONT_SIZE,
   pickContrastColor,
@@ -304,6 +306,7 @@ defineOptions({ inheritAttrs: false });
 
 const emit = defineEmits<{
   (e: "hover", payload: ChartHoverPayload): void;
+  (e: "update:hiddenSeries", hidden: string[]): void;
 }>();
 
 defineSlots<{
@@ -341,6 +344,18 @@ const allSeries = computed<ResolvedSeries[]>(() => {
   if (topY) return [{ data: topY }];
   return [];
 });
+
+const { isHidden, toggle: toggleLegend } = useLegendToggle({
+  hidden: () => props.hiddenSeries,
+  onUpdate: (hidden) => emit("update:hiddenSeries", hidden),
+});
+
+/** Series still drawn, each with its index into `allSeries`. */
+const visibleSeries = computed(() =>
+  allSeries.value
+    .map((series, index) => ({ series, index }))
+    .filter(({ series }) => !isHidden(series.legend)),
+);
 
 const categoryCount = computed(() => {
   let n = props.categories?.length ?? 0;
@@ -485,7 +500,7 @@ function dataValueExtent(start: number, end: number) {
     for (let i = start; i <= end; i++) {
       let pos = 0;
       let neg = 0;
-      for (const s of allSeries.value) {
+      for (const { series: s } of visibleSeries.value) {
         if (i >= s.data.length) continue;
         const v = Number(s.data[i]);
         if (!isFinite(v)) continue;
@@ -497,7 +512,7 @@ function dataValueExtent(start: number, end: number) {
       if (neg < min) min = neg;
     }
   } else {
-    for (const s of allSeries.value) {
+    for (const { series: s } of visibleSeries.value) {
       const last = Math.min(end, s.data.length - 1);
       for (let i = start; i <= last; i++) {
         const n = Number(s.data[i]);
@@ -566,7 +581,7 @@ const groupWidth = computed(() => slotSize.value * (1 - props.barPadding));
 
 /** Width of an individual bar (always; for stacked it's the full group). */
 const barWidth = computed(() => {
-  const k = allSeries.value.length;
+  const k = visibleSeries.value.length;
   if (k === 0) return 0;
   if (props.layout === "stacked" || k === 1) return groupWidth.value;
   const totalGap = props.groupGap * (k - 1);
@@ -663,7 +678,7 @@ function makeBar(
 
 const bars = computed<BarRect[]>(() => {
   const out: BarRect[] = [];
-  const seriesList = allSeries.value;
+  const seriesList = visibleSeries.value;
   const k = seriesList.length;
   if (k === 0) return out;
   const { start, end } = visibleRange.value;
@@ -679,7 +694,7 @@ const bars = computed<BarRect[]>(() => {
       let posCursor = 0;
       let negCursor = 0;
       for (let s = 0; s < k; s++) {
-        const series = seriesList[s];
+        const { series, index } = seriesList[s];
         const raw = Number(series.data[i] ?? NaN);
         if (!isFinite(raw)) continue;
         const bottom = raw >= 0 ? posCursor : negCursor;
@@ -690,12 +705,12 @@ const bars = computed<BarRect[]>(() => {
             valuePixel(top),
             groupStart,
             group,
-            series.color ?? defaultColor(s),
+            series.color ?? defaultColor(index),
             series.opacity ?? 1,
             series.blendMode,
             raw,
             i,
-            s,
+            index,
           ),
         );
         if (raw >= 0) posCursor = top;
@@ -703,7 +718,7 @@ const bars = computed<BarRect[]>(() => {
       }
     } else if (props.layout === "overlay") {
       for (let s = 0; s < k; s++) {
-        const series = seriesList[s];
+        const { series, index } = seriesList[s];
         const raw = Number(series.data[i] ?? NaN);
         if (!isFinite(raw)) continue;
         out.push(
@@ -712,18 +727,18 @@ const bars = computed<BarRect[]>(() => {
             valuePixel(raw),
             groupStart,
             group,
-            series.color ?? defaultColor(s),
+            series.color ?? defaultColor(index),
             series.opacity ?? 1,
             series.blendMode,
             raw,
             i,
-            s,
+            index,
           ),
         );
       }
     } else {
       for (let s = 0; s < k; s++) {
-        const series = seriesList[s];
+        const { series, index } = seriesList[s];
         const raw = Number(series.data[i] ?? NaN);
         if (!isFinite(raw)) continue;
         const barStart = groupStart + (k === 1 ? 0 : s * (bw + props.groupGap));
@@ -733,12 +748,12 @@ const bars = computed<BarRect[]>(() => {
             valuePixel(raw),
             barStart,
             bw,
-            series.color ?? defaultColor(s),
+            series.color ?? defaultColor(index),
             series.opacity ?? 1,
             series.blendMode,
             raw,
             i,
-            s,
+            index,
           ),
         );
       }
@@ -851,7 +866,8 @@ const summaryLinesStyled = computed<StyledSummaryLine[]>(() => {
 
 const summaryLinesResolved = computed<ResolvedSummaryLine[]>(() => {
   if (slotSize.value === 0) return [];
-  return summaryLinesStyled.value.map((line): ResolvedSummaryLine => {
+  const lines = summaryLinesStyled.value.filter((l) => !isHidden(l.legend));
+  return lines.map((line): ResolvedSummaryLine => {
     const points: { x: number; y: number }[] = [];
     let d = "";
     let inSeg = false;
@@ -1208,7 +1224,7 @@ const hoverSlotProps = computed(() => {
   const values: ChartTooltipValue[] = [];
   for (let i = 0; i < series.length; i++) {
     const s = series[i];
-    if (s.showInTooltip === false) continue;
+    if (s.showInTooltip === false || isHidden(s.legend)) continue;
     values.push({
       value: Number(s.data[idx] ?? NaN),
       color: s.color ?? defaultColor(i),
@@ -1572,6 +1588,14 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
       <div class="chart-sr-only" aria-live="polite">
         {{ isFullscreen ? "Chart expanded to fill window" : "" }}
       </div>
+      <ChartLegendToggles
+        v-if="legendToggle && positionedLegendItems.length > 0"
+        :items="positionedLegendItems"
+        :is-hidden="isHidden"
+        :font-size="legendResolved.fontSize"
+        :font-weight="legendResolved.fontWeight"
+        @toggle="toggleLegend"
+      />
       <svg
         ref="svgRef"
         :width="width"
@@ -1608,9 +1632,10 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
         </text>
         <!-- inline legend -->
         <g v-if="positionedLegendItems.length > 0">
-          <template
+          <g
             v-for="(item, i) in positionedLegendItems"
             :key="'ileg' + i"
+            :opacity="isHidden(item.label) ? 0.4 : undefined"
           >
             <rect
               v-if="item.kind === 'bar'"
@@ -1636,10 +1661,13 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
               :font-size="legendResolved.fontSize"
               :fill="legendResolved.fill"
               :font-weight="legendResolved.fontWeight"
+              :text-decoration="
+                isHidden(item.label) ? 'line-through' : undefined
+              "
             >
               {{ item.label }}
             </text>
-          </template>
+          </g>
         </g>
         <!-- axes (the value axis line is suppressed when valueAxis is false) -->
         <line

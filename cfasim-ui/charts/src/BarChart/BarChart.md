@@ -763,6 +763,54 @@ its full extent there.
   </template>
 </ComponentDemo>
 
+### Toggle series from the legend
+
+Set `legend-toggle` to let readers show and hide marks by clicking their
+legend item. Every series and summary line with a `legend` label becomes
+toggleable; marks that share a label toggle together. A hidden mark leaves
+the plot and the tooltip, its legend item dims with a strikethrough, and
+the value axis rescales to what is still shown. CSV downloads always include
+every series.
+
+The chart tracks the hidden labels itself. Bind `v-model:hidden-series` (an
+array of legend labels) to read the state, set an initial selection, or
+drive it from your own controls; `hidden-series` works without
+`legend-toggle` too.
+
+<ComponentDemo>
+  <BarChart
+    data-testid="legend-toggle-bar-chart"
+    :series="[
+      { data: [120, 180, 90, 60], legend: 'Unvaccinated', color: '#0057b7' },
+      { data: [30, 45, 20, 12], legend: 'Vaccinated', color: '#fb7e38' },
+    ]"
+    :categories="['0-17', '18-49', '50-64', '65+']"
+    :height="220"
+    y-label="Cases"
+    tooltip-trigger="hover"
+    legend-toggle
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :series="[
+    { data: unvaccinated, legend: 'Unvaccinated', color: '#0057b7' },
+    { data: vaccinated, legend: 'Vaccinated', color: '#fb7e38' },
+  ]"
+  :categories="['0-17', '18-49', '50-64', '65+']"
+  :height="220"
+  y-label="Cases"
+  tooltip-trigger="hover"
+  legend-toggle
+  v-model:hidden-series="hidden"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ## Accessibility
 
 The chart's `<svg>` is exposed as a single labeled image so screen readers
@@ -785,6 +833,12 @@ Set `ariaLabel` to give screen readers a fuller summary than the visible title
 
 Pass `role` to override the default `"img"` (e.g. `role="figure"`, or a role of
 your own).
+
+With `legend-toggle`, each toggleable legend item is a real `<button>` laid
+over the legend, outside the `<svg>`. The buttons sit in a group named "Show
+or hide series", are reachable with <kbd>Tab</kbd>, activate with
+<kbd>Enter</kbd> or <kbd>Space</kbd>, and report whether the mark is shown
+through `aria-pressed`. They stay in place while the chart is expanded.
 
 ## API
 

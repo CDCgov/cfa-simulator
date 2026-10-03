@@ -3178,4 +3178,112 @@ describe("LineChart", () => {
       expect(wrapper.emitted("hover")).toBeUndefined();
     });
   });
+
+  describe("legend toggle", () => {
+    const toggleProps = {
+      series: [
+        { data: [0, 5, 10], legend: "Low", color: "red" },
+        { data: [0, 500, 1000], legend: "High", color: "blue" },
+      ],
+      width: 600,
+      height: 300,
+      menu: false,
+      tooltipTrigger: "hover" as const,
+      legendToggle: true,
+    };
+    const toggles = (w: ReturnType<typeof mount>) =>
+      w.findAll(".chart-legend-toggle");
+    const lines = (w: ReturnType<typeof mount>) =>
+      w.findAll("path").filter((p) => p.attributes("fill") === "none");
+    const yMax = (w: ReturnType<typeof mount>) =>
+      Math.max(
+        ...w
+          .findAll('[data-testid="y-tick"]')
+          .map((t) => Number(t.text().replace(/,/g, ""))),
+      );
+
+    it("renders no toggle buttons unless legendToggle is set", () => {
+      const wrapper = mount(LineChart, {
+        props: { ...toggleProps, legendToggle: false },
+      });
+      expect(toggles(wrapper).length).toBe(0);
+    });
+
+    it("renders a pressed button per legend item, outside the svg", () => {
+      const wrapper = mount(LineChart, { props: toggleProps });
+      const buttons = toggles(wrapper);
+      expect(buttons.map((b) => b.attributes("aria-label"))).toEqual([
+        "Low",
+        "High",
+      ]);
+      expect(
+        buttons.every((b) => b.attributes("aria-pressed") === "true"),
+      ).toBe(true);
+      expect(wrapper.find("svg .chart-legend-toggle").exists()).toBe(false);
+    });
+
+    it("hides the series, rescales y, and emits on click", async () => {
+      const wrapper = mount(LineChart, { props: toggleProps });
+      expect(lines(wrapper).length).toBe(2);
+      expect(yMax(wrapper)).toBe(1000);
+
+      await toggles(wrapper)[1].trigger("click");
+      expect(lines(wrapper).length).toBe(1);
+      expect(lines(wrapper)[0].attributes("stroke")).toBe("red");
+      expect(yMax(wrapper)).toBe(10);
+      expect(toggles(wrapper)[1].attributes("aria-pressed")).toBe("false");
+      expect(wrapper.emitted("update:hiddenSeries")).toEqual([[["High"]]]);
+
+      await toggles(wrapper)[1].trigger("click");
+      expect(lines(wrapper).length).toBe(2);
+      expect(wrapper.emitted("update:hiddenSeries")?.[1]).toEqual([[]]);
+    });
+
+    it("drops hidden series from the tooltip, keeping seriesIndex", async () => {
+      const wrapper = mount(LineChart, {
+        props: { ...toggleProps, hiddenSeries: ["Low"] },
+        slots: {
+          tooltip: `<template #tooltip="{ values }">
+            <span class="tip">{{ values.map((v) => v.seriesIndex).join(",") }}</span>
+          </template>`,
+        },
+      });
+      await wrapper
+        .find('[data-testid="chart-overlay"]')
+        .trigger("mousemove", { clientX: 300 });
+      expect(wrapper.find(".tip").text()).toBe("1");
+    });
+
+    it("follows a controlled hiddenSeries prop", async () => {
+      const wrapper = mount(LineChart, {
+        props: { ...toggleProps, hiddenSeries: ["High"] },
+      });
+      expect(lines(wrapper).length).toBe(1);
+      // The parent owns the state: a click only emits.
+      await toggles(wrapper)[0].trigger("click");
+      expect(lines(wrapper).length).toBe(1);
+      expect(wrapper.emitted("update:hiddenSeries")).toEqual([
+        [["High", "Low"]],
+      ]);
+      await wrapper.setProps({ hiddenSeries: [] });
+      expect(lines(wrapper).length).toBe(2);
+    });
+
+    it("toggles areas but not inline area sections", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          ...toggleProps,
+          areas: [{ upper: [1, 6, 11], lower: [0, 4, 9], legend: "Band" }],
+          areaSections: [
+            { startIndex: 0, endIndex: 1, label: "Phase", legend: "inline" },
+          ],
+        },
+      });
+      expect(toggles(wrapper).map((b) => b.attributes("aria-label"))).toEqual([
+        "Low",
+        "High",
+        "Band",
+      ]);
+    });
+  });
 });

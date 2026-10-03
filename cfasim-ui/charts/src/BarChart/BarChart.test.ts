@@ -2188,4 +2188,79 @@ describe("BarChart", () => {
       expect(overlay(wrapper).exists()).toBe(false);
     });
   });
+
+  describe("legend toggle", () => {
+    const toggleProps = {
+      series: [
+        { data: [1, 2], legend: "Low", color: "red" },
+        { data: [100, 200], legend: "High", color: "blue" },
+      ],
+      categories: ["A", "B"],
+      width: 600,
+      height: 300,
+      menu: false,
+      legendToggle: true,
+    };
+    const toggles = (w: ReturnType<typeof mount>) =>
+      w.findAll(".chart-legend-toggle");
+
+    it("renders no toggle buttons unless legendToggle is set", () => {
+      const wrapper = mount(BarChart, {
+        props: { ...toggleProps, legendToggle: false },
+      });
+      expect(toggles(wrapper).length).toBe(0);
+    });
+
+    it("hides a series, widens the rest, and rescales the value axis", async () => {
+      const wrapper = mount(BarChart, { props: toggleProps });
+      expect(bars(wrapper).length).toBe(4);
+      const widthBefore = Number(bars(wrapper)[0].attributes("width"));
+
+      await toggles(wrapper)[1].trigger("click");
+      expect(bars(wrapper).length).toBe(2);
+      expect(
+        bars(wrapper).every((b) => b.attributes("data-series") === "0"),
+      ).toBe(true);
+      expect(Number(bars(wrapper)[0].attributes("width"))).toBeGreaterThan(
+        widthBefore,
+      );
+      const ticks = wrapper
+        .findAll('[data-testid="value-tick"]')
+        .map((t) => Number(t.text()));
+      expect(Math.max(...ticks)).toBeLessThanOrEqual(2);
+      expect(toggles(wrapper)[1].attributes("aria-pressed")).toBe("false");
+      expect(wrapper.emitted("update:hiddenSeries")).toEqual([[["High"]]]);
+    });
+
+    it("keeps a series' default color when an earlier one is hidden", async () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          ...toggleProps,
+          series: [
+            { data: [1, 2], legend: "Low" },
+            { data: [3, 4], legend: "High" },
+          ],
+        },
+      });
+      const fill = bars(wrapper)
+        .find((b) => b.attributes("data-series") === "1")!
+        .attributes("fill");
+      await toggles(wrapper)[0].trigger("click");
+      expect(bars(wrapper)[0].attributes("fill")).toBe(fill);
+    });
+
+    it("toggles summary lines", async () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          ...toggleProps,
+          summaryLines: [{ data: [1, 2], legend: "Trend" }],
+        },
+      });
+      const linePaths = () =>
+        wrapper.findAll("path").filter((p) => p.attributes("fill") === "none");
+      expect(linePaths().length).toBe(1);
+      await toggles(wrapper)[2].trigger("click");
+      expect(linePaths().length).toBe(0);
+    });
+  });
 });

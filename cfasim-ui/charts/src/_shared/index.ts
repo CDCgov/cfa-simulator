@@ -36,6 +36,11 @@ export { isTouchDevice } from "./touch.js";
 export { default as ChartZoomControls } from "./ChartZoomControls.vue";
 export { default as ChartPlotClip } from "./ChartPlotClip.vue";
 export { default as ChartBrushRect } from "./ChartBrushRect.vue";
+export { default as ChartLegendToggles } from "./ChartLegendToggles.vue";
+export {
+  useLegendToggle,
+  type LegendToggleOptions,
+} from "./useLegendToggle.js";
 export {
   seriesToCsv,
   categoricalToCsv,

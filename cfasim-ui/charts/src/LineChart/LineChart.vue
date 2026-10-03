@@ -22,6 +22,8 @@ import {
   ChartZoomControls,
   ChartPlotClip,
   ChartBrushRect,
+  ChartLegendToggles,
+  useLegendToggle,
   positionLegendItems,
   layoutMarkerLabels,
   markerDashArray,
@@ -286,6 +288,7 @@ defineOptions({ inheritAttrs: false });
 
 const emit = defineEmits<{
   (e: "hover", payload: ChartHoverPayload): void;
+  (e: "update:hiddenSeries", hidden: string[]): void;
   (e: "update:markers", markers: ChartMarker[]): void;
   (e: "markerDrag", payload: ChartMarkerDragPayload): void;
   (e: "markerDragEnd", payload: ChartMarkerDragPayload): void;
@@ -398,6 +401,11 @@ const resolvedXAxis = computed<{
 const xIsDate = computed(() => resolvedXAxis.value.isDate);
 const allSeries = computed<ResolvedSeries[]>(() => resolvedXAxis.value.series);
 const allAreas = computed<ResolvedArea[]>(() => resolvedXAxis.value.areas);
+
+const { isHidden, toggle: toggleLegend } = useLegendToggle({
+  hidden: () => props.hiddenSeries,
+  onUpdate: (hidden) => emit("update:hiddenSeries", hidden),
+});
 
 const maxLen = computed(() => {
   let m = 0;
@@ -604,10 +612,12 @@ function dataYExtent(win: { min: number; max: number } | null) {
     if (v > 0 && v < smallestPositive) smallestPositive = v;
   };
   for (const s of allSeries.value) {
+    if (isHidden(s.legend)) continue;
     if (win) visitWindow(s.data, (i) => seriesXAt(s, i), win, visit);
     else for (const v of s.data) visit(v);
   }
   for (const a of allAreas.value) {
+    if (isHidden(a.legend)) continue;
     for (const band of [a.upper, a.lower]) {
       if (win) visitWindow(band, (i) => areaXAt(a, i), win, visit);
       else for (const v of band) visit(v);
@@ -781,28 +791,38 @@ function sectionColor(sec: AreaSection): string {
 
 /** Per-series path (and dot points when enabled). */
 const seriesRender = computed(() =>
-  allSeries.value.map((s) => ({
-    s,
-    path: s.line !== false ? toPath(s) : "",
-    points: s.dots ? toPoints(s) : [],
-  })),
+  allSeries.value
+    .filter((s) => !isHidden(s.legend))
+    .map((s) => ({
+      s,
+      path: s.line !== false ? toPath(s) : "",
+      points: s.dots ? toPoints(s) : [],
+    })),
 );
 
 /** Per-area fill path. */
 const areaRender = computed(() =>
-  allAreas.value.map((a) => ({ a, path: toAreaPath(a) })),
+  allAreas.value
+    .filter((a) => !isHidden(a.legend))
+    .map((a) => ({ a, path: toAreaPath(a) })),
 );
 
 /** Per-section fill/line paths, snapped boundary x's, and color. */
 const sectionRender = computed(() =>
-  (props.areaSections ?? []).map((sec) => ({
-    sec,
-    fillPath: toSectionPath(sec),
-    linePath: sec.seriesIndex != null ? toSectionPath(sec, false) : "",
-    startX: snap(sectionXPixel(sec, "start")),
-    endX: snap(sectionXPixel(sec, "end")),
-    color: sectionColor(sec),
-  })),
+  (props.areaSections ?? [])
+    .filter(
+      (sec) =>
+        sec.seriesIndex == null ||
+        !isHidden(allSeries.value[sec.seriesIndex]?.legend),
+    )
+    .map((sec) => ({
+      sec,
+      fillPath: toSectionPath(sec),
+      linePath: sec.seriesIndex != null ? toSectionPath(sec, false) : "",
+      startX: snap(sectionXPixel(sec, "start")),
+      endX: snap(sectionXPixel(sec, "end")),
+      color: sectionColor(sec),
+    })),
 );
 
 const SECTION_LABEL_ROW_HEIGHT = 36;
@@ -1149,7 +1169,7 @@ const hoverPoints = computed(() => {
   const series = allSeries.value;
   for (let i = 0; i < series.length; i++) {
     const s = series[i];
-    if (s.showInTooltip === false) continue;
+    if (s.showInTooltip === false || isHidden(s.legend)) continue;
     const nIdx = nearestIndex(s, targetX);
     const value = nIdx !== null ? Number(s.data[nIdx]) : NaN;
     const finite = isFinite(value);
@@ -1306,6 +1326,14 @@ const positionedLegendItems = computed(() =>
     padding.value.left,
     legendY.value,
   ),
+);
+
+function legendItemHidden(item: InlineLegendItem): boolean {
+  return item.type !== "section" && isHidden(item.label);
+}
+
+const legendToggleItems = computed(() =>
+  positionedLegendItems.value.filter((item) => item.type !== "section"),
 );
 
 const MARKER_LABEL_FONT_SIZE = 12;
@@ -1542,6 +1570,14 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
       <div class="chart-sr-only" aria-live="polite">
         {{ isFullscreen ? "Chart expanded to fill window" : "" }}
       </div>
+      <ChartLegendToggles
+        v-if="legendToggle && legendToggleItems.length > 0"
+        :items="legendToggleItems"
+        :is-hidden="isHidden"
+        :font-size="legendResolved.fontSize"
+        :font-weight="legendResolved.fontWeight"
+        @toggle="toggleLegend"
+      />
       <svg
         ref="svgRef"
         :width="width"
@@ -1559,9 +1595,10 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
         <ChartTitle :title="title" :title-style="titleStyle" :bounds="bounds" />
         <!-- inline legend -->
         <g v-if="positionedLegendItems.length > 0">
-          <template
+          <g
             v-for="(item, i) in positionedLegendItems"
             :key="'ileg' + i"
+            :opacity="legendItemHidden(item) ? 0.4 : undefined"
           >
             <!-- series indicator: line -->
             <line
@@ -1603,10 +1640,13 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
               :font-size="legendResolved.fontSize"
               :fill="legendResolved.fill"
               :font-weight="legendResolved.fontWeight"
+              :text-decoration="
+                legendItemHidden(item) ? 'line-through' : undefined
+              "
             >
               {{ item.label }}
             </text>
-          </template>
+          </g>
         </g>
         <!-- axes -->
         <line
