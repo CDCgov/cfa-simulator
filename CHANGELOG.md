@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.14] - 2026-10-09
+
+### Features
+
+- **charts:** Add a fixed domain to the continuous choropleth color scale
+
 ## [0.8.13] - 2026-10-09
 
 ### Features
