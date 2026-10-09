@@ -21,7 +21,19 @@ export {
   type FocusItem,
   type FocusValue,
   type FocusStyle,
+  type RegionsSource,
+  type MapProjection,
+  type MapProjectionName,
 } from "./ChoroplethMap/ChoroplethMap.vue";
+// The projections ChoroplethMap bundles, re-exported so a `projection`
+// factory needs no d3-geo dependency of its own.
+export {
+  geoAlbersUsa,
+  geoMercator,
+  geoEquirectangular,
+  geoEqualEarth,
+  type GeoProjection,
+} from "d3-geo";
 export { default as ChartTooltip } from "./ChartTooltip/ChartTooltip.vue";
 export {
   default as DataTable,

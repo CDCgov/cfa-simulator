@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { isTouchDevice } from "../_shared/touch.js";
 
+import { strokeStyle, clickSelect } from "./ChoroplethMap.testUtils.js";
+
 // Touch detection is probed per event, so tests can flip devices per case.
 // jsdom defaults to a mouse-only environment.
 vi.mock("../_shared/touch.js", () => ({
@@ -41,23 +43,6 @@ function dispatchTouch(
     changedTouches: points,
   });
   el.dispatchEvent(ev);
-}
-
-// Highlight color is applied as inline style (so the theme-following
-// light-dark() default resolves); read it back off the raw element.
-const strokeStyle = (w: { element: Element }) =>
-  (w.element as SVGPathElement).style.stroke;
-
-// Click-select defers by a double-click-sized window so a double-click can
-// zoom instead of selecting; run a click and flush past that window.
-async function clickSelect(target: { trigger: (e: string) => Promise<void> }) {
-  vi.useFakeTimers();
-  try {
-    await target.trigger("click");
-    vi.advanceTimersByTime(300);
-  } finally {
-    vi.useRealTimers();
-  }
 }
 
 // The overlay layers (cities + state labels) paint on the next rAF after

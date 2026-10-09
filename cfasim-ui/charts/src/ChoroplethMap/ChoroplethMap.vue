@@ -9,7 +9,17 @@ import {
   toRaw,
   useSlots,
 } from "vue";
-import { geoPath, geoAlbersUsa, geoMercator, geoCentroid } from "d3-geo";
+import {
+  geoPath,
+  geoAlbersUsa,
+  geoMercator,
+  geoEquirectangular,
+  geoEqualEarth,
+  geoCentroid,
+  geoArea,
+  type GeoProjection,
+  type GeoPermissibleObjects,
+} from "d3-geo";
 import {
   zoom as d3Zoom,
   zoomIdentity,
@@ -21,7 +31,11 @@ import { select } from "d3-selection";
 // `applyFocus` can animate the zoom transform.
 import "d3-transition";
 import { feature, mesh, merge } from "topojson-client";
-import type { Topology, GeometryCollection } from "topojson-specification";
+import type {
+  Topology,
+  GeometryCollection,
+  GeometryObject,
+} from "topojson-specification";
 import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
@@ -74,6 +88,7 @@ import {
   mixFeatures,
   stateOfId,
   type LevelLookup,
+  type OverrideResolution,
 } from "./mixedGeo.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -160,6 +175,45 @@ export interface FocusItem {
 
 export type FocusValue = string | FocusItem | Array<string | FocusItem> | null;
 
+/**
+ * Custom geography for the map (the `regions` prop): any set of regions,
+ * from a TopoJSON topology or a GeoJSON FeatureCollection. Selects the
+ * generic mode, where the US-specific props are ignored.
+ */
+export interface RegionsSource {
+  /** TopoJSON topology; `object` names the object to draw (defaults to the
+   * topology's first object). Smaller on the wire than GeoJSON. */
+  topology?: Topology;
+  object?: string;
+  /** GeoJSON FeatureCollection to draw instead of a topology. */
+  geojson?: GeoJSON.FeatureCollection;
+  /** Feature property holding each region's id. Default `"id"`; a feature
+   * without that property falls back to its top-level `id`. */
+  idProperty?: string;
+  /** Feature property holding each region's display name (tooltip, accessible
+   * name). Default `"name"`; falls back to the id. */
+  nameProperty?: string;
+  /**
+   * A second set of regions drawn as a borders mesh on top of the map (styled
+   * by `theme.borders`), the way state borders sit over counties. `object`
+   * names another object of `topology` and meshes only the edges shared by
+   * two of its regions. `geojson` draws every ring of every feature in the
+   * collection, exterior included.
+   */
+  borders?: { object?: string; geojson?: GeoJSON.FeatureCollection };
+}
+
+export type MapProjectionName =
+  "albersUsa" | "mercator" | "equirectangular" | "equalEarth";
+
+/**
+ * A named d3-geo projection, or a factory returning any `GeoProjection`
+ * (rotated, conic, ...). The map calls `fitExtent` on the result, so only
+ * the projection's shape matters, not its scale or translate.
+ */
+export type MapProjection =
+  MapProjectionName | ((width: number, height: number) => GeoProjection);
+
 const props = withDefaults(
   defineProps<{
     /** TopoJSON topology object (e.g. from us-atlas/states-10m.json or us-atlas/counties-10m.json).
@@ -167,8 +221,22 @@ const props = withDefaults(
      * for geoType="counties" or geoType="hsas". For HSA maps, the pre-merged
      * `usHsaTopology` from `@cfasim-ui/charts/us-hsa-topology` (an "hsas" +
      * "states" topology, about half the size of a counties topology) can be
-     * passed instead of a counties topology. */
-    topology: Topology;
+     * passed instead of a counties topology. Not used when `regions` is set. */
+    topology?: Topology;
+    /**
+     * Draw a custom geography (any TopoJSON object or GeoJSON collection)
+     * instead of the US topology; see `RegionsSource`. The US-only props
+     * are ignored while it is set.
+     */
+    regions?: RegionsSource;
+    /**
+     * Map projection: `"albersUsa"` (the US-mode default), `"mercator"` (the
+     * default with `regions`), `"equirectangular"`, `"equalEarth"`, or a
+     * factory `(width, height) => GeoProjection` for any other d3-geo
+     * projection. Always fitted to the drawn regions. The d3-geo projections
+     * are re-exported from `@cfasim-ui/charts` (`geoMercator`, ...).
+     */
+    projection?: MapProjection;
     data?: StateData[];
     /** Geographic type: "states" (default), "counties", or "hsas" (Health Service Areas) */
     geoType?: GeoType;
@@ -444,6 +512,62 @@ const chartAriaLabel = computed(() => props.ariaLabel ?? props.title);
 // reachable, unlike role="img"). An explicit `role` prop always wins.
 const chartRole = computed(
   () => props.role ?? (chartAriaLabel.value ? "figure" : undefined),
+);
+
+// ─── Generic geography (`regions`) ───────────────────────────────────────
+// With `regions` set the map draws the caller's own feature set and every
+// US-specific prop is ignored: no FIPS id widths, no HSA table, no state
+// scoping, labels, DC enlargement, or tight fit. Everything downstream of
+// `featuresGeo` / `stateBordersPath` / `outlineMesh` is geography-agnostic.
+const isGeneric = computed(() => props.regions != null);
+
+// The one source of US geometry. Undefined in generic mode, so every US
+// reader (states, counties, HSAs, the decor meshes) goes empty instead of
+// painting under the custom regions.
+const usTopology = computed<Topology | undefined>(() =>
+  isGeneric.value ? undefined : (toRaw(props.topology) as Topology | undefined),
+);
+// The US-only overlay props, masked once for every consumer.
+const usStateLabels = computed(() => !isGeneric.value && props.stateLabels);
+const usCities = computed(() => (isGeneric.value ? undefined : props.cities));
+
+// The level a row's or focus item's `geoType` means: generic maps have one
+// level, so a per-item geoType is ignored there.
+function levelOfItem(explicit?: GeoType): GeoType {
+  return isGeneric.value ? props.geoType : (explicit ?? props.geoType);
+}
+
+let warnedIgnoredUsProps = false;
+watch(
+  () => [props.regions, props.topology] as const,
+  ([regions, topology]) => {
+    if (!regions) {
+      if (!topology) {
+        console.warn(
+          "[ChoroplethMap] pass `topology` (US states/counties/HSAs) or `regions` (custom geography); nothing to draw.",
+        );
+      }
+      return;
+    }
+    if (warnedIgnoredUsProps) return;
+    const ignored = [
+      topology && "topology",
+      props.geoType !== "states" && "geoType",
+      props.dataGeoType && "dataGeoType",
+      props.state && "state",
+      props.tightFit && "tightFit",
+      props.stateLabels && "stateLabels",
+      props.enlargeDc && "enlargeDc",
+      props.cities?.length && "cities",
+    ].filter(Boolean);
+    if (ignored.length) {
+      warnedIgnoredUsProps = true;
+      console.warn(
+        `[ChoroplethMap] \`regions\` is set, so these US-only props are ignored: ${ignored.join(", ")}.`,
+      );
+    }
+  },
+  { immediate: true },
 );
 
 // The template root is a <Teleport>, so fallthrough attrs (class, style,
@@ -807,7 +931,9 @@ onMounted(() => {
       // reactive) for their letterbox-aware viewport and pin — a resize can
       // change the offsets without changing viewScale, so re-place here
       // rather than relying on the viewScale watcher alone.
-      if (props.cities?.length || props.stateLabels) scheduleOverlayLayout();
+      if (usCities.value?.length || usStateLabels.value) {
+        scheduleOverlayLayout();
+      }
     });
     svgResizeObserver.observe(svgRef.value);
   }
@@ -869,7 +995,9 @@ function setupZoom() {
       // City markers + state labels live outside the zoomed group, so
       // re-place them against the new transform (constant on-screen size,
       // labels re-decluttered / re-fit).
-      if (props.cities?.length || props.stateLabels) scheduleOverlayLayout();
+      if (usCities.value?.length || usStateLabels.value) {
+        scheduleOverlayLayout();
+      }
       isZoomed.value = t.k !== 1 || t.x !== 0 || t.y !== 0;
       if (isZoomed.value) hasZoomed.value = true;
     })
@@ -950,7 +1078,7 @@ function resolveFocusItems(items: FocusItem[]): ResolvedFocus[] {
   const nameLookups = nameToIdByGeoType.value;
   const out: ResolvedFocus[] = [];
   for (const item of items) {
-    const geoType = item.geoType ?? props.geoType;
+    const geoType = levelOfItem(item.geoType);
     const lookup = lookups.get(geoType);
     if (!lookup) continue;
     let f = lookup.get(item.id);
@@ -1410,19 +1538,27 @@ type StateFeature = GeoJSON.Feature<GeoJSON.Geometry | null, { name?: string }>;
 // featuresByGeoType chain — that chain reads `stateFips`, so depending on it
 // here would form a reactive cycle.
 const statesFeatures = computed<StateFeature[]>(() => {
-  const topo = toRaw(props.topology) as unknown as {
-    objects?: { states?: NamedGeometry };
-  };
+  const topo = usTopology.value as unknown as
+    { objects?: { states?: NamedGeometry } } | undefined;
   const statesObj = topo?.objects?.states;
   if (!statesObj) return [];
-  const fc = feature(topo as unknown as Topology, statesObj) as
-    | GeoJSON.FeatureCollection<GeoJSON.Geometry | null, { name?: string }>
-    | StateFeature;
-  return fc.type === "FeatureCollection" ? fc.features : [fc];
+  return featuresOf(topo as unknown as Topology, statesObj) as StateFeature[];
 });
+
+/** The features of a topology object, whichever shape `feature()` returns. */
+function featuresOf(topo: Topology, obj: GeometryObject): GeoJSON.Feature[] {
+  const fc = feature(topo, obj);
+  return fc.type === "FeatureCollection" ? fc.features : [fc];
+}
+
+// Mesh predicates: the edges shared by two different geometries (interior
+// borders) and the edges used by exactly one (the exterior).
+const sharedEdges = (a: GeometryObject, b: GeometryObject) => a !== b;
+const exteriorEdges = (a: GeometryObject, b: GeometryObject) => a === b;
 
 // 2-digit FIPS for the active `state` prop, or null when unset/unresolved.
 const stateFips = computed<string | null>(() => {
+  if (isGeneric.value) return null;
   const s = props.state?.trim();
   if (!s) return null;
   if (/^\d{1,2}$/.test(s)) return s.padStart(2, "0");
@@ -1444,7 +1580,7 @@ const stateOutlineFeature = computed<StateFeature | null>(() => {
 watch(
   () => [props.state, stateFips.value] as const,
   ([state, fips]) => {
-    if (state && state.trim() && !fips) {
+    if (!isGeneric.value && state && state.trim() && !fips) {
       console.warn(
         `[ChoroplethMap] state="${state}" matched no state name or FIPS code; rendering the full map.`,
       );
@@ -1469,6 +1605,7 @@ function loadHsaModule() {
   return hsaModulePromise;
 }
 const needsHsaModule = computed(() => {
+  if (isGeneric.value) return false;
   if (props.geoType === "hsas" || props.dataGeoType === "hsas") return true;
   // A mixed-level row can pull HSAs in (`data[].geoType`), and any state
   // override on an HSA base map needs the table to place its features.
@@ -1501,9 +1638,8 @@ const hsaFeaturesGeo = computed(() => {
   const mod = hsaModule.value;
   if (!mod) return { type: "FeatureCollection" as const, features: [] };
   const { fipsToHsa, hsaNames } = mod;
-  const topo = toRaw(props.topology) as unknown as CountiesTopo & {
-    objects?: { hsas?: GeometryCollection };
-  };
+  const topo = usTopology.value as unknown as
+    (CountiesTopo & { objects?: { hsas?: GeometryCollection } }) | undefined;
   const scopeFips = stateFips.value;
 
   // Fast path: a pre-merged HSA topology (@cfasim-ui/charts/us-hsa-topology)
@@ -1511,11 +1647,9 @@ const hsaFeaturesGeo = computed(() => {
   // no county merge needed. HSA codes are state-FIPS-prefixed, so
   // single-state scoping filters by prefix; names still come from the lazy
   // `hsaNames` table.
-  const hsasObj = topo.objects?.hsas;
+  const hsasObj = topo?.objects?.hsas;
   if (hsasObj) {
-    const fc = feature(topo as unknown as Topology, hsasObj) as
-      GeoJSON.FeatureCollection | GeoJSON.Feature;
-    const all = fc.type === "FeatureCollection" ? fc.features : [fc];
+    const all = featuresOf(topo as unknown as Topology, hsasObj);
     const features: GeoJSON.Feature[] = [];
     for (const f of all) {
       const id = String(f.id).padStart(6, "0");
@@ -1530,7 +1664,7 @@ const hsaFeaturesGeo = computed(() => {
   }
 
   // HSAs are unions of counties: a states-only topology can't build them.
-  const countyGeometries = topo.objects?.counties?.geometries;
+  const countyGeometries = topo?.objects?.counties?.geometries;
   if (!countyGeometries)
     return { type: "FeatureCollection" as const, features: [] };
   const groups = new Map<string, typeof countyGeometries>();
@@ -1563,20 +1697,187 @@ const hsaFeaturesGeo = computed(() => {
 // the mixed-level code can index counties without depending on the base
 // geoType (and without re-running topojson's `feature()` per consumer).
 const countiesFeatures = computed<ChoroplethFeature[]>(() => {
-  const topo = toRaw(props.topology) as unknown as {
-    objects?: { counties?: NamedGeometry };
-  };
+  const topo = usTopology.value as unknown as
+    { objects?: { counties?: NamedGeometry } } | undefined;
   const obj = topo?.objects?.counties;
   if (!obj) return [];
-  const fc = feature(topo as unknown as Topology, obj);
-  return (
-    fc.type === "FeatureCollection" ? fc.features : [fc]
-  ) as ChoroplethFeature[];
+  return featuresOf(topo as unknown as Topology, obj) as ChoroplethFeature[];
+});
+
+// ─── Generic feature set (`regions`) ─────────────────────────────────────
+// The parts of `regions`, read through computeds that return the raw
+// values, so a new `regions` object carrying the same topology or
+// collection (an inline template literal, re-created on every parent
+// render) does not decode, refit, and rebuild the map again.
+const regionsTopology = computed<Topology | undefined>(() => {
+  const topo = props.regions?.topology;
+  return topo ? (toRaw(topo) as Topology) : undefined;
+});
+const regionsGeojson = computed(() => {
+  const fc = props.regions?.geojson;
+  return fc ? toRaw(fc) : undefined;
+});
+const regionsObjectName = computed(() => props.regions?.object);
+const regionsIdProperty = computed(() => props.regions?.idProperty ?? "id");
+const regionsNameProperty = computed(
+  () => props.regions?.nameProperty ?? "name",
+);
+const regionsBordersObject = computed(() => props.regions?.borders?.object);
+const regionsBordersGeojson = computed(() => {
+  const fc = props.regions?.borders?.geojson;
+  return fc ? toRaw(fc) : undefined;
+});
+
+/** A named object of the regions topology (default: its first), or null with a warning. */
+function regionsObject(
+  name: string | undefined,
+  what: string,
+): GeometryObject | null {
+  const topo = regionsTopology.value;
+  if (!topo) return null;
+  const key = name ?? Object.keys(topo.objects)[0];
+  const obj = key ? topo.objects[key] : undefined;
+  if (!obj) {
+    console.warn(
+      `[ChoroplethMap] regions.${what}: topology has no object "${key}"; nothing drawn.`,
+    );
+    return null;
+  }
+  return obj as GeometryObject;
+}
+
+// The object the regions are drawn from (topology mode), shared by the
+// feature set and the exterior outline.
+const regionsDrawObject = computed(() =>
+  regionsObject(regionsObjectName.value, "object"),
+);
+
+// d3-geo reads rings on the sphere: an exterior ring must wind clockwise
+// (a counter-clockwise ring, the RFC 7946 convention most GeoJSON tools
+// emit, is the rest of the globe) and a hole the other way. Rewind any
+// ring that encloses more than a hemisphere on its own so caller data in
+// either convention draws the small polygon. Geometry that needs no
+// change is returned as is; only flipped rings are copied.
+const HEMISPHERE = 2 * Math.PI;
+function rewindRing(
+  ring: GeoJSON.Position[],
+  hole: boolean,
+): GeoJSON.Position[] {
+  const area = geoArea({ type: "Polygon", coordinates: [ring] });
+  return area > HEMISPHERE !== hole ? ring.slice().reverse() : ring;
+}
+function rewindPolygon(rings: GeoJSON.Position[][]): GeoJSON.Position[][] {
+  const out = rings.map((ring, i) => rewindRing(ring, i > 0));
+  return out.some((ring, i) => ring !== rings[i]) ? out : rings;
+}
+function rewindGeometry(g: GeoJSON.Geometry | null): GeoJSON.Geometry | null {
+  if (g?.type === "Polygon") {
+    const coordinates = rewindPolygon(g.coordinates);
+    return coordinates === g.coordinates ? g : { type: "Polygon", coordinates };
+  }
+  if (g?.type === "MultiPolygon") {
+    const coordinates = g.coordinates.map(rewindPolygon);
+    return coordinates.some((poly, i) => poly !== g.coordinates[i])
+      ? { type: "MultiPolygon", coordinates }
+      : g;
+  }
+  return g;
+}
+
+// Normalizes the caller's regions to the shape the US path produces: a
+// string `id` (from `idProperty`, else the feature's own id) and
+// `properties.name` (from `nameProperty`, else the id). The original
+// properties are kept alongside for the `#tooltip` slot's `feature`.
+const genericFeatures = computed<ChoroplethFeature[]>(() => {
+  if (!isGeneric.value) return [];
+  let raw: GeoJSON.Feature[];
+  const geojson = regionsGeojson.value;
+  const topo = regionsTopology.value;
+  if (geojson) {
+    raw = geojson.features;
+  } else if (topo) {
+    const obj = regionsDrawObject.value;
+    if (!obj) return [];
+    raw = featuresOf(topo, obj);
+  } else {
+    console.warn(
+      "[ChoroplethMap] `regions` needs a `topology` or a `geojson` collection; nothing drawn.",
+    );
+    return [];
+  }
+  const idProp = regionsIdProperty.value;
+  const nameProp = regionsNameProperty.value;
+  const out: ChoroplethFeature[] = [];
+  let skipped = 0;
+  for (const f of raw) {
+    const props_ = f.properties as Record<string, unknown> | null;
+    const rawId = props_?.[idProp] ?? f.id;
+    if (rawId == null) {
+      skipped++;
+      continue;
+    }
+    const id = String(rawId);
+    const rawName = props_?.[nameProp];
+    out.push({
+      type: "Feature",
+      id,
+      geometry: rewindGeometry(f.geometry),
+      properties: { ...props_, name: rawName == null ? id : String(rawName) },
+    });
+  }
+  if (skipped) {
+    console.warn(
+      `[ChoroplethMap] regions: ${skipped} feature(s) have no "${idProp}" property or id and were skipped.`,
+    );
+  }
+  return out;
+});
+
+// Every ring of every polygon in a collection, as one MultiLineString. The
+// GeoJSON form of `regions.borders`: with no shared-arc topology there is
+// no cheap way to keep only interior edges, so neighbors each draw their
+// shared edge (indistinguishable on screen for an opaque stroke).
+function collectionRings(
+  fc: GeoJSON.FeatureCollection,
+): GeoJSON.MultiLineString | null {
+  const lines: GeoJSON.Position[][] = [];
+  for (const f of fc.features) {
+    const g = f.geometry;
+    if (!g) continue;
+    if (g.type === "Polygon") lines.push(...g.coordinates);
+    else if (g.type === "MultiPolygon") {
+      for (const poly of g.coordinates) lines.push(...poly);
+    } else if (g.type === "LineString") lines.push(g.coordinates);
+    else if (g.type === "MultiLineString") lines.push(...g.coordinates);
+  }
+  return lines.length ? { type: "MultiLineString", coordinates: lines } : null;
+}
+
+// `regions.borders`: the generic stand-in for the state-borders mesh
+// (styled by `theme.borders`). TopoJSON meshes the shared edges of the named
+// object; GeoJSON draws the collection's rings.
+const genericBordersMesh = computed<GeoJSON.MultiLineString | null>(() => {
+  const geojson = regionsBordersGeojson.value;
+  if (geojson) return collectionRings(geojson);
+  const name = regionsBordersObject.value;
+  if (!name) return null;
+  const obj = regionsObject(name, "borders.object");
+  return obj ? mesh(regionsTopology.value!, obj, sharedEdges) : null;
+});
+
+// `theme.outline` in generic mode: the exterior of the drawn object, which
+// only a topology can supply (arcs used by exactly one region). GeoJSON
+// regions draw no exterior outline.
+const genericOutlineMesh = computed<GeoJSON.MultiLineString | null>(() => {
+  if (regionsGeojson.value) return null;
+  const obj = regionsDrawObject.value;
+  return obj ? mesh(regionsTopology.value!, obj, exteriorEdges) : null;
 });
 
 // Features at the base `geoType`, scoped by the `state` prop — the map before
 // any per-state level overrides (`data[].geoType`) are mixed in.
 const baseFeaturesGeo = computed<ChoroplethFeature[]>(() => {
+  if (isGeneric.value) return genericFeatures.value;
   // hsaFeaturesGeo already honors `state` (it scopes the source counties).
   if (props.geoType === "hsas")
     return hsaFeaturesGeo.value.features as ChoroplethFeature[];
@@ -1638,8 +1939,15 @@ function levelLookup(level: GeoType): LevelLookup<ChoroplethFeature> | null {
   return lookup.byId.size ? lookup : null;
 }
 
-const overrideResolution = computed(() =>
-  resolveGeoOverrides(props.data, props.geoType, levelLookup, hsaToState.value),
+const overrideResolution = computed<OverrideResolution>(() =>
+  isGeneric.value
+    ? { overrides: new Map(), unresolved: [], conflicts: [] }
+    : resolveGeoOverrides(
+        props.data,
+        props.geoType,
+        levelLookup,
+        hsaToState.value,
+      ),
 );
 
 // Serialized first so the override map's *identity* only changes when the set
@@ -1677,6 +1985,7 @@ const DC_DEFAULT_SCALE = 4;
 const dcScaleBase = computed<number | null>(() => {
   // Unset means "on for state-level maps, off elsewhere"; an explicit
   // `false` always disables.
+  if (isGeneric.value) return null;
   const v = props.enlargeDc ?? props.geoType === "states";
   if (!v || stateFips.value) return null;
   const s = v === true ? DC_DEFAULT_SCALE : Number(v);
@@ -1740,12 +2049,14 @@ watch(
 );
 
 const stateBordersPath = computed(() => {
+  if (isGeneric.value) return genericBordersMesh.value;
   if (props.geoType !== "counties" && props.geoType !== "hsas") return null;
   // Single-state mode: trace just the selected state's outline instead of
   // the full national state-border mesh.
   if (stateFips.value) return stateOutlineFeature.value;
-  const topo = toRaw(props.topology) as unknown as CountiesTopo;
-  return mesh(topo, topo.objects.states, (a, b) => a !== b);
+  const topo = usTopology.value as unknown as CountiesTopo | undefined;
+  const states = topo?.objects?.states;
+  return states ? mesh(topo!, states, sharedEdges) : null;
 });
 
 // Exterior boundary of the rendered geography (theme.outline): the nation
@@ -1756,35 +2067,38 @@ const stateBordersPath = computed(() => {
 // resolves, so maps without an outline never pay for it.
 const outlineMesh = computed<GeoJSON.MultiLineString | null>(() => {
   if (!resolvedTheme.value.outline) return null;
-  const topo = toRaw(props.topology) as unknown as {
-    objects?: {
-      states?: NamedGeometry;
-      counties?: NamedGeometry;
-      hsas?: GeometryCollection;
-    };
-  };
+  if (isGeneric.value) return genericOutlineMesh.value;
+  const topo = usTopology.value as unknown as
+    | {
+        objects?: {
+          states?: NamedGeometry;
+          counties?: NamedGeometry;
+          hsas?: GeometryCollection;
+        };
+      }
+    | undefined;
   const useCounties = props.geoType === "counties" || props.geoType === "hsas";
   // A pre-merged HSA topology has no counties object; its `objects.states`
   // meshes to the same exterior (both objects partition the same territory
   // over a shared arc set, so arcs used exactly once are the same coastline).
   // Gated on `hsas` so topologies that simply lack counties still get none.
   const obj = useCounties
-    ? (topo.objects?.counties ??
-      (topo.objects?.hsas ? topo.objects?.states : undefined))
-    : topo.objects?.states;
+    ? (topo?.objects?.counties ??
+      (topo?.objects?.hsas ? topo?.objects?.states : undefined))
+    : topo?.objects?.states;
   if (!obj) return null;
   const scope = stateFips.value;
   if (!scope) {
-    return mesh(topo as unknown as Topology, obj, (a, b) => a === b);
+    return mesh(topo as unknown as Topology, obj, exteriorEdges);
   }
-  const pad = obj === topo.objects?.counties ? 5 : 2;
+  const pad = obj === topo?.objects?.counties ? 5 : 2;
   const geometries = obj.geometries.filter(
     (g) => String(g.id).padStart(pad, "0").slice(0, 2) === scope,
   );
   return mesh(
     topo as unknown as Topology,
     { type: "GeometryCollection", geometries } as NamedGeometry,
-    (a, b) => a === b,
+    exteriorEdges,
   );
 });
 
@@ -1801,10 +2115,9 @@ const pad5 = (id: unknown) => String(id).padStart(5, "0");
 function meshCounties(
   predicate: (aId: unknown, bId: unknown) => boolean,
 ): GeoJSON.MultiLineString | null {
-  const topo = toRaw(props.topology) as unknown as {
-    objects?: { counties?: NamedGeometry };
-  };
-  const counties = topo.objects?.counties;
+  const topo = usTopology.value as unknown as
+    { objects?: { counties?: NamedGeometry } } | undefined;
+  const counties = topo?.objects?.counties;
   if (!counties) return null;
   const scope = stateFips.value;
   const overridden = geoOverrides.value;
@@ -1921,36 +2234,79 @@ const conusFeaturesGeo = computed(() => {
   return { type: "FeatureCollection" as const, features: kept };
 });
 
-const projection = computed(() => {
+const NAMED_PROJECTIONS: Record<MapProjectionName, () => GeoProjection> = {
+  albersUsa: geoAlbersUsa,
+  mercator: geoMercator,
+  equirectangular: geoEquirectangular,
+  equalEarth: geoEqualEarth,
+};
+
+// Unfitted projection from the `projection` prop. Generic maps default to
+// Mercator (Albers USA projects anything outside the US to nothing); US
+// maps keep Albers USA.
+function newProjection(): GeoProjection {
+  const p = props.projection;
+  if (typeof p === "function") return p(width.value, height.value);
+  const name = p ?? (isGeneric.value ? "mercator" : "albersUsa");
+  return (NAMED_PROJECTIONS[name] ?? geoAlbersUsa)();
+}
+
+type Extent = [[number, number], [number, number]];
+
+// Fit the projection to `object`. A projection that cannot place it (Albers
+// USA covers the 50 states + DC; the island territories, or any custom
+// region, fall outside) yields a NaN transform and every path renders as
+// "MNaN,NaN…", so fall back to a plain Mercator. Silent for the implicit
+// US default; an explicit `projection` that fails warns once.
+let warnedProjectionFallback = false;
+function fitProjection(
+  extent: Extent,
+  object: GeoPermissibleObjects,
+): GeoProjection {
+  const fitted = newProjection().fitExtent(extent, object);
+  if ("features" in object && object.features.length === 0) return fitted;
+  const c = geoPath(fitted).centroid(object);
+  if (Number.isFinite(c[0]) && Number.isFinite(c[1])) return fitted;
+  if (props.projection != null && !warnedProjectionFallback) {
+    warnedProjectionFallback = true;
+    console.warn(
+      "[ChoroplethMap] the `projection` cannot place these regions; falling back to Mercator.",
+    );
+  }
+  return geoMercator().fitExtent(extent, object);
+}
+
+const mapProjection = computed(() => {
+  if (isGeneric.value) {
+    return fitProjection(
+      [
+        [0, 0],
+        [width.value, height.value],
+      ],
+      featuresGeo.value,
+    );
+  }
   const outline = stateOutlineFeature.value;
   if (stateFips.value && outline) {
-    const extent: [[number, number], [number, number]] = [
-      [STATE_FIT_INSET, STATE_FIT_INSET],
-      [width.value - STATE_FIT_INSET, height.value - STATE_FIT_INSET],
-    ];
-    const albers = geoAlbersUsa().fitExtent(extent, outline);
-    // geoAlbersUsa only covers the 50 states + DC (it handles Alaska and
-    // Hawaii via insets). The island territories — Puerto Rico, Guam, the
-    // US Virgin Islands, American Samoa, the N. Mariana Islands — fall
-    // outside it and project to null, so fitExtent yields a NaN transform
-    // and every path renders as "MNaN,NaN…". Detect that by projecting the
-    // outline's centroid and fall back to a plain Mercator that can render
-    // any region.
-    const c = geoPath(albers).centroid(outline);
-    if (Number.isFinite(c[0]) && Number.isFinite(c[1])) return albers;
-    return geoMercator().fitExtent(extent, outline);
+    return fitProjection(
+      [
+        [STATE_FIT_INSET, STATE_FIT_INSET],
+        [width.value - STATE_FIT_INSET, height.value - STATE_FIT_INSET],
+      ],
+      outline,
+    );
   }
   // stateLabels reserves a slim right margin so the callout column can hug
   // the east coast; both the full and tight fits use the same extent, so
   // the tight-fit lerp composes with it unchanged.
-  const extent: [[number, number], [number, number]] = [
+  const extent: Extent = [
     [0, 0],
     [
-      width.value - (props.stateLabels ? STATE_LABELS_FIT_PAD : 0),
+      width.value - (usStateLabels.value ? STATE_LABELS_FIT_PAD : 0),
       height.value,
     ],
   ];
-  const full = geoAlbersUsa().fitExtent(extent, featuresGeo.value);
+  const full = fitProjection(extent, featuresGeo.value);
   const conus = conusFeaturesGeo.value;
   if (!conus) return full;
   // Tighten the fit by interpolating the projection's scale + translate from
@@ -1959,23 +2315,25 @@ const projection = computed(() => {
   // corner, cropped by the SVG/canvas viewport. Everything downstream (paths,
   // picking, tooltip anchors, focus zoom) derives from this projection, so
   // both renderers stay consistent.
-  const tight = geoAlbersUsa().fitExtent(extent, conus);
+  const tight = fitProjection(extent, conus);
   const t = tightFitAmount.value;
   const lerp = (a: number, b: number) => a + (b - a) * t;
+  const fullScale = full.scale();
   const [fx, fy] = full.translate();
   const [tx, ty] = tight.translate();
-  return geoAlbersUsa()
-    .scale(lerp(full.scale(), tight.scale()))
+  return full
+    .scale(lerp(fullScale, tight.scale()))
     .translate([lerp(fx, tx), lerp(fy, ty)]);
 });
 
-const pathGenerator = computed(() => geoPath(projection.value));
+const pathGenerator = computed(() => geoPath(mapProjection.value));
 
 // Default feature stroke width is halved on dense maps (counties/hsas);
 // an explicit theme.strokeWidth applies as-is on every geoType.
 const effectiveStrokeWidth = computed(() => {
   const w = resolvedTheme.value.strokeWidth;
   if (w != null) return w;
+  if (isGeneric.value) return 0.5;
   return props.geoType === "counties" || props.geoType === "hsas" ? 0.25 : 0.5;
 });
 
@@ -2017,7 +2375,7 @@ const nameToIdByGeoType = computed(() => {
 // unchanged when dataGeoType is unset or equal to the base geoType.
 function baseToDataId(baseId: string): string | undefined {
   const dataGt = props.dataGeoType;
-  if (!dataGt || dataGt === props.geoType) return baseId;
+  if (isGeneric.value || !dataGt || dataGt === props.geoType) return baseId;
   if (props.geoType === "counties" && dataGt === "hsas") {
     return hsaModule.value?.fipsToHsa[baseId];
   }
@@ -2074,10 +2432,11 @@ const dataMap = computed(() => {
   // Name fallback resolves in whichever geoType the data is keyed by — the
   // row's own `geoType` when it declares one (mixed-level maps), else the
   // map-wide `dataGeoType`.
-  const dataGt = props.dataGeoType ?? props.geoType;
   for (const d of props.data) {
     map.set(d.id, d.value);
-    const fid = nameToIdByGeoType.value.get(d.geoType ?? dataGt)?.get(d.id);
+    const fid = nameToIdByGeoType.value
+      .get(levelOfItem(d.geoType ?? props.dataGeoType))
+      ?.get(d.id);
     if (fid) map.set(fid, d.value);
   }
   return map;
@@ -3307,8 +3666,8 @@ function renderCityLayer() {
   if (!g) return;
   clearChildren(g);
 
-  const cities = props.cities;
-  const proj = projection.value;
+  const cities = usCities.value;
+  const proj = mapProjection.value;
   if (!cities || cities.length === 0 || !proj) return;
 
   const t = overlayTransform();
@@ -3424,8 +3783,8 @@ function stateLabelPx(vs: number): number {
 // they work on county/HSA base maps too; single-state mode labels only the
 // scoped state.
 const stateLabelGeometry = computed<StateLabelFeature[]>(() => {
-  if (!props.stateLabels) return [];
-  const proj = projection.value;
+  if (!usStateLabels.value) return [];
+  const proj = mapProjection.value;
   const path = pathGenerator.value;
   const feats = stateFips.value
     ? stateOutlineFeature.value
@@ -4377,8 +4736,8 @@ watch(
 // layers regardless of which dep fired.
 watch(
   () => [
-    props.cities,
-    projection.value,
+    usCities.value,
+    mapProjection.value,
     viewScale.value,
     props.citiesMinZoom,
     props.zoom,
@@ -4395,7 +4754,7 @@ watch(
     // projection refits + single-state scoping, and the fill deps (data,
     // scale, resolved theme) recolor the contrast-picked inside labels.
     stateLabelGeometry.value,
-    ...(props.stateLabels
+    ...(usStateLabels.value
       ? [props.data, props.dataGeoType, props.colorScale, resolvedTheme.value]
       : []),
   ],
@@ -4562,7 +4921,7 @@ watch(
       zoom). pointer-events: none lets hover/click fall through to the map.
       -->
       <svg
-        v-if="(cities && cities.length) || stateLabels"
+        v-if="(usCities && usCities.length) || usStateLabels"
         ref="cityOverlayRef"
         class="choropleth-city-overlay"
         :viewBox="`0 0 ${width} ${height}`"

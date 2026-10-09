@@ -36,7 +36,7 @@ cfasim-ui is the shared component and theming library you use to make simulators
 ## Charts
 
 - [BarChart](./charts/bar-chart) — grouped/stacked/overlay bar chart, vertical or horizontal
-- [ChoroplethMap](./charts/choropleth-map) — US state choropleth map with D3
+- [ChoroplethMap](./charts/choropleth-map) — choropleth map of US states, counties, and HSAs, or any custom geography
 - [DataTable](./charts/data-table) — table for columnar data or ModelOutput
 - [LineChart](./charts/line-chart) — responsive SVG line chart
 

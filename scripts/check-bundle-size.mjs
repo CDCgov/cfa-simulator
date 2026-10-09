@@ -24,7 +24,7 @@ const LIMITS = [
     name: "@cfasim-ui/charts JS",
     path: "cfasim-ui/charts/dist/index.js",
     gzip: true,
-    limit: 55 * KB,
+    limit: 58 * KB,
   },
   {
     name: "@cfasim-ui/charts CSS",
