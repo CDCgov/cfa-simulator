@@ -1,6 +1,13 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.13] - 2026-10-09
+
+### Features
+
+- **charts:** Add legend toggle to LineChart and BarChart
+- **charts:** Add custom geography and projection props to ChoroplethMap
+
 ## [0.8.12] - 2026-10-01
 
 ### Chores
