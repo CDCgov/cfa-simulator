@@ -119,6 +119,13 @@ export interface ChoroplethColorScale {
   min?: string;
   /** Maximum color (any CSS color, as `min`). Default: "#08519c" */
   max?: string;
+  /**
+   * Fixed value range mapped onto `min`..`max`, so colors keep their
+   * meaning while `data` changes (an animated map, a probability in
+   * `[0, 1]`). Default: the min and max of the numeric `data` values.
+   * Values outside the domain take the end colors.
+   */
+  domain?: [number, number];
 }
 
 export interface ThresholdStop {
@@ -2442,7 +2449,33 @@ const dataMap = computed(() => {
   return map;
 });
 
+// A valid `colorScale.domain`, or null to derive the extent from the data.
+// An unusable domain (non-finite, reversed, or empty) warns and is ignored.
+const fixedDomain = computed<[number, number] | null>(() => {
+  const scale = props.colorScale;
+  const domain = Array.isArray(scale) ? undefined : scale?.domain;
+  if (!domain) return null;
+  const [min, max] = domain;
+  return Number.isFinite(min) && Number.isFinite(max) && min < max
+    ? [min, max]
+    : null;
+});
+watch(
+  () =>
+    Array.isArray(props.colorScale) ? undefined : props.colorScale?.domain,
+  (domain) => {
+    if (domain && !fixedDomain.value) {
+      console.warn(
+        `[ChoroplethMap] colorScale.domain [${domain.join(", ")}] must be two finite numbers with min < max; using the data extent.`,
+      );
+    }
+  },
+  { immediate: true },
+);
+
 const extent = computed(() => {
+  const fixed = fixedDomain.value;
+  if (fixed) return { min: fixed[0], max: fixed[1] };
   if (!props.data || props.data.length === 0) return { min: 0, max: 1 };
   let min = Infinity;
   let max = -Infinity;
@@ -2600,7 +2633,9 @@ function colorFor(id: string): string {
     return stopStyleFor(id)?.color ?? noData;
   }
   const { min, max } = extent.value;
-  return interpolateColor(((value as number) - min) / (max - min));
+  // Clamp so values outside a fixed domain take the end colors.
+  const t = ((value as number) - min) / (max - min);
+  return interpolateColor(Math.max(0, Math.min(1, t)));
 }
 
 /** Per-stop feature stroke, or undefined for the theme default. */

@@ -249,7 +249,18 @@ swatch per stop.
 
 ### Continuous (`ChoroplethColorScale`)
 
-Numeric values interpolate between `min` and `max`.
+Numeric values interpolate between `min` and `max` over the data's range.
+Pass `domain` to pin that range instead, so colors keep their meaning as
+`data` changes (an animated map, or a probability that should always span
+`[0, 1]`); values outside it take the end colors.
+
+```vue
+<ChoroplethMap
+  :topology="statesTopo"
+  :data="dayRows"
+  :color-scale="{ min: '#fff5f0', max: '#a50f15', domain: [0, 1] }"
+/>
+```
 
 <ComponentDemo>
   <ChoroplethMap
@@ -1478,6 +1489,9 @@ interface ChoroplethColorScale {
   min?: string;
   /** Maximum color (any CSS color). Default: "#08519c" */
   max?: string;
+  /** Fixed value range mapped onto min..max. Default: the data's min and
+   * max. Values outside it take the end colors. */
+  domain?: [number, number];
 }
 ```
 

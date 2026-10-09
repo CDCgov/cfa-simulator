@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { isTouchDevice } from "../_shared/touch.js";
 
-import { strokeStyle, clickSelect } from "./ChoroplethMap.testUtils.js";
+import {
+  strokeStyle,
+  clickSelect,
+  pathFor,
+} from "./ChoroplethMap.testUtils.js";
 
 // Touch detection is probed per event, so tests can flip devices per case.
 // jsdom defaults to a mouse-only environment.
@@ -498,6 +502,61 @@ describe("ChoroplethMap", () => {
     expect(gradient.attributes("style") || "").toContain("linear-gradient");
     const ticks = legend.findAll(".choropleth-legend-ticks > span");
     expect(ticks.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("pins the continuous scale to colorScale.domain", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        data: [{ id: "06", value: 50 }],
+        colorScale: { min: "#000000", max: "#ffffff", domain: [0, 100] },
+      },
+    });
+    const ticks = wrapper.findAll(".choropleth-legend-ticks > span");
+    expect(ticks.map((t) => t.text())).toEqual(["25", "50", "75"]);
+    expect(pathFor(wrapper, "06").attributes("fill")).toBe("rgb(128,128,128)");
+  });
+
+  it("clamps values outside a fixed domain to the end colors", () => {
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        data: [
+          { id: "06", value: 250 },
+          { id: "36", value: -10 },
+        ],
+        colorScale: { min: "#000000", max: "#ffffff", domain: [0, 100] },
+      },
+    });
+    expect(pathFor(wrapper, "06").attributes("fill")).toBe("rgb(255,255,255)");
+    expect(pathFor(wrapper, "36").attributes("fill")).toBe("rgb(0,0,0)");
+  });
+
+  it("warns on an invalid domain and falls back to the data extent", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        data: [
+          { id: "06", value: 0 },
+          { id: "36", value: 100 },
+        ],
+        colorScale: { min: "#000000", max: "#ffffff", domain: [100, 0] },
+      },
+    });
+    expect(
+      warn.mock.calls.filter(([m]) => String(m).includes("colorScale.domain")),
+    ).toHaveLength(1);
+    const ticks = wrapper.findAll(".choropleth-legend-ticks > span");
+    expect(ticks.map((t) => t.text())).toEqual(["25", "50", "75"]);
+    expect(pathFor(wrapper, "36").attributes("fill")).toBe("rgb(255,255,255)");
+    warn.mockRestore();
   });
 
   it("hides legend when legend=false", () => {
