@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.15] - 2026-10-10
+
+### Bug Fixes
+
+- **wasm:** Version wasm URLs so browser caches never serve a stale build
+
 ## [0.8.14] - 2026-10-09
 
 ### Features
