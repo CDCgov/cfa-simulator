@@ -18,6 +18,28 @@ test("reed-frost model renders", async ({ page }) => {
   await expect(page.getByLabel("Population")).toBeVisible();
 });
 
+test("wasm urls carry the build hash from the vite plugin", async ({
+  page,
+}) => {
+  // Both files sit at fixed paths under public/, so the worker must append
+  // the plugin's `?v=` hash to each or a cached build outlives a deploy.
+  const wasmUrls: string[] = [];
+  page.on("request", (req) => {
+    if (req.url().includes("/wasm/rust_example/")) wasmUrls.push(req.url());
+  });
+  await page.goto("/reed-frost");
+  await expect(
+    page.locator(".line-chart-wrapper svg path").first(),
+  ).toBeVisible({
+    timeout: 30_000,
+  });
+  const hash = /\?v=([0-9a-f]{12})$/;
+  expect(wasmUrls).toHaveLength(2);
+  expect(wasmUrls[0]).toMatch(/\/rust_example\.js\?v=/);
+  expect(wasmUrls[1]).toMatch(/\/rust_example_bg\.wasm\?v=/);
+  expect(wasmUrls[0].match(hash)?.[1]).toBe(wasmUrls[1].match(hash)?.[1]);
+});
+
 test("ixa-example model renders", async ({ page }) => {
   await page.goto("/ixa-example");
   await expect(page.locator("h1")).toContainText("Ixa Example");

@@ -10,13 +10,31 @@ const modulePromises = new Map<string, Promise<Record<string, any>>>();
 
 const baseUrl = import.meta.env.BASE_URL ?? "/";
 
+// Injected by the `cfasimWasm` Vite plugin (model name -> hash of the
+// wasm-pack output). Absent when an app ships prebuilt wasm without it.
+declare const __CFASIM_WASM_VERSIONS__: Record<string, string> | undefined;
+
+function wasmVersion(model: string): string | undefined {
+  if (typeof __CFASIM_WASM_VERSIONS__ === "undefined") return undefined;
+  return __CFASIM_WASM_VERSIONS__?.[model];
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ensureModule(model: string): Promise<Record<string, any>> {
   if (!modulePromises.has(model)) {
     const promise = (async () => {
-      const url = `${self.location.origin}${baseUrl}wasm/${model}/${model}.js`;
-      const mod = await import(/* @vite-ignore */ url);
-      await mod.default();
+      const dir = `${self.location.origin}${baseUrl}wasm/${model}/`;
+      const version = wasmVersion(model);
+      const query = version ? `?v=${version}` : "";
+      const mod = await import(/* @vite-ignore */ `${dir}${model}.js${query}`);
+      // The glue resolves `<model>_bg.wasm` against its own URL, which drops
+      // the query, so the wasm path is passed explicitly when versioned.
+      // The object form needs wasm-bindgen >= 0.2.93.
+      if (version) {
+        await mod.default({ module_or_path: `${dir}${model}_bg.wasm${query}` });
+      } else {
+        await mod.default();
+      }
       return mod;
     })();
     promise.catch(() => {

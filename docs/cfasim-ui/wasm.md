@@ -86,6 +86,12 @@ modelOutputToCSV(output); // CSV string
 | `bool` | `Uint8Array`   | Booleans (0/1)                     |
 | `enum` | `Uint32Array`  | Integer indices with string labels |
 
+## Cache busting
+
+Both wasm files live at fixed URLs (`/wasm/{model}/{model}.js` and `{model}_bg.wasm`), so a browser or CDN cache can pair a freshly deployed app bundle with a stale wasm build. The `cfasimWasm` Vite plugin hashes the wasm-pack output after each build and injects a `__CFASIM_WASM_VERSIONS__` map (model name to hash) through Vite's `define`. The worker appends it as `?v=<hash>` to the glue import and passes the `_bg.wasm` URL explicitly to the glue's init function, so both requests change whenever the Rust build changes. Several plugin instances merge into the same map.
+
+The explicit init path uses wasm-bindgen's `{ module_or_path }` form, which needs wasm-bindgen 0.2.93 or newer. Apps that ship prebuilt wasm without the plugin still load it from the plain URLs.
+
 ## Lower-level API
 
 For more control, use the worker API directly:

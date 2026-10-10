@@ -142,7 +142,7 @@ export default defineConfig({
 });
 ```
 
-`model: ".."` resolves from the Vite root (`interactive/`) back to the project root where `Cargo.toml` lives. The plugin runs `wasm-pack build .. --target web --out-dir interactive/public/wasm/my_sim`. The worker loads `/wasm/{name}/{name}.js` at runtime, so `name` must match the crate name (with hyphens converted to underscores).
+`model: ".."` resolves from the Vite root (`interactive/`) back to the project root where `Cargo.toml` lives. The plugin runs `wasm-pack build .. --target web --out-dir interactive/public/wasm/my_sim`. The worker loads `/wasm/{name}/{name}.js` at runtime, so `name` must match the crate name (with hyphens converted to underscores). The plugin also hashes the build output and the worker appends it as a `?v=` query to both wasm URLs, so a deploy never pairs new app code with a browser-cached wasm module (see [Cache busting](../cfasim-ui/wasm#cache-busting)).
 
 Options:
 
