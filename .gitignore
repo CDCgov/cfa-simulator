@@ -54,3 +54,6 @@ cfasim-ui/charts/docs/
 .vscode/*
 .DS_Store
 .cache/
+
+# Scratch notes, never committed
+wip/
