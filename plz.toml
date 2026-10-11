@@ -137,6 +137,6 @@ run = "pnpm exec vitepress build"
 
 # Run tests for docs (Playwright tests for docs site)
 [taskgroup.docs.test]
-depends = ["build", "docs.generate"]
+depends = ["build", "docs.generate", "docs.demos"]
 run = "pnpm exec playwright test --config playwright.config.ts"
 git_hook = "pre-push"

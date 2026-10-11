@@ -229,9 +229,12 @@ if (globals) {
   transform: translateX(-100%);
 }
 
+/* Both scroll panes are positioned so absolute descendants (visually-hidden
+   labels) are contained by the pane instead of the page. */
 .SidebarScroll {
   flex: 1;
   min-width: 0;
+  position: relative;
   overflow-y: auto;
   padding: var(--space-4);
   background-color: var(--color-bg-1);
@@ -346,6 +349,7 @@ if (globals) {
 .MainScroll {
   flex: 1;
   min-height: 0;
+  position: relative;
   overflow-y: auto;
   overflow-x: hidden;
   padding: var(--space-6) 0;

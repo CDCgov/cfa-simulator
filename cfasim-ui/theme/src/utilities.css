@@ -501,10 +501,14 @@
     color: var(--color-text-tertiary) !important;
   }
 
-  /* Visually hidden — hides content visually but keeps it available to
-     screen readers. Focusable elements reappear on keyboard focus. */
+  /* Visually hidden: hides content visually but keeps it available to
+     screen readers. Focusable elements reappear on keyboard focus. Pinned to
+     the containing block's corner so a hidden element far down a scroll pane
+     never extends the document below the viewport. */
   .visually-hidden:not(:focus):not(:focus-within):not(:active) {
     position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
     width: 1px !important;
     height: 1px !important;
     padding: 0 !important;
