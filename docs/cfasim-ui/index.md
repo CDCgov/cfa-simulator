@@ -19,6 +19,7 @@ cfasim-ui is the shared component and theming library you use to make simulators
 - [Button](./components/button) — primary and secondary actions
 - [ButtonGroup](./components/button-group) — visually joins a set of buttons into one unit
 - [Container](./components/container) — vertical or horizontal layout wrapper with optional border, height, and gap
+- [DatePicker](./components/date-picker) — date field with a calendar popover and custom formats
 - [Expander](./components/expander) — collapsible content section
 - [Grid](./components/grid) — responsive multi-column layout
 - [Hint](./components/hint) — inline tooltip for help text

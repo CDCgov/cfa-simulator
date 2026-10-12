@@ -144,6 +144,9 @@ importers:
       '@codemirror/view':
         specifier: 6.43.6
         version: 6.43.6
+      '@internationalized/date':
+        specifier: 3.12.2
+        version: 3.12.2
       codemirror:
         specifier: 6.0.2
         version: 6.0.2

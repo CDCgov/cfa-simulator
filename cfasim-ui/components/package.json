@@ -36,6 +36,7 @@
     "prepack": "node ../../scripts/generate_docs.mjs"
   },
   "dependencies": {
+    "@internationalized/date": "3.12.2",
     "@cfasim-ui/shared": "workspace:*",
     "@codemirror/lang-json": "6.0.2",
     "@codemirror/lang-yaml": "6.1.3",

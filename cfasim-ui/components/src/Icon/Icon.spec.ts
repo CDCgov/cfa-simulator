@@ -15,6 +15,6 @@ test("base set icons render as inline SVGs", async ({ page }) => {
   const gridIcons = page.locator(".base-icons .Icon");
   await expect(gridIcons.first()).toBeVisible();
   const count = await gridIcons.count();
-  expect(count).toBe(26);
+  expect(count).toBe(27);
   await expect(page.locator(".base-icons .Icon svg")).toHaveCount(count);
 });

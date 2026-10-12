@@ -73,7 +73,7 @@ const baseIcons = [
   "keyboard_double_arrow_left", "keyboard_double_arrow_right",
   "arrow_upward", "arrow_downward", "arrow_back", "arrow_forward",
   "menu", "more_vert", "more_horiz",
-  "add", "edit", "delete", "close", "check", "search", "tune", "download",
+  "add", "edit", "delete", "close", "check", "search", "tune", "download", "calendar_today",
   "github",
 ];
 </script>

@@ -20,7 +20,7 @@ export default defineConfig({
       fileName: "index",
     },
     rollupOptions: {
-      external: ["vue", "reka-ui"],
+      external: ["vue", "reka-ui", "@internationalized/date"],
     },
   },
 });
