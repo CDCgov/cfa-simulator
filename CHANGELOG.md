@@ -1,6 +1,20 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.16] - 2026-10-12
+
+### Bug Fixes
+
+- **components:** Keep hide-label inputs from making the page scroll in SidebarLayout
+
+### Chores
+
+- Ignore wip/ scratch directory
+
+### Features
+
+- **charts:** Honor xTicks on a date axis and pick denser default date ticks
+
 ## [0.8.15] - 2026-10-10
 
 ### Bug Fixes
