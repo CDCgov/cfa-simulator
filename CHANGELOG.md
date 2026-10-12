@@ -1,6 +1,16 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.18] - 2026-10-12
+
+### Chores
+
+- Raise charts JS bundle size limit to 62 KB
+
+### Features
+
+- **components:** Add DatePicker with custom formats and model time
+
 ## [0.8.17] - 2026-10-12
 
 ### Features
