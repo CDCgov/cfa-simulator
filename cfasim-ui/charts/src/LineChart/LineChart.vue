@@ -31,6 +31,7 @@ import {
   parseDate,
   isAllDates,
   pickDateTicks,
+  placedDateTicks,
   formatDate,
   type ChartData,
   type LabelStyle,
@@ -224,7 +225,10 @@ interface LineChartProps extends ChartCommonProps {
    * Tick placement on the x-axis. Number = interval in data units
    * (respecting `xMin`, e.g. `7` ticks every 7 days). Array = explicit tick
    * values in data space; values outside the data range are dropped.
-   * When omitted, ticks are chosen automatically.
+   * When omitted, ticks are chosen automatically. On a date axis the
+   * units are milliseconds (an interval steps from the first date; an
+   * array holds epoch-ms values) and the default label format follows the
+   * interval: days, weeks, months or years.
    */
   xTicks?: number | number[];
   /**
@@ -1059,7 +1063,12 @@ const xTickItems = computed(() => {
   let values: number[];
   let unit: DateTickUnit | undefined;
   if (isDate) {
-    const picked = pickDateTicks(xMin, xMax, targetTickCount, tz.value);
+    // Date labels are short ("May 21"), so a date axis fits a tick per
+    // 60px: an 84-day span on a 650px plot gets weekly ticks.
+    const picked =
+      props.xTicks != null
+        ? placedDateTicks(xMin, xMax, props.xTicks)
+        : pickDateTicks(xMin, xMax, innerW.value / 60, tz.value);
     unit = picked.unit;
     // Run through computeTickValues so the clip-to-range semantics
     // match the numeric path. xMin is already 0, so `ticks` is used

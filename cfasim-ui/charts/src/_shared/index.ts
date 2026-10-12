@@ -94,6 +94,8 @@ export {
   parseDate,
   isAllDates,
   pickDateTicks,
+  placedDateTicks,
+  unitForInterval,
   formatDate,
   DATE_FORMAT_PRESETS,
   type DateFormat,

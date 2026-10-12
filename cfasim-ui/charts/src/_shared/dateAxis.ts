@@ -84,6 +84,7 @@ const TICK_INTERVALS: readonly TickInterval[] = [
   { unit: "day", step: 1, ms: 1 * MS_PER_DAY },
   { unit: "day", step: 2, ms: 2 * MS_PER_DAY },
   { unit: "week", step: 1, ms: 1 * MS_PER_WEEK },
+  { unit: "week", step: 2, ms: 2 * MS_PER_WEEK },
   { unit: "month", step: 1, ms: 1 * MS_PER_MONTH_APPROX },
   { unit: "month", step: 3, ms: 3 * MS_PER_MONTH_APPROX },
   { unit: "month", step: 6, ms: 6 * MS_PER_MONTH_APPROX },
@@ -184,12 +185,23 @@ export function isAllDates(
  * per-tick budget (`span / targetCount`). Guarantees at most
  * ~`targetCount` ticks.
  */
+// The interval whose tick count comes closest to `targetCount`; a tie goes
+// to the denser one. (Taking the first interval at or above the rough
+// spacing instead rounded every axis towards fewer ticks: an 84-day span
+// asking for 8 got months.)
 function chooseInterval(spanMs: number, targetCount: number): TickInterval {
-  const rough = spanMs / Math.max(1, targetCount);
+  const target = Math.max(1, targetCount);
+  let best = TICK_INTERVALS[TICK_INTERVALS.length - 1];
+  let bestDiff = Infinity;
   for (const candidate of TICK_INTERVALS) {
-    if (rough <= candidate.ms) return candidate;
+    // Ticks sit at both ends of the span, hence the 1.
+    const diff = Math.abs(spanMs / candidate.ms + 1 - target);
+    if (diff < bestDiff) {
+      best = candidate;
+      bestDiff = diff;
+    }
   }
-  return TICK_INTERVALS[TICK_INTERVALS.length - 1];
+  return best;
 }
 
 function snapToUnit(ms: number, unit: DateTickUnit, tz: DateTimezone): number {
@@ -351,6 +363,47 @@ function addUnit(
   }
   // Unreachable — the early returns above cover second/minute/hour-utc/week-utc.
   return ms;
+}
+
+/**
+ * The unit a tick interval of `ms` counts in, for the default label format
+ * of ticks a consumer placed with `xTicks`: a 2-week interval is weeks, a
+ * 90-day one months.
+ */
+export function unitForInterval(ms: number): DateTickUnit {
+  if (ms >= MS_PER_YEAR_APPROX) return "year";
+  if (ms >= MS_PER_MONTH_APPROX) return "month";
+  if (ms >= MS_PER_WEEK) return "week";
+  if (ms >= MS_PER_DAY) return "day";
+  if (ms >= MS_PER_HOUR) return "hour";
+  if (ms >= MS_PER_MINUTE) return "minute";
+  return "second";
+}
+
+/**
+ * Tick values a consumer placed on a date axis spanning `[minMs, maxMs]`:
+ * an interval in ms steps from `minMs` (so weekly ticks fall on the same
+ * weekday as the first date), an array is kept as given; either is clipped
+ * to the span.
+ */
+export function placedDateTicks(
+  minMs: number,
+  maxMs: number,
+  ticks: number | number[],
+): { values: number[]; unit: DateTickUnit } {
+  if (Array.isArray(ticks)) {
+    const values = ticks.filter((v) => v >= minMs && v <= maxMs);
+    const gap = values.length > 1 ? values[1] - values[0] : maxMs - minMs;
+    return { values, unit: unitForInterval(gap) };
+  }
+  const values: number[] = [];
+  if (ticks > 0 && Number.isFinite(ticks)) {
+    for (let v = minMs, i = 0; v <= maxMs && i < MAX_TICK_ITER; i++) {
+      values.push(v);
+      v = minMs + (i + 1) * ticks;
+    }
+  }
+  return { values, unit: unitForInterval(ticks) };
 }
 
 /**

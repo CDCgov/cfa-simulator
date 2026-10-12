@@ -374,7 +374,7 @@ On touch devices, drag **horizontally** across the chart to scrub the tooltip be
 
 ### Custom axis ticks
 
-Control tick placement with `x-ticks` and `y-ticks`. Pass a **number** for a fixed interval (in data units, respecting `xMin`) or an **array** of explicit values. Use `x-tick-format` / `y-tick-format` to customize labels.
+Control tick placement with `x-ticks` and `y-ticks`. Pass a **number** for a fixed interval (in data units, respecting `xMin`) or an **array** of explicit values. Use `x-tick-format` / `y-tick-format` to customize labels. On a date axis the units are milliseconds: an interval steps from the first date (`7 * 86400000` is a tick every week, on the weekday the data starts), an array holds epoch-ms values, and the default label format follows the interval (days, weeks or months).
 
 <ComponentDemo>
   <LineChart

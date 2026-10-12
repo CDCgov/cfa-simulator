@@ -4,6 +4,8 @@ import {
   isDateLike,
   isAllDates,
   pickDateTicks,
+  placedDateTicks,
+  unitForInterval,
   formatDate,
   DATE_FORMAT_PRESETS,
 } from "./dateAxis.js";
@@ -107,6 +109,38 @@ describe("isAllDates", () => {
   });
 });
 
+describe("placedDateTicks", () => {
+  const day = 24 * 60 * 60 * 1000;
+
+  it("steps an interval from the first date and clips the span", () => {
+    const min = Date.UTC(2026, 4, 14); // a Thursday
+    const r = placedDateTicks(min, min + 20 * day, 7 * day);
+    expect(r.unit).toBe("week");
+    expect(r.values).toEqual([min, min + 7 * day, min + 14 * day]);
+    for (const v of r.values) expect(new Date(v).getUTCDay()).toBe(4);
+  });
+
+  it("keeps explicit values inside the span", () => {
+    const min = Date.UTC(2026, 0, 1);
+    const r = placedDateTicks(min, min + 10 * day, [
+      min - day,
+      min + 2 * day,
+      min + 9 * day,
+      min + 30 * day,
+    ]);
+    expect(r.values).toEqual([min + 2 * day, min + 9 * day]);
+    expect(r.unit).toBe("week");
+  });
+
+  it("names the unit an interval counts in", () => {
+    expect(unitForInterval(day)).toBe("day");
+    expect(unitForInterval(14 * day)).toBe("week");
+    expect(unitForInterval(90 * day)).toBe("month");
+    expect(unitForInterval(400 * day)).toBe("year");
+    expect(unitForInterval(60 * 60 * 1000)).toBe("hour");
+  });
+});
+
 describe("pickDateTicks", () => {
   const target = 5;
 
@@ -138,6 +172,20 @@ describe("pickDateTicks", () => {
       expect(new Date(v).getUTCDay()).toBe(1);
     }
     expect(r.values.length).toBeGreaterThan(2);
+  });
+
+  it("picks the interval whose count is closest to the target", () => {
+    // 83 days: 8 ticks wanted gives fortnights (6), 11 gives weeks (12).
+    const min = Date.UTC(2026, 4, 14);
+    const max = Date.UTC(2026, 7, 5);
+    const week = 7 * 24 * 60 * 60 * 1000;
+    const fortnightly = pickDateTicks(min, max, 8, "utc");
+    expect(fortnightly.unit).toBe("week");
+    expect(fortnightly.values[1] - fortnightly.values[0]).toBe(2 * week);
+    const weekly = pickDateTicks(min, max, 11, "utc");
+    expect(weekly.values[1] - weekly.values[0]).toBe(week);
+    for (const v of weekly.values) expect(new Date(v).getUTCDay()).toBe(1);
+    expect(weekly.values.length).toBe(12);
   });
 
   it("picks monthly ticks for a 6-month span", () => {
