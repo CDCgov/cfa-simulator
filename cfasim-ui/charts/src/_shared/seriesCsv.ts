@@ -16,6 +16,26 @@ export interface CsvSeries {
   data: ChartData;
   /** Optional parallel x-values; when all series share the same x, an `x` column is used. */
   x?: ChartData;
+  /** Optional interval bounds; together they add `_lower` / `_upper` columns after the value. */
+  lower?: ChartData;
+  upper?: ChartData;
+}
+
+/** Column headers for one series: its value plus any interval bounds. */
+function boundHeaders(
+  name: string,
+  s: { lower?: ChartData; upper?: ChartData },
+) {
+  // Both bounds or nothing, matching when a chart draws a whisker.
+  return hasBounds(s) ? [name, `${name}_lower`, `${name}_upper`] : [name];
+}
+
+function hasBounds(s: { lower?: ChartData; upper?: ChartData }): boolean {
+  return s.lower !== undefined && s.upper !== undefined;
+}
+
+function cellAt(data: ChartData | undefined, r: number): string {
+  return data && r < data.length ? String(data[r]) : "";
 }
 
 /**
@@ -31,16 +51,19 @@ export function seriesToCsv(series: CsvSeries[]): string {
     ? series[0].x
     : undefined;
   const xHeader = sharedX ? "x" : "index";
-  const headers =
-    series.length === 1
-      ? [xHeader, "value"]
-      : [xHeader, ...series.map((_, i) => `series_${i}`)];
+  const headers = [
+    xHeader,
+    ...series.flatMap((s, i) =>
+      boundHeaders(series.length === 1 ? "value" : `series_${i}`, s),
+    ),
+  ];
   const rows = [headers.join(",")];
   for (let r = 0; r < maxLen; r++) {
     const xCell = sharedX ? String(sharedX[r]) : r.toString();
     const cells = [xCell];
     for (const s of series) {
-      cells.push(r < s.data.length ? String(s.data[r]) : "");
+      cells.push(cellAt(s.data, r));
+      if (hasBounds(s)) cells.push(cellAt(s.lower, r), cellAt(s.upper, r));
     }
     rows.push(cells.join(","));
   }
@@ -53,19 +76,30 @@ export function seriesToCsv(series: CsvSeries[]): string {
  */
 export function categoricalToCsv(
   categories: readonly string[],
-  series: { label?: string; data: ChartData }[],
+  series: {
+    label?: string;
+    data: ChartData;
+    lower?: ChartData;
+    upper?: ChartData;
+  }[],
   categoryHeader = "category",
 ): string {
   if (series.length === 0 || categories.length === 0) return "";
-  const headers =
-    series.length === 1
-      ? [categoryHeader, series[0].label || "value"]
-      : [categoryHeader, ...series.map((s, i) => s.label || `series_${i}`)];
+  const headers = [
+    categoryHeader,
+    ...series.flatMap((s, i) =>
+      boundHeaders(
+        s.label || (series.length === 1 ? "value" : `series_${i}`),
+        s,
+      ),
+    ),
+  ];
   const rows = [headers.join(",")];
   for (let r = 0; r < categories.length; r++) {
     const cells = [escapeCsvField(categories[r])];
     for (const s of series) {
-      cells.push(r < s.data.length ? String(s.data[r]) : "");
+      cells.push(cellAt(s.data, r));
+      if (hasBounds(s)) cells.push(cellAt(s.lower, r), cellAt(s.upper, r));
     }
     rows.push(cells.join(","));
   }

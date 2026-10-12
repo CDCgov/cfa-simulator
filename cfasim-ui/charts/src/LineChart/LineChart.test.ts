@@ -3287,3 +3287,236 @@ describe("LineChart", () => {
     });
   });
 });
+
+describe("LineChart intervals", () => {
+  function intervals(wrapper: ReturnType<typeof mount>) {
+    return wrapper.findAll('[data-testid="interval"]');
+  }
+
+  it("renders a whisker with caps and a value dot for each interval", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        data: [0, 10, 20, 30],
+        intervals: [
+          { x: 1, lower: 5, upper: 15, value: 10 },
+          { x: 2, lower: 18, upper: 24 },
+        ],
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    const items = intervals(wrapper);
+    expect(items).toHaveLength(2);
+    expect(items[0].findAll("line.interval-cap")).toHaveLength(2);
+    expect(items[0].find("circle.interval-dot").exists()).toBe(true);
+    expect(items[1].find("circle.interval-dot").exists()).toBe(false);
+    const line = items[0].find("line.interval-line");
+    // Vertical whisker: same x, lower end below upper end on screen.
+    expect(line.attributes("x1")).toBe(line.attributes("x2"));
+    expect(Number(line.attributes("y1"))).toBeGreaterThan(
+      Number(line.attributes("y2")),
+    );
+  });
+
+  it("extends the y axis to cover interval bounds", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        data: [0, 10, 20],
+        intervals: [{ x: 1, lower: 5, upper: 80 }],
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    const labels = wrapper.findAll("text").map((t) => t.text());
+    expect(labels).toContain("80");
+  });
+
+  it("extends the x axis to cover an interval past the data", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        data: [0, 10, 20],
+        intervals: [{ x: 6, lower: 5, upper: 8 }],
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    const labels = wrapper.findAll("text").map((t) => t.text());
+    expect(labels).toContain("6");
+  });
+
+  it("layers per-interval style over intervalStyle", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        data: [0, 10, 20],
+        intervals: [
+          { x: 1, lower: 5, upper: 15 },
+          { x: 2, lower: 5, upper: 15, color: "red", lineWidth: 4 },
+        ],
+        intervalStyle: { color: "blue", lineWidth: 2, capWidth: 0 },
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    const [a, b] = intervals(wrapper);
+    expect(a.find("line.interval-line").attributes("stroke")).toBe("blue");
+    expect(a.find("line.interval-line").attributes("stroke-width")).toBe("2");
+    expect(a.findAll("line.interval-cap")).toHaveLength(0);
+    expect(b.find("line.interval-line").attributes("stroke")).toBe("red");
+    expect(b.find("line.interval-line").attributes("stroke-width")).toBe("4");
+  });
+
+  it("draws an outline pass only when outlineWidth is set", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        data: [0, 10, 20],
+        intervals: [
+          { x: 1, lower: 5, upper: 15 },
+          { x: 2, lower: 5, upper: 15, outlineWidth: 3 },
+        ],
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    const [a, b] = intervals(wrapper);
+    expect(a.findAll(".interval-outline")).toHaveLength(0);
+    expect(b.findAll(".interval-outline")).toHaveLength(3);
+    expect(b.find(".interval-outline").attributes("stroke-width")).toBe("4.5");
+  });
+
+  it("expands series lower/upper into whiskers in the series color", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        series: [
+          {
+            data: [1, 2, 3],
+            lower: [0, 1, 2],
+            upper: [2, 3, 4],
+            color: "#123456",
+            legend: "A",
+          },
+        ],
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    const items = intervals(wrapper);
+    expect(items).toHaveLength(3);
+    expect(items[0].find("line.interval-line").attributes("stroke")).toBe(
+      "#123456",
+    );
+    // Series whiskers rely on the series' own marks for the point estimate.
+    expect(items[0].find("circle.interval-dot").exists()).toBe(false);
+  });
+
+  it("hides series whiskers along with a legend-hidden series", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        series: [
+          { data: [1, 2], lower: [0, 1], upper: [2, 3], legend: "A" },
+          { data: [5, 6], legend: "B" },
+        ],
+        hiddenSeries: ["A"],
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    expect(intervals(wrapper)).toHaveLength(0);
+  });
+
+  it("offsets interval x by xMin like the series", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        data: [0, 10, 20],
+        xMin: 10,
+        intervals: [{ x: 11, lower: 5, upper: 15 }],
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    const line = intervals(wrapper)[0].find("line.interval-line");
+    const path = wrapper.find("path[fill='none']");
+    // Middle data point lands at the plot's horizontal center.
+    const d = path.attributes("d") ?? "";
+    const midX = Number(d.split("L")[1].split(",")[0]);
+    expect(Number(line.attributes("x1"))).toBeCloseTo(midX, 5);
+  });
+
+  it("ties a standalone interval to a series for color and hiding", () => {
+    const props = {
+      series: [
+        { data: [1, 2], color: "#abcdef", legend: "A" },
+        { data: [3, 4], legend: "B" },
+      ],
+      intervals: [{ x: 1, lower: 0, upper: 5, seriesIndex: 0 }],
+      width: 400,
+      height: 200,
+      menu: false,
+    };
+    const shown = mount(LineChart, { props });
+    expect(
+      intervals(shown)[0].find("line.interval-line").attributes("stroke"),
+    ).toBe("#abcdef");
+    const hidden = mount(LineChart, {
+      props: { ...props, hiddenSeries: ["A"] },
+    });
+    expect(intervals(hidden)).toHaveLength(0);
+  });
+
+  it("shows a standalone interval between data points in the tooltip", async () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        data: [1, 2, 3],
+        intervals: [{ x: 1.3, lower: 10, upper: 20 }],
+        width: 400,
+        height: 200,
+        menu: false,
+        tooltipTrigger: "hover" as const,
+      },
+      slots: {
+        tooltip: `<template #tooltip="p">
+          <div class="tt">{{ p.index }}|{{ p.intervals.length }}</div>
+        </template>`,
+      },
+    });
+    const overlay = wrapper.find('[data-testid="chart-overlay"]');
+    await overlay.trigger("mousemove", { clientX: 200 });
+    expect(wrapper.find(".tt").text()).toBe("1|1");
+    await overlay.trigger("mousemove", { clientX: 380 });
+    expect(wrapper.find(".tt").text()).toBe("2|0");
+  });
+
+  it("includes interval bounds in the tooltip and CSV", async () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        series: [{ data: [1, 2], lower: [0, 1], upper: [2, 3] }],
+        intervals: [{ x: 1, lower: 10, upper: 20, value: 15 }],
+        width: 400,
+        height: 200,
+        menu: false,
+        downloadLink: true,
+        tooltipTrigger: "hover" as const,
+      },
+      slots: {
+        tooltip: `<template #tooltip="p">
+          <div class="tt">{{ p.values[0].lower }}-{{ p.values[0].upper }}|{{ p.intervals.map(i => i.lower + '-' + i.upper).join() }}</div>
+        </template>`,
+      },
+    });
+    await wrapper
+      .find('[data-testid="chart-overlay"]')
+      .trigger("mousemove", { clientX: 300 });
+    expect(wrapper.find(".tt").text()).toBe("1-3|10-20");
+    const link = wrapper.find("a.line-chart-download-link");
+    expect(decodeURIComponent(link.attributes("href") ?? "")).toContain(
+      "index,value,value_lower,value_upper\n0,1,0,2\n1,2,1,3",
+    );
+  });
+});

@@ -10,6 +10,9 @@ keywords:
     overlay,
     vertical,
     horizontal,
+    interval,
+    error bars,
+    whiskers,
     svg,
   ]
 ---
@@ -604,6 +607,119 @@ extent with `valueMin` / `valueMax`. Pass `x: number[]` (in
 category-index space — `0` is the first category center, fractional
 values land between) to plot at custom positions; useful when the
 summary samples are denser or sparser than the histogram bins.
+
+### Intervals
+
+Give a series parallel `lower` and `upper` arrays to draw a whisker on
+every bar: a line between the bounds with end caps, centered on the bar.
+Whiskers draw in `currentColor` (the chart's text color) rather than the
+series color, since a bar-colored whisker would vanish wherever it
+overlaps the bar; set `color` in `intervalStyle` to change it. Bounds are
+absolute values on the value axis
+(not offsets from the bar), including in `stacked` layout, and the axis
+extends to cover them. Whiskers follow the series' legend toggle, show up
+in the tooltip as a range, and export as extra `_lower` / `_upper` CSV
+columns.
+
+<ComponentDemo>
+  <BarChart
+    data-testid="interval-bar-chart"
+    :series="[
+      {
+        data: [42, 55, 61, 48],
+        lower: [36, 49, 54, 41],
+        upper: [48, 61, 68, 55],
+        color: '#0057b7',
+        legend: 'Scenario A',
+      },
+      {
+        data: [35, 47, 52, 44],
+        lower: [30, 41, 46, 38],
+        upper: [40, 53, 58, 50],
+        color: '#ef4444',
+        legend: 'Scenario B',
+      },
+    ]"
+    :categories="['Q1', 'Q2', 'Q3', 'Q4']"
+    :interval-style="{ capWidth: 6 }"
+    :height="240"
+    value-label="Cases"
+    tooltip-trigger="hover"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :series="[
+    {
+      data: [42, 55, 61, 48],
+      lower: [36, 49, 54, 41],
+      upper: [48, 61, 68, 55],
+      color: '#0057b7',
+      legend: 'Scenario A',
+    },
+    {
+      data: [35, 47, 52, 44],
+      lower: [30, 41, 46, 38],
+      upper: [40, 53, 58, 50],
+      color: '#ef4444',
+      legend: 'Scenario B',
+    },
+  ]"
+  :categories="['Q1', 'Q2', 'Q3', 'Q4']"
+  :interval-style="{ capWidth: 6 }"
+  :height="240"
+  value-label="Cases"
+  tooltip-trigger="hover"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+Standalone `intervals` place a whisker at a category index (fractional
+values land between categories) independent of any series, with an
+optional `value` dot. Add `seriesIndex` to center it on one series' bar
+within a grouped category. In horizontal
+orientation the whisker runs sideways and the caps stand upright. See
+[`LineChart` → Intervals](./line-chart#intervals) for the full
+`ChartInterval` / `IntervalStyle` shape and the chart-level
+`intervalStyle` defaults.
+
+<ComponentDemo>
+  <BarChart
+    :data="[18, 27, 31, 22]"
+    :categories="['North', 'South', 'East', 'West']"
+    :intervals="[
+      { x: 1, lower: 22, upper: 34, value: 29 },
+      { x: 2, lower: 26, upper: 38, value: 33, color: '#c2410c' },
+    ]"
+    :interval-style="{ lineWidth: 2, capWidth: 10, outlineWidth: 2 }"
+    orientation="horizontal"
+    :height="220"
+    value-label="Observed vs. modeled"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :data="[18, 27, 31, 22]"
+  :categories="['North', 'South', 'East', 'West']"
+  :intervals="[
+    { x: 1, lower: 22, upper: 34, value: 29 },
+    { x: 2, lower: 26, upper: 38, value: 33, color: '#c2410c' },
+  ]"
+  :interval-style="{ lineWidth: 2, capWidth: 10, outlineWidth: 2 }"
+  orientation="horizontal"
+  :height="220"
+  value-label="Observed vs. modeled"
+/>
+```
+
+  </template>
+</ComponentDemo>
 
 ### Annotations
 

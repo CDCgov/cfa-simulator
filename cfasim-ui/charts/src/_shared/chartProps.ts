@@ -6,6 +6,7 @@
 
 import type { NumberFormat } from "@cfasim-ui/shared";
 import type { ChartAnnotation } from "./annotations.js";
+import type { ChartInterval, IntervalStyle } from "./intervals.js";
 import type { ChartPadding } from "./useChartPadding.js";
 
 /**
@@ -202,6 +203,21 @@ export interface ChartCommonProps {
   /** Annotations rendered as the top layer of the chart. */
   annotations?: readonly ChartAnnotation[];
   /**
+   * Whiskers drawn at arbitrary positions on the main axis: a line from
+   * `lower` to `upper` on the value axis with end caps, and optionally a
+   * dot at `value`. Independent of any series, so they suit calibration
+   * targets and observed ranges on a trajectory plot. For one whisker
+   * per data point, set `lower` / `upper` on the series instead. See
+   * `ChartInterval`.
+   */
+  intervals?: readonly ChartInterval[];
+  /**
+   * Default styling for every interval on the chart, both `intervals`
+   * and series `lower` / `upper` whiskers. A field set on an individual
+   * interval wins. See `IntervalStyle`.
+   */
+  intervalStyle?: IntervalStyle;
+  /**
    * Extra padding (pixels) added around the plot. Number = same on all
    * sides; object = per-side. Useful for giving annotations or other
    * overlays room to extend past the data area without clipping.
@@ -217,11 +233,25 @@ export interface ChartTooltipValue {
   value: number;
   color: string;
   seriesIndex: number;
+  /** Low end of the series' interval at this point, when it has `lower` / `upper`. */
+  lower?: number;
+  /** High end of the series' interval at this point. */
+  upper?: number;
+}
+
+/** One top-level interval sitting at the hovered position. */
+export interface ChartTooltipInterval {
+  lower: number;
+  upper: number;
+  value?: number;
+  color: string;
 }
 
 /** Properties common to every chart's tooltip slot. */
 export interface ChartTooltipBaseProps {
   index: number;
   values: ChartTooltipValue[];
+  /** Top-level `intervals` whose `x` lands on the hovered position. */
+  intervals: ChartTooltipInterval[];
   data: unknown;
 }

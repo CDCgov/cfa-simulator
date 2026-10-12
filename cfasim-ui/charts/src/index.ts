@@ -50,5 +50,11 @@ export {
   type ResolvedMapTheme,
 } from "./_shared/mapTheme.js";
 export type { ChartAnnotation } from "./_shared/annotations.js";
+export type { ChartInterval, IntervalStyle } from "./_shared/intervals.js";
+export type {
+  ChartTooltipValue,
+  ChartTooltipInterval,
+  ChartTooltipBaseProps,
+} from "./_shared/chartProps.js";
 export type { ChartMarker, ChartMarkerDragPayload } from "./_shared/markers.js";
 export type { BlendMode, LineMarkStyle } from "./_shared/chartProps.js";

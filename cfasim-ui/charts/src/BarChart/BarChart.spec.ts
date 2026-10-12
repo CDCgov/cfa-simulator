@@ -62,3 +62,21 @@ test("legend buttons hide and restore bar series", async ({ page }) => {
   await toggle.click();
   await expect(bars).toHaveCount(8);
 });
+
+test("BarChart centers series whiskers on their bars", async ({ page }) => {
+  await page.goto("./cfasim-ui/charts/bar-chart");
+  const chart = page.locator('[data-testid="interval-bar-chart"]');
+  await chart.scrollIntoViewIfNeeded();
+  const intervals = chart.locator('[data-testid="interval"]');
+  await expect(intervals).toHaveCount(8);
+  const bar = chart.locator('[data-testid="bar"][data-series="1"]').first();
+  const barBox = await bar.boundingBox();
+  // Series B's first whisker follows series A's four, in category order.
+  const line = intervals.nth(4).locator("line.interval-line");
+  const x1 = Number(await line.getAttribute("x1"));
+  const svgBox = await chart.locator("svg").last().boundingBox();
+  expect(barBox && svgBox).toBeTruthy();
+  const barCenter = barBox!.x + barBox!.width / 2 - svgBox!.x;
+  expect(Math.abs(x1 - barCenter)).toBeLessThan(1);
+  await expect(line).toHaveAttribute("stroke", "currentColor");
+});

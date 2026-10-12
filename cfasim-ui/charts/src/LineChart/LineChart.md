@@ -1,6 +1,20 @@
 ---
 keywords:
-  [line, chart, time-series, series, axis, area, confidence band, marker, svg]
+  [
+    line,
+    chart,
+    time-series,
+    series,
+    axis,
+    area,
+    confidence band,
+    interval,
+    error bars,
+    whiskers,
+    calibration,
+    marker,
+    svg,
+  ]
 ---
 
 # LineChart
@@ -198,6 +212,7 @@ Every text element on the chart has its own style prop and default size (in px).
 | Area section label                          | `areaSection.inlineLabelStyle`       | `LabelStyle` |           11 |
 | Area section description                    | `areaSection.inlineDescriptionStyle` | `LabelStyle` |           11 |
 | Annotation text                             | `annotation.fontSize`                | `number`     |           13 |
+| Interval whiskers (stroke width)            | `intervalStyle.lineWidth`            | `number`     |          1.5 |
 
 These are single styles applied to both axes — there's no separate x vs y font size. The same props (except the LineChart-only area-section fields) exist on `BarChart`, since both compose `ChartCommonProps`.
 
@@ -742,6 +757,126 @@ the field from shared config. Set `blendMode` on an `Area` to apply a CSS
 
   </template>
 </ComponentDemo>
+
+### Intervals
+
+Draw a whisker at any x with `intervals`: a line from `lower` to `upper`
+with end caps, and a dot at `value` when one is given. Intervals are
+independent of the series, which makes them a good fit for calibration
+targets: observed ranges a bundle of simulated trajectories should pass
+through. `x` is in the chart's x-space (so it respects `xMin`, explicit
+`x` values, and epoch-ms on a date axis), and the y axis extends to cover
+every interval.
+
+<ComponentDemo>
+  <LineChart
+    data-testid="calibration-chart"
+    :series="Array.from({ length: 30 }, (_, i) => ({
+      data: Array.from({ length: 40 }, (_, t) => Math.max(0, 40 * Math.exp(-((t - 18 - (i % 7)) ** 2) / 90) + (Math.random() - 0.5) * 6)),
+      color: '#0057b7',
+    }))"
+    :intervals="[
+      { x: 5, lower: 1, upper: 6, value: 3 },
+      { x: 12, lower: 14, upper: 26, value: 20 },
+      { x: 19, lower: 32, upper: 46, value: 39 },
+      { x: 30, lower: 8, upper: 18, value: 13 },
+    ]"
+    :interval-style="{ color: '#c2410c', lineWidth: 2, capWidth: 10 }"
+    :height="260"
+    :line-opacity="0.15"
+    x-label="Days"
+    y-label="Incidence"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="trajectories"
+  :intervals="[
+    { x: 5, lower: 1, upper: 6, value: 3 },
+    { x: 12, lower: 14, upper: 26, value: 20 },
+    { x: 19, lower: 32, upper: 46, value: 39 },
+    { x: 30, lower: 8, upper: 18, value: 13 },
+  ]"
+  :interval-style="{ color: '#c2410c', lineWidth: 2, capWidth: 10 }"
+  :height="260"
+  :line-opacity="0.15"
+  x-label="Days"
+  y-label="Incidence"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+`intervalStyle` sets defaults for every whisker on the chart; any field
+set on an individual interval wins. The style fields are `color`,
+`lineWidth`, `capWidth` (`0` hides the caps), `opacity`, `lineDash`,
+`outlineWidth` / `outlineColor` (a page-colored halo for legibility over
+dense series, off by default), `dot` / `dotRadius` / `dotFill` /
+`dotStroke` / `dotStrokeWidth` for the value marker, and `blendMode`.
+
+For one whisker per data point, put parallel `lower` and `upper` arrays
+on a `Series`. They draw in the series color under its line and dots,
+follow its legend toggle, show up in the tooltip as a range, and export
+as extra `_lower` / `_upper` CSV columns. Style them with the series'
+`intervalStyle`.
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      {
+        data: [12, 18, 25, 31, 28, 20, 14],
+        lower: [9, 14, 20, 26, 23, 16, 10],
+        upper: [15, 22, 30, 36, 33, 24, 18],
+        color: '#0057b7',
+        dots: true,
+        legend: 'Observed',
+        intervalStyle: { capWidth: 6, opacity: 0.8 },
+      },
+      {
+        data: [10, 17, 24, 30, 29, 22, 15],
+        color: '#ef4444',
+        dashed: true,
+        legend: 'Model',
+      },
+    ]"
+    :height="240"
+    x-label="Week"
+    y-label="Cases"
+    tooltip-trigger="hover"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    {
+      data: observed,
+      lower: observedLo,
+      upper: observedHi,
+      color: '#0057b7',
+      dots: true,
+      legend: 'Observed',
+      intervalStyle: { capWidth: 6, opacity: 0.8 },
+    },
+    { data: model, color: '#ef4444', dashed: true, legend: 'Model' },
+  ]"
+  :height="240"
+  x-label="Week"
+  y-label="Cases"
+  tooltip-trigger="hover"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+> **Intervals vs. areas.** `areas` fills a continuous band between two
+> series and suits a model's own uncertainty envelope. `intervals` marks
+> discrete ranges at specific positions and suits observations.
 
 ### Area sections
 
@@ -1553,3 +1688,35 @@ interface AreaSection {
   legend?: "inline" | "below" | false; // default: "below"
 }
 ```
+
+### ChartInterval
+
+```ts
+interface ChartInterval extends IntervalStyle {
+  x: number; // data-space x (epoch ms on a date axis)
+  lower: number;
+  upper: number;
+  value?: number; // point estimate, drawn as a dot
+  seriesIndex?: number; // tie to a series: hides with it; LineChart takes its color, BarChart centers on its bar
+}
+
+interface IntervalStyle {
+  color?: string; // default: currentColor (LineChart series whiskers: the series color)
+  lineWidth?: number; // default: 1.5
+  capWidth?: number; // default: 8; 0 hides the caps
+  opacity?: number; // default: 1
+  lineDash?: string | number | number[]; // whisker only; caps stay solid
+  outlineWidth?: number; // default: 0 (no halo)
+  outlineColor?: string; // default: var(--color-bg-0, #fff)
+  dot?: boolean; // default: true for `intervals`, false for series whiskers
+  dotRadius?: number; // default: 3
+  dotFill?: string; // default: color
+  dotStroke?: string;
+  dotStrokeWidth?: number; // default: 1
+  blendMode?: BlendMode;
+}
+```
+
+The tooltip slot receives `intervals` (standalone intervals whose `x` is
+the hovered x) alongside `values`, and each series value carries `lower`
+/ `upper` when the series has whiskers.

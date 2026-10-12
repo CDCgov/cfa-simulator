@@ -102,3 +102,27 @@ describe("categoricalToCsv", () => {
     ).toBe("category,x\nA,1\nB,2\nC,");
   });
 });
+
+describe("interval columns", () => {
+  it("adds lower/upper columns after a series value", () => {
+    expect(seriesToCsv([{ data: [1, 2], lower: [0, 1], upper: [2, 3] }])).toBe(
+      "index,value,value_lower,value_upper\n0,1,0,2\n1,2,1,3",
+    );
+    expect(
+      seriesToCsv([{ data: [1] }, { data: [5], lower: [4], upper: [6] }]),
+    ).toBe("index,series_0,series_1,series_1_lower,series_1_upper\n0,1,5,4,6");
+  });
+
+  it("needs both bounds before adding columns", () => {
+    expect(seriesToCsv([{ data: [1], lower: [0] }])).toBe("index,value\n0,1");
+  });
+
+  it("adds lower/upper columns to categorical CSV", () => {
+    expect(
+      categoricalToCsv(
+        ["A", "B"],
+        [{ label: "Cases", data: [1, 2], lower: [0, 1], upper: [2, 4] }],
+      ),
+    ).toBe("category,Cases,Cases_lower,Cases_upper\nA,1,0,2\nB,2,1,4");
+  });
+});

@@ -2264,3 +2264,178 @@ describe("BarChart", () => {
     });
   });
 });
+
+describe("BarChart intervals", () => {
+  function intervals(wrapper: ReturnType<typeof mount>) {
+    return wrapper.findAll('[data-testid="interval"]');
+  }
+
+  it("centers a series whisker on its bar in a grouped layout", () => {
+    const wrapper = mount(BarChart, {
+      props: {
+        series: [
+          { data: [10, 20], lower: [8, 18], upper: [12, 22], legend: "A" },
+          { data: [15, 25], lower: [13, 23], upper: [17, 27], legend: "B" },
+        ],
+        categories: ["x", "y"],
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    const items = intervals(wrapper);
+    expect(items).toHaveLength(4);
+    const found = bars(wrapper);
+    // Whiskers are emitted per series then per category; bars per
+    // category then per series.
+    for (let s = 0; s < 2; s++) {
+      for (let c = 0; c < 2; c++) {
+        const bar = found[c * 2 + s];
+        const line = items[s * 2 + c].find("line.interval-line");
+        const center =
+          Number(bar.attributes("x")) + Number(bar.attributes("width")) / 2;
+        expect(Number(line.attributes("x1"))).toBeCloseTo(center, 5);
+        // Never the bar's own color: that would hide the whisker over the bar.
+        expect(line.attributes("stroke")).toBe("currentColor");
+      }
+    }
+  });
+
+  it("centers a standalone interval on the category slot", () => {
+    const wrapper = mount(BarChart, {
+      props: {
+        data: [10, 20, 30],
+        categories: ["a", "b", "c"],
+        intervals: [{ x: 1, lower: 15, upper: 25 }],
+        width: 300,
+        height: 200,
+        menu: false,
+        barPadding: 0,
+      },
+    });
+    const bar = bars(wrapper)[1];
+    const line = intervals(wrapper)[0].find("line.interval-line");
+    const center =
+      Number(bar.attributes("x")) + Number(bar.attributes("width")) / 2;
+    expect(Number(line.attributes("x1"))).toBeCloseTo(center, 5);
+  });
+
+  it("pins a standalone interval to a series bar via seriesIndex", () => {
+    const wrapper = mount(BarChart, {
+      props: {
+        series: [
+          { data: [10, 20], color: "#111111" },
+          { data: [15, 25], color: "#222222" },
+        ],
+        intervals: [{ x: 0, lower: 12, upper: 18, seriesIndex: 1 }],
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    const bar = bars(wrapper).find((b) => b.attributes("data-series") === "1")!;
+    const line = intervals(wrapper)[0].find("line.interval-line");
+    const center =
+      Number(bar.attributes("x")) + Number(bar.attributes("width")) / 2;
+    expect(Number(line.attributes("x1"))).toBeCloseTo(center, 5);
+    expect(line.attributes("stroke")).toBe("currentColor");
+  });
+
+  it("draws horizontal whiskers with vertical caps in horizontal orientation", () => {
+    const wrapper = mount(BarChart, {
+      props: {
+        data: [10, 20],
+        intervals: [{ x: 0, lower: 5, upper: 15 }],
+        orientation: "horizontal",
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    const item = intervals(wrapper)[0];
+    const line = item.find("line.interval-line");
+    expect(line.attributes("y1")).toBe(line.attributes("y2"));
+    expect(Number(line.attributes("x2"))).toBeGreaterThan(
+      Number(line.attributes("x1")),
+    );
+    const cap = item.find("line.interval-cap");
+    expect(cap.attributes("x1")).toBe(cap.attributes("x2"));
+  });
+
+  it("drops an interval that sits off the category axis", () => {
+    const wrapper = mount(BarChart, {
+      props: {
+        data: [10, 20, 30],
+        intervals: [
+          { x: 5, lower: 1, upper: 2 },
+          { x: 2.2, lower: 1, upper: 2 },
+        ],
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    expect(intervals(wrapper)).toHaveLength(1);
+  });
+
+  it("extends the value axis to cover interval bounds", () => {
+    const wrapper = mount(BarChart, {
+      props: {
+        data: [10, 20],
+        intervals: [{ x: 1, lower: 15, upper: 100 }],
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    const labels = wrapper.findAll("text").map((t) => t.text());
+    expect(labels).toContain("100");
+  });
+
+  it("hides whiskers of a legend-hidden series", () => {
+    const wrapper = mount(BarChart, {
+      props: {
+        series: [
+          { data: [10], lower: [8], upper: [12], legend: "A" },
+          { data: [15], legend: "B" },
+        ],
+        intervals: [{ x: 0, lower: 1, upper: 2, seriesIndex: 0 }],
+        hiddenSeries: ["A"],
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    expect(intervals(wrapper)).toHaveLength(0);
+  });
+
+  it("includes interval bounds in the tooltip and CSV", async () => {
+    const wrapper = mount(BarChart, {
+      props: {
+        series: [
+          { data: [1, 2], lower: [0, 1], upper: [2, 3], legend: "Cases" },
+        ],
+        intervals: [{ x: 1, lower: 10, upper: 20 }],
+        categories: ["a", "b"],
+        width: 400,
+        height: 200,
+        menu: false,
+        downloadLink: true,
+        tooltipTrigger: "hover" as const,
+      },
+      slots: {
+        tooltip: `<template #tooltip="p">
+          <div class="tt">{{ p.values[0].lower }}-{{ p.values[0].upper }}|{{ p.intervals.map(i => i.lower + '-' + i.upper).join() }}</div>
+        </template>`,
+      },
+    });
+    await wrapper
+      .find('[data-testid="chart-overlay"]')
+      .trigger("mousemove", { clientX: 300, clientY: 100 });
+    expect(wrapper.find(".tt").text()).toBe("1-3|10-20");
+    const link = wrapper.find("a.bar-chart-download-link");
+    expect(decodeURIComponent(link.attributes("href") ?? "")).toContain(
+      "category,Cases,Cases_lower,Cases_upper\na,1,0,2\nb,2,1,3",
+    );
+  });
+});

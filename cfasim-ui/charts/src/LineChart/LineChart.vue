@@ -17,6 +17,12 @@ import {
   useChartCommon,
   makeTooltipValueFormatter,
   ChartAnnotations,
+  ChartIntervals,
+  seriesIntervals,
+  resolveIntervalStyle,
+  type ChartInterval,
+  type IntervalStyle,
+  type ChartTooltipInterval,
   ChartAxisLabels,
   ChartTitle,
   ChartZoomControls,
@@ -116,6 +122,16 @@ export interface Series extends LineMarkStyle {
    * hover dot. Defaults to true. The series line/dots are still drawn.
    */
   showInTooltip?: boolean;
+  /**
+   * Low bound of an interval at each point, parallel to `y`/`data`.
+   * With `upper`, draws a whisker at every point where both bounds are
+   * finite, in the series color. Bounds are absolute y values.
+   */
+  lower?: LineChartData;
+  /** High bound of an interval at each point, parallel to `y`/`data`. */
+  upper?: LineChartData;
+  /** Styling for this series' `lower` / `upper` whiskers. */
+  intervalStyle?: IntervalStyle;
 }
 
 export interface Area {
@@ -449,6 +465,29 @@ const xDisplayOffset = computed(() =>
   hasExplicitX.value ? 0 : (props.xMin ?? 0),
 );
 
+/**
+ * Top-level `intervals` in internal x units (the display offset removed,
+ * as for annotations), minus any tied to a legend-hidden series.
+ */
+const topIntervals = computed<ChartInterval[]>(() => {
+  const out: ChartInterval[] = [];
+  for (const iv of props.intervals ?? []) {
+    if (iv.seriesIndex !== undefined) {
+      const s = allSeries.value[iv.seriesIndex];
+      if (!s || isHidden(s.legend)) continue;
+    }
+    out.push({ ...iv, x: iv.x - xDisplayOffset.value });
+  }
+  return out;
+});
+
+/** Series color for a standalone interval tied to a series. */
+function intervalColor(iv: ChartInterval): string | undefined {
+  return iv.seriesIndex === undefined
+    ? undefined
+    : allSeries.value[iv.seriesIndex]?.color;
+}
+
 const xExtent = computed(() => {
   let min = Infinity;
   let max = -Infinity;
@@ -469,8 +508,32 @@ const xExtent = computed(() => {
       if (v > max) max = v;
     }
   }
+  for (const iv of topIntervals.value) {
+    if (!isFinite(iv.x)) continue;
+    if (iv.x < min) min = iv.x;
+    if (iv.x > max) max = iv.x;
+  }
   if (!isFinite(min)) return { min: 0, max: 0 };
   return { min, max };
+});
+
+/** Whiskers expanded from each visible series' `lower` / `upper`. */
+const seriesIntervalList = computed<ChartInterval[]>(() => {
+  const out: ChartInterval[] = [];
+  allSeries.value.forEach((s, i) => {
+    if (isHidden(s.legend) || !s.lower || !s.upper) return;
+    out.push(
+      ...seriesIntervals({
+        data: s.data,
+        lower: s.lower,
+        upper: s.upper,
+        xAt: (j) => seriesXAt(s, j),
+        seriesIndex: i,
+        style: { color: s.color, ...s.intervalStyle },
+      }),
+    );
+  });
+  return out;
 });
 
 /** Brushed x-window in internal x units; null shows the full extent. */
@@ -625,6 +688,14 @@ function dataYExtent(win: { min: number; max: number } | null) {
     for (const band of [a.upper, a.lower]) {
       if (win) visitWindow(band, (i) => areaXAt(a, i), win, visit);
       else for (const v of band) visit(v);
+    }
+  }
+  for (const list of [topIntervals.value, seriesIntervalList.value]) {
+    for (const iv of list) {
+      if (win && (iv.x < win.min || iv.x > win.max)) continue;
+      visit(iv.lower);
+      visit(iv.upper);
+      if (iv.value !== undefined) visit(iv.value);
     }
   }
   if (!isFinite(min)) return { min: 0, max: 0, range: 1 };
@@ -1113,7 +1184,17 @@ const xTickItems = computed(() => {
 });
 
 function toCsv(): string {
-  return resolveCsvOverride(props.csv) ?? seriesToCsv(allSeries.value);
+  return (
+    resolveCsvOverride(props.csv) ??
+    seriesToCsv(
+      allSeries.value.map((s) => ({
+        data: s.data,
+        x: s.x,
+        lower: s.lower,
+        upper: s.upper,
+      })),
+    )
+  );
 }
 
 /** Data-space x of the hovered point (via the first series). */
@@ -1172,6 +1253,8 @@ const hoverPoints = computed(() => {
     seriesIndex: number;
     color: string;
     value: number;
+    lower?: number;
+    upper?: number;
     x: number;
     y: number;
   }[] = [];
@@ -1182,12 +1265,40 @@ const hoverPoints = computed(() => {
     const nIdx = nearestIndex(s, targetX);
     const value = nIdx !== null ? Number(s.data[nIdx]) : NaN;
     const finite = isFinite(value);
+    const lower = nIdx !== null && s.lower ? Number(s.lower[nIdx]) : NaN;
+    const upper = nIdx !== null && s.upper ? Number(s.upper[nIdx]) : NaN;
+    const hasBounds = isFinite(lower) && isFinite(upper);
     out.push({
       seriesIndex: i,
       color: s.color ?? "currentColor",
       value,
+      lower: hasBounds ? Math.min(lower, upper) : undefined,
+      upper: hasBounds ? Math.max(lower, upper) : undefined,
       x: finite ? xPixel(seriesXAt(s, nIdx!)) : NaN,
       y: finite ? yPixel(value) : NaN,
+    });
+  }
+  return out;
+});
+
+/**
+ * Top-level intervals belonging to the hovered point: those whose
+ * nearest first-series point is the hovered one, so an interval between
+ * two data x values still shows up.
+ */
+const hoverIntervals = computed<ChartTooltipInterval[]>(() => {
+  const idx = hoverIndex.value;
+  const s0 = allSeries.value[0];
+  if (idx === null || !s0) return [];
+  const out: ChartTooltipInterval[] = [];
+  for (const iv of topIntervals.value) {
+    if (!isFinite(iv.x) || nearestIndex(s0, iv.x) !== idx) continue;
+    out.push({
+      lower: Math.min(iv.lower, iv.upper),
+      upper: Math.max(iv.lower, iv.upper),
+      value: iv.value,
+      color: resolveIntervalStyle(iv, props.intervalStyle, intervalColor(iv))
+        .color,
     });
   }
   return out;
@@ -1207,12 +1318,15 @@ const hoverSlotProps = computed(() => {
     value: p.value,
     color: p.color,
     seriesIndex: p.seriesIndex,
+    lower: p.lower,
+    upper: p.upper,
   }));
   return {
     index: idx,
     // Single source of truth for label dispatch — same as the x-axis ticks.
     xLabel: formatXValue(targetX, idx),
     values,
+    intervals: hoverIntervals.value,
     data: props.tooltipData?.[idx] ?? null,
   };
 });
@@ -1229,6 +1343,19 @@ function projectAnnotation(
     if (y < extent.value.min || y > extent.value.max) return null;
   }
   return { x: xPixel(internalX), y: yPixel(y) };
+}
+
+/**
+ * Pixel position for an interval endpoint. Unlike annotations, nothing
+ * is dropped while zoomed: the whiskers sit inside the plot clip, so a
+ * range crossing the window edge is cut rather than hidden.
+ */
+function projectInterval(
+  iv: ChartInterval,
+  value: number,
+): { x: number; y: number } | null {
+  if (!isFinite(iv.x) || !isFinite(value)) return null;
+  return { x: xPixel(iv.x), y: yPixel(value) };
 }
 
 function indexFromPointer(clientX: number): number | null {
@@ -1752,6 +1879,13 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             stroke="none"
             :style="a.blendMode ? { mixBlendMode: a.blendMode } : undefined"
           />
+          <!-- series whiskers (under their lines and dots) -->
+          <ChartIntervals
+            v-if="seriesIntervalList.length > 0"
+            :intervals="seriesIntervalList"
+            :defaults="intervalStyle"
+            :project="projectInterval"
+          />
           <!-- data lines and dots -->
           <template v-for="({ s, path, points }, i) in seriesRender" :key="i">
             <path
@@ -1788,6 +1922,14 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
               />
             </template>
           </template>
+          <!-- standalone intervals (above series, e.g. calibration targets) -->
+          <ChartIntervals
+            v-if="topIntervals.length > 0"
+            :intervals="topIntervals"
+            :defaults="intervalStyle"
+            :project="projectInterval"
+            :color-for="intervalColor"
+          />
           <!-- area sections (rendered above series) -->
           <template v-for="(r, i) in sectionRender" :key="'areasec' + i">
             <path
@@ -2015,6 +2157,37 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
                 :style="{ background: v.color }"
               />
               {{ isFinite(v.value) ? formatTooltipValue(v.value) : "—" }}
+              <span
+                v-if="v.lower !== undefined && v.upper !== undefined"
+                class="line-chart-tooltip-range"
+              >
+                ({{ formatTooltipValue(v.lower) }}–{{
+                  formatTooltipValue(v.upper)
+                }})
+              </span>
+            </div>
+            <div
+              v-for="(iv, i) in hoverSlotProps.intervals"
+              :key="'iv' + i"
+              class="line-chart-tooltip-row"
+            >
+              <span
+                class="line-chart-tooltip-swatch"
+                :style="{ background: iv.color }"
+              />
+              <template v-if="iv.value !== undefined">
+                {{ formatTooltipValue(iv.value) }}
+                <span class="line-chart-tooltip-range">
+                  ({{ formatTooltipValue(iv.lower) }}–{{
+                    formatTooltipValue(iv.upper)
+                  }})
+                </span>
+              </template>
+              <template v-else>
+                {{ formatTooltipValue(iv.lower) }}–{{
+                  formatTooltipValue(iv.upper)
+                }}
+              </template>
             </div>
           </div>
         </slot>
@@ -2054,6 +2227,10 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
   display: flex;
   align-items: center;
   gap: 0.375em;
+}
+
+.line-chart-tooltip-range {
+  opacity: 0.7;
 }
 
 .line-chart-download-link {

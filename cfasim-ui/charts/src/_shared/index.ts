@@ -60,6 +60,15 @@ export { default as ChartAxisLabels } from "./ChartAxisLabels.vue";
 export { default as ChartTitle } from "./ChartTitle.vue";
 export { useChartCommon } from "./useChartCommon.js";
 export type { ChartAnnotation } from "./annotations.js";
+export { default as ChartIntervals } from "./ChartIntervals.vue";
+export {
+  intervalGeometry,
+  resolveIntervalStyle,
+  seriesIntervals,
+  INTERVAL_DEFAULTS,
+  type ChartInterval,
+  type IntervalStyle,
+} from "./intervals.js";
 export {
   useChartFoundation,
   makeTooltipValueFormatter,
@@ -69,6 +78,7 @@ export type {
   ChartCommonProps,
   ChartHoverPayload,
   ChartTooltipValue,
+  ChartTooltipInterval,
   ChartTooltipBaseProps,
   TitleStyle,
   LabelStyle,

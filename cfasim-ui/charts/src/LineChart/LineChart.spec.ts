@@ -227,3 +227,31 @@ test("legend buttons toggle series by keyboard and keep working expanded", async
   await expect(baseline).toHaveAttribute("aria-pressed", "false");
   expect(await yMax()).toBeLessThanOrEqual(500);
 });
+
+test("LineChart draws calibration intervals above the trajectories", async ({
+  page,
+}) => {
+  await page.goto("./cfasim-ui/charts/line-chart");
+  const chart = page.locator('[data-testid="calibration-chart"]');
+  await chart.scrollIntoViewIfNeeded();
+  const intervals = chart.locator('[data-testid="interval"]');
+  await expect(intervals).toHaveCount(4);
+  const first = intervals.first();
+  await expect(first.locator("line.interval-cap")).toHaveCount(2);
+  await expect(first.locator("circle.interval-dot")).toHaveCount(1);
+  await expect(first.locator("line.interval-line")).toHaveAttribute(
+    "stroke",
+    "#c2410c",
+  );
+  // The whiskers sit after every series path in paint order.
+  const order = await chart
+    .locator("svg")
+    .last()
+    .evaluate((svg) => {
+      const nodes = Array.from(
+        svg.querySelectorAll("path[fill='none'], [data-testid='interval']"),
+      );
+      return nodes.map((n) => (n.tagName === "path" ? "p" : "i")).join("");
+    });
+  expect(order).toMatch(/^p+i{4}$/);
+});

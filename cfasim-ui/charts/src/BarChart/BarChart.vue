@@ -17,6 +17,12 @@ import {
   useChartCommon,
   makeTooltipValueFormatter,
   ChartAnnotations,
+  ChartIntervals,
+  seriesIntervals,
+  resolveIntervalStyle,
+  type ChartInterval,
+  type IntervalStyle,
+  type ChartTooltipInterval,
   ChartAxisLabels,
   ChartTitle,
   ChartZoomControls,
@@ -70,6 +76,19 @@ export interface BarSeries {
    * true. The bars are still drawn.
    */
   showInTooltip?: boolean;
+  /**
+   * Low bound of an interval per category, parallel to `y`/`data`. With
+   * `upper`, draws a whisker on every bar where both bounds are finite,
+   * centered on the bar. Whiskers default to `currentColor`, not the
+   * series color, which would vanish over the bar. Bounds are absolute
+   * values on the value axis (not offsets from the bar), including in
+   * `stacked` layout.
+   */
+  lower?: BarChartData;
+  /** High bound of an interval per category, parallel to `y`/`data`. */
+  upper?: BarChartData;
+  /** Styling for this series' `lower` / `upper` whiskers. */
+  intervalStyle?: IntervalStyle;
 }
 
 /**
@@ -323,6 +342,9 @@ type ResolvedSeries = {
   legend?: string;
   showInLegend?: boolean;
   showInTooltip?: boolean;
+  lower?: BarChartData;
+  upper?: BarChartData;
+  intervalStyle?: IntervalStyle;
 };
 
 function resolveSeries(s: BarSeries): ResolvedSeries {
@@ -334,6 +356,9 @@ function resolveSeries(s: BarSeries): ResolvedSeries {
     legend: s.legend,
     showInLegend: s.showInLegend,
     showInTooltip: s.showInTooltip,
+    lower: s.lower,
+    upper: s.upper,
+    intervalStyle: s.intervalStyle,
   };
 }
 
@@ -485,6 +510,70 @@ function resetZoom() {
   zoomValue.value = null;
 }
 
+/** Top-level `intervals`, dropping any pinned to a legend-hidden series. */
+const topIntervals = computed<ChartInterval[]>(() =>
+  (props.intervals ?? []).filter((iv) => {
+    if (iv.seriesIndex === undefined) return true;
+    const s = allSeries.value[iv.seriesIndex];
+    return s !== undefined && !isHidden(s.legend);
+  }),
+);
+
+/** Whiskers expanded from each visible series' `lower` / `upper`. */
+const seriesIntervalList = computed<ChartInterval[]>(() => {
+  const out: ChartInterval[] = [];
+  for (const { series: s, index } of visibleSeries.value) {
+    if (!s.lower || !s.upper) continue;
+    out.push(
+      ...seriesIntervals({
+        data: s.data,
+        lower: s.lower,
+        upper: s.upper,
+        xAt: (i) => i,
+        seriesIndex: index,
+        // Not the series color: a whisker in the bar's own color vanishes
+        // where it overlaps the bar, so it falls back to currentColor.
+        style: s.intervalStyle,
+      }),
+    );
+  }
+  return out;
+});
+
+/**
+ * Pixel position of an interval endpoint. With a `seriesIndex` in a
+ * grouped layout the whisker centers on that series' bar; otherwise on
+ * the category slot. Nothing is dropped while zoomed: the whiskers sit
+ * inside the plot clip.
+ */
+function projectInterval(
+  iv: ChartInterval,
+  value: number,
+): { x: number; y: number } | null {
+  if (!isFinite(iv.x) || !isFinite(value) || slotSize.value === 0) {
+    return null;
+  }
+  // Off the category axis entirely: the plot clip only applies while
+  // zoomed, so this would otherwise paint over the padding.
+  if (iv.x < -0.5 || iv.x > categoryCount.value - 0.5) return null;
+  let categoricalPx = slotStart(iv.x + 0.5);
+  const k = visibleSeries.value.length;
+  if (iv.seriesIndex !== undefined && props.layout === "grouped" && k > 1) {
+    const pos = visibleSeries.value.findIndex(
+      ({ index }) => index === iv.seriesIndex,
+    );
+    if (pos < 0) return null;
+    const innerOffset = (slotSize.value - groupWidth.value) / 2;
+    const bw = barWidth.value;
+    categoricalPx =
+      slotStart(iv.x) + innerOffset + pos * (bw + props.groupGap) + bw / 2;
+  }
+  const valuePx = valuePixel(value);
+  return isVertical.value
+    ? { x: categoricalPx, y: valuePx }
+    : { x: valuePx, y: categoricalPx };
+}
+
 /**
  * Value extent across all series (accounting for stacking) for the
  * categories `start..end`.
@@ -520,6 +609,17 @@ function dataValueExtent(start: number, end: number) {
         visitPositive(n);
         if (n < min) min = n;
         if (n > max) max = n;
+      }
+    }
+  }
+  for (const list of [topIntervals.value, seriesIntervalList.value]) {
+    for (const iv of list) {
+      if (iv.x < start - 0.5 || iv.x > end + 0.5) continue;
+      for (const v of [iv.lower, iv.upper, iv.value]) {
+        if (v === undefined || !isFinite(v)) continue;
+        visitPositive(v);
+        if (v < min) min = v;
+        if (v > max) max = v;
       }
     }
   }
@@ -1072,6 +1172,8 @@ function toCsv(): string {
   const namedSeries = allSeries.value.map((s) => ({
     label: s.legend,
     data: s.data,
+    lower: s.lower,
+    upper: s.upper,
   }));
   return categoricalToCsv(categoryLabels.value, namedSeries);
 }
@@ -1225,16 +1327,32 @@ const hoverSlotProps = computed(() => {
   for (let i = 0; i < series.length; i++) {
     const s = series[i];
     if (s.showInTooltip === false || isHidden(s.legend)) continue;
+    const lower = s.lower ? Number(s.lower[idx] ?? NaN) : NaN;
+    const upper = s.upper ? Number(s.upper[idx] ?? NaN) : NaN;
+    const hasBounds = isFinite(lower) && isFinite(upper);
     values.push({
       value: Number(s.data[idx] ?? NaN),
       color: s.color ?? defaultColor(i),
       seriesIndex: i,
+      lower: hasBounds ? Math.min(lower, upper) : undefined,
+      upper: hasBounds ? Math.max(lower, upper) : undefined,
+    });
+  }
+  const intervals: ChartTooltipInterval[] = [];
+  for (const iv of topIntervals.value) {
+    if (Math.round(iv.x) !== idx) continue;
+    intervals.push({
+      lower: Math.min(iv.lower, iv.upper),
+      upper: Math.max(iv.lower, iv.upper),
+      value: iv.value,
+      color: resolveIntervalStyle(iv, props.intervalStyle).color,
     });
   }
   return {
     index: idx,
     category: categoryLabels.value[idx] ?? String(idx),
     values,
+    intervals,
     data: props.tooltipData?.[idx] ?? null,
   };
 });
@@ -1806,6 +1924,19 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
             :fill-opacity="bar.opacity"
             :style="bar.blendMode ? { mixBlendMode: bar.blendMode } : undefined"
           />
+          <!-- interval whiskers: per-series first, then standalone ones -->
+          <ChartIntervals
+            v-if="seriesIntervalList.length > 0"
+            :intervals="seriesIntervalList"
+            :defaults="intervalStyle"
+            :project="projectInterval"
+          />
+          <ChartIntervals
+            v-if="topIntervals.length > 0"
+            :intervals="topIntervals"
+            :defaults="intervalStyle"
+            :project="projectInterval"
+          />
           <!-- value-on-bar labels -->
           <text
             v-for="item in barLabelItems"
@@ -1915,6 +2046,37 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
                 :style="{ background: v.color }"
               />
               {{ isFinite(v.value) ? formatTooltipValue(v.value) : "—" }}
+              <span
+                v-if="v.lower !== undefined && v.upper !== undefined"
+                class="bar-chart-tooltip-range"
+              >
+                ({{ formatTooltipValue(v.lower) }}–{{
+                  formatTooltipValue(v.upper)
+                }})
+              </span>
+            </div>
+            <div
+              v-for="(iv, i) in hoverSlotProps.intervals"
+              :key="'iv' + i"
+              class="bar-chart-tooltip-row"
+            >
+              <span
+                class="bar-chart-tooltip-swatch"
+                :style="{ background: iv.color }"
+              />
+              <template v-if="iv.value !== undefined">
+                {{ formatTooltipValue(iv.value) }}
+                <span class="bar-chart-tooltip-range">
+                  ({{ formatTooltipValue(iv.lower) }}–{{
+                    formatTooltipValue(iv.upper)
+                  }})
+                </span>
+              </template>
+              <template v-else>
+                {{ formatTooltipValue(iv.lower) }}–{{
+                  formatTooltipValue(iv.upper)
+                }}
+              </template>
             </div>
           </div>
         </slot>
@@ -1954,6 +2116,10 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
   display: flex;
   align-items: center;
   gap: 0.375em;
+}
+
+.bar-chart-tooltip-range {
+  opacity: 0.7;
 }
 
 .bar-chart-download-link {
