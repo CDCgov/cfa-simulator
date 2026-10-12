@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.8.17] - 2026-10-12
+
+### Features
+
+- **charts:** Add interval whiskers to LineChart and BarChart
+
 ## [0.8.16] - 2026-10-12
 
 ### Bug Fixes
