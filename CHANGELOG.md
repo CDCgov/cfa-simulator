@@ -1,6 +1,17 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.9.0] - 2026-10-14
+
+### Features
+
+- **charts:** Restyle area section labels with an extended fill and bar
+- **charts:** Style grid lines with weight, color, and dash patterns
+
+### Tests
+
+- Speed up pre-commit and e2e suites
+
 ## [0.8.18] - 2026-10-12
 
 ### Chores
