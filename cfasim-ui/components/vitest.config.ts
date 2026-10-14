@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import vue from "@vitejs/plugin-vue";
 import svgLoader from "vite-svg-loader";
 import { iconSvgoConfig } from "./svgLoaderConfig.mjs";
@@ -8,6 +8,6 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     // .spec is for e2e tests
-    exclude: ["src/**/*.spec.ts"],
+    exclude: [...configDefaults.exclude, "src/**/*.spec.ts"],
   },
 });

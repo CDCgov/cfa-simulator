@@ -1,9 +1,12 @@
 import { test, expect } from "@playwright/test";
-import { execSync, spawn } from "node:child_process";
+import { exec, execSync, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { existsSync, rmSync, mkdtempSync } from "node:fs";
 import { resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { promisify } from "node:util";
+
+const execAsync = promisify(exec);
 
 const ROOT = resolve(import.meta.dirname, "..");
 const CLI = resolve(ROOT, "target/debug/cfasim");
@@ -30,8 +33,21 @@ function scaffoldProject(name: string, template: Template) {
   });
 }
 
+// Each template keeps a persistent cargo target dir under the (gitignored)
+// workspace `target/` so dependency crates compile once, not per run; one
+// dir per template because cargo locks a target dir per build. Both the
+// pre-build below and the `cfasimWasm` vite plugin (which runs wasm-pack
+// again at startup) must point at it.
+function wasmEnv(template: Template) {
+  return {
+    ...process.env,
+    CARGO_TARGET_DIR: resolve(ROOT, "target/e2e-wasm", template),
+  };
+}
+
 function startVite(
   name: string,
+  template: Template,
   port: number,
 ): { proc: ChildProcess; url: string } {
   const proc = spawn(
@@ -39,6 +55,7 @@ function startVite(
     ["exec", "vite", "--port", String(port), "--strictPort"],
     {
       cwd: resolve(TMP_DIR, name),
+      env: wasmEnv(template),
       stdio: ["ignore", "inherit", "inherit"],
     },
   );
@@ -105,30 +122,37 @@ test.describe("cfasim init", () => {
     // copies the packages (exercised by the `cfasim docs` test below).
     execSync("node scripts/generate_docs.mjs", { cwd: ROOT, stdio: "pipe" });
 
-    // Scaffold and install each project
-    for (const p of projects) {
-      scaffoldProject(p.name, p.template);
-      execSync("pnpm install", { cwd: resolve(TMP_DIR, p.name) });
-    }
+    // Scaffold and install each project. Installs are independent, so run
+    // them concurrently.
+    for (const p of projects) scaffoldProject(p.name, p.template);
+    await Promise.all(
+      projects.map((p) =>
+        execAsync("pnpm install", { cwd: resolve(TMP_DIR, p.name) }),
+      ),
+    );
 
     // Pre-build wasm so `waitForServer` doesn't time out waiting on the
     // `cfasimWasm` plugin's cold cargo build during vite startup. Mirrors
     // the plugin's invocation in cfasim-ui/wasm/src/vitePlugin.js.
-    for (const p of projects) {
-      if (p.template === "python") continue; // pyodide template, no wasm-pack
-      const moduleName = p.name.replace(/-/g, "_");
-      execSync(
-        `wasm-pack build .. --target web --out-dir public/wasm/${moduleName}`,
-        { cwd: resolve(TMP_DIR, p.name, "interactive"), stdio: "pipe" },
-      );
-    }
+    await Promise.all(
+      projects
+        .filter((p) => p.template !== "python") // pyodide template, no wasm-pack
+        .map((p) => {
+          const moduleName = p.name.replace(/-/g, "_");
+          return execAsync(
+            `wasm-pack build .. --target web --out-dir public/wasm/${moduleName}`,
+            {
+              cwd: resolve(TMP_DIR, p.name, "interactive"),
+              env: wasmEnv(p.template),
+            },
+          );
+        }),
+    );
 
     // Start vite dev servers
-    for (const p of projects) {
-      const { proc, url } = startVite(p.name, p.port);
-      procs.push(proc);
-      await waitForServer(url);
-    }
+    const servers = projects.map((p) => startVite(p.name, p.template, p.port));
+    procs.push(...servers.map((s) => s.proc));
+    await Promise.all(servers.map((s) => waitForServer(s.url)));
   });
 
   test.afterAll(async () => {
