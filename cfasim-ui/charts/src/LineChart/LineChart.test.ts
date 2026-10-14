@@ -1434,22 +1434,287 @@ describe("LineChart", () => {
       expect(paths[1].attributes("fill-opacity")).toBe("0.5");
     });
 
-    it("renders tick marks at section boundaries", () => {
+    it("draws no boundary lines or bar for an unlabeled series section", () => {
       const wrapper = mount(LineChart, {
         props: {
           series: [{ data: [0, 10, 20, 30] }],
-          areaSections: [{ startIndex: 1, endIndex: 3 }],
+          areaSections: [{ seriesIndex: 0, startIndex: 1, endIndex: 3 }],
           height: 200,
           width: 400,
           menu: false,
         },
       });
-      const lines = wrapper.findAll("line");
-      // 2 axis lines + 2 tick marks for section boundaries
-      const tickLines = lines.filter(
-        (l) => l.attributes("stroke-opacity") === "0.4",
+      // Only the two axis lines.
+      expect(wrapper.findAll("line").length).toBe(2);
+      expect(wrapper.find('[data-testid="section-bar"]').exists()).toBe(false);
+    });
+
+    it("extends a labeled section's fill past the axis to a bar", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20, 30] }],
+          areaSections: [
+            { seriesIndex: 0, startIndex: 1, endIndex: 3, label: "Phase" },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      // Bar sits 26px under the plot bottom (170), past the tick labels.
+      const bar = wrapper.find('[data-testid="section-bar"]');
+      expect(bar.exists()).toBe(true);
+      expect(bar.attributes("y1")).toBe("196");
+      expect(bar.attributes("y2")).toBe("196");
+      // The fill closes at the bar, not the plot bottom.
+      const fill = wrapper.find('[data-testid="section-fill"]');
+      expect(fill.attributes("d")).toContain(",196");
+      expect(fill.attributes("d")).not.toContain(",170");
+    });
+
+    it("keeps an unlabeled section's fill inside the plot", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20, 30] }],
+          areaSections: [
+            {
+              seriesIndex: 0,
+              startIndex: 1,
+              endIndex: 3,
+              legend: "inline",
+              label: "Phase",
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const fill = wrapper.find('[data-testid="section-fill"]');
+      expect(fill.attributes("d")).toContain(",170");
+      expect(wrapper.find('[data-testid="section-bar"]').exists()).toBe(false);
+    });
+
+    it("styles the highlighted line and bar independently of the fill", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20, 30] }],
+          areaSections: [
+            {
+              seriesIndex: 0,
+              startIndex: 1,
+              endIndex: 3,
+              color: "#ff0000",
+              lineColor: "#00ff00",
+              strokeWidth: 3,
+              label: "Phase",
+              barColor: "#0000ff",
+              barWidth: 2,
+              barOpacity: 1,
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const fill = wrapper.find('[data-testid="section-fill"]');
+      expect(fill.attributes("fill")).toBe("#ff0000");
+      const line = wrapper
+        .findAll("path")
+        .find((p) => p.attributes("stroke") === "#00ff00")!;
+      expect(line.attributes("stroke-width")).toBe("3");
+      const bar = wrapper.find('[data-testid="section-bar"]');
+      expect(bar.attributes("stroke")).toBe("#0000ff");
+      expect(bar.attributes("stroke-width")).toBe("2");
+      expect(bar.attributes("stroke-opacity")).toBe("1");
+    });
+
+    it("applies areaSectionLayout spacing", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20, 30, 40] }],
+          areaSections: [
+            { startIndex: 0, endIndex: 2, label: "First section label" },
+            { startIndex: 1, endIndex: 3, label: "Second section label" },
+          ],
+          areaSectionLayout: { barOffset: 40, labelGap: 10, rowHeight: 50 },
+          height: 200,
+          width: 300,
+          menu: false,
+        },
+      });
+      // Plot bottom is 170; the bar moves to 170 + 40.
+      const bar = wrapper.find('[data-testid="section-bar"]');
+      expect(bar.attributes("y1")).toBe("210");
+      const fill = wrapper.find('[data-testid="section-fill"]');
+      expect(fill.attributes("d")).toContain(",210");
+      // First row label baseline: bar + gap + 10; second row one rowHeight lower.
+      const ys = wrapper
+        .findAll('[data-testid="section-label"] text')
+        .map((t) => Number(t.attributes("y")));
+      expect(ys).toEqual([230, 280]);
+      // svg grows to fit both rows: 210 + 10 + 2 * 50.
+      expect(wrapper.find("svg").attributes("height")).toBe("320");
+    });
+
+    it("moves the x-axis label to the left of the first section label row", () => {
+      const props = {
+        series: [{ data: [0, 10, 20] }],
+        xLabel: "Days",
+        height: 200,
+        width: 400,
+        menu: false,
+      };
+      const plain = mount(LineChart, { props });
+      const labeled = mount(LineChart, {
+        props: {
+          ...props,
+          areaSections: [{ startIndex: 1, endIndex: 2, label: "Phase" }],
+        },
+      });
+      const xLabelEl = (w: ReturnType<typeof mount>) =>
+        w.findAll("text").filter((t) => t.text() === "Days");
+      expect(xLabelEl(plain)).toHaveLength(1);
+      expect(Number(xLabelEl(plain)[0].attributes("y"))).toBe(196);
+      // Centered under the plot without section labels.
+      expect(xLabelEl(plain)[0].attributes("text-anchor")).toBe("middle");
+      expect(Number(xLabelEl(plain)[0].attributes("x"))).toBe(220);
+      // Only the section-row copy renders (the centered one is dropped).
+      const labeledEls = xLabelEl(labeled);
+      expect(labeledEls).toHaveLength(1);
+      const el = labeledEls[0];
+      expect(el.attributes("text-anchor")).toBe("start");
+      expect(Number(el.attributes("x"))).toBe(50);
+      // Same baseline as the first-row section label. With an x label the
+      // bottom padding is 38: plot bottom 162, bar 188, then 6 gap + 10.
+      expect(Number(el.attributes("y"))).toBe(204);
+      const sectionText = labeled.find('[data-testid="section-label"] text');
+      expect(sectionText.attributes("y")).toBe("204");
+      expect(sectionText.attributes("x")).toBe("220");
+      // One row of labels: 188 + 6 + 32, no extra room reserved under it.
+      expect(labeled.find("svg").attributes("height")).toBe("226");
+    });
+
+    it("left-aligns the x-axis label without sections when asked", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20] }],
+          xLabel: "Days",
+          xLabelAlign: "left",
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const el = wrapper.findAll("text").find((t) => t.text() === "Days")!;
+      expect(el.attributes("text-anchor")).toBe("start");
+      expect(Number(el.attributes("x"))).toBe(50);
+      expect(Number(el.attributes("y"))).toBe(196);
+    });
+
+    it("centers the x-axis label under the section rows with xLabelAlign center", () => {
+      const props = {
+        series: [{ data: [0, 10, 20] }],
+        xLabel: "Days",
+        xLabelAlign: "center" as const,
+        height: 200,
+        width: 400,
+        menu: false,
+      };
+      const plain = mount(LineChart, { props });
+      const plainEl = plain.findAll("text").find((t) => t.text() === "Days")!;
+      expect(plainEl.attributes("text-anchor")).toBe("middle");
+      // padding.left 50 + innerW 340 / 2
+      expect(Number(plainEl.attributes("x"))).toBe(220);
+      const labeled = mount(LineChart, {
+        props: {
+          ...props,
+          areaSections: [{ startIndex: 0, endIndex: 2, label: "Phase" }],
+        },
+      });
+      const el = labeled.findAll("text").find((t) => t.text() === "Days")!;
+      expect(el.attributes("text-anchor")).toBe("middle");
+      const svgH = Number(labeled.find("svg").attributes("height"));
+      expect(Number(el.attributes("y"))).toBe(svgH - 4);
+      // Rows end at 226; font size 13 + 8 gap reserved beneath for the label.
+      expect(svgH).toBe(247);
+      // The section label keeps the first row: nothing to collide with.
+      const sectionText = labeled.find('[data-testid="section-label"] text');
+      expect(sectionText.attributes("y")).toBe("204");
+    });
+
+    it("drops the bar and label of a section hidden with its series", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20, 30], legend: "A" }],
+          areaSections: [
+            { seriesIndex: 0, startIndex: 1, endIndex: 3, label: "Phase" },
+          ],
+          legendToggle: true,
+          hiddenSeries: ["A"],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      expect(wrapper.find('[data-testid="section-fill"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="section-bar"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="section-label"]').exists()).toBe(
+        false,
       );
-      expect(tickLines.length).toBe(2);
+      expect(wrapper.find("svg").attributes("height")).toBe("200");
+    });
+
+    it("scales the collision estimate with the label font size", () => {
+      const base = {
+        series: [{ data: [0, 10, 20, 30, 40] }],
+        height: 200,
+        width: 400,
+        menu: false,
+      };
+      // Second section starts 85px right of the first (innerW 340 / 4).
+      // At 11px the first label (~70px) clears it; at 22px (~140px) it
+      // collides and the second drops a row.
+      const rows = (fontSize: number) =>
+        mount(LineChart, {
+          props: {
+            ...base,
+            areaSections: [
+              {
+                startIndex: 0,
+                endIndex: 1,
+                label: "Phase one",
+                inlineLabelStyle: { fontSize },
+              },
+              { startIndex: 1, endIndex: 2, label: "Phase two" },
+            ],
+          },
+        })
+          .findAll('[data-testid="section-label"] text')
+          .map((t) => t.attributes("y"));
+      const small = rows(11);
+      expect(small[0]).toBe(small[1]);
+      const large = rows(22);
+      expect(large[0]).not.toBe(large[1]);
+    });
+
+    it("pushes a section label that would overlap the x-axis label down a row", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [0, 10, 20] }],
+          xLabel: "Days",
+          areaSections: [{ startIndex: 0, endIndex: 2, label: "Phase" }],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const sectionText = wrapper.find('[data-testid="section-label"] text');
+      expect(sectionText.attributes("x")).toBe("50");
+      // Second row: 204 + 32.
+      expect(sectionText.attributes("y")).toBe("236");
+      expect(wrapper.find("svg").attributes("height")).toBe("258");
     });
 
     it("renders label text when label is provided", () => {
@@ -1542,12 +1807,7 @@ describe("LineChart", () => {
           menu: false,
         },
       });
-      // Two label groups means two circles (indicators)
-      const groups = wrapper.findAll("g");
-      const labelGroups = groups.filter((g) => {
-        const circle = g.find("circle");
-        return circle.exists() && circle.attributes("r") === "4";
-      });
+      const labelGroups = wrapper.findAll('[data-testid="section-label"]');
       expect(labelGroups.length).toBe(2);
       // They should have different y positions for their text
       const labelTexts = labelGroups.map((g) =>
@@ -1556,7 +1816,7 @@ describe("LineChart", () => {
       expect(labelTexts[0]).not.toBe(labelTexts[1]);
     });
 
-    it("anchors label indicator circle to the section start", () => {
+    it("anchors the label text and bar to the section start", () => {
       const wrapper = mount(LineChart, {
         props: {
           series: [{ data: [0, 10, 20] }],
@@ -1567,14 +1827,12 @@ describe("LineChart", () => {
         },
       });
       // padding.left = 50 (no yLabel), innerW = 400 - 50 - 10 = 340
-      // xPixel(1) with range 0..2 = 50 + 0.5 * 340 = 220
-      const expectedStart = 220;
-      const labelCircles = wrapper
-        .findAll("circle")
-        .filter((c) => c.attributes("r") === "4");
-      expect(labelCircles.length).toBe(1);
-      const cx = Number(labelCircles[0].attributes("cx"));
-      expect(cx).toBeCloseTo(expectedStart, 0);
+      // xPixel(1) with range 0..2 = 50 + 0.5 * 340 = 220 (bar is pixel-snapped)
+      const bar = wrapper.find('[data-testid="section-bar"]');
+      expect(bar.attributes("x1")).toBe("220.5");
+      expect(bar.attributes("x2")).toBe("390.5");
+      const text = wrapper.find('[data-testid="section-label"] text');
+      expect(Number(text.attributes("x"))).toBeCloseTo(220, 0);
     });
 
     it("clamps label so right edge stays within the chart", () => {
@@ -1589,19 +1847,16 @@ describe("LineChart", () => {
         },
       });
       // padding.left = 50, innerW = 340, so chart right edge = 390.
-      // textWidth = 40 * 7 = 280; preferred cx = 390 + 140 + 2 = 532 → overflow.
-      // Clamped: cx = 390 - 140 - 8 = 242. Label text right edge = cx + 140 + 8 = 390.
-      const labelGroups = wrapper.findAll("g").filter((g) => {
-        const c = g.find("circle");
-        return c.exists() && c.attributes("r") === "4";
-      });
+      // textWidth = 40 * 7 = 280; the section starts at 390 → overflow.
+      // Clamped: x = 390 - 280 - 8 = 102, so the text ends 8px inside the edge.
+      const labelGroups = wrapper.findAll('[data-testid="section-label"]');
       expect(labelGroups.length).toBe(1);
       const textEl = labelGroups[0].findAll("text")[0];
       const textX = Number(textEl.attributes("x"));
       const textWidth = longLabel.length * 7;
       const textRight = textX + textWidth;
       expect(textRight).toBeLessThanOrEqual(390);
-      expect(textRight).toBeCloseTo(390, 0);
+      expect(textRight).toBeCloseTo(382, 0);
     });
 
     it("does not render extra elements without areaSections", () => {

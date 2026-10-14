@@ -214,7 +214,7 @@ Every text element on the chart has its own style prop and default size (in px).
 | Annotation text                             | `annotation.fontSize`                | `number`     |           13 |
 | Interval whiskers (stroke width)            | `intervalStyle.lineWidth`            | `number`     |          1.5 |
 
-These are single styles applied to both axes — there's no separate x vs y font size. The same props (except the LineChart-only area-section fields) exist on `BarChart`, since both compose `ChartCommonProps`.
+`xLabelAlign` places the x-axis label centered under the plot (`"center"`) or at its left edge (`"left"`); when omitted it is centered, except while area-section labels are showing, where it joins their first row at the left. These are single styles applied to both axes: there's no separate x vs y font size. The same props (except the LineChart-only area-section fields) exist on `BarChart`, since both compose `ChartCommonProps`.
 
 <ComponentDemo>
   <LineChart
@@ -880,22 +880,106 @@ as extra `_lower` / `_upper` CSV columns. Style them with the series'
 
 ### Area sections
 
-Highlight a range of a series line by filling the area between the line and the x-axis. Labels are rendered below the chart and automatically stack when they overlap.
+Highlight a range of a series line by filling the area between the line and the x-axis. A labeled section's fill continues past the axis to a faint bar, with its label and description beneath, left-aligned at the section start. Labels of sections that overlap in time stack into rows, and the x-axis label moves to the left of the first row (a section label that would overlap it drops a row). Set `legend: "inline"` to list a section in the legend strip instead. Tune the bar and row spacing with `area-section-layout` (see `AreaSectionLayout`); per section, `lineColor` and `strokeWidth` style the highlighted line (or, without `seriesIndex`, the boundary lines) and `barColor`, `barWidth`, and `barOpacity` style the bar. Move the sections below with the sliders to see the labels stack and unstack; with `x-label-align="center"` the x-axis label moves beneath the rows instead.
+
+<ComponentDemo>
+  <LineChart
+    :series="sectionDemoSeries"
+    :area-sections="sectionDemoSections"
+    :height="250"
+    x-label="Days"
+    y-label="Cumulative count"
+    :menu="false"
+  />
+  <div style="display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px">
+    <div style="flex: 1 1 220px">
+      <NumberInput
+        v-model:range="growthRange"
+        label="Growth phase (days)"
+        :min="0"
+        :max="10"
+        number-type="integer"
+      />
+    </div>
+    <div style="flex: 1 1 220px">
+      <NumberInput
+        v-model:range="mitigationRange"
+        label="Mitigation period (days)"
+        :min="0"
+        :max="10"
+        number-type="integer"
+      />
+    </div>
+  </div>
+
+<template #code>
+
+```vue
+<script setup>
+import { ref, computed } from "vue";
+
+const growthRange = ref([2, 7]);
+const mitigationRange = ref([3, 9]);
+const sections = computed(() => [
+  {
+    startIndex: growthRange.value[0],
+    endIndex: growthRange.value[1],
+    color: "#6366f1",
+    strokeWidth: 0,
+    label: `Day ${growthRange.value[0]}–${growthRange.value[1]}`,
+    description: "Rapid growth phase",
+  },
+  {
+    seriesIndex: 0,
+    startIndex: mitigationRange.value[0],
+    endIndex: mitigationRange.value[1],
+    color: "#f43f5e",
+    label: `Day ${mitigationRange.value[0]}–${mitigationRange.value[1]}`,
+    description: "Mitigation period",
+  },
+]);
+</script>
+
+<LineChart
+  :series="series"
+  :area-sections="sections"
+  :height="250"
+  x-label="Days"
+  y-label="Cumulative count"
+/>
+<NumberInput
+  v-model:range="growthRange"
+  label="Growth phase (days)"
+  :min="0"
+  :max="10"
+  number-type="integer"
+/>
+<NumberInput
+  v-model:range="mitigationRange"
+  label="Mitigation period (days)"
+  :min="0"
+  :max="10"
+  number-type="integer"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+Without a below-chart label (no `label`/`description`, or `legend: "inline"`)
+the fill stays inside the plot and nothing is drawn under the axis.
 
 <ComponentDemo>
   <LineChart
     :series="[
       { data: [0, 2, 5, 12, 25, 45, 70, 100, 130, 155, 170], color: '#000', strokeWidth: 1, legend: 'No interventions' },
-      { data: [0, 0, 0, 2, 8, 20, 40, 65, 90, 110, 120], color: '#999', strokeWidth: 1, dashed: true, legend: 'Interventions' },
     ]"
     :area-sections="[
-      { startIndex: 2, endIndex: 7, color: '#6366f1', strokeWidth: 0, legend: 'inline', label: 'Day 2–7', description: 'Rapid growth phase' },
-      { seriesIndex: 0, startIndex: 5, endIndex: 9, color: '#f43f5e', label: 'Day 5–9', description: 'Mitigation period' },
+      { seriesIndex: 0, startIndex: 3, endIndex: 7, color: '#6366f1', legend: 'inline', label: 'Day 3–7', description: 'Rapid growth phase' },
     ]"
     :height="250"
     x-label="Days"
     y-label="Cumulative count"
-    tooltip-trigger="hover"
     :menu="false"
   />
 
@@ -910,37 +994,21 @@ Highlight a range of a series line by filling the area between the line and the 
       strokeWidth: 1,
       legend: 'No interventions',
     },
-    {
-      data: [0, 0, 0, 2, 8, 20, 40, 65, 90, 110, 120],
-      color: '#999',
-      strokeWidth: 1,
-      dashed: true,
-      legend: 'Interventions',
-    },
   ]"
   :area-sections="[
     {
-      startIndex: 2,
+      seriesIndex: 0,
+      startIndex: 3,
       endIndex: 7,
       color: '#6366f1',
-      strokeWidth: 0,
       legend: 'inline',
-      label: 'Day 2–7',
+      label: 'Day 3–7',
       description: 'Rapid growth phase',
-    },
-    {
-      seriesIndex: 0,
-      startIndex: 5,
-      endIndex: 9,
-      color: '#f43f5e',
-      label: 'Day 5–9',
-      description: 'Mitigation period',
     },
   ]"
   :height="250"
   x-label="Days"
   y-label="Cumulative count"
-  tooltip-trigger="hover"
 />
 ```
 
@@ -1217,6 +1285,30 @@ const infections = Array.from({ length: 45 }, (_, t) =>
 const hospitalizations = Array.from({ length: 45 }, (_, t) =>
   38 * Math.exp(-((t - 24) ** 2) / 180),
 );
+const growthRange = ref([2, 7]);
+const mitigationRange = ref([3, 9]);
+const sectionDemoSeries = [
+  { data: [0, 2, 5, 12, 25, 45, 70, 100, 130, 155, 170], color: "#000", strokeWidth: 1, legend: "No interventions" },
+  { data: [0, 0, 0, 2, 8, 20, 40, 65, 90, 110, 120], color: "#999", strokeWidth: 1, dashed: true, legend: "Interventions" },
+];
+const sectionDemoSections = computed(() => [
+  {
+    startIndex: growthRange.value[0],
+    endIndex: growthRange.value[1],
+    color: "#6366f1",
+    strokeWidth: 0,
+    label: `Day ${growthRange.value[0]}–${growthRange.value[1]}`,
+    description: "Rapid growth phase",
+  },
+  {
+    seriesIndex: 0,
+    startIndex: mitigationRange.value[0],
+    endIndex: mitigationRange.value[1],
+    color: "#f43f5e",
+    label: `Day ${mitigationRange.value[0]}–${mitigationRange.value[1]}`,
+    description: "Mitigation period",
+  },
+]);
 const isolation = ref(12);
 const recovery = ref(32);
 const markers = computed({
@@ -1683,9 +1775,29 @@ interface AreaSection {
   opacity?: number; // default: 0.15
   label?: string;
   description?: string;
-  strokeWidth?: number; // default: 2
+  strokeWidth?: number; // highlighted line segment, or the boundary lines of a full-height section; default: 2, 0 hides
+  lineColor?: string; // same line; default: color
   dashed?: boolean;
+  barColor?: string; // bar under a labeled section's fill; default: color
+  barWidth?: number; // default: 1
+  barOpacity?: number; // default: 0.5
   legend?: "inline" | "below" | false; // default: "below"
+  inlineLabelStyle?: LabelStyle;
+  inlineDescriptionStyle?: LabelStyle;
+}
+```
+
+### AreaSectionLayout
+
+Chart-level spacing of the below-chart section labels, passed as
+`area-section-layout`. The bar and label rows are shared by every section,
+so the spacing is set once per chart.
+
+```ts
+interface AreaSectionLayout {
+  barOffset?: number; // plot bottom to the bar; default: 26
+  labelGap?: number; // bar to the first label row; default: 6
+  rowHeight?: number; // each stacked label row; default: 32
 }
 ```
 

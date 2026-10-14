@@ -4,6 +4,7 @@ export {
   type Series,
   type Area,
   type AreaSection,
+  type AreaSectionLayout,
 } from "./LineChart/LineChart.vue";
 export {
   default as BarChart,
