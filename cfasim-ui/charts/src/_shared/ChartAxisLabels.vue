@@ -3,17 +3,22 @@ import type { resolveLabelStyle } from "./useChartPadding.js";
 
 /**
  * The x/y axis labels shared by the cartesian charts: the y label rotated
- * along the left edge, the x label centered below the plot.
+ * along the left edge, the x label centered below the plot (or at its left
+ * edge with `xLabelAlign: "left"`).
  */
-defineProps<{
-  xLabel?: string;
-  yLabel?: string;
-  padding: { top: number; left: number };
-  innerW: number;
-  innerH: number;
-  height: number;
-  labelStyle: ReturnType<typeof resolveLabelStyle>;
-}>();
+withDefaults(
+  defineProps<{
+    xLabel?: string;
+    yLabel?: string;
+    padding: { top: number; left: number };
+    innerW: number;
+    innerH: number;
+    height: number;
+    labelStyle: ReturnType<typeof resolveLabelStyle>;
+    xLabelAlign?: "left" | "center";
+  }>(),
+  { xLabelAlign: "center" },
+);
 </script>
 
 <template>
@@ -33,9 +38,9 @@ defineProps<{
   <!-- x axis label -->
   <text
     v-if="xLabel"
-    :x="padding.left + innerW / 2"
+    :x="xLabelAlign === 'center' ? padding.left + innerW / 2 : padding.left"
     :y="height - 4"
-    text-anchor="middle"
+    :text-anchor="xLabelAlign === 'center' ? 'middle' : 'start'"
     :font-size="labelStyle.fontSize"
     :fill="labelStyle.fill"
     :font-weight="labelStyle.fontWeight"

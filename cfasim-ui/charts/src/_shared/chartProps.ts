@@ -142,6 +142,13 @@ export interface ChartCommonProps {
   hiddenSeries?: string[];
   xLabel?: string;
   yLabel?: string;
+  /**
+   * Horizontal placement of `xLabel`: centered under the plot or at its
+   * left edge. When omitted it is centered, except on `LineChart` while
+   * area-section labels are showing, where it joins their first row at
+   * the left.
+   */
+  xLabelAlign?: "left" | "center";
   debounce?: number;
   menu?: boolean | string;
   /**

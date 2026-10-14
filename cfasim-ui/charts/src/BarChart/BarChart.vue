@@ -1866,6 +1866,7 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
         </template>
         <ChartAxisLabels
           :x-label="xLabel"
+          :x-label-align="xLabelAlign"
           :y-label="yLabel"
           :padding="padding"
           :inner-w="innerW"

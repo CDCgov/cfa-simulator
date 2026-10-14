@@ -171,10 +171,21 @@ export interface AreaSection {
   label?: string;
   /** Secondary description text (e.g. "40.0M vaccines administered") */
   description?: string;
-  /** Stroke width for the highlighted line segment (default: 2) */
+  /**
+   * Stroke width of the highlighted line segment, or of the vertical
+   * boundary lines when there is no `seriesIndex` (default: 2; 0 hides).
+   */
   strokeWidth?: number;
+  /** Color of that line; defaults to `color` */
+  lineColor?: string;
   /** Dashed stroke pattern */
   dashed?: boolean;
+  /** Color of the bar under a labeled section's fill; defaults to `color` */
+  barColor?: string;
+  /** Width of the bar under a labeled section's fill (default: 1) */
+  barWidth?: number;
+  /** Opacity of the bar under a labeled section's fill (default: 0.5) */
+  barOpacity?: number;
   /** Label placement: "below" (default) renders below chart, "inline" renders in legend row, false hides label */
   legend?: "inline" | "below" | false;
   /**
@@ -188,6 +199,16 @@ export interface AreaSection {
    * the default opacity.
    */
   inlineDescriptionStyle?: LabelStyle;
+}
+
+/** Vertical spacing of the below-chart area section labels, in pixels. */
+export interface AreaSectionLayout {
+  /** Distance from the plot bottom to the bar under the fill. Default: 26. */
+  barOffset?: number;
+  /** Gap between the bar and the first label row. Default: 6. */
+  labelGap?: number;
+  /** Height of each stacked label row. Default: 32. */
+  rowHeight?: number;
 }
 
 interface LineChartProps extends ChartCommonProps {
@@ -205,6 +226,8 @@ interface LineChartProps extends ChartCommonProps {
   series?: Series[];
   areas?: Area[];
   areaSections?: AreaSection[];
+  /** Spacing of the below-chart `areaSections` labels. See `AreaSectionLayout`. */
+  areaSectionLayout?: AreaSectionLayout;
   /**
    * Vertical marker lines spanning the full plot height, each with an
    * optional label just above the top of the line. Markers are
@@ -818,9 +841,11 @@ function sectionXPixel(section: AreaSection, which: "start" | "end"): number {
   return xPixel(idx);
 }
 
-function toSectionPath(section: AreaSection, closed = true): string {
-  const py = padding.value.top + innerH.value;
-
+function toSectionPath(
+  section: AreaSection,
+  closed = true,
+  py = padding.value.top + innerH.value,
+): string {
   // No seriesIndex: full-height rectangle spanning the range
   if (section.seriesIndex == null) {
     const sx = sectionXPixel(section, "start");
@@ -882,7 +907,50 @@ const areaRender = computed(() =>
     .map((a) => ({ a, path: toAreaPath(a) })),
 );
 
-/** Per-section fill/line paths, snapped boundary x's, and color. */
+const SECTION_LAYOUT_DEFAULTS: Required<AreaSectionLayout> = {
+  // Clears the x tick labels.
+  barOffset: 26,
+  labelGap: 6,
+  rowHeight: 32,
+};
+/** Estimated glyph width at the default 11px label size; scaled by font size. */
+const SECTION_LABEL_CHAR_WIDTH = 7;
+const SECTION_LABEL_FONT_SIZE = 11;
+const SECTION_LABEL_H_GAP = 16;
+/** Gap kept between the last section row and a centered x-axis label. */
+const SECTION_X_LABEL_GAP = 8;
+
+function estimateTextWidth(text: string, fontSize: number): number {
+  return (
+    text.length *
+    SECTION_LABEL_CHAR_WIDTH *
+    (fontSize / SECTION_LABEL_FONT_SIZE)
+  );
+}
+
+/** Sections whose label renders below the chart extend their fill down to a bar. */
+function hasBelowLabel(sec: AreaSection): boolean {
+  return (
+    !!(sec.label || sec.description) &&
+    sec.legend !== "inline" &&
+    sec.legend !== false
+  );
+}
+
+const sectionLayout = computed<Required<AreaSectionLayout>>(() => ({
+  ...SECTION_LAYOUT_DEFAULTS,
+  ...props.areaSectionLayout,
+}));
+
+const sectionBarY = computed(
+  () => padding.value.top + innerH.value + sectionLayout.value.barOffset,
+);
+
+/**
+ * Per-section fill/line paths, snapped boundary x's, and color. Sections
+ * with a below-chart label extend their fill through the x axis to the
+ * label bar.
+ */
 const sectionRender = computed(() =>
   (props.areaSections ?? [])
     .filter(
@@ -890,29 +958,37 @@ const sectionRender = computed(() =>
         sec.seriesIndex == null ||
         !isHidden(allSeries.value[sec.seriesIndex]?.legend),
     )
-    .map((sec) => ({
-      sec,
-      fillPath: toSectionPath(sec),
-      linePath: sec.seriesIndex != null ? toSectionPath(sec, false) : "",
-      startX: snap(sectionXPixel(sec, "start")),
-      endX: snap(sectionXPixel(sec, "end")),
-      color: sectionColor(sec),
-    })),
+    .map((sec) => {
+      const extended = hasBelowLabel(sec);
+      const bottomY = extended
+        ? sectionBarY.value
+        : padding.value.top + innerH.value;
+      return {
+        sec,
+        extended,
+        bottomY,
+        fillPath: toSectionPath(sec, true, bottomY),
+        linePath: sec.seriesIndex != null ? toSectionPath(sec, false) : "",
+        startX: snap(sectionXPixel(sec, "start")),
+        endX: snap(sectionXPixel(sec, "end")),
+        color: sectionColor(sec),
+      };
+    }),
 );
 
-const SECTION_LABEL_ROW_HEIGHT = 36;
-const SECTION_LABEL_TOP_MARGIN = 12;
-const SECTION_LABEL_CHAR_WIDTH = 7;
-const SECTION_LABEL_H_GAP = 16;
-
 interface PositionedSectionLabel {
-  cx: number;
+  /** Left edge of the label text. */
+  x: number;
+  /** Bar extent, clamped to the plot. */
+  barX1: number;
+  barX2: number;
   labelText: string;
   descText: string;
   textWidth: number;
   row: number;
-  color: string;
-  fillOpacity: number;
+  barColor: string;
+  barWidth: number;
+  barOpacity: number;
   labelStyle: ReturnType<typeof resolveLabelStyle>;
   descStyle: ReturnType<typeof resolveLabelStyle>;
 }
@@ -927,72 +1003,92 @@ const sectionLabels = computed<{
   const items: PositionedSectionLabel[] = [];
   const chartLeft = padding.value.left;
   const chartRight = padding.value.left + innerW.value;
-  for (const sec of sections) {
-    if (!sec.label && !sec.description) continue;
-    if (sec.legend === "inline" || sec.legend === false) continue;
+  // Walk the rendered sections so a section hidden with its series loses
+  // its label and bar along with its fill.
+  for (const { sec, extended, color } of sectionRender.value) {
+    if (!extended) continue;
     const labelText = sec.label ?? "";
     const descText = sec.description ?? "";
-    const maxChars = Math.max(labelText.length, descText.length);
-    const textWidth = maxChars * SECTION_LABEL_CHAR_WIDTH;
-    // Anchor the indicator circle to the start of the area. The circle is
-    // drawn at (cx - textWidth/2 - 2), so solve for cx to place it at the
-    // section's start pixel. Clamp so the label's right edge stays within
-    // the chart if it would otherwise overflow.
     const startPx = sectionXPixel(sec, "start");
+    const endPx = sectionXPixel(sec, "end");
     // Zoomed past this section entirely: drop its label.
-    if (
-      isZoomed.value &&
-      (startPx > chartRight || sectionXPixel(sec, "end") < chartLeft)
-    )
-      continue;
-    const labelRightPad = 8;
-    const preferred = Math.max(startPx, chartLeft) + textWidth / 2 + 2;
-    const maxCx = chartRight - textWidth / 2 - labelRightPad;
-    const cx = Math.min(preferred, maxCx);
-    const color = sectionColor(sec);
+    if (isZoomed.value && (startPx > chartRight || endPx < chartLeft)) continue;
+    const barX1 = snap(Math.max(startPx, chartLeft));
+    const barX2 = snap(Math.min(endPx, chartRight));
     // Section labels default to the section's data-driven color/weight;
     // user-supplied styles override piece-by-piece.
     const labelStyle = resolveLabelStyle(
       { color, fontWeight: 600, ...sec.inlineLabelStyle },
-      { fontSize: 11 },
+      { fontSize: SECTION_LABEL_FONT_SIZE },
     );
     const descStyle = resolveLabelStyle(sec.inlineDescriptionStyle, {
-      fontSize: 11,
+      fontSize: SECTION_LABEL_FONT_SIZE,
       fillOpacity: 0.6,
     });
+    const textWidth = Math.max(
+      estimateTextWidth(labelText, labelStyle.fontSize),
+      estimateTextWidth(descText, descStyle.fontSize),
+    );
+    // Text starts at the section's left edge, pulled in so its right
+    // edge stays within the chart.
+    const labelRightPad = 8;
+    const x = Math.max(
+      chartLeft,
+      Math.min(startPx, chartRight - textWidth - labelRightPad),
+    );
     items.push({
-      cx,
+      x,
+      barX1,
+      barX2,
       labelText,
       descText,
       textWidth,
       row: 0,
-      color,
-      fillOpacity: sec.opacity ?? 0.15,
+      barColor: sec.barColor ?? color,
+      barWidth: sec.barWidth ?? 1,
+      barOpacity: sec.barOpacity ?? 0.5,
       labelStyle,
       descStyle,
     });
   }
 
-  items.sort((a, b) => a.cx - b.cx);
+  items.sort((a, b) => a.x - b.x);
 
-  // Greedy collision detection
+  // Greedy collision detection. A left-aligned x-axis label sits at the
+  // left of the first row, so it seeds that row's right edge and pushes
+  // any section label it would overlap down a row.
   const rowRightEdges: number[] = [];
+  if (props.xLabel && props.xLabelAlign !== "center") {
+    rowRightEdges.push(
+      chartLeft +
+        estimateTextWidth(props.xLabel, axisLabelResolved.value.fontSize),
+    );
+  }
   for (const item of items) {
-    const left = item.cx - item.textWidth / 2;
     let row = 0;
     while (row < rowRightEdges.length) {
-      if (left >= rowRightEdges[row] + SECTION_LABEL_H_GAP) break;
+      if (item.x >= rowRightEdges[row] + SECTION_LABEL_H_GAP) break;
       row++;
     }
     item.row = row;
-    const right = item.cx + item.textWidth / 2;
+    const right = item.x + item.textWidth;
     rowRightEdges[row] = Math.max(rowRightEdges[row] ?? -Infinity, right);
   }
 
   if (items.length === 0) return { labels: [], extraHeight: 0 };
   const maxRow = Math.max(...items.map((it) => it.row));
-  const extraHeight =
-    (maxRow + 1) * SECTION_LABEL_ROW_HEIGHT + SECTION_LABEL_TOP_MARGIN;
+  // The bar sits inside the standard bottom padding; the label rows (and
+  // a centered x-axis label, which moves beneath them) grow the svg past
+  // `height`.
+  const rowsBottom =
+    sectionBarY.value +
+    sectionLayout.value.labelGap +
+    (maxRow + 1) * sectionLayout.value.rowHeight;
+  const xLabelSpace =
+    props.xLabel && props.xLabelAlign === "center"
+      ? axisLabelResolved.value.fontSize + SECTION_X_LABEL_GAP
+      : 0;
+  const extraHeight = Math.max(0, rowsBottom + xLabelSpace - height.value);
   return { labels: items, extraHeight };
 });
 
@@ -1051,12 +1147,21 @@ const totalHeight = computed(
 );
 
 const sectionLabelBaseY = computed(
-  () =>
-    padding.value.top +
-    innerH.value +
-    padding.value.bottom +
-    SECTION_LABEL_TOP_MARGIN,
+  () => sectionBarY.value + sectionLayout.value.labelGap,
 );
+
+/** Section labels showing: a left-aligned x-axis label joins their first row. */
+const xLabelInSectionRow = computed(
+  () =>
+    !!props.xLabel &&
+    props.xLabelAlign !== "center" &&
+    sectionLabels.value.labels.length > 0,
+);
+
+const hasExtendedSections = computed(() =>
+  sectionRender.value.some((r) => r.extended),
+);
+const sectionClipId = useId();
 
 const yTickItems = computed(() => {
   const { min, max } = extent.value;
@@ -1728,6 +1833,14 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           :inner-w="innerW"
           :inner-h="innerH"
         />
+        <!-- taller clip for section fills that extend to the label bar -->
+        <ChartPlotClip
+          v-if="isZoomed && hasExtendedSections"
+          :id="sectionClipId"
+          :padding="padding"
+          :inner-w="innerW"
+          :inner-h="innerH + sectionLayout.barOffset"
+        />
         <ChartTitle :title="title" :title-style="titleStyle" :bounds="bounds" />
         <!-- inline legend -->
         <g v-if="positionedLegendItems.length > 0">
@@ -1747,24 +1860,13 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
               stroke-width="2"
               :stroke-dasharray="item.dashed ? '4 2' : undefined"
             />
-            <!-- area indicator: filled swatch -->
+            <!-- area and section indicator: filled swatch -->
             <rect
-              v-else-if="item.type === 'area'"
+              v-else
               :x="item.x"
               :y="item.y - 4"
               width="12"
               height="8"
-              :fill="item.color"
-              :fill-opacity="item.fillOpacity"
-              :stroke="item.color"
-              stroke-width="1.5"
-            />
-            <!-- section indicator: filled circle -->
-            <circle
-              v-else
-              :cx="item.x + 4"
-              :cy="item.y"
-              r="4"
               :fill="item.color"
               :fill-opacity="item.fillOpacity"
               :stroke="item.color"
@@ -1844,28 +1946,27 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           {{ tick.value }}
         </text>
         <ChartAxisLabels
-          :x-label="xLabel"
+          :x-label="xLabelInSectionRow ? undefined : xLabel"
+          :x-label-align="xLabelAlign"
           :y-label="yLabel"
           :padding="padding"
           :inner-w="innerW"
           :inner-h="innerH"
-          :height="height"
+          :height="totalHeight"
           :label-style="axisLabelResolved"
         />
-        <!-- x tick labels -->
+        <!-- x-axis label, on the left of the first section label row -->
         <text
-          v-for="(tick, i) in xTickItems"
-          :key="'x' + i"
-          data-testid="x-tick"
-          :x="tick.x"
-          :y="padding.top + innerH + 16"
-          :text-anchor="tick.anchor"
-          :font-size="tickLabelResolved.fontSize"
-          :fill="tickLabelResolved.fill"
-          :font-weight="tickLabelResolved.fontWeight"
-          :fill-opacity="tickLabelResolved.fillOpacity"
+          v-if="xLabelInSectionRow"
+          data-testid="x-axis-label"
+          :x="padding.left"
+          :y="sectionLabelBaseY + 10"
+          text-anchor="start"
+          :font-size="axisLabelResolved.fontSize"
+          :fill="axisLabelResolved.fill"
+          :font-weight="axisLabelResolved.fontWeight"
         >
-          {{ tick.value }}
+          {{ xLabel }}
         </text>
         <!-- plot marks, clipped to the plot while zoomed -->
         <g :clip-path="isZoomed ? `url(#${clipId})` : undefined">
@@ -1930,9 +2031,19 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             :project="projectInterval"
             :color-for="intervalColor"
           />
-          <!-- area sections (rendered above series) -->
+        </g>
+        <!-- area sections (rendered above series) -->
+        <g
+          v-if="sectionRender.length > 0"
+          :clip-path="
+            isZoomed
+              ? `url(#${hasExtendedSections ? sectionClipId : clipId})`
+              : undefined
+          "
+        >
           <template v-for="(r, i) in sectionRender" :key="'areasec' + i">
             <path
+              data-testid="section-fill"
               :d="r.fillPath"
               :fill="r.color"
               :fill-opacity="r.sec.opacity ?? 0.15"
@@ -1942,7 +2053,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
               v-if="r.sec.seriesIndex != null"
               :d="r.linePath"
               fill="none"
-              :stroke="r.color"
+              :stroke="r.sec.lineColor ?? r.color"
               :stroke-width="r.sec.strokeWidth ?? 2"
               :stroke-dasharray="r.sec.dashed ? '6 3' : undefined"
             />
@@ -1954,25 +2065,29 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
                 :x1="x"
                 :y1="padding.top"
                 :x2="x"
-                :y2="padding.top + innerH"
-                :stroke="r.color"
+                :y2="r.bottomY"
+                :stroke="r.sec.lineColor ?? r.color"
                 :stroke-width="r.sec.strokeWidth ?? 2"
                 :stroke-dasharray="r.sec.dashed ? '6 3' : undefined"
               />
             </template>
-            <!-- tick marks at section boundaries -->
-            <line
-              v-for="(x, j) in [r.startX, r.endX]"
-              :key="'t' + j"
-              :x1="x"
-              :y1="padding.top + innerH - 4"
-              :x2="x"
-              :y2="padding.top + innerH + 4"
-              stroke="currentColor"
-              stroke-opacity="0.4"
-            />
           </template>
         </g>
+        <!-- x tick labels (after the sections so they read over an extended fill) -->
+        <text
+          v-for="(tick, i) in xTickItems"
+          :key="'x' + i"
+          data-testid="x-tick"
+          :x="tick.x"
+          :y="padding.top + innerH + 16"
+          :text-anchor="tick.anchor"
+          :font-size="tickLabelResolved.fontSize"
+          :fill="tickLabelResolved.fill"
+          :font-weight="tickLabelResolved.fontWeight"
+          :fill-opacity="tickLabelResolved.fillOpacity"
+        >
+          {{ tick.value }}
+        </text>
         <!-- Tooltip: crosshair line -->
         <line
           v-if="hasTooltipSlot && hoverIndex !== null && inPlotX(hoverX)"
@@ -2085,21 +2200,26 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             @keydown="onMarkerKeydown(m.index, $event)"
           />
         </g>
-        <!-- area section labels -->
-        <g v-for="(item, i) in sectionLabels.labels" :key="'seclab' + i">
-          <circle
-            :cx="item.cx - item.textWidth / 2 - 2"
-            :cy="sectionLabelBaseY + item.row * SECTION_LABEL_ROW_HEIGHT + 4"
-            r="4"
-            :fill="item.color"
-            :fill-opacity="item.fillOpacity"
-            :stroke="item.color"
-            stroke-width="1.5"
+        <!-- area section labels: a bar along the bottom of the extended fill, text beneath -->
+        <g
+          v-for="(item, i) in sectionLabels.labels"
+          :key="'seclab' + i"
+          data-testid="section-label"
+        >
+          <line
+            data-testid="section-bar"
+            :x1="item.barX1"
+            :y1="sectionBarY"
+            :x2="item.barX2"
+            :y2="sectionBarY"
+            :stroke="item.barColor"
+            :stroke-opacity="item.barOpacity"
+            :stroke-width="item.barWidth"
           />
           <text
             v-if="item.labelText"
-            :x="item.cx - item.textWidth / 2 + 8"
-            :y="sectionLabelBaseY + item.row * SECTION_LABEL_ROW_HEIGHT + 8"
+            :x="item.x"
+            :y="sectionLabelBaseY + item.row * sectionLayout.rowHeight + 10"
             :font-size="item.labelStyle.fontSize"
             :font-weight="item.labelStyle.fontWeight"
             :fill="item.labelStyle.fill"
@@ -2108,8 +2228,8 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           </text>
           <text
             v-if="item.descText"
-            :x="item.cx - item.textWidth / 2 + 8"
-            :y="sectionLabelBaseY + item.row * SECTION_LABEL_ROW_HEIGHT + 22"
+            :x="item.x"
+            :y="sectionLabelBaseY + item.row * sectionLayout.rowHeight + 24"
             :font-size="item.descStyle.fontSize"
             :font-weight="item.descStyle.fontWeight"
             :fill="item.descStyle.fill"
