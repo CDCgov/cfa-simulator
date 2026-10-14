@@ -608,6 +608,42 @@ category-index space — `0` is the first category center, fractional
 values land between) to plot at custom positions; useful when the
 summary samples are denser or sparser than the histogram bins.
 
+### Grid lines
+
+Value-axis grid lines are on by default. Set `value-grid` to `false` to
+drop them, or pass a `GridStyle` object to change their weight, color,
+opacity, or pattern (`lineStyle: "dashed" | "dotted"`, or a raw
+`lineDash`). The chart-level `grid-style` prop supplies the same defaults
+on both charts; see
+[GridStyle](./line-chart#gridstyle) for the fields.
+
+<ComponentDemo>
+  <BarChart
+    :series="[
+      { data: [42, 55, 61, 48], color: '#0057b7', legend: 'Scenario A' },
+      { data: [35, 47, 52, 44], color: '#fb7e38', legend: 'Scenario B' },
+    ]"
+    :categories="['Q1', 'Q2', 'Q3', 'Q4']"
+    :height="220"
+    y-label="Cases"
+    :value-grid="{ lineStyle: 'dashed', color: '#6b7280', opacity: 0.4 }"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :series="series"
+  :categories="['Q1', 'Q2', 'Q3', 'Q4']"
+  :height="220"
+  y-label="Cases"
+  :value-grid="{ lineStyle: 'dashed', color: '#6b7280', opacity: 0.4 }"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Intervals
 
 Give a series parallel `lower` and `upper` arrays to draw a whisker on

@@ -18,6 +18,9 @@ import {
   makeTooltipValueFormatter,
   ChartAnnotations,
   ChartIntervals,
+  ChartGridLines,
+  resolveGridStyle,
+  type GridStyle,
   seriesIntervals,
   resolveIntervalStyle,
   type ChartInterval,
@@ -304,8 +307,14 @@ interface LineChartProps extends ChartCommonProps {
    * and as a default x-tick formatter when `xTickFormat` is not provided.
    */
   xLabels?: string[];
-  xGrid?: boolean;
-  yGrid?: boolean;
+  /**
+   * Draw a vertical grid line at each x tick. `true` uses the chart's
+   * `gridStyle` (or the defaults); pass a `GridStyle` to style this axis'
+   * lines on their own. Default off.
+   */
+  xGrid?: boolean | GridStyle;
+  /** Draw a horizontal grid line at each y tick. Same values as `xGrid`. */
+  yGrid?: boolean | GridStyle;
 }
 
 const props = withDefaults(defineProps<LineChartProps>(), {
@@ -324,6 +333,13 @@ const {
   legendResolved,
   hasTooltipSlot,
 } = useChartCommon(props);
+
+const xGridStyle = computed(() =>
+  resolveGridStyle(props.xGrid, props.gridStyle),
+);
+const yGridStyle = computed(() =>
+  resolveGridStyle(props.yGrid, props.gridStyle),
+);
 
 // The template root is a <Teleport>, so fallthrough attrs (class, style,
 // data-*, id…) can't auto-inherit — forward them onto the wrapper manually.
@@ -1903,32 +1919,22 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           stroke="currentColor"
           stroke-opacity="0.3"
         />
-        <!-- y grid lines -->
-        <template v-if="yGrid">
-          <line
-            v-for="(tick, i) in yTickItems"
-            :key="'yg' + i"
-            :x1="padding.left"
-            :y1="tick.y"
-            :x2="padding.left + innerW"
-            :y2="tick.y"
-            stroke="currentColor"
-            stroke-opacity="0.1"
-          />
-        </template>
-        <!-- x grid lines -->
-        <template v-if="xGrid">
-          <line
-            v-for="(tick, i) in xTickItems"
-            :key="'xg' + i"
-            :x1="tick.x"
-            :y1="padding.top"
-            :x2="tick.x"
-            :y2="padding.top + innerH"
-            stroke="currentColor"
-            stroke-opacity="0.1"
-          />
-        </template>
+        <ChartGridLines
+          v-if="yGridStyle"
+          axis="y"
+          :positions="yTickItems.map((t) => t.y)"
+          :start="padding.left"
+          :end="padding.left + innerW"
+          :grid-style="yGridStyle"
+        />
+        <ChartGridLines
+          v-if="xGridStyle"
+          axis="x"
+          :positions="xTickItems.map((t) => t.x)"
+          :start="padding.top"
+          :end="padding.top + innerH"
+          :grid-style="xGridStyle"
+        />
         <!-- y tick labels -->
         <text
           v-for="(tick, i) in yTickItems"

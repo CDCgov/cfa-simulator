@@ -669,6 +669,42 @@ inverts. The white `outline`, if any, is unaffected.
   </template>
 </ComponentDemo>
 
+Pass a `GridStyle` object instead of `true` to change an axis' line
+weight, color, opacity, or pattern (`lineStyle: "dashed" | "dotted"`, or a
+raw `lineDash`). The chart-level `grid-style` prop supplies defaults for
+every grid on the chart; a field on the axis prop wins.
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      { data: [0, 10, 25, 45, 60, 55, 40, 20, 8], color: '#fb7e38', strokeWidth: 3 },
+      { data: [0, 5, 12, 20, 28, 25, 18, 10, 4], color: '#0057b7', strokeWidth: 3 },
+    ]"
+    :height="200"
+    x-label="Weeks"
+    y-label="Incidence"
+    :grid-style="{ color: '#6b7280', opacity: 0.35 }"
+    :x-grid="{ lineStyle: 'dotted' }"
+    :y-grid="{ lineStyle: 'dashed', lineWidth: 1.5 }"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="series"
+  :height="200"
+  x-label="Weeks"
+  y-label="Incidence"
+  :grid-style="{ color: '#6b7280', opacity: 0.35 }"
+  :x-grid="{ lineStyle: 'dotted' }"
+  :y-grid="{ lineStyle: 'dashed', lineWidth: 1.5 }"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Dots
 
 <ComponentDemo>
@@ -1832,3 +1868,18 @@ interface IntervalStyle {
 The tooltip slot receives `intervals` (standalone intervals whose `x` is
 the hovered x) alongside `values`, and each series value carries `lower`
 / `upper` when the series has whiskers.
+
+### GridStyle
+
+Accepted by `xGrid` / `yGrid` (and `BarChart`'s `valueGrid`) in place of
+`true`, and by the chart-level `gridStyle` prop as defaults.
+
+```ts
+interface GridStyle {
+  color?: string; // default: currentColor
+  opacity?: number; // default: 0.1
+  lineWidth?: number; // default: 1
+  lineStyle?: "solid" | "dashed" | "dotted"; // default: solid; scales with lineWidth
+  lineDash?: string | number | number[]; // raw stroke-dasharray; overrides lineStyle
+}
+```

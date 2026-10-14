@@ -61,6 +61,15 @@ export { default as ChartTitle } from "./ChartTitle.vue";
 export { useChartCommon } from "./useChartCommon.js";
 export type { ChartAnnotation } from "./annotations.js";
 export { default as ChartIntervals } from "./ChartIntervals.vue";
+export { default as ChartGridLines } from "./ChartGridLines.vue";
+export {
+  resolveGridStyle,
+  gridDash,
+  GRID_DEFAULTS,
+  type GridStyle,
+  type GridLineStyle,
+  type ResolvedGridStyle,
+} from "./grid.js";
 export {
   intervalGeometry,
   resolveIntervalStyle,

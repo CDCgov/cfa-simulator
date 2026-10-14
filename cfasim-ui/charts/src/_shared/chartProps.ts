@@ -6,6 +6,7 @@
 
 import type { NumberFormat } from "@cfasim-ui/shared";
 import type { ChartAnnotation } from "./annotations.js";
+import type { GridStyle } from "./grid.js";
 import type { ChartInterval, IntervalStyle } from "./intervals.js";
 import type { ChartPadding } from "./useChartPadding.js";
 
@@ -224,6 +225,13 @@ export interface ChartCommonProps {
    * interval wins. See `IntervalStyle`.
    */
   intervalStyle?: IntervalStyle;
+  /**
+   * Default styling for every grid on the chart (`xGrid` / `yGrid` on
+   * `LineChart`, `valueGrid` on `BarChart`). Does not turn a grid on by
+   * itself; a `GridStyle` passed to the axis prop wins field by field.
+   * See `GridStyle`.
+   */
+  gridStyle?: GridStyle;
   /**
    * Extra padding (pixels) added around the plot. Number = same on all
    * sides; object = per-side. Useful for giving annotations or other

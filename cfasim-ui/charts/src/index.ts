@@ -52,6 +52,7 @@ export {
 } from "./_shared/mapTheme.js";
 export type { ChartAnnotation } from "./_shared/annotations.js";
 export type { ChartInterval, IntervalStyle } from "./_shared/intervals.js";
+export type { GridStyle, GridLineStyle } from "./_shared/grid.js";
 export type {
   ChartTooltipValue,
   ChartTooltipInterval,

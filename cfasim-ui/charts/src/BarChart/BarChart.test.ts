@@ -965,6 +965,45 @@ describe("BarChart", () => {
       expect(gridLines.length).toBe(0);
     });
 
+    it("styles grid lines from valueGrid over gridStyle", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [0, 25, 50],
+          width: 400,
+          height: 200,
+          menu: false,
+          gridStyle: { color: "#999", lineStyle: "dotted" },
+          valueGrid: { lineStyle: "dashed", lineWidth: 1.5 },
+        },
+      });
+      const lines = wrapper.findAll('[data-testid="grid-line"]');
+      expect(lines.length).toBeGreaterThan(0);
+      const a = lines[0].attributes();
+      expect(a.stroke).toBe("#999");
+      expect(a["stroke-width"]).toBe("1.5");
+      expect(a["stroke-dasharray"]).toBe("6 6");
+      expect(a["stroke-linecap"]).toBe("butt");
+      // Vertical bars: horizontal grid lines.
+      expect(a.y1).toBe(a.y2);
+    });
+
+    it("draws vertical grid lines in horizontal orientation", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [0, 25, 50],
+          width: 400,
+          height: 200,
+          menu: false,
+          orientation: "horizontal",
+          valueGrid: { lineStyle: "dotted" },
+        },
+      });
+      const a = wrapper.find('[data-testid="grid-line"]').attributes();
+      expect(a.x1).toBe(a.x2);
+      expect(a["stroke-dasharray"]).toBe("0 3");
+      expect(a["stroke-linecap"]).toBe("round");
+    });
+
     it("applies a per-series color", () => {
       const wrapper = mount(BarChart, {
         props: {

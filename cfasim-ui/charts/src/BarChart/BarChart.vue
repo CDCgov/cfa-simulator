@@ -18,6 +18,9 @@ import {
   makeTooltipValueFormatter,
   ChartAnnotations,
   ChartIntervals,
+  ChartGridLines,
+  resolveGridStyle,
+  type GridStyle,
   seriesIntervals,
   resolveIntervalStyle,
   type ChartInterval,
@@ -267,7 +270,13 @@ interface BarChartProps extends ChartCommonProps {
    * Default 1.
    */
   groupGap?: number;
-  valueGrid?: boolean;
+  /**
+   * Draw a grid line at each value tick. Default `true`, styled by the
+   * chart's `gridStyle` (or the defaults); pass a `GridStyle` to style
+   * the lines directly. Hidden along with the axis when `valueAxis` is
+   * false.
+   */
+  valueGrid?: boolean | GridStyle;
   /**
    * Draw the value axis (its line and tick labels). Default true. Set
    * false for a clean "value-on-bar" look where each segment is labeled
@@ -318,6 +327,10 @@ const {
   legendResolved,
   hasTooltipSlot,
 } = useChartCommon(props);
+
+const valueGridStyle = computed(() =>
+  resolveGridStyle(props.valueGrid, props.gridStyle),
+);
 
 // The template root is a <Teleport>, so fallthrough attrs (class, style,
 // data-*, id…) can't auto-inherit — forward them onto the wrapper manually.
@@ -1806,19 +1819,14 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
           stroke="currentColor"
           stroke-opacity="0.3"
         />
-        <!-- value grid lines -->
-        <template v-if="valueGrid && valueAxis">
-          <line
-            v-for="(tick, i) in valueTickItems"
-            :key="'vg' + i"
-            :x1="isVertical ? padding.left : tick.pos"
-            :y1="isVertical ? tick.pos : padding.top"
-            :x2="isVertical ? padding.left + innerW : tick.pos"
-            :y2="isVertical ? tick.pos : padding.top + innerH"
-            stroke="currentColor"
-            stroke-opacity="0.1"
-          />
-        </template>
+        <ChartGridLines
+          v-if="valueGridStyle && valueAxis"
+          :axis="isVertical ? 'y' : 'x'"
+          :positions="valueTickItems.map((t) => t.pos)"
+          :start="isVertical ? padding.left : padding.top"
+          :end="isVertical ? padding.left + innerW : padding.top + innerH"
+          :grid-style="valueGridStyle"
+        />
         <!-- hover highlight band (rendered behind bars) -->
         <rect
           v-if="hoverBand && hasTooltipSlot"

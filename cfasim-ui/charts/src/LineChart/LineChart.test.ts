@@ -3774,4 +3774,77 @@ describe("LineChart intervals", () => {
       "index,value,value_lower,value_upper\n0,1,0,2\n1,2,1,3",
     );
   });
+
+  describe("grid lines", () => {
+    const grid = (wrapper: ReturnType<typeof mount>, axis: "x" | "y") =>
+      wrapper.findAll(`[data-axis="${axis}"] [data-testid="grid-line"]`);
+
+    it("draws no grid by default", () => {
+      const wrapper = mount(LineChart, {
+        props: { data: [0, 10, 20], width: 400, height: 200, menu: false },
+      });
+      expect(wrapper.findAll('[data-testid="grid-line"]').length).toBe(0);
+    });
+
+    it("draws default-styled lines for `true`", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          width: 400,
+          height: 200,
+          menu: false,
+          yGrid: true,
+        },
+      });
+      const lines = grid(wrapper, "y");
+      expect(lines.length).toBeGreaterThan(0);
+      expect(grid(wrapper, "x").length).toBe(0);
+      const a = lines[0].attributes();
+      expect(a.stroke).toBe("currentColor");
+      expect(a["stroke-opacity"]).toBe("0.1");
+      expect(a["stroke-width"]).toBe("1");
+      expect(a["stroke-dasharray"]).toBeUndefined();
+      expect(a["stroke-linecap"]).toBe("butt");
+      expect(a.x1).not.toBe(a.x2);
+      expect(a.y1).toBe(a.y2);
+    });
+
+    it("styles each axis from its own GridStyle over the chart gridStyle", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          width: 400,
+          height: 200,
+          menu: false,
+          gridStyle: { color: "#999", opacity: 0.4 },
+          xGrid: { lineStyle: "dotted", lineWidth: 2 },
+          yGrid: { lineStyle: "dashed", color: "red" },
+        },
+      });
+      const x = grid(wrapper, "x")[0].attributes();
+      expect(x.stroke).toBe("#999");
+      expect(x["stroke-opacity"]).toBe("0.4");
+      expect(x["stroke-width"]).toBe("2");
+      expect(x["stroke-dasharray"]).toBe("0 6");
+      expect(x["stroke-linecap"]).toBe("round");
+      expect(x.x1).toBe(x.x2);
+      const y = grid(wrapper, "y")[0].attributes();
+      expect(y.stroke).toBe("red");
+      expect(y["stroke-opacity"]).toBe("0.4");
+      expect(y["stroke-dasharray"]).toBe("4 4");
+    });
+
+    it("passes a raw lineDash through", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          width: 400,
+          height: 200,
+          menu: false,
+          yGrid: { lineDash: [2, 6] },
+        },
+      });
+      expect(grid(wrapper, "y")[0].attributes("stroke-dasharray")).toBe("2 6");
+    });
+  });
 });
