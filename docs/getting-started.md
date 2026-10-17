@@ -63,7 +63,7 @@ And finally, create a new project:
 cfasim init
 ```
 
-`cfasim init` prompts for a project name and language (Python or Rust), then generates a Vite + Vue app wired up to run your model in the browser.
+`cfasim init` prompts for a project name and a template (Python or Rust, in the browser or on a local server), then generates a Vite + Vue app wired up to your model.
 
 ## Packages
 
@@ -74,6 +74,7 @@ cfasim init
 | `@cfasim-ui/theme`      | Design tokens, reset, and utility classes                     |
 | `@cfasim-ui/pyodide`    | Run Python models in the browser via Pyodide                  |
 | `@cfasim-ui/wasm`       | Run Rust/WASM models in the browser                           |
+| `@cfasim-ui/server`     | Run Python or Rust tasks on a local server (`cfasim serve`)   |
 
 ## Choose your guide
 
@@ -81,5 +82,6 @@ Follow the guide for the language your model is written in:
 
 - **[Python Projects](./guide/python)** — Vite + Vue + Pyodide. Write your model in Python, build it as a wheel, and run it in the browser.
 - **[Rust Projects](./guide/rust)** — Vite + Vue + WebAssembly. Write your model in Rust, compile to WASM, and run it in the browser.
+- **[Python Server Projects](./guide/python-server)** and **[Rust Server Projects](./guide/rust-server)** — the model runs as tasks on a local server (`cfasim serve`) with streamed progress and saved runs, for jobs too long or too heavy for the browser.
 
-Both guides walk through project setup, model creation, Vite configuration, and wiring up the UI from scratch.
+The guides walk through project setup, model creation, Vite configuration, and wiring up the UI from scratch.

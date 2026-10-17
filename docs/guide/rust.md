@@ -2,6 +2,8 @@
 
 This guide walks through setting up a cfasim-ui project that runs a Rust model compiled to WebAssembly in the browser.
 
+If your model takes minutes to run, needs threads or native dependencies WebAssembly cannot use, or should save its results on disk, see [Rust Server Projects](./rust-server) instead: the model runs natively as tasks on a local server and the page streams progress from it.
+
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) v24+

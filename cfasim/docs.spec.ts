@@ -45,7 +45,7 @@ test.describe("cfasim docs --json against installed @cfasim-ui packages", () => 
     }
     // The umbrella's remaining workspace deps aren't under test; link them to
     // the local working tree since the workspace version may not be published.
-    for (const pkg of ["shared", "wasm", "pyodide", "theme"]) {
+    for (const pkg of ["shared", "wasm", "pyodide", "server", "theme"]) {
       overrides[`@cfasim-ui/${pkg}`] =
         `file:${resolve(ROOT, "cfasim-ui", pkg)}`;
     }

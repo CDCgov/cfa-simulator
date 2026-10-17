@@ -5,6 +5,7 @@ import {
   formatNumber,
   type ModelOutput,
   type NumberFormat,
+  isoDate,
 } from "@cfasim-ui/shared";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
@@ -142,6 +143,8 @@ interface Column {
   name: string;
   values: ArrayLike<number | string | boolean>;
   enumLabels?: string[];
+  /** `date` columns hold days since 1970-01-01. */
+  isDate?: boolean;
 }
 
 const columns = computed<Column[]>(() => {
@@ -151,6 +154,7 @@ const columns = computed<Column[]>(() => {
       name: col.name,
       values: d.column(col.name),
       enumLabels: col.enumLabels,
+      isDate: col.type === "date",
     }));
   }
   return Object.entries(d).map(([name, values]) => ({ name, values }));
@@ -181,6 +185,7 @@ function cellValue(col: Column, row: number): string {
   }
   if (col.enumLabels && typeof v === "number")
     return col.enumLabels[v] ?? String(v);
+  if (col.isDate && typeof v === "number") return isoDate(v) ?? "";
   if (typeof v === "number") {
     if (Number.isInteger(v)) return v.toString();
     return v.toFixed(4);

@@ -1,6 +1,6 @@
 import { readFileSync, statSync, readdirSync } from "node:fs";
 import { gzipSync } from "node:zlib";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 const KB = 1024;
 
@@ -10,9 +10,10 @@ const LIMITS = [
     name: "@cfasim-ui/components JS",
     path: "cfasim-ui/components/dist/index.js",
     gzip: true,
-    // ~13 KB of this is the inline SVGs for the default icon set (always
-    // bundled so <Icon> works with zero setup); the rest is the components.
-    limit: 16 * KB,
+    // Includes the eagerly imported SelectBox chunk (shared with the lazy
+    // ParamEditor) and the inline SVGs for the default icon set (always
+    // bundled so <Icon> works with zero setup).
+    limit: 22 * KB,
   },
   {
     name: "@cfasim-ui/components CSS",
@@ -45,8 +46,22 @@ function getFileSize(filePath) {
   return statSync(filePath).size;
 }
 
+// Gzip of the entry plus every chunk it statically imports, since those load
+// with it. Dynamic `import()` chunks are left out.
 function getGzipSize(filePath) {
-  return gzipSync(readFileSync(filePath)).length;
+  const seen = new Set();
+  const visit = (file) => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    const src = readFileSync(file, "utf8");
+    for (const [, spec] of src.matchAll(
+      /^(?:import|export)\b[^"'()]*?["'](\.{1,2}\/[^"']+)["']/gm,
+    )) {
+      visit(resolve(dirname(file), spec));
+    }
+  };
+  visit(filePath);
+  return gzipSync(Buffer.concat([...seen].map((f) => readFileSync(f)))).length;
 }
 
 function getDirCssSize(dirPath) {

@@ -56,6 +56,7 @@ const COMPONENT_NAMES = [
   "MultiSelect",
   "NumberInput",
   "ParamEditor",
+  "PriorInput",
   "SelectBox",
   "SidebarLayout",
   "Spinner",

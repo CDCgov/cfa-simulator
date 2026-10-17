@@ -17,7 +17,9 @@ static TEMPLATES: Dir = include_dir!("$CARGO_MANIFEST_DIR/src/templates");
 #[derive(Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
 pub enum Template {
     Python,
+    PythonServer,
     Rust,
+    RustServer,
     Ixa,
 }
 
@@ -25,7 +27,9 @@ impl Template {
     fn dir_name(&self) -> &str {
         match self {
             Template::Python => "python",
+            Template::PythonServer => "python-server",
             Template::Rust => "rust",
+            Template::RustServer => "rust-server",
             Template::Ixa => "ixa",
         }
     }
@@ -34,23 +38,52 @@ impl Template {
     fn runtime(&self) -> &str {
         self.dir_name()
     }
+
+    /// Template directories applied in order; files in later layers replace
+    /// files at the same path in earlier ones. `_server` holds the UI shared by
+    /// the server templates, and python-server builds on the python package.
+    fn layers(&self) -> Vec<&str> {
+        match self {
+            Template::PythonServer => vec![SHARED_DIR, "python", "_server", "python-server"],
+            Template::RustServer => vec![SHARED_DIR, "_server", "rust-server"],
+            _ => vec![SHARED_DIR, self.dir_name()],
+        }
+    }
 }
 
 impl fmt::Display for Template {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Template::Python => write!(f, "Python"),
+            Template::PythonServer => write!(f, "Python (local server)"),
             Template::Rust => write!(f, "Rust (WASM)"),
+            Template::RustServer => write!(f, "Rust (local server)"),
             Template::Ixa => write!(f, "Ixa (Rust agent-based model on WASM)"),
         }
     }
 }
 
 /// Files keyed by their path relative to the template root (no leading
-/// `python/` or `_shared/`). `_shared/` files are inserted first; template-
-/// specific files overlay them, so a file in `python/` with the same relative
-/// path wins.
+/// `python/` or `_shared/`).
 type TemplateFiles = HashMap<String, String>;
+
+/// Overlays each layer's files in `template.layers()` order.
+fn merge_layers(
+    template: &Template,
+    mut layers: HashMap<String, TemplateFiles>,
+) -> Result<TemplateFiles, Box<dyn std::error::Error>> {
+    let mut files = TemplateFiles::new();
+    for layer in template.layers() {
+        // A missing layer (e.g. an older template tarball) would scaffold a
+        // project with files silently left out.
+        let layer_files = layers
+            .remove(layer)
+            .filter(|f| !f.is_empty())
+            .ok_or_else(|| format!("No template files found for {template} (missing {layer}/)"))?;
+        files.extend(layer_files);
+    }
+    Ok(files)
+}
 
 fn download_templates(template: &Template) -> Result<TemplateFiles, Box<dyn std::error::Error>> {
     let response = ureq::get(TEMPLATE_URL).call()?;
@@ -58,11 +91,8 @@ fn download_templates(template: &Template) -> Result<TemplateFiles, Box<dyn std:
     let decoder = flate2::read::GzDecoder::new(reader);
     let mut archive = tar::Archive::new(decoder);
 
-    let shared_prefix = format!("{}{}/", TEMPLATE_PREFIX, SHARED_DIR);
-    let template_prefix = format!("{}{}/", TEMPLATE_PREFIX, template.dir_name());
-
-    let mut shared = TemplateFiles::new();
-    let mut specific = TemplateFiles::new();
+    let wanted = template.layers();
+    let mut layers: HashMap<String, TemplateFiles> = HashMap::new();
 
     for entry in archive.entries()? {
         let mut entry = entry?;
@@ -70,27 +100,31 @@ fn download_templates(template: &Template) -> Result<TemplateFiles, Box<dyn std:
         if !entry.header().entry_type().is_file() {
             continue;
         }
-
-        let (bucket, prefix) = if path.starts_with(&shared_prefix) {
-            (&mut shared, &shared_prefix)
-        } else if path.starts_with(&template_prefix) {
-            (&mut specific, &template_prefix)
-        } else {
+        let Some((layer, relative)) = path
+            .strip_prefix(TEMPLATE_PREFIX)
+            .and_then(|p| p.split_once('/'))
+        else {
             continue;
         };
+        if !wanted.contains(&layer) {
+            continue;
+        }
 
-        let relative = path.strip_prefix(prefix).unwrap().to_string();
-        eprintln!("  fetched: {}", relative);
         let mut content = String::new();
         entry.read_to_string(&mut content)?;
-        bucket.insert(relative, content);
+        layers
+            .entry(layer.to_string())
+            .or_default()
+            .insert(relative.to_string(), content);
     }
 
-    if specific.is_empty() {
-        return Err("No template files found in the downloaded archive".into());
+    let files = merge_layers(template, layers)?;
+    let mut fetched: Vec<_> = files.keys().collect();
+    fetched.sort();
+    for path in fetched {
+        eprintln!("  fetched: {}", path);
     }
-
-    Ok(merge(shared, specific))
+    Ok(files)
 }
 
 fn collect_files(
@@ -117,27 +151,15 @@ fn collect_files(
 }
 
 fn embedded_templates(template: &Template) -> Result<TemplateFiles, Box<dyn std::error::Error>> {
-    let mut shared = TemplateFiles::new();
-    if let Some(shared_dir) = TEMPLATES.get_dir(SHARED_DIR) {
-        collect_files(shared_dir, shared_dir.path(), &mut shared)?;
+    let mut layers = HashMap::new();
+    for layer in template.layers() {
+        if let Some(dir) = TEMPLATES.get_dir(layer) {
+            let mut files = TemplateFiles::new();
+            collect_files(dir, dir.path(), &mut files)?;
+            layers.insert(layer.to_string(), files);
+        }
     }
-
-    let template_subdir = TEMPLATES
-        .get_dir(template.dir_name())
-        .ok_or_else(|| format!("Embedded template directory not found for {}", template))?;
-    let mut specific = TemplateFiles::new();
-    collect_files(template_subdir, template_subdir.path(), &mut specific)?;
-
-    if specific.is_empty() {
-        return Err("No template files found in embedded directory".into());
-    }
-
-    Ok(merge(shared, specific))
-}
-
-fn merge(mut shared: TemplateFiles, specific: TemplateFiles) -> TemplateFiles {
-    shared.extend(specific);
-    shared
+    merge_layers(template, layers)
 }
 
 fn to_module_name(name: &str) -> String {
@@ -305,9 +327,19 @@ pub fn run(
                 "Python package built as a wheel for Pyodide",
             )
             .item(
+                Template::PythonServer,
+                "Python server",
+                "Python tasks run on a local server with streamed progress",
+            )
+            .item(
                 Template::Rust,
                 "Rust",
                 "Compiles to WebAssembly via wasm-bindgen",
+            )
+            .item(
+                Template::RustServer,
+                "Rust server",
+                "Native Rust tasks run on a local server with streamed progress",
             )
             .item(
                 Template::Ixa,
@@ -356,4 +388,33 @@ pub fn run(
     println!("Next steps:\n  cd {dir}\n  pnpm install\n  pnpm run dev");
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_template_has_all_its_layers() {
+        for template in [
+            Template::Python,
+            Template::PythonServer,
+            Template::Rust,
+            Template::RustServer,
+            Template::Ixa,
+        ] {
+            assert!(embedded_templates(&template).is_ok(), "{template}");
+        }
+    }
+
+    #[test]
+    fn a_missing_layer_is_an_error() {
+        let file = |path: &str| TemplateFiles::from([(path.to_string(), String::new())]);
+        let layers = HashMap::from([
+            (SHARED_DIR.to_string(), file("README.md")),
+            ("rust-server".to_string(), file("src/main.rs")),
+        ]);
+        let err = merge_layers(&Template::RustServer, layers).unwrap_err();
+        assert!(err.to_string().contains("missing _server/"), "{err}");
+    }
 }

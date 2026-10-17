@@ -51,6 +51,17 @@ describe("Table", () => {
     ]);
   });
 
+  it("renders date columns from ModelOutput as ISO dates", () => {
+    const output = new ModelOutput(
+      2,
+      [{ name: "when", type: "date" }],
+      [new Uint32Array([20458, 0xffffffff])],
+    );
+    const wrapper = mount(DataTable, { props: { data: output } });
+    const cells = wrapper.findAll("tbody td").map((td) => td.text());
+    expect(cells).toEqual(["2026-01-05", ""]);
+  });
+
   it("renders enum labels from ModelOutput", () => {
     const output = new ModelOutput(
       2,

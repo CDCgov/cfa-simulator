@@ -1,4 +1,8 @@
-export type ColumnType = "i32" | "u32" | "f64" | "bool" | "enum";
+export type ColumnType = "i32" | "u32" | "f64" | "bool" | "enum" | "date";
+
+/** Value of a `date` column with no date (`DATE_MISSING` on the Python side). */
+export const DATE_MISSING = 0xffffffff;
+const DAY_MS = 86_400_000;
 
 export interface ColumnDescriptor {
   name: string;
@@ -20,16 +24,26 @@ export interface ModelOutputsWire {
   outputs: Record<string, ModelOutputWire>;
 }
 
-const COLUMN_TYPE_TO_CTOR: Record<
+export const COLUMN_TYPE_TO_CTOR: Record<
   ColumnType,
-  new (buffer: ArrayBuffer) => TypedColumn
+  { new (buffer: ArrayBuffer): TypedColumn; BYTES_PER_ELEMENT: number }
 > = {
   f64: Float64Array,
   i32: Int32Array,
   u32: Uint32Array,
   bool: Uint8Array,
   enum: Uint32Array,
+  date: Uint32Array,
 };
+
+/** ISO `yyyy-mm-dd` for a `date` column value (days since 1970-01-01). */
+export function isoDate(days: number): string | null {
+  const date = new Date(days * DAY_MS);
+  if (days === DATE_MISSING || Number.isNaN(date.getTime())) return null;
+  // Not toISOString, which writes years past 9999 as "+010000".
+  const pad = (n: number, width = 2) => String(n).padStart(width, "0");
+  return `${pad(date.getUTCFullYear(), 4)}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+}
 
 export class ModelOutput {
   readonly length: number;
@@ -64,6 +78,14 @@ export class ModelOutput {
       throw new Error(`Column ${columnName} is not an enum`);
     }
     return desc.enumLabels[index];
+  }
+
+  /** A `date` column as ISO strings (`null` where the date is missing). */
+  dates(columnName: string): (string | null)[] {
+    if (this.descriptor(columnName).type !== "date") {
+      throw new Error(`Column ${columnName} is not a date`);
+    }
+    return Array.from(this.column(columnName), isoDate);
   }
 
   get names(): string[] {

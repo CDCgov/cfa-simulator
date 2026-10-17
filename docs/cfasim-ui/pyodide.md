@@ -78,13 +78,14 @@ modelOutputToCSV(output); // CSV string
 
 ### Column types
 
-| Type   | TypedArray     | Description                        |
-| ------ | -------------- | ---------------------------------- |
-| `f64`  | `Float64Array` | 64-bit floats                      |
-| `i32`  | `Int32Array`   | 32-bit signed integers             |
-| `u32`  | `Uint32Array`  | 32-bit unsigned integers           |
-| `bool` | `Uint8Array`   | Booleans (0/1)                     |
-| `enum` | `Uint32Array`  | Integer indices with string labels |
+| Type   | TypedArray     | Description                                                                              |
+| ------ | -------------- | ---------------------------------------------------------------------------------------- |
+| `f64`  | `Float64Array` | 64-bit floats                                                                            |
+| `i32`  | `Int32Array`   | 32-bit signed integers                                                                   |
+| `u32`  | `Uint32Array`  | 32-bit unsigned integers                                                                 |
+| `bool` | `Uint8Array`   | Booleans (0/1)                                                                           |
+| `enum` | `Uint32Array`  | Integer indices with string labels                                                       |
+| `date` | `Uint32Array`  | Days since 1970-01-01; `output.dates(name)` gives ISO strings, `DATE_MISSING` marks none |
 
 ## Workers
 

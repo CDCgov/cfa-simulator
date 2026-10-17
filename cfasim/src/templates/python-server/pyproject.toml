@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools==83.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "{{ module_name }}"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["cfasim-model=={{ cfasim_version }}"]
+
+[dependency-groups]
+dev = ["pytest==9.1.1", "ruff==0.15.22"]
+
+[tool.pytest.ini_options]
+testpaths = ["src"]
+
+[tool.ruff]
+# target-version is inferred from project.requires-python
+{% if local_ui_dir %}
+# e2e only: resolve cfasim-model from the local working tree instead of PyPI
+# (mirrors the rust template's [patch.crates-io]).
+[tool.uv.sources]
+cfasim-model = { path = "{{ local_ui_dir }}/cfasim-model-py", editable = true }
+{% endif %}

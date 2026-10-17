@@ -122,7 +122,9 @@ export default defineConfig({
         items: [
           { text: "Getting Started", link: "/getting-started" },
           { text: "Python Projects", link: "/guide/python" },
+          { text: "Python Server Projects", link: "/guide/python-server" },
           { text: "Rust Projects", link: "/guide/rust" },
+          { text: "Rust Server Projects", link: "/guide/rust-server" },
         ],
       },
       {
@@ -142,11 +144,12 @@ export default defineConfig({
             items: componentSidebarItems("charts"),
           },
           {
-            text: "Workers",
+            text: "Runtimes",
             collapsed: false,
             items: [
               { text: "Pyodide", link: "/cfasim-ui/pyodide" },
               { text: "WASM", link: "/cfasim-ui/wasm" },
+              { text: "Server", link: "/cfasim-ui/server" },
             ],
           },
         ],
