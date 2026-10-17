@@ -40,6 +40,18 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - run: plz cli test
 
+  test-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: k88hudson/setup-plz@v1
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: cfasim-model-py/uv.lock
+      - run: plz model-py format
+      - run: plz model-py test
+
   test-docs:
     runs-on: ubuntu-latest
     steps:

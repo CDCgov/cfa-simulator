@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ModelOutput } from "./ModelOutput.js";
+import { ModelOutput, DATE_MISSING, isoDate } from "./ModelOutput.js";
 import type {
   ModelOutputWire,
   ModelOutputsWire,
@@ -205,5 +205,22 @@ describe("transfer protocol with ModelOutputs", () => {
       result: "hello",
     };
     expect(unwrapResponse(response)).toBe("hello");
+  });
+});
+
+describe("date columns", () => {
+  it("decodes days since the epoch to ISO strings and CSV", () => {
+    const output = new ModelOutput(
+      3,
+      [{ name: "when", type: "date" }],
+      [new Uint32Array([0, 20458, DATE_MISSING])],
+    );
+    expect(output.dates("when")).toEqual(["1970-01-01", "2026-01-05", null]);
+    expect(isoDate(20465)).toBe("2026-01-12");
+    expect(isoDate(0)).toBe("1970-01-01");
+    expect(isoDate(2_932_897)).toBe("10000-01-01");
+    expect(isoDate(4_000_000_000)).toBeNull();
+    expect(modelOutputToCSV(output)).toBe("when\n1970-01-01\n2026-01-05\n");
+    expect(() => output.dates("nope")).toThrow();
   });
 });

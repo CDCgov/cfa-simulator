@@ -11,3 +11,9 @@ license = "Apache-2.0"
 # Left as a floor rather than pinned: Pyodide supplies its own bundled numpy,
 # and an exact pin would make micropip reject the already-loaded copy.
 dependencies = ["numpy>=1.26"]
+
+[dependency-groups]
+dev = ["pytest==9.1.1", "ruff==0.15.22"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

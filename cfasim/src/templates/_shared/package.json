@@ -8,7 +8,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+{% if runtime == "python-server" or runtime == "rust-server" %}    "server": "cfasim serve",
+{% endif %}    "build": "vite build",
     "typecheck": "vue-tsc --noEmit",
     "test:e2e": "playwright test"
   },

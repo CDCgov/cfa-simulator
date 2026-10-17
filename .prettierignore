@@ -20,3 +20,6 @@ cfasim/src/templates/_shared/interactive/src/env.d.ts
 cfasim/src/templates/_shared/interactive/index.html
 cfasim/src/templates/_shared/pnpm-workspace.yaml
 cfasim/src/templates/_shared/vite.config.ts
+cfasim/src/templates/_shared/package.json
+# Protocol fixtures written by cfasim-model-py/tests/make_fixtures.py (byte-compared in tests)
+cfasim-model-py/tests/fixtures/

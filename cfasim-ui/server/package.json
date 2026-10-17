@@ -1,0 +1,35 @@
+{
+  "name": "@cfasim-ui/server",
+  "version": "0.9.3",
+  "type": "module",
+  "description": "Local task-server integration for cfasim-ui: run long jobs with streamed progress and saved runs",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CDCgov/cfa-simulator.git",
+    "directory": "cfasim-ui/server"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "src",
+    "!src/*.test.ts",
+    "!src/testUtils.ts"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./vite": "./src/vitePlugin.js"
+  },
+  "dependencies": {
+    "@cfasim-ui/shared": "workspace:*"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1",
+    "vitest": "4.1.10",
+    "vue": "3.5.40"
+  }
+}

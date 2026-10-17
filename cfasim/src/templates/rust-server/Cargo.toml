@@ -1,0 +1,15 @@
+[package]
+name = "{{ project_name }}"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cfasim-model = { version = "{{ cfasim_version }}", default-features = false, features = ["tasks"] }
+serde = { version = "1.0.229", features = ["derive"] }
+{% if local_ui_dir %}
+# e2e only: resolve cfasim-model from the local working tree instead of
+# crates.io, so tests never depend on the current version being published
+# (during a release, the version bump lands before the registry does).
+[patch.crates-io]
+cfasim-model = { path = "{{ local_ui_dir }}/cfasim-model" }
+{% endif %}

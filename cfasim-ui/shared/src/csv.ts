@@ -1,4 +1,5 @@
 import type { ModelOutput } from "./ModelOutput.js";
+import { isoDate } from "./ModelOutput.js";
 
 export function modelOutputToCSV(output: ModelOutput): string {
   const header = output.names.join(",");
@@ -10,6 +11,8 @@ export function modelOutputToCSV(output: ModelOutput): string {
       const val = output.buffers[c][r];
       if (desc.type === "enum") {
         cells.push(desc.enumLabels![val as number]);
+      } else if (desc.type === "date") {
+        cells.push(isoDate(val as number) ?? "");
       } else if (desc.type === "bool") {
         cells.push(val ? "true" : "false");
       } else {

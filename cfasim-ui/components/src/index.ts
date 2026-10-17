@@ -23,6 +23,18 @@ export type {
   ParamEditorFormat,
   ParamEditorValue,
 } from "./ParamEditor/ParamEditor.vue";
+export { default as PriorInput } from "./PriorInput/PriorInput.vue";
+export {
+  NUMPYRO_DISTRIBUTIONS,
+  defaultPrior,
+  descriptorFor,
+  priorLabel,
+} from "./PriorInput/distributions";
+export type {
+  DistributionDescriptor,
+  DistributionParam,
+  PriorSpec,
+} from "./PriorInput/distributions";
 export { default as SelectBox } from "./SelectBox/SelectBox.vue";
 export type { SelectOption } from "./SelectBox/SelectBox.vue";
 export { default as SidebarLayout } from "./SidebarLayout/SidebarLayout.vue";

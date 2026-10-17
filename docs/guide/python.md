@@ -2,6 +2,8 @@
 
 This guide walks through setting up a cfasim-ui project that runs a Python model in the browser via [Pyodide](https://pyodide.org).
 
+If your model takes minutes to run, needs JAX or numpyro, or should save its results on disk, see [Python Server Projects](./python-server) instead: the model runs as tasks on a local server and the page streams progress from it.
+
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) v24+

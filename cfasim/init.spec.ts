@@ -1,7 +1,13 @@
 import { test, expect } from "@playwright/test";
 import { exec, execSync, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { existsSync, rmSync, mkdtempSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { promisify } from "node:util";
@@ -11,7 +17,7 @@ const execAsync = promisify(exec);
 const ROOT = resolve(import.meta.dirname, "..");
 const CLI = resolve(ROOT, "target/debug/cfasim");
 
-type Template = "python" | "rust" | "ixa";
+type Template = "python" | "python-server" | "rust" | "rust-server" | "ixa";
 
 const TMP_DIR = mkdtempSync(resolve(tmpdir(), "cfasim-test-"));
 
@@ -22,7 +28,11 @@ function cleanProject(name: string) {
   }
 }
 
-function scaffoldProject(name: string, template: Template) {
+function scaffoldProject(
+  name: string,
+  template: Template,
+  serverPort?: number,
+) {
   cleanProject(name);
   const dir = resolve(TMP_DIR, name);
   // CFASIM_LOCAL_UI_DIR makes the scaffolded project's pnpm-workspace.yaml add
@@ -31,6 +41,19 @@ function scaffoldProject(name: string, template: Template) {
   execSync(`${CLI} init --dir ${dir} --template ${template} --local`, {
     env: { ...process.env, CFASIM_LOCAL_UI_DIR: ROOT },
   });
+  // Every server template starts `cfasim serve` on 8765; two of them running
+  // at once need their own ports or the pages silently share one server.
+  if (serverPort !== undefined) {
+    const config = resolve(dir, "vite.config.ts");
+    const text = readFileSync(config, "utf8");
+    if (!text.includes("cfasimServer()")) {
+      throw new Error(`expected cfasimServer() in ${config}`);
+    }
+    writeFileSync(
+      config,
+      text.replace("cfasimServer()", `cfasimServer({ port: ${serverPort} })`),
+    );
+  }
 }
 
 // Each template keeps a persistent cargo target dir under the (gitignored)
@@ -42,6 +65,9 @@ function wasmEnv(template: Template) {
   return {
     ...process.env,
     CARGO_TARGET_DIR: resolve(ROOT, "target/e2e-wasm", template),
+    // The server templates' vite plugin starts `cfasim serve`: use the CLI
+    // built from this tree, not whatever is on PATH (or uvx would fetch).
+    CFASIM_BIN: CLI,
   };
 }
 
@@ -82,6 +108,8 @@ test.describe("cfasim init", () => {
     template: Template;
     port: number;
     paramLabel: string;
+    // Port for the project's own `cfasim serve` (default 8765).
+    serverPort?: number;
   }[] = [
     {
       name: "test-project-python",
@@ -90,10 +118,23 @@ test.describe("cfasim init", () => {
       paramLabel: "Steps",
     },
     {
+      name: "test-project-python-server",
+      template: "python-server",
+      port: 7204,
+      paramLabel: "Steps",
+    },
+    {
       name: "test-project-rust",
       template: "rust",
       port: 7202,
       paramLabel: "Steps",
+    },
+    {
+      name: "test-project-rust-server",
+      template: "rust-server",
+      port: 7205,
+      paramLabel: "Steps",
+      serverPort: 8766,
     },
     {
       name: "test-project-ixa",
@@ -124,11 +165,30 @@ test.describe("cfasim init", () => {
 
     // Scaffold and install each project. Installs are independent, so run
     // them concurrently.
-    for (const p of projects) scaffoldProject(p.name, p.template);
+    for (const p of projects) {
+      scaffoldProject(p.name, p.template, p.serverPort);
+    }
     await Promise.all(
-      projects.map((p) =>
-        execAsync("pnpm install", { cwd: resolve(TMP_DIR, p.name) }),
-      ),
+      projects.flatMap((p) => {
+        const cwd = resolve(TMP_DIR, p.name);
+        const steps = [execAsync("pnpm install", { cwd })];
+        // The Python server template's worker runs under uv; sync its venv
+        // up front so vite startup is not blocked on a cold resolve.
+        if (p.template === "python-server") {
+          steps.push(execAsync("uv sync", { cwd }));
+        }
+        // `cfasim serve` builds the Rust tasks binary at startup; build it
+        // up front (same target dir) so `waitForServer` is not racing cargo.
+        if (p.template === "rust-server") {
+          steps.push(
+            execAsync("cargo build --release", {
+              cwd,
+              env: wasmEnv(p.template),
+            }),
+          );
+        }
+        return steps;
+      }),
     );
 
     // Pre-build wasm so `waitForServer` doesn't time out waiting on the
@@ -136,7 +196,7 @@ test.describe("cfasim init", () => {
     // the plugin's invocation in cfasim-ui/wasm/src/vitePlugin.js.
     await Promise.all(
       projects
-        .filter((p) => p.template !== "python") // pyodide template, no wasm-pack
+        .filter((p) => p.template === "rust" || p.template === "ixa") // wasm templates only
         .map((p) => {
           const moduleName = p.name.replace(/-/g, "_");
           return execAsync(
@@ -191,12 +251,19 @@ test.describe("cfasim init", () => {
       });
     });
 
+    // The server templates draw their chart only after a run is started.
+    const clickRun = p.template.endsWith("-server");
+
     test(`${p.template} project renders`, async ({ page }) => {
       await page.goto(`http://localhost:${p.port}`);
 
       await expect(page.locator("h2")).toContainText(p.name);
       await expect(page.locator("h1")).toContainText(p.name);
       await expect(page.getByLabel(p.paramLabel)).toBeVisible();
+
+      if (clickRun) {
+        await page.getByRole("button", { name: "Run", exact: true }).click();
+      }
 
       // Verify the model actually loaded and drew the chart.
       await expect(page.locator("svg path").first()).toBeVisible({
@@ -219,6 +286,9 @@ test.describe("cfasim init", () => {
       });
 
       await page.goto(`http://localhost:${p.port}`);
+      if (clickRun) {
+        await page.getByRole("button", { name: "Run", exact: true }).click();
+      }
       await expect(page.locator("svg path").first()).toBeVisible({
         timeout: 30_000,
       });

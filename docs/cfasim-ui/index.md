@@ -4,14 +4,15 @@ cfasim-ui is the shared component and theming library you use to make simulators
 
 ## Packages
 
-| Package                 | Description                                                                     |
-| ----------------------- | ------------------------------------------------------------------------------- |
-| `@cfasim-ui/components` | Accessible UI components built on [reka-ui](https://reka-ui.com)                |
-| `@cfasim-ui/charts`     | SVG charting components                                                         |
-| `@cfasim-ui/theme`      | Design tokens, reset, and utility classes                                       |
-| `@cfasim-ui/pyodide`    | Run Python models in the browser via [Pyodide](https://pyodide.org) Web Workers |
-| `@cfasim-ui/wasm`       | Run Rust/WASM models in the browser via a Web Worker                            |
-| `@cfasim-ui/shared`     | Shared utilities, including the [`useUrlParams`](./shared) composable           |
+| Package                 | Description                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------- |
+| `@cfasim-ui/components` | Accessible UI components built on [reka-ui](https://reka-ui.com)                      |
+| `@cfasim-ui/charts`     | SVG charting components                                                               |
+| `@cfasim-ui/theme`      | Design tokens, reset, and utility classes                                             |
+| `@cfasim-ui/pyodide`    | Run Python models in the browser via [Pyodide](https://pyodide.org) Web Workers       |
+| `@cfasim-ui/wasm`       | Run Rust/WASM models in the browser via a Web Worker                                  |
+| `@cfasim-ui/server`     | Run long Python or Rust tasks on a local server with streamed progress and saved runs |
+| `@cfasim-ui/shared`     | Shared utilities, including the [`useUrlParams`](./shared) composable                 |
 
 ## Components
 
@@ -27,6 +28,7 @@ cfasim-ui is the shared component and theming library you use to make simulators
 - [MultiSelect](./components/multi-select) — multi-select combobox with autocomplete
 - [NumberInput](./components/number-input) — number field with optional single, range, or multi-handle slider
 - [ParamEditor](./components/param-editor) — lazy-loaded JSON/TOML/YAML editor for parameter sets
+- [PriorInput](./components/prior-input) — distribution family and parameters for a Bayesian prior, using numpyro names
 - [SelectBox](./components/select-box) — dropdown select
 - [SidebarLayout](./components/sidebar-layout) — two-panel layout with a collapsible sidebar
 - [Spinner](./components/spinner) — loading indicator
@@ -41,7 +43,8 @@ cfasim-ui is the shared component and theming library you use to make simulators
 - [DataTable](./charts/data-table) — table for columnar data or ModelOutput
 - [LineChart](./charts/line-chart) — responsive SVG line chart
 
-## Workers
+## Runtimes
 
 - [Pyodide](./pyodide) — run Python models via Pyodide Web Workers
 - [WASM](./wasm) — run Rust/WASM models via a Web Worker
+- [Server](./server) — run Python or Rust tasks on a local server (`cfasim serve`) with progress streaming and run history

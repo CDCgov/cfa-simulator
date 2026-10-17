@@ -3,6 +3,7 @@ mod init;
 mod proc;
 mod project;
 mod run;
+mod serve;
 mod settings;
 mod test;
 mod tools;
@@ -27,7 +28,7 @@ enum Commands {
         #[arg(long, default_missing_value = ".")]
         dir: Option<String>,
 
-        /// Template: python or rust (skips interactive prompt)
+        /// Template: python, python-server, rust, rust-server, or ixa (skips interactive prompt)
         #[arg(long)]
         template: Option<init::Template>,
 
@@ -58,6 +59,8 @@ enum Commands {
         #[arg(long)]
         e2e: bool,
     },
+    /// Run the local task server for the current cfasim project (Python or Rust)
+    Serve(serve::ServeArgs),
     /// Start the Vite dev server for the current cfasim project
     Run {
         /// Extra arguments forwarded to `vite` (prefix with `--`, e.g. `cfasim run -- --port 5174`)
@@ -85,6 +88,7 @@ fn main() -> Result<()> {
         Commands::Docs { json } => docs::run(json),
         Commands::Test { unit, e2e } => test::run(unit, e2e),
         Commands::Run { args } => run::run(args),
+        Commands::Serve(args) => serve::run(args),
     };
 
     if is_init {

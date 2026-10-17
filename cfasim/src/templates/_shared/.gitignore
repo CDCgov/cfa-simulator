@@ -4,9 +4,25 @@ __pycache__/
 *.egg-info/
 /build/
 .pytest_cache/
+{%- elif runtime == "python-server" -%}
+# Python
+__pycache__/
+*.egg-info/
+/build/
+.pytest_cache/
+.venv/
+
+# Saved runs written by cfasim serve
+/output/
 {%- elif runtime == "rust" -%}
 # Rust
 target/
+{%- elif runtime == "rust-server" -%}
+# Rust
+target/
+
+# Saved runs written by cfasim serve
+/output/
 {%- endif %}
 
 # UI

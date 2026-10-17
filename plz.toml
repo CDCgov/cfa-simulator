@@ -1,6 +1,6 @@
 # Install all dependencies
 [tasks.setup]
-run = "pnpm install && pnpm exec playwright install chromium && cargo install wasm-pack --locked && cargo install git-cliff --locked && uv sync --no-install-project"
+run = "pnpm install && pnpm exec playwright install chromium && cargo install wasm-pack --locked && cargo install git-cliff --locked && uv sync --no-install-project && uv sync --project cfasim-model-py"
 
 # Run all tests
 [tasks.test]
@@ -15,7 +15,7 @@ fail_hook = { suggest_command = "plz fix" }
 
 # Type-check
 [tasks.typecheck]
-run = "pnpm exec vue-tsc --noEmit -p cfasim-ui/charts/tsconfig.json && pnpm exec vue-tsc --noEmit -p cfasim-ui/components/tsconfig.json"
+run = "pnpm exec vue-tsc --noEmit -p cfasim-ui/charts/tsconfig.json && pnpm exec vue-tsc --noEmit -p cfasim-ui/components/tsconfig.json && pnpm exec tsc --noEmit -p cfasim-ui/server/tsconfig.json"
 git_hook = "pre-commit"
 
 # Auto-fix formatting
@@ -63,6 +63,24 @@ run = "pnpm -r publish --access public"
 
 [taskgroup.publish.cargo]
 run = "cargo publish -p cfasim-model && cargo publish -p cfasim"
+
+[taskgroup.model-py.extends]
+dir = "cfasim-model-py"
+
+# Python unit tests for cfasim-model (outputs file format, task worker, numpyro helpers)
+[taskgroup.model-py.test]
+run = "uv run pytest"
+git_hook = "pre-commit"
+
+# Check Python formatting and lint
+[taskgroup.model-py.format]
+run = "uv run ruff format --check src tests && uv run ruff check src tests"
+git_hook = "pre-commit"
+fail_hook = { suggest_command = "plz model-py fix" }
+
+# Auto-fix Python formatting and lint
+[taskgroup.model-py.fix]
+run = "uv run ruff format src tests && uv run ruff check --fix src tests"
 
 [taskgroup.cli.extends]
 dir = "cfasim"

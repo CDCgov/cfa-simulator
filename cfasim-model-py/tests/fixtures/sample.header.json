@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "outputs": {
+    "series": {
+      "length": 3,
+      "columns": [
+        {
+          "name": "time",
+          "type": "f64"
+        },
+        {
+          "name": "delta",
+          "type": "i32"
+        },
+        {
+          "name": "count",
+          "type": "u32"
+        },
+        {
+          "name": "flag",
+          "type": "bool"
+        },
+        {
+          "name": "status",
+          "type": "enum",
+          "enumLabels": [
+            "S",
+            "I",
+            "R"
+          ]
+        },
+        {
+          "name": "when",
+          "type": "date"
+        }
+      ],
+      "byteOffsets": [
+        0,
+        24,
+        40,
+        56,
+        64,
+        80
+      ],
+      "byteLengths": [
+        24,
+        12,
+        12,
+        3,
+        12,
+        12
+      ]
+    },
+    "empty": {
+      "length": 0,
+      "columns": [
+        {
+          "name": "nothing",
+          "type": "f64"
+        }
+      ],
+      "byteOffsets": [
+        96
+      ],
+      "byteLengths": [
+        0
+      ]
+    }
+  }
+}

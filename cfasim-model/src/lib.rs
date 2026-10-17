@@ -1,5 +1,22 @@
+//! Model output types for cfasim simulations.
+//!
+//! [`ModelOutput`] is one table of typed columns and [`Outputs`] a set of named
+//! tables. In the browser they cross into JavaScript with [`ModelOutput::into_js`]
+//! / [`model_outputs`]; with the `tasks` feature they are written to a
+//! `.cfasim` outputs file by the [`tasks`] worker that `cfasim serve` runs.
+
+#[cfg(feature = "wasm")]
 use js_sys::{Array, Float64Array, Int32Array, Object, Reflect, Uint32Array, Uint8Array};
+#[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
+
+#[cfg(feature = "tasks")]
+pub mod outputs_file;
+#[cfg(feature = "tasks")]
+pub mod tasks;
+
+/// Sentinel for a missing value in a `date` column (days since 1970-01-01).
+pub const DATE_MISSING: u32 = u32::MAX;
 
 pub enum ColumnData {
     F64(Vec<f64>),
@@ -10,6 +27,37 @@ pub enum ColumnData {
         indices: Vec<u32>,
         labels: Vec<String>,
     },
+    /// Calendar dates as days since 1970-01-01; [`DATE_MISSING`] for none.
+    Date(Vec<u32>),
+}
+
+impl ColumnData {
+    /// The wire type name shared with the browser-side `ColumnDescriptor`.
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            ColumnData::F64(_) => "f64",
+            ColumnData::I32(_) => "i32",
+            ColumnData::U32(_) => "u32",
+            ColumnData::Bool(_) => "bool",
+            ColumnData::Enum { .. } => "enum",
+            ColumnData::Date(_) => "date",
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            ColumnData::F64(v) => v.len(),
+            ColumnData::I32(v) => v.len(),
+            ColumnData::U32(v) => v.len(),
+            ColumnData::Bool(v) => v.len(),
+            ColumnData::Enum { indices, .. } => indices.len(),
+            ColumnData::Date(v) => v.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 pub struct ModelOutput {
@@ -23,6 +71,18 @@ impl ModelOutput {
             length,
             columns: Vec::new(),
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.length
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.length == 0
+    }
+
+    pub fn columns(&self) -> &[(String, ColumnData)] {
+        &self.columns
     }
 
     pub fn add_f64(mut self, name: &str, data: Vec<f64>) -> Self {
@@ -57,6 +117,14 @@ impl ModelOutput {
         self
     }
 
+    /// A date column of days since 1970-01-01 (`DATE_MISSING` for none).
+    pub fn add_date(mut self, name: &str, days: Vec<u32>) -> Self {
+        self.columns
+            .push((name.to_string(), ColumnData::Date(days)));
+        self
+    }
+
+    #[cfg(feature = "wasm")]
     pub fn into_js(self) -> JsValue {
         let obj = Object::new();
         Reflect::set(&obj, &"__modelOutput".into(), &true.into()).unwrap();
@@ -68,31 +136,27 @@ impl ModelOutput {
         for (name, data) in self.columns {
             let desc = Object::new();
             Reflect::set(&desc, &"name".into(), &name.into()).unwrap();
+            Reflect::set(&desc, &"type".into(), &data.type_name().into()).unwrap();
 
             match data {
                 ColumnData::F64(v) => {
-                    Reflect::set(&desc, &"type".into(), &"f64".into()).unwrap();
                     let arr = Float64Array::from(v.as_slice());
                     bufs.push(&arr.buffer());
                 }
                 ColumnData::I32(v) => {
-                    Reflect::set(&desc, &"type".into(), &"i32".into()).unwrap();
                     let arr = Int32Array::from(v.as_slice());
                     bufs.push(&arr.buffer());
                 }
-                ColumnData::U32(v) => {
-                    Reflect::set(&desc, &"type".into(), &"u32".into()).unwrap();
+                ColumnData::U32(v) | ColumnData::Date(v) => {
                     let arr = Uint32Array::from(v.as_slice());
                     bufs.push(&arr.buffer());
                 }
                 ColumnData::Bool(v) => {
-                    Reflect::set(&desc, &"type".into(), &"bool".into()).unwrap();
                     let bytes: Vec<u8> = v.iter().map(|b| if *b { 1 } else { 0 }).collect();
                     let arr = Uint8Array::from(bytes.as_slice());
                     bufs.push(&arr.buffer());
                 }
                 ColumnData::Enum { indices, labels } => {
-                    Reflect::set(&desc, &"type".into(), &"enum".into()).unwrap();
                     let labels_arr = Array::new();
                     for l in &labels {
                         labels_arr.push(&JsValue::from_str(l));
@@ -111,16 +175,59 @@ impl ModelOutput {
     }
 }
 
-/// Create a multi-output result from named ModelOutput pairs.
-pub fn model_outputs<const N: usize>(pairs: [(&str, ModelOutput); N]) -> JsValue {
-    let obj = Object::new();
-    Reflect::set(&obj, &"__modelOutputs".into(), &true.into()).unwrap();
+/// Named tables: what a model run produces.
+#[derive(Default)]
+pub struct Outputs {
+    tables: Vec<(String, ModelOutput)>,
+}
 
-    let outputs = Object::new();
-    for (name, output) in pairs {
-        Reflect::set(&outputs, &name.into(), &output.into_js()).unwrap();
+impl Outputs {
+    pub fn new() -> Self {
+        Self::default()
     }
-    Reflect::set(&obj, &"outputs".into(), &outputs).unwrap();
 
-    obj.into()
+    pub fn add(mut self, name: &str, output: ModelOutput) -> Self {
+        self.tables.push((name.to_string(), output));
+        self
+    }
+
+    pub fn tables(&self) -> &[(String, ModelOutput)] {
+        &self.tables
+    }
+
+    pub fn names(&self) -> Vec<&str> {
+        self.tables.iter().map(|(n, _)| n.as_str()).collect()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.tables.is_empty()
+    }
+
+    #[cfg(feature = "wasm")]
+    pub fn into_js(self) -> JsValue {
+        let obj = Object::new();
+        Reflect::set(&obj, &"__modelOutputs".into(), &true.into()).unwrap();
+        let outputs = Object::new();
+        for (name, output) in self.tables {
+            Reflect::set(&outputs, &name.into(), &output.into_js()).unwrap();
+        }
+        Reflect::set(&obj, &"outputs".into(), &outputs).unwrap();
+        obj.into()
+    }
+}
+
+impl<const N: usize> From<[(&str, ModelOutput); N]> for Outputs {
+    fn from(pairs: [(&str, ModelOutput); N]) -> Self {
+        let mut outputs = Outputs::new();
+        for (name, output) in pairs {
+            outputs = outputs.add(name, output);
+        }
+        outputs
+    }
+}
+
+/// Create a multi-output result from named ModelOutput pairs.
+#[cfg(feature = "wasm")]
+pub fn model_outputs<const N: usize>(pairs: [(&str, ModelOutput); N]) -> JsValue {
+    Outputs::from(pairs).into_js()
 }
