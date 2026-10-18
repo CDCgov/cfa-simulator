@@ -1680,6 +1680,10 @@ interface RenderedMarker {
   pillPadY: number;
   /** Top of the marker line: the plot top, or the pill's bottom edge. */
   lineTop: number;
+  /** Current x shown under the label while dragging (`showValueOnDrag`). */
+  value?: string;
+  valueY: number;
+  valueOutlineWidth: number;
   draggable: boolean;
   hitTop: number;
   ariaLabel: string;
@@ -1725,6 +1729,12 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
     const labelBg =
       m.labelBackground === true ? color : m.labelBackground || undefined;
     const pad = markerPillPadding(m);
+    const value =
+      m.showValueOnDrag && m.label && drag?.index === i
+        ? m.valueFormat
+          ? m.valueFormat(markerEmitX(xv))
+          : formatXValue(xv, 0)
+        : undefined;
     out.push({
       index: i,
       internalX: xv,
@@ -1751,6 +1761,9 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
       pillPadX: pad.x,
       pillPadY: pad.y,
       lineTop: padding.value.top,
+      value,
+      valueY: 0,
+      valueOutlineWidth: m.labelOutlineWidth ?? 3,
       draggable: m.draggable !== false,
       hitTop: padding.value.top,
       ariaLabel: m.label ?? `Marker ${i + 1}`,
@@ -1782,6 +1795,7 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
     r.labelX = r.labelBg ? p.x + dir * r.pillPadX : p.x;
     r.labelY = padding.value.top - props.markerLabelGap + p.row * rowHeight;
     r.hitTop = Math.min(r.labelY - r.labelFontSize, padding.value.top);
+    r.valueY = r.labelY + r.labelFontSize * 1.25;
     if (r.labelBg) {
       // The baseline sits one padding above the pill bottom, so caps are
       // centered and descenders hang into the bottom padding.
@@ -1795,6 +1809,8 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
         dir,
       );
       r.lineTop = Math.min(padding.value.top, bottom);
+      // The value sits just under the pill, caps 3px below its edge.
+      r.valueY = bottom + 3 + r.labelFontSize * MARKER_CAP_HEIGHT_RATIO;
     }
   });
   return out;
@@ -2317,6 +2333,22 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             @pointerdown="onMarkerPointerDown(m.index, $event)"
           >
             {{ m.label }}
+          </text>
+          <text
+            v-if="m.value"
+            data-testid="marker-value"
+            :x="m.labelX"
+            :y="m.valueY"
+            :text-anchor="m.anchor"
+            :font-size="m.labelFontSize"
+            :fill="m.labelBg ? 'currentColor' : m.labelFill"
+            :stroke="m.labelOutlineColor"
+            :stroke-width="m.valueOutlineWidth"
+            stroke-linejoin="round"
+            paint-order="stroke fill"
+            pointer-events="none"
+          >
+            {{ m.value }}
           </text>
           <line
             v-if="m.draggable"

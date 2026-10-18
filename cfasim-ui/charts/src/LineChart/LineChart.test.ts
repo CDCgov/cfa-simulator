@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { nextTick } from "vue";
 import { mount } from "@vue/test-utils";
 import LineChart from "./LineChart.vue";
 import type { ChartAnnotation } from "../_shared/annotations.js";
@@ -3402,6 +3403,60 @@ describe("LineChart", () => {
         x: number;
       }[];
       expect(updated[0].x).toBe(4);
+    });
+
+    it("shows the current x under the label while dragging", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          ...baseProps,
+          markers: [
+            { x: 5, label: "Peak", showValueOnDrag: true },
+            {
+              x: 2,
+              label: "Pill",
+              labelBackground: true,
+              showValueOnDrag: true,
+              valueFormat: (x) => `day ${x}`,
+            },
+          ],
+        },
+        attachTo: document.body,
+      });
+      expect(wrapper.find('[data-testid="marker-value"]').exists()).toBe(false);
+      const hits = wrapper.findAll('[data-testid="marker-hit"]');
+      await hits[0].trigger("pointerdown", { clientX: 320, pointerId: 1 });
+      window.dispatchEvent(new MouseEvent("pointermove", { clientX: 374 }));
+      await nextTick();
+      let value = wrapper.find('[data-testid="marker-value"]');
+      // 54px per data unit → x 6, under the label in regular haloed text.
+      expect(value.text()).toBe("6");
+      const label = wrapper.find('[data-testid="marker-label"]');
+      expect(value.attributes("x")).toBe(label.attributes("x"));
+      expect(Number(value.attributes("y"))).toBe(
+        Number(label.attributes("y")) + 15,
+      );
+      expect(value.attributes("stroke-width")).toBe("3");
+      window.dispatchEvent(new MouseEvent("pointerup", { clientX: 374 }));
+      await nextTick();
+      expect(wrapper.find('[data-testid="marker-value"]').exists()).toBe(false);
+
+      // A pill marker shows the value below the pill, not inside it.
+      await hits[1].trigger("pointerdown", { clientX: 158, pointerId: 2 });
+      window.dispatchEvent(new MouseEvent("pointermove", { clientX: 212 }));
+      await nextTick();
+      value = wrapper.find('[data-testid="marker-value"]');
+      expect(value.text()).toBe("day 3");
+      const d = wrapper
+        .find('[data-testid="marker-label-bg"]')
+        .attributes("d")!;
+      const pillBottom = Number(
+        /L\d+(?:\.\d+)?,(\d+(?:\.\d+)?) Z$/.exec(d)![1],
+      );
+      expect(Number(value.attributes("y"))).toBe(pillBottom + 3 + 9);
+      expect(value.attributes("fill")).toBe("currentColor");
+      window.dispatchEvent(new MouseEvent("pointerup", { clientX: 212 }));
+      await nextTick();
+      wrapper.unmount();
     });
 
     it("clamps drag and keyboard moves to the data extent", async () => {
