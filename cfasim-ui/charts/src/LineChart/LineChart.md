@@ -347,6 +347,43 @@ Hover over the chart to see a tooltip with values at each data point. Set `toolt
 
 On touch devices, drag **horizontally** across the chart to scrub the tooltip between points; a **vertical** swipe scrolls the page instead of getting captured by the chart.
 
+The tooltip stops at every x value of every series shown in it, so series sampled on different dates (say, weekly data over daily data) need no shared x grid. Each row shows its series' nearest point to the hovered x. The `index` passed to the slot, used for `tooltip-data` and emitted by `hover`, counts positions in the sorted union of those x values, which is the plain point index whenever the series share one x set.
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      { legend: 'Daily', x: Array.from({ length: 29 }, (_, i) => `2025-01-${String(i + 1).padStart(2, '0')}`), data: Array.from({ length: 29 }, (_, i) => Math.round(20 + 15 * Math.sin(i / 4) + (i % 3) * 3)), color: '#0057b7' },
+      { legend: 'Weekly', x: ['2025-01-01', '2025-01-08', '2025-01-15', '2025-01-22', '2025-01-29'], data: [22, 38, 29, 14, 24], color: '#fb7e38', strokeWidth: 3, dots: true },
+    ]"
+    :height="200"
+    y-label="Cases"
+    tooltip-trigger="hover"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    { legend: 'Daily', x: dailyDates, data: dailyCases, color: '#0057b7' },
+    {
+      legend: 'Weekly',
+      x: weeklyDates,
+      data: weeklyCases,
+      color: '#fb7e38',
+      strokeWidth: 3,
+      dots: true,
+    },
+  ]"
+  :height="200"
+  y-label="Cases"
+  tooltip-trigger="hover"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 <ComponentDemo>
   <LineChart
     :series="[

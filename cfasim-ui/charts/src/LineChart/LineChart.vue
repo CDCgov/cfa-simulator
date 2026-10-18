@@ -1329,12 +1329,47 @@ function toCsv(): string {
   );
 }
 
-/** Data-space x of the hovered point (via the first series). */
+/**
+ * Sorted union of the x values of every tooltip-visible series: the
+ * positions the tooltip can rest on. `hoverIndex` indexes this grid, so
+ * series on different x sets each contribute their points instead of
+ * the first series deciding where the tooltip may stop. When every
+ * series shares one x set this is that set, and the index matches the
+ * point index.
+ */
+const hoverGrid = computed<number[]>(() => {
+  const xs = new Set<number>();
+  for (const s of allSeries.value) {
+    if (s.showInTooltip === false || isHidden(s.legend)) continue;
+    for (let i = 0; i < s.data.length; i++) {
+      const x = seriesXAt(s, i);
+      if (isFinite(x)) xs.add(x);
+    }
+  }
+  return Array.from(xs).sort((a, b) => a - b);
+});
+
+/** Index of the grid position closest to a data-space x. */
+function nearestGridIndex(targetX: number): number | null {
+  const grid = hoverGrid.value;
+  if (grid.length === 0 || !isFinite(targetX)) return null;
+  let lo = 0;
+  let hi = grid.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (grid[mid] < targetX) lo = mid + 1;
+    else hi = mid;
+  }
+  if (lo > 0 && targetX - grid[lo - 1] <= grid[lo] - targetX) return lo - 1;
+  return lo;
+}
+
+/** Data-space x of the hovered grid position. */
 const hoverDataX = computed(() => {
   const idx = hoverIndex.value;
-  const s0 = allSeries.value[0];
-  if (idx === null || !s0) return null;
-  return seriesXAt(s0, idx);
+  if (idx === null) return null;
+  const x = hoverGrid.value[idx];
+  return x === undefined ? null : x;
 });
 
 const hoverX = computed(() =>
@@ -1414,17 +1449,16 @@ const hoverPoints = computed(() => {
 });
 
 /**
- * Top-level intervals belonging to the hovered point: those whose
- * nearest first-series point is the hovered one, so an interval between
- * two data x values still shows up.
+ * Top-level intervals belonging to the hovered position: those whose
+ * nearest grid position is the hovered one, so an interval between two
+ * data x values still shows up.
  */
 const hoverIntervals = computed<ChartTooltipInterval[]>(() => {
   const idx = hoverIndex.value;
-  const s0 = allSeries.value[0];
-  if (idx === null || !s0) return [];
+  if (idx === null) return [];
   const out: ChartTooltipInterval[] = [];
   for (const iv of topIntervals.value) {
-    if (!isFinite(iv.x) || nearestIndex(s0, iv.x) !== idx) continue;
+    if (nearestGridIndex(iv.x) !== idx) continue;
     out.push({
       lower: Math.min(iv.lower, iv.upper),
       upper: Math.max(iv.lower, iv.upper),
@@ -1493,13 +1527,11 @@ function projectInterval(
 function indexFromPointer(clientX: number): number | null {
   const rect = containerRef.value?.getBoundingClientRect();
   if (!rect) return null;
-  const s0 = allSeries.value[0];
-  if (!s0 || s0.data.length === 0) return null;
   const { min: xMin, max: xMax } = xDomain.value;
   const range = xMax - xMin || 1;
   const mouseX = clientX - rect.left;
   const targetX = xMin + ((mouseX - padding.value.left) / innerW.value) * range;
-  return nearestIndex(s0, targetX);
+  return nearestGridIndex(targetX);
 }
 
 const markersHaveLabels = computed(() =>

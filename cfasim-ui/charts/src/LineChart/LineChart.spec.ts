@@ -255,3 +255,26 @@ test("LineChart draws calibration intervals above the trajectories", async ({
     });
   expect(order).toMatch(/^p+i{4}$/);
 });
+
+test("tooltip stops at every x of every series, not just the first", async ({
+  page,
+}) => {
+  await page.goto("./cfasim-ui/charts/line-chart");
+  const chart = page
+    .locator(".line-chart-wrapper")
+    .filter({ hasText: "Weekly" })
+    .first();
+  await chart.scrollIntoViewIfNeeded();
+  const overlay = chart.locator("rect[fill='transparent']").first();
+  const box = (await overlay.boundingBox())!;
+  const labels = new Set<string>();
+  for (let i = 0; i <= 60; i++) {
+    await page.mouse.move(box.x + (box.width * i) / 60, box.y + box.height / 2);
+    const label = chart.locator(".line-chart-tooltip-label");
+    await expect(label).toBeVisible();
+    labels.add((await label.textContent())!.trim());
+    await expect(chart.locator(".line-chart-tooltip-row")).toHaveCount(2);
+  }
+  // Daily series has 29 points; the weekly one adds none outside that set.
+  expect(labels.size).toBe(29);
+});
