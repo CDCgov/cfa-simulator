@@ -2677,6 +2677,19 @@ describe("LineChart", () => {
       expect(yMid).toBeCloseTo(midpoint, 0);
     });
 
+    it("extends the y axis to yMin and yMax without clipping", () => {
+      const ticks = (w: ReturnType<typeof mount>) =>
+        w
+          .findAll('[data-testid="y-tick"]')
+          .map((t) => Number(t.text().replace(/,/g, "")));
+      const base = { data: [2, 5, 8], width: 400, height: 240, menu: false };
+      const wide = mount(LineChart, { props: { ...base, yMin: 0, yMax: 20 } });
+      expect(Math.min(...ticks(wide))).toBe(0);
+      expect(Math.max(...ticks(wide))).toBe(20);
+      const inside = mount(LineChart, { props: { ...base, yMax: 4 } });
+      expect(Math.max(...ticks(inside))).toBeGreaterThanOrEqual(8);
+    });
+
     it("ignores yMin <= 0 in log mode", () => {
       const wrapper = mount(LineChart, {
         props: {
