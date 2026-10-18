@@ -1916,6 +1916,55 @@ function clampMarkerX(xv: number): number {
   return Math.min(max, Math.max(min, xv));
 }
 
+/** Sorted x positions of every series point, for `snap: true` markers. */
+const markerSnapGrid = computed<number[]>(() => {
+  const xs = new Set<number>();
+  for (const s of allSeries.value) {
+    for (let i = 0; i < s.data.length; i++) {
+      const x = seriesXAt(s, i);
+      if (isFinite(x)) xs.add(x);
+    }
+  }
+  return Array.from(xs).sort((a, b) => a - b);
+});
+
+/**
+ * Origin a numeric `snap` step counts from: the first date on a date
+ * axis, else the axis origin (so steps land on display multiples).
+ */
+function markerSnapOrigin(): number {
+  return xIsDate.value ? xExtent.value.min : -xDisplayOffset.value;
+}
+
+/**
+ * Snap an internal x to the marker's grid. With `dir` set, move to the
+ * next grid position in that direction instead of the nearest one.
+ */
+function snapMarkerX(m: ChartMarker, xv: number, dir: -1 | 0 | 1 = 0): number {
+  const snap = m.snap;
+  if (!snap) return xv;
+  if (typeof snap === "number") {
+    if (!(snap > 0)) return xv;
+    const origin = markerSnapOrigin();
+    const steps = (xv - origin) / snap;
+    const n = dir === 0 ? Math.round(steps) : Math.round(steps) + dir;
+    return clampMarkerX(origin + n * snap);
+  }
+  const grid = markerSnapGrid.value;
+  if (grid.length === 0) return xv;
+  let lo = 0;
+  let hi = grid.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (grid[mid] < xv) lo = mid + 1;
+    else hi = mid;
+  }
+  let idx = lo;
+  if (lo > 0 && xv - grid[lo - 1] <= grid[lo] - xv) idx = lo - 1;
+  idx = Math.min(grid.length - 1, Math.max(0, idx + dir));
+  return clampMarkerX(grid[idx]);
+}
+
 /** Internal x converted back to the marker's own coordinate space. */
 function markerEmitX(internalX: number): number | Date {
   return xIsDate.value ? new Date(internalX) : internalX + xDisplayOffset.value;
@@ -1959,13 +2008,19 @@ function onMarkerPointerDown(index: number, e: PointerEvent) {
     markerDragCleanup = null;
   };
   const move = (ev: PointerEvent) => {
-    const xv = clampMarkerX(markerPointerX(ev.clientX) + grabOffset);
+    const xv = snapMarkerX(
+      m,
+      clampMarkerX(markerPointerX(ev.clientX) + grabOffset),
+    );
     markerDragState.value = { index, x: xv };
     emitMarkerUpdate(index, xv, false);
   };
   const finish = (ev: PointerEvent) => {
     cleanup();
-    const xv = clampMarkerX(markerPointerX(ev.clientX) + grabOffset);
+    const xv = snapMarkerX(
+      m,
+      clampMarkerX(markerPointerX(ev.clientX) + grabOffset),
+    );
     markerDragState.value = null;
     emitMarkerUpdate(index, xv, true);
   };
@@ -1991,12 +2046,17 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
   const m = (props.markers ?? [])[index];
   if (!m || m.draggable === false) return;
   e.preventDefault();
-  const { min, max } = xDomain.value;
-  const base =
-    !xIsDate.value && !hasExplicitX.value ? 1 : (max - min) / 100 || 1;
-  const xv = clampMarkerX(
-    markerInternalX(m) + dir * base * (e.shiftKey ? 10 : 1),
-  );
+  const steps = e.shiftKey ? 10 : 1;
+  let xv: number;
+  if (m.snap) {
+    xv = clampMarkerX(markerInternalX(m));
+    for (let i = 0; i < steps; i++) xv = snapMarkerX(m, xv, dir);
+  } else {
+    const { min, max } = xDomain.value;
+    const base =
+      !xIsDate.value && !hasExplicitX.value ? 1 : (max - min) / 100 || 1;
+    xv = clampMarkerX(markerInternalX(m) + dir * base * steps);
+  }
   emitMarkerUpdate(index, xv, true);
 }
 </script>

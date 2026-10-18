@@ -1486,8 +1486,8 @@ const markerDates = Array.from(
   (_, t) => new Date(Date.UTC(2026, 0, 1 + t)),
 );
 const dateMarkers = ref([
-  { x: "2026-01-13", label: "Isolation" },
-  { x: "2026-02-02", label: "Recovery", labelBackground: true },
+  { x: "2026-01-13", label: "Isolation", snap: true },
+  { x: "2026-02-02", label: "Recovery", labelBackground: true, snap: true },
 ]);
 const isolation = ref(12);
 const recovery = ref(32);
@@ -1668,7 +1668,11 @@ const markers = ref([
 On a date axis, set `x` to a `Date`, a date string, or epoch-ms; drag
 updates then emit `Date` values, and the drag readout formats them like
 the axis ticks. On a numeric axis `x` is in the same display space as the
-axis (it respects `xMin`).
+axis (it respects `xMin`). `snap: true` snaps a dragged marker to the
+series' x positions (whole days below) and a number snaps to multiples
+of that step (`7 * 86400000` for weeks on a date axis, `5` for every
+fifth unit on a numeric one); arrow keys then step between snap
+positions.
 
 <ComponentDemo>
   <LineChart
@@ -1691,8 +1695,8 @@ const dates = Array.from(
   (_, t) => new Date(Date.UTC(2026, 0, 1 + t)),
 );
 const markers = ref([
-  { x: "2026-01-13", label: "Isolation" },
-  { x: "2026-02-02", label: "Recovery", labelBackground: true },
+  { x: "2026-01-13", label: "Isolation", snap: true },
+  { x: "2026-02-02", label: "Recovery", labelBackground: true, snap: true },
 ]);
 </script>
 ```
@@ -1717,6 +1721,7 @@ interface ChartMarker {
   labelBackground?: boolean | string; // pill behind the label: true = marker color
   labelPadding?: number | { x?: number; y?: number }; // pill padding (default: { x: 6, y: 5 })
   draggable?: boolean; // default: true
+  snap?: boolean | number; // true = series x positions; number = step in axis units
   showValueOnDrag?: boolean; // current x above the x axis while dragging (default: true)
   valueFormat?: (x: number | Date) => string; // formats that value (default: like the x axis)
   valueStyle?: LabelStyle; // drag value text style (defaults: label font size / currentColor / 400)
