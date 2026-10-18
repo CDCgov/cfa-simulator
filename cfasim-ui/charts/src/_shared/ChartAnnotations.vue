@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { ChartAnnotation } from "./annotations.js";
-import type { BlendMode } from "./chartProps.js";
+import { blendStyle, type BlendMode } from "./chartProps.js";
 import type { ChartBounds } from "./useChartPadding.js";
 
 const props = withDefaults(
@@ -40,8 +40,9 @@ const LINE_HEIGHT_RATIO = 1.2;
 // of a text line (between baseline and cap-height). Lands on the x-height
 // middle for most fonts.
 const LINE_CENTER_RATIO = 0.35;
-// Length of the arrow head from tip to base (see the polygon `points`).
+// Arrow head: tip at the origin pointing along +x, 6px long, 6px wide.
 const ARROW_LENGTH_PX = 6;
+const ARROW_POINTS = `0,0 -${ARROW_LENGTH_PX},-3 -${ARROW_LENGTH_PX},3`;
 
 interface TextRun {
   text: string;
@@ -204,7 +205,7 @@ const items = computed<RenderedAnnotation[]>(() => {
         ? `rotate(${a.rotate} ${labelX} ${labelY})`
         : undefined,
       textBaseline,
-      blendMode: a.blendMode === "normal" ? undefined : a.blendMode,
+      blendMode: a.blendMode,
       pointerPath,
       lineColor,
       lineWidth,
@@ -380,11 +381,7 @@ function quadStartAngle(
 
 <template>
   <g class="chart-annotations" pointer-events="none">
-    <g
-      v-for="(item, i) in items"
-      :key="i"
-      :style="item.blendMode ? { mixBlendMode: item.blendMode } : undefined"
-    >
+    <g v-for="(item, i) in items" :key="i" :style="blendStyle(item.blendMode)">
       <!--
         Outline pass. Each shape is rendered first in `outlineColor` at a
         wider stroke so the rule line, pointer, and arrow tip stay legible
@@ -412,7 +409,7 @@ function quadStartAngle(
       />
       <polygon
         v-if="item.arrowTip && item.outlineWidth > 0"
-        points="0,0 -6,-3 -6,3"
+        :points="ARROW_POINTS"
         class="annotation-outline"
         :fill="item.outlineColor"
         :stroke="item.outlineColor"
@@ -446,7 +443,7 @@ function quadStartAngle(
       -->
       <polygon
         v-if="item.arrowTip"
-        points="0,0 -6,-3 -6,3"
+        :points="ARROW_POINTS"
         :fill="item.lineColor"
         :transform="item.arrowTransform"
       />

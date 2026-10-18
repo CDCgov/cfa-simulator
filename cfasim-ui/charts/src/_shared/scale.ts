@@ -126,3 +126,23 @@ export function computeLogTickValues(opts: {
   }
   return out;
 }
+
+/**
+ * Index of the entry in an ascending `sorted` array nearest to `x` (the
+ * lower one on a tie), or `null` when the array is empty.
+ */
+export function nearestSortedIndex(
+  sorted: readonly number[],
+  x: number,
+): number | null {
+  if (sorted.length === 0 || !isFinite(x)) return null;
+  let lo = 0;
+  let hi = sorted.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (sorted[mid] < x) lo = mid + 1;
+    else hi = mid;
+  }
+  if (lo > 0 && x - sorted[lo - 1] <= sorted[lo] - x) return lo - 1;
+  return lo;
+}

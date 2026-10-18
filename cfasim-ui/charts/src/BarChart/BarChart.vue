@@ -14,6 +14,7 @@ import {
   categoricalToCsv,
   resolveCsvOverride,
   useChartFoundation,
+  blendStyle,
   useChartCommon,
   makeTooltipValueFormatter,
   ChartAnnotations,
@@ -1931,7 +1932,7 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
             :height="bar.h"
             :fill="bar.color"
             :fill-opacity="bar.opacity"
-            :style="bar.blendMode ? { mixBlendMode: bar.blendMode } : undefined"
+            :style="blendStyle(bar.blendMode)"
           />
           <!-- interval whiskers: per-series first, then standalone ones -->
           <ChartIntervals
@@ -1975,9 +1976,7 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
               :stroke-dasharray="line.dashed ? '6 3' : undefined"
               stroke-linecap="round"
               stroke-linejoin="round"
-              :style="
-                line.blendMode ? { mixBlendMode: line.blendMode } : undefined
-              "
+              :style="blendStyle(line.blendMode)"
             />
             <template v-if="line.dots">
               <circle
@@ -1988,9 +1987,7 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
                 :r="line.dotRadius"
                 :fill="line.color"
                 :fill-opacity="line.opacity"
-                :style="
-                  line.blendMode ? { mixBlendMode: line.blendMode } : undefined
-                "
+                :style="blendStyle(line.blendMode)"
               />
             </template>
           </template>

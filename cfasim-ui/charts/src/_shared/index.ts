@@ -4,6 +4,7 @@ export {
   scaleFraction,
   zoomExtent,
   clampExtentForScale,
+  nearestSortedIndex,
   computeLogTickValues,
   type ScaleType,
 } from "./scale.js";
@@ -55,6 +56,9 @@ export {
   type ChartMarkerDragPayload,
   type MarkerLabelItem,
   type MarkerLabelPlacement,
+  markerPillPadding,
+  markerLabelBox,
+  markerPillPath,
 } from "./markers.js";
 export { default as ChartAxisLabels } from "./ChartAxisLabels.vue";
 export { default as ChartTitle } from "./ChartTitle.vue";
@@ -94,6 +98,7 @@ export type {
   BlendMode,
   LineMarkStyle,
 } from "./chartProps.js";
+export { blendStyle } from "./chartProps.js";
 export {
   parseRgb,
   resolveColorToRgb,
