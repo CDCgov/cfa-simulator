@@ -86,6 +86,7 @@ const TICK_INTERVALS: readonly TickInterval[] = [
   { unit: "week", step: 1, ms: 1 * MS_PER_WEEK },
   { unit: "week", step: 2, ms: 2 * MS_PER_WEEK },
   { unit: "month", step: 1, ms: 1 * MS_PER_MONTH_APPROX },
+  { unit: "month", step: 2, ms: 2 * MS_PER_MONTH_APPROX },
   { unit: "month", step: 3, ms: 3 * MS_PER_MONTH_APPROX },
   { unit: "month", step: 6, ms: 6 * MS_PER_MONTH_APPROX },
   { unit: "year", step: 1, ms: 1 * MS_PER_YEAR_APPROX },
@@ -189,18 +190,19 @@ export function isAllDates(
 // to the denser one. (Taking the first interval at or above the rough
 // spacing instead rounded every axis towards fewer ticks: an 84-day span
 // asking for 8 got months.)
-function chooseInterval(spanMs: number, targetCount: number): TickInterval {
+/** Index into `TICK_INTERVALS` whose tick count is closest to the target. */
+function chooseInterval(spanMs: number, targetCount: number): number {
   const target = Math.max(1, targetCount);
-  let best = TICK_INTERVALS[TICK_INTERVALS.length - 1];
+  let best = TICK_INTERVALS.length - 1;
   let bestDiff = Infinity;
-  for (const candidate of TICK_INTERVALS) {
+  TICK_INTERVALS.forEach((candidate, i) => {
     // Ticks sit at both ends of the span, hence the 1.
     const diff = Math.abs(spanMs / candidate.ms + 1 - target);
     if (diff < bestDiff) {
-      best = candidate;
+      best = i;
       bestDiff = diff;
     }
-  }
+  });
   return best;
 }
 
@@ -410,13 +412,17 @@ export function placedDateTicks(
  * Choose tick values for a date axis spanning `[minMs, maxMs]`. The
  * returned `unit` lets the default formatter pick a unit-appropriate
  * preset (year ticks → "year", month → "month-year", day → "month-day",
- * etc.) — same trick Vega-Lite uses.
+ * etc.) — same trick Vega-Lite uses. `targetCount` is only a density
+ * budget that knows nothing about label widths, so a caller that can
+ * measure its labels passes `fits`: when it rejects the chosen ticks,
+ * the next coarser intervals are tried until one fits (or none is left).
  */
 export function pickDateTicks(
   minMs: number,
   maxMs: number,
   targetCount: number,
   tz: DateTimezone,
+  fits?: (values: number[], unit: DateTickUnit) => boolean,
 ): { values: number[]; unit: DateTickUnit } {
   if (
     !Number.isFinite(minMs) ||
@@ -426,16 +432,27 @@ export function pickDateTicks(
   ) {
     return { values: [], unit: "day" };
   }
-  const span = maxMs - minMs;
-  const { unit, step } = chooseInterval(span, targetCount);
+  const first = chooseInterval(maxMs - minMs, targetCount);
+  let picked = dateTicksFor(minMs, maxMs, TICK_INTERVALS[first], tz);
+  for (let i = first + 1; fits && !fits(picked.values, picked.unit); i++) {
+    if (i >= TICK_INTERVALS.length) break;
+    picked = dateTicksFor(minMs, maxMs, TICK_INTERVALS[i], tz);
+  }
+  return picked;
+}
 
+function dateTicksFor(
+  minMs: number,
+  maxMs: number,
+  { unit, step }: TickInterval,
+  tz: DateTimezone,
+): { values: number[]; unit: DateTickUnit } {
   let v = snapToUnit(minMs, unit, tz);
   let safety = 0;
   while (v < minMs && safety < MAX_TICK_ITER) {
     v = addUnit(v, unit, step, tz);
     safety++;
   }
-
   const values: number[] = [];
   for (let i = 0; i < MAX_TICK_ITER && v <= maxMs; i++) {
     values.push(v);

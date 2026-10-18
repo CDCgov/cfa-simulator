@@ -1277,9 +1277,53 @@ function formatXValue(
 }
 
 /**
+ * Font the chart's text renders in, read from the svg once mounted and
+ * again when web fonts finish loading, so measured label widths match
+ * the painted glyphs rather than a fallback face.
+ */
+const chartFontFamily = ref("sans-serif");
+onMounted(() => {
+  const read = () => {
+    if (svgRef.value) {
+      chartFontFamily.value =
+        getComputedStyle(svgRef.value).fontFamily || "sans-serif";
+    }
+  };
+  read();
+  document.fonts?.ready.then(read);
+});
+
+/** Smallest gap kept between neighboring x tick labels. */
+const X_TICK_LABEL_GAP = 8;
+
+/**
+ * Whether date tick labels fit between their ticks, measured in the
+ * tick font. Trusts the density budget where text cannot be measured.
+ */
+function dateTicksFit(values: number[], unit: DateTickUnit): boolean {
+  if (values.length < 2) return true;
+  const { min, max } = xDomain.value;
+  let step = Infinity;
+  for (let i = 1; i < values.length; i++) {
+    step = Math.min(step, values[i] - values[i - 1]);
+  }
+  const spacing = (step / (max - min)) * innerW.value;
+  const { fontSize, fontWeight } = tickLabelResolved.value;
+  const font = `${fontWeight ?? 400} ${fontSize}px ${chartFontFamily.value}`;
+  let widest = 0;
+  for (let i = 0; i < values.length; i++) {
+    const w = measureText(formatXValue(values[i], i, unit), font);
+    if (w === null) return true;
+    widest = Math.max(widest, w);
+  }
+  return spacing >= widest + X_TICK_LABEL_GAP;
+}
+
+/**
  * Tick positions and the unit they are labeled in on a date axis. Date
- * labels are short ("May 21"), so a date axis fits a tick per 60px: an
- * 84-day span on a 650px plot gets weekly ticks. Undefined otherwise.
+ * labels are short ("May 21"), so a date axis budgets a tick per 60px
+ * (an 84-day span on a 650px plot gets weekly ticks) and then coarsens
+ * until the measured labels fit. Undefined otherwise.
  */
 const xDateTicks = computed(() => {
   if (!xIsDate.value) return undefined;
@@ -1287,7 +1331,7 @@ const xDateTicks = computed(() => {
   if (xMin === xMax) return undefined;
   return props.xTicks != null
     ? placedDateTicks(xMin, xMax, props.xTicks)
-    : pickDateTicks(xMin, xMax, innerW.value / 60, tz.value);
+    : pickDateTicks(xMin, xMax, innerW.value / 60, tz.value, dateTicksFit);
 });
 
 /** Date unit the x ticks are labeled in, so other readouts can match. */
@@ -1669,23 +1713,6 @@ const {
     onSelect: onZoomSelect,
     onReset: resetZoom,
   },
-});
-
-/**
- * Font the chart's text renders in, read from the svg once mounted and
- * again when web fonts finish loading, so measured label widths match
- * the painted glyphs rather than a fallback face.
- */
-const chartFontFamily = ref("sans-serif");
-onMounted(() => {
-  const read = () => {
-    if (svgRef.value) {
-      chartFontFamily.value =
-        getComputedStyle(svgRef.value).fontFamily || "sans-serif";
-    }
-  };
-  read();
-  document.fonts?.ready.then(read);
 });
 
 const positionedLegendItems = computed(() =>

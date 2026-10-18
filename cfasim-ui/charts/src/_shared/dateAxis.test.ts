@@ -162,6 +162,34 @@ describe("pickDateTicks", () => {
     ]);
   });
 
+  it("steps to coarser intervals until the labels fit", () => {
+    const min = Date.UTC(2025, 10, 1);
+    const max = Date.UTC(2026, 10, 1);
+    const monthly = pickDateTicks(min, max, 12, "utc");
+    expect(monthly.unit).toBe("month");
+    expect(monthly.values.length).toBe(13);
+    // Reject anything denser than 8 ticks: monthly fails, bimonthly fits.
+    const tried: number[] = [];
+    const r = pickDateTicks(min, max, 12, "utc", (values) => {
+      tried.push(values.length);
+      return values.length <= 8;
+    });
+    expect(tried).toEqual([13, 7]);
+    expect(r.unit).toBe("month");
+    expect(r.values).toEqual([
+      Date.UTC(2025, 10, 1),
+      Date.UTC(2026, 0, 1),
+      Date.UTC(2026, 2, 1),
+      Date.UTC(2026, 4, 1),
+      Date.UTC(2026, 6, 1),
+      Date.UTC(2026, 8, 1),
+      Date.UTC(2026, 10, 1),
+    ]);
+    // A rule nothing satisfies ends on the coarsest interval.
+    const last = pickDateTicks(min, max, 12, "utc", () => false);
+    expect(last.unit).toBe("year");
+  });
+
   it("picks weekly ticks for a multi-week span (Monday-anchored)", () => {
     const min = Date.UTC(2026, 0, 1); // Thursday
     const max = Date.UTC(2026, 1, 5);
