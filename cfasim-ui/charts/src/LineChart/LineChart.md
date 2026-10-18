@@ -1481,6 +1481,14 @@ const ruleAnnotation = computed(() => {
     ...annotationOutline(ruleOutline.value),
   };
 });
+const markerDates = Array.from(
+  { length: 45 },
+  (_, t) => new Date(Date.UTC(2026, 0, 1 + t)),
+);
+const dateMarkers = ref([
+  { x: "2026-01-13", label: "Isolation" },
+  { x: "2026-02-02", label: "Recovery", labelBackground: true },
+]);
 const isolation = ref(12);
 const recovery = ref(32);
 const markers = computed({
@@ -1658,8 +1666,39 @@ const markers = ref([
 </ComponentDemo>
 
 On a date axis, set `x` to a `Date`, a date string, or epoch-ms; drag
-updates then emit `Date` values. On a numeric axis `x` is in the same
-display space as the axis (it respects `xMin`).
+updates then emit `Date` values, and the drag readout formats them like
+the axis ticks. On a numeric axis `x` is in the same display space as the
+axis (it respects `xMin`).
+
+<ComponentDemo>
+  <LineChart
+    v-model:markers="dateMarkers"
+    :x="markerDates"
+    :y="infections"
+    :height="240"
+    y-label="Infections"
+    :menu="false"
+  />
+
+<template #code>
+
+```vue
+<LineChart v-model:markers="markers" :x="dates" :y="infections" :height="240" />
+
+<script setup>
+const dates = Array.from(
+  { length: 45 },
+  (_, t) => new Date(Date.UTC(2026, 0, 1 + t)),
+);
+const markers = ref([
+  { x: "2026-01-13", label: "Isolation" },
+  { x: "2026-02-02", label: "Recovery", labelBackground: true },
+]);
+</script>
+```
+
+  </template>
+</ComponentDemo>
 
 ```ts
 interface ChartMarker {

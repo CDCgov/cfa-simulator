@@ -3560,6 +3560,32 @@ describe("LineChart", () => {
       );
     });
 
+    it("formats the drag readout on a date axis like the ticks", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          x: ["2026-01-01", "2026-01-11"],
+          y: [0, 10],
+          width: 600,
+          height: 300,
+          menu: false,
+          markers: [{ x: "2026-01-06", label: "Peak" }],
+        },
+        attachTo: document.body,
+      });
+      const tick = wrapper.findAll('[data-testid="x-tick"]')[0].text();
+      expect(tick).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
+      const hit = wrapper.find('[data-testid="marker-hit"]');
+      await hit.trigger("pointerdown", { clientX: 320, pointerId: 1 });
+      window.dispatchEvent(new MouseEvent("pointermove", { clientX: 374 }));
+      await nextTick();
+      // 54px per day → Jan 7, in the same "Mon D" style as the ticks.
+      expect(wrapper.find('[data-testid="marker-value"]').text()).toBe("Jan 7");
+      expect(hit.attributes("aria-valuetext")).toBe("Jan 7");
+      window.dispatchEvent(new MouseEvent("pointerup", { clientX: 374 }));
+      await nextTick();
+      wrapper.unmount();
+    });
+
     it("skips markers with unparseable x values", () => {
       const wrapper = mount(LineChart, {
         props: { ...baseProps, markers: [{ x: "not-a-date" }, { x: 5 }] },

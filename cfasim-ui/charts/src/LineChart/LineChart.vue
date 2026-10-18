@@ -1254,6 +1254,18 @@ function formatXValue(
   return formatTick(display, decimals);
 }
 
+/** Date unit the x ticks are labeled in, so other readouts can match. */
+const xDateTickUnit = computed<DateTickUnit | undefined>(() => {
+  if (!xIsDate.value) return undefined;
+  const { min: xMin, max: xMax } = xDomain.value;
+  if (xMin === xMax) return undefined;
+  return (
+    props.xTicks != null
+      ? placedDateTicks(xMin, xMax, props.xTicks)
+      : pickDateTicks(xMin, xMax, innerW.value / 60, tz.value)
+  ).unit;
+});
+
 const xTickItems = computed(() => {
   const { min: xMin, max: xMax } = xDomain.value;
   if (xMin === xMax) return [];
@@ -1745,7 +1757,7 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
       m.showValueOnDrag !== false && drag?.index === i
         ? m.valueFormat
           ? m.valueFormat(markerEmitX(xv))
-          : formatXValue(xv, 0)
+          : formatXValue(xv, 0, xDateTickUnit.value)
         : undefined;
     out.push({
       index: i,
@@ -1788,7 +1800,7 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
       hitTop: padding.value.top,
       ariaLabel: m.label ?? `Marker ${i + 1}`,
       ariaNow: xv + off,
-      ariaText: formatXValue(xv, 0),
+      ariaText: formatXValue(xv, 0, xDateTickUnit.value),
     });
   }
   const labeled = out.filter((r) => r.label);
