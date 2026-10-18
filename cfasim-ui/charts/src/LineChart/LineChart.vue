@@ -1,5 +1,22 @@
+<script lang="ts">
+// One measuring canvas for every chart on the page.
+let measureCtx: CanvasRenderingContext2D | null | undefined;
+
+function measureText(text: string, font: string): number | null {
+  if (measureCtx === undefined) {
+    measureCtx =
+      typeof document === "undefined"
+        ? null
+        : document.createElement("canvas").getContext("2d");
+  }
+  if (!measureCtx) return null;
+  measureCtx.font = font;
+  return measureCtx.measureText(text).width;
+}
+</script>
+
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useId } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, useId } from "vue";
 import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import {
@@ -1654,6 +1671,23 @@ const {
   },
 });
 
+/**
+ * Font the chart's text renders in, read from the svg once mounted and
+ * again when web fonts finish loading, so measured label widths match
+ * the painted glyphs rather than a fallback face.
+ */
+const chartFontFamily = ref("sans-serif");
+onMounted(() => {
+  const read = () => {
+    if (svgRef.value) {
+      chartFontFamily.value =
+        getComputedStyle(svgRef.value).fontFamily || "sans-serif";
+    }
+  };
+  read();
+  document.fonts?.ready.then(read);
+});
+
 const positionedLegendItems = computed(() =>
   positionLegendItems(
     inlineLegendItems.value,
@@ -1679,8 +1713,20 @@ const MARKER_LABEL_CHAR_FACTOR = 0.6;
 /** Gap between a dragged marker's value readout and the line / x axis. */
 const MARKER_VALUE_GAP = 4;
 
-function markerTextWidth(text: string, fontSize: number): number {
-  return text.length * fontSize * MARKER_LABEL_CHAR_FACTOR;
+/**
+ * Width of a marker label: measured in the chart's font when a canvas is
+ * available, else estimated from the character count.
+ */
+function markerTextWidth(
+  text: string,
+  fontSize: number,
+  fontWeight: string | number = 600,
+): number {
+  const measured = measureText(
+    text,
+    `${fontWeight} ${fontSize}px ${chartFontFamily.value}`,
+  );
+  return measured ?? text.length * fontSize * MARKER_LABEL_CHAR_FACTOR;
 }
 
 /** The current x shown above the x axis while a marker is dragged. */
@@ -1832,7 +1878,9 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
   const placements = layoutMarkerLabels(
     labeled.map(({ r, pad }) => ({
       x: r.px,
-      width: markerTextWidth(r.label!, r.labelFontSize) + (pad ? 2 * pad.x : 0),
+      width:
+        markerTextWidth(r.label!, r.labelFontSize, r.labelFontWeight) +
+        (pad ? 2 * pad.x : 0),
     })),
     { left: padding.value.left, right: padding.value.left + innerW.value },
   );
@@ -1862,7 +1910,8 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
         edge,
         r.labelY - box.ascent,
         bottom,
-        markerTextWidth(r.label!, r.labelFontSize) + 2 * pad.x,
+        markerTextWidth(r.label!, r.labelFontSize, r.labelFontWeight) +
+          2 * pad.x,
         dir,
       );
     }
@@ -1875,7 +1924,10 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
     if (!v) continue;
     const flip = r.label
       ? r.anchor === "end"
-      : r.px + MARKER_VALUE_GAP + markerTextWidth(v.text, v.fontSize) > right;
+      : r.px +
+          MARKER_VALUE_GAP +
+          markerTextWidth(v.text, v.fontSize, v.fontWeight) >
+        right;
     v.anchor = flip ? "end" : "start";
     v.x = r.px + (flip ? -1 : 1) * MARKER_VALUE_GAP;
   }
