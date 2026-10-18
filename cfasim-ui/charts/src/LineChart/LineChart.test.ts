@@ -1041,6 +1041,40 @@ describe("LineChart", () => {
       wrapper.unmount();
     });
 
+    it("anchors the tooltip to the union of x values across series", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [
+            { x: [0, 10, 20], data: [1, 2, 3], color: "#0057b7" },
+            { x: [5, 15, 25], data: [4, 5, 6], color: "#f4a261" },
+            { x: [2, 12], data: [7, 8], showInTooltip: false },
+          ],
+          width: 400,
+          height: 200,
+          menu: false,
+          tooltipTrigger: "hover" as const,
+        },
+        attachTo: document.body,
+      });
+      const overlay = wrapper
+        .findAll("rect")
+        .find((r) => r.attributes("fill") === "transparent")!;
+      const labels = new Set<string>();
+      const indices = new Set<number>();
+      for (let clientX = 0; clientX <= 400; clientX += 4) {
+        await overlay.trigger("mousemove", { clientX, clientY: 50 });
+        labels.add(wrapper.find(".line-chart-tooltip-label").text());
+        indices.add(
+          (wrapper.emitted("hover")!.at(-1)![0] as { index: number }).index,
+        );
+      }
+      expect([...labels]).toEqual(["0", "5", "10", "15", "20", "25"]);
+      expect([...indices].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5]);
+      // Every series still reports its nearest point at a union position.
+      expect(wrapper.findAll(".line-chart-tooltip-row").length).toBe(2);
+      wrapper.unmount();
+    });
+
     it("hides a series legend entry when showInLegend is false", () => {
       const wrapper = mount(LineChart, {
         props: {

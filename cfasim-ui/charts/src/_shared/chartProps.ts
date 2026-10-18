@@ -264,6 +264,11 @@ export interface ChartTooltipInterval {
 
 /** Properties common to every chart's tooltip slot. */
 export interface ChartTooltipBaseProps {
+  /**
+   * Hovered position. BarChart: the category index. LineChart: the
+   * index into the sorted union of x values of tooltip-visible series,
+   * which is the point index when every series shares one x set.
+   */
   index: number;
   values: ChartTooltipValue[];
   /** Top-level `intervals` whose `x` lands on the hovered position. */
