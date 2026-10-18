@@ -425,6 +425,38 @@ Control tick placement with `x-ticks` and `y-ticks`. Pass a **number** for a fix
   </template>
 </ComponentDemo>
 
+### Fixed y range
+
+`y-min` and `y-max` set the lowest and highest values the y axis must include, so charts of the same quantity share a scale. They only widen the axis: data outside the range still extends it, nothing is clipped.
+
+<ComponentDemo>
+  <LineChart
+    :data="[0.12, 0.28, 0.45, 0.61, 0.74, 0.83, 0.89]"
+    :y-min="0"
+    :y-max="1"
+    :height="220"
+    x-label="Week"
+    y-label="Coverage"
+    y-grid
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :data="coverage"
+  :y-min="0"
+  :y-max="1"
+  :height="220"
+  x-label="Week"
+  y-label="Coverage"
+  y-grid
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Logarithmic y-axis
 
 Set `y-scale-type="log"` to switch the y axis to base-10 log scaling. Useful

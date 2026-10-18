@@ -249,7 +249,17 @@ interface LineChartProps extends ChartCommonProps {
    */
   markerLabelGap?: number;
   lineOpacity?: number;
+  /**
+   * Lowest value the y axis must include. The axis still extends below
+   * it when the data does; it never clips. Ignored on a log axis when
+   * `<= 0`.
+   */
   yMin?: number;
+  /**
+   * Highest value the y axis must include. The axis still extends above
+   * it when the data does; it never clips.
+   */
+  yMax?: number;
   /**
    * Scale type for the y axis. `"linear"` (default) maps values directly
    * to pixels; `"log"` uses a base-10 log mapping. On a log axis,
@@ -739,6 +749,7 @@ function dataYExtent(win: { min: number; max: number } | null) {
   }
   if (!isFinite(min)) return { min: 0, max: 0, range: 1 };
   if (props.yMin != null && props.yMin < min) min = props.yMin;
+  if (props.yMax != null && props.yMax > max) max = props.yMax;
   const clamped = clampExtentForScale(
     min,
     max,
