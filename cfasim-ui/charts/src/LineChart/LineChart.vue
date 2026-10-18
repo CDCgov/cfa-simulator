@@ -1812,7 +1812,10 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
     const p = placements[j];
     const dir = p.anchor === "start" ? 1 : -1;
     r.anchor = p.anchor;
-    r.labelX = r.labelBg ? p.x + dir * r.pillPadX : p.x;
+    // Flush with the line's outer edge, not its center, so the text (or
+    // pill) does not read as offset from a thick line.
+    const edge = p.x - dir * (r.strokeWidth / 2);
+    r.labelX = r.labelBg ? edge + dir * r.pillPadX : edge;
     r.labelY = padding.value.top - props.markerLabelGap + p.row * rowHeight;
     r.hitTop = Math.min(r.labelY - r.labelFontSize, padding.value.top);
     // A label pushed down a row sits inside the plot, so its line starts
@@ -1827,7 +1830,7 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
       const bottom = r.labelY + r.pillPadY;
       const top = bottom - pillHeight(r);
       r.labelBgPath = markerPillPath(
-        r.px,
+        edge,
         top,
         bottom,
         textWidth(r) + 2 * r.pillPadX,
