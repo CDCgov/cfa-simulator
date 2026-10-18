@@ -1,6 +1,34 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.9.1] - 2026-10-18
+
+### Bug Fixes
+
+- **charts:** Keep rotated annotation text beside its rule, aim arrows along the curve, rework annotation docs
+- **charts:** Start a stacked marker label's line below its text
+- **charts:** Align marker labels with the line's outer edge
+
+### Chores
+
+- **deps:** Bump smol-toml from 1.7.0 to 1.9.0
+- Raise charts JS bundle size limit to 64 KB
+
+### Features
+
+- **charts:** Add yMax prop to LineChart
+- **charts:** Anchor LineChart tooltip to the union of series x values
+- **charts:** Add blendMode, text outline, and rotate to annotations
+- **charts:** Add labelBackground pill with hover state to LineChart markers
+- **charts:** Show a marker's current x under its label while dragging
+- **charts:** Show a dragged marker's x above the axis by default, with value styling options
+- **charts:** Format marker drag readouts like date ticks and add a date-axis markers demo
+- **charts:** Add snap option to LineChart markers
+
+### Refactor
+
+- **charts:** Share marker geometry, blend styles, and x lookups across LineChart
+
 ## [0.9.0] - 2026-10-14
 
 ### Features
