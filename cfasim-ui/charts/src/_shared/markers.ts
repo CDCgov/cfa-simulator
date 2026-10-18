@@ -73,6 +73,18 @@ export interface ChartMarker {
   labelPadding?: number | { x?: number; y?: number };
   /** Whether the marker can be dragged along the x-axis. Default: true. */
   draggable?: boolean;
+  /**
+   * While the marker is being dragged, show its current `x` under the
+   * label (below the pill when it has a `labelBackground`) in regular
+   * text, formatted like the x axis unless `valueFormat` is set. Only
+   * markers with a `label` show it. Default: false.
+   */
+  showValueOnDrag?: boolean;
+  /**
+   * Formats the value shown by `showValueOnDrag`. Receives the marker's
+   * `x` in its own coordinate space (a `Date` on a date axis).
+   */
+  valueFormat?: (x: number | Date) => string;
 }
 
 /** Payload emitted on `marker-drag` / `marker-drag-end`. */

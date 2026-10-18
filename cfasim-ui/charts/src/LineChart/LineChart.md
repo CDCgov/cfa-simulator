@@ -1360,7 +1360,9 @@ from your refs in a writable computed and split drag updates back out in
 its setter, as below. (Alternatively, listen to `marker-drag` and dispatch
 on `payload.index` or `payload.marker.label`.)
 
-Drag the lines below (or focus one and use the arrow keys):
+Drag the lines below (or focus one and use the arrow keys). With
+`showValueOnDrag: true` a marker shows its current `x` under the label
+while it is dragged, formatted like the x axis or through `valueFormat`:
 
 <script setup>
 import { ref, computed } from "vue";
@@ -1481,8 +1483,8 @@ const isolation = ref(12);
 const recovery = ref(32);
 const markers = computed({
   get: () => [
-    { x: isolation.value, label: "Isolation" },
-    { x: recovery.value, label: "Recovery" },
+    { x: isolation.value, label: "Isolation", showValueOnDrag: true },
+    { x: recovery.value, label: "Recovery", showValueOnDrag: true },
   ],
   set: ([a, b]) => {
     isolation.value = a.x;
@@ -1506,6 +1508,7 @@ const styledMarkers = ref([
     color: "#0057b7",
     dash: "2 6",
     labelBackground: true,
+    showValueOnDrag: true,
   },
 ]);
 </script>
@@ -1540,8 +1543,8 @@ const recovery = ref(32);
 // markers array, the setter splits drag updates back out.
 const markers = computed({
   get: () => [
-    { x: isolation.value, label: "Isolation" },
-    { x: recovery.value, label: "Recovery" },
+    { x: isolation.value, label: "Isolation", showValueOnDrag: true },
+    { x: recovery.value, label: "Recovery", showValueOnDrag: true },
   ],
   set: ([a, b]) => {
     isolation.value = a.x;
@@ -1645,6 +1648,7 @@ const markers = ref([
     color: "#0057b7",
     dash: "2 6",
     labelBackground: true,
+    showValueOnDrag: true,
   },
 ]);
 </script>
@@ -1674,6 +1678,8 @@ interface ChartMarker {
   labelBackground?: boolean | string; // pill behind the label: true = marker color
   labelPadding?: number | { x?: number; y?: number }; // pill padding (default: { x: 6, y: 5 })
   draggable?: boolean; // default: true
+  showValueOnDrag?: boolean; // show the current x under the label while dragging
+  valueFormat?: (x: number | Date) => string; // formats that value (default: like the x axis)
 }
 ```
 
