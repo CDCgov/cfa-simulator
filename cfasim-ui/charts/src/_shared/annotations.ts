@@ -64,10 +64,13 @@ export interface ChartAnnotation {
   /**
    * Rotation of the label in degrees, clockwise, about its reference
    * position (the anchor plus `offset`). `-90` reads bottom to top,
-   * which suits a label beside a `"ruleX"` line. `align` then runs along
-   * the rotated baseline: `"left"` extends the text away from the
-   * reference point in reading direction. Pointer geometry is computed
-   * for unrotated text, so pair rotation with a rule or `pointer: "none"`.
+   * which suits a label beside a `"ruleX"` line. Rotated text keeps to
+   * the side of its position facing away from the anchor, so with
+   * `rotate: -90` an `offset.x` of `6` sits just right of a vertical
+   * rule and `-6` just left. `align` runs along the rotated baseline:
+   * `"left"` extends the text away from the reference point in reading
+   * direction. Pointer geometry is computed for unrotated text, so pair
+   * rotation with a rule or `pointer: "none"`.
    */
   rotate?: number;
   /**

@@ -1125,24 +1125,66 @@ the fill stays inside the plot and nothing is drawn under the axis.
 Pin callouts to data points with `annotations`. Each annotation anchors at
 `(x, y)` in data coordinates (the same x-space as the chart axis, so it
 respects `xMin` and explicit `x` values), with a pixel
-`offset: { x, y }` for the label position. Text supports `\n` for line
-breaks. A curved
-pointer line connects the anchor to the label, and the label gets an
-outline stroke matching the background so it stays legible over series
-lines.
+`offset: { x, y }` for the label position. A pointer line connects the
+anchor to the label: `pointer` picks `"curved"` (default), `"straight"`
+or `"none"`, and `arrow` caps the anchor end. Text supports `\n` for line
+breaks, `**bold**` and `_italic_` runs (they compose: `**_both_**`).
+Multi-line callouts attach to whichever edge of the text faces the anchor,
+so the pointer never cuts through the lines.
+
+The label and line each get a legibility outline in the page background
+color: `outlineColor` / `outlineWidth` style the line's halo and are the
+defaults for the text's `textOutlineColor` / `textOutlineWidth`.
+`blendMode` applies a CSS `mix-blend-mode` to the whole annotation so it
+combines with the series under it instead of covering them. Try the
+options below.
 
 <ComponentDemo>
   <LineChart
     :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
-    :annotations="[
-      { x: 5, y: 30, offset: { x: 24, y: -28 }, text: 'Peak\nDay 5' },
-      { x: 0, y: 0, offset: { x: 28, y: -22 }, text: 'Onset' },
-    ]"
-    :chart-padding="{ top: 40, right: 24 }"
-    :height="240"
+    :annotations="[pointerAnnotation]"
+    :chart-padding="{ top: 50, right: 70, bottom: 16, left: 70 }"
+    :height="280"
     x-label="Days"
     y-label="Cases"
+    :menu="false"
   />
+  <div class="annotation-controls">
+    <SelectBox
+      v-model="pointerKind"
+      label="Pointer"
+      :options="[
+        { value: 'curved', label: 'Curved' },
+        { value: 'straight', label: 'Straight' },
+        { value: 'none', label: 'None' },
+      ]"
+    />
+    <SelectBox
+      v-model="pointerPosition"
+      label="Label position"
+      :options="[
+        { value: 'above', label: 'Above' },
+        { value: 'above-right', label: 'Above right' },
+        { value: 'right', label: 'Right' },
+        { value: 'below-right', label: 'Below right' },
+        { value: 'below', label: 'Below' },
+        { value: 'below-left', label: 'Below left' },
+        { value: 'left', label: 'Left' },
+        { value: 'above-left', label: 'Above left' },
+      ]"
+    />
+    <SelectBox
+      v-model="pointerOutline"
+      label="Outline"
+      :options="annotationOutlineOptions"
+    />
+    <SelectBox
+      v-model="pointerBlend"
+      label="Blend mode"
+      :options="annotationBlendOptions"
+    />
+    <Toggle v-model="pointerArrow" label="Arrow" />
+  </div>
 
 <template #code>
 
@@ -1150,11 +1192,20 @@ lines.
 <LineChart
   :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
   :annotations="[
-    { x: 5, y: 30, offset: { x: 24, y: -28 }, text: 'Peak\nDay 5' },
-    { x: 0, y: 0, offset: { x: 28, y: -22 }, text: 'Onset' },
+    {
+      x: 3,
+      y: 15,
+      offset: { x: 50, y: -36 },
+      text: '**Cluster**\n_Day 3_',
+      pointer: 'curved',
+      arrow: true,
+      outlineWidth: 3,
+      textOutlineWidth: 3,
+      blendMode: 'normal',
+    },
   ]"
-  :chart-padding="{ top: 40, right: 24 }"
-  :height="240"
+  :chart-padding="{ top: 50, right: 70, bottom: 16, left: 70 }"
+  :height="280"
   x-label="Days"
   y-label="Cases"
 />
@@ -1167,130 +1218,10 @@ Use `chart-padding` to reserve room outside the plot so annotations (or
 any other overlay) don't clip the data area. It accepts a number (same on
 all sides) or an object with `top`, `right`, `bottom`, `left`.
 
-Annotation text supports a small set of inline markers:
-
-- `**bold**` — bold
-- `_italic_` — italic
-- `\n` — line break
-
-Markers compose (`**_bold italic_**`).
-
-<ComponentDemo>
-  <LineChart
-    :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
-    :annotations="[
-      { x: 5, y: 30, offset: { x: 24, y: -28 }, text: '**Peak**\n_Day 5_' },
-    ]"
-    :chart-padding="{ top: 40, right: 24 }"
-    :height="240"
-    x-label="Days"
-    y-label="Cases"
-  />
-
-<template #code>
-
-```vue
-<LineChart
-  :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
-  :annotations="[
-    { x: 5, y: 30, offset: { x: 24, y: -28 }, text: '**Peak**\n_Day 5_' },
-  ]"
-  :chart-padding="{ top: 40, right: 24 }"
-  :height="240"
-  x-label="Days"
-  y-label="Cases"
-/>
-```
-
-  </template>
-</ComponentDemo>
-
-Multi-line callouts attach to whichever edge of the text faces the anchor:
-text **above** the point connects to its bottom edge, text **below**
-connects to its top, and text to the side connects to its near vertical
-edge — so the pointer never cuts through the lines. The demo below anchors
-the same two-line label at one point and fans it out in every direction.
-
-<ComponentDemo>
-  <LineChart
-    :data="[2, 10, 7, 6, 8, 4, 9]"
-    :annotations="[
-      { x: 3, y: 6, offset: { x: 0, y: -86 }, text: 'Cluster\ndetected' },
-      { x: 3, y: 6, offset: { x: 62, y: -62 }, text: 'Cluster\ndetected' },
-      { x: 3, y: 6, offset: { x: 96, y: 0 }, text: 'Cluster\ndetected' },
-      { x: 3, y: 6, offset: { x: 62, y: 62 }, text: 'Cluster\ndetected' },
-      { x: 3, y: 6, offset: { x: 0, y: 86 }, text: 'Cluster\ndetected' },
-      { x: 3, y: 6, offset: { x: -62, y: 62 }, text: 'Cluster\ndetected' },
-      { x: 3, y: 6, offset: { x: -96, y: 0 }, text: 'Cluster\ndetected' },
-      { x: 3, y: 6, offset: { x: -62, y: -62 }, text: 'Cluster\ndetected' },
-    ]"
-    :chart-padding="{ top: 70, right: 120, bottom: 50, left: 120 }"
-    :height="340"
-    x-label="Days"
-    y-label="Cases"
-  />
-
-<template #code>
-
-```vue
-<LineChart
-  :data="[2, 10, 7, 6, 8, 4, 9]"
-  :annotations="[
-    { x: 3, y: 6, offset: { x: 0, y: -86 }, text: 'Cluster\ndetected' },
-    { x: 3, y: 6, offset: { x: 62, y: -62 }, text: 'Cluster\ndetected' },
-    { x: 3, y: 6, offset: { x: 96, y: 0 }, text: 'Cluster\ndetected' },
-    { x: 3, y: 6, offset: { x: 62, y: 62 }, text: 'Cluster\ndetected' },
-    { x: 3, y: 6, offset: { x: 0, y: 86 }, text: 'Cluster\ndetected' },
-    { x: 3, y: 6, offset: { x: -62, y: 62 }, text: 'Cluster\ndetected' },
-    { x: 3, y: 6, offset: { x: -96, y: 0 }, text: 'Cluster\ndetected' },
-    { x: 3, y: 6, offset: { x: -62, y: -62 }, text: 'Cluster\ndetected' },
-  ]"
-  :chart-padding="{ top: 70, right: 120, bottom: 50, left: 120 }"
-  :height="340"
-  x-label="Days"
-  y-label="Cases"
-/>
-```
-
-  </template>
-</ComponentDemo>
-
-```ts
-interface ChartAnnotation {
-  x: number; // anchor in data coords (x-axis)
-  y: number; // anchor in data coords (y-axis)
-  text: string; // label text; \n produces line breaks
-  offset: { x: number; y: number }; // pixel offset from anchor to label
-  color?: string; // text / pointer color (default: currentColor)
-  fontSize?: number; // default: 13 (matches axis labels)
-  fontWeight?: string | number; // default: "normal"
-  outlineColor?: string; // background-matched outline (default: var(--color-bg-0, #fff))
-  outlineWidth?: number; // default: 3
-  align?: "left" | "center" | "right"; // default: derived from offset[0] sign
-  lineColor?: string; // connector-line color override (default: color)
-  lineWidth?: number; // default: 1
-  lineDash?: string | number | readonly number[]; // SVG stroke-dasharray
-  // default: "curved"
-  // "ruleX" / "ruleY" span the full plot on the named axis;
-  // "ruleUp" / "ruleDown" / "ruleFromLeft" / "ruleFromRight" run from an edge to the anchor.
-  pointer?:
-    | "curved"
-    | "straight"
-    | "none"
-    | "ruleX"
-    | "ruleY"
-    | "ruleUp"
-    | "ruleDown"
-    | "ruleFromLeft"
-    | "ruleFromRight";
-  arrow?: boolean; // triangle marker at the anchor end (default: true)
-}
-```
-
 ### Rules
 
-Set `pointer` to one of the rule values to replace the curved /
-straight connector with a straight line through the anchor:
+Set `pointer` to one of the rule values to replace the connector with a
+straight line through the anchor:
 
 - `"ruleX"` — vertical line spanning the plot height at the annotation's `x`.
 - `"ruleY"` — horizontal line spanning the plot width at the annotation's `y`.
@@ -1299,36 +1230,77 @@ straight connector with a straight line through the anchor:
 - `"ruleFromLeft"` — horizontal from the left edge in to the anchor.
 - `"ruleFromRight"` — horizontal from the right edge in to the anchor.
 
-`lineColor`, `lineWidth`, and `lineDash` style the line. The label is
-positioned from the anchor as usual via `offset`.
+`lineColor`, `lineWidth`, and `lineDash` style the line, and the label is
+positioned from the anchor as usual via `offset`. `rotate` turns the label
+about its position, in degrees clockwise: `-90` reads bottom to top beside a
+vertical rule. Rotated text keeps to the side of its position facing away
+from the anchor, so a small `offset.x` of either sign puts the label just
+beside the rule. Set `align` explicitly for rotated text, since it runs
+along the rotated baseline (`"left"` extends away from the position in
+reading direction).
 
 <ComponentDemo>
   <LineChart
     :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
-    :annotations="[
-      {
-        x: 5,
-        y: 30,
-        offset: { x: 8, y: 14 },
-        text: 'Peak',
-        pointer: 'ruleX',
-        lineDash: '4 3',
-      },
-      {
-        x: 5,
-        y: 30,
-        offset: { x: -8, y: -6 },
-        text: 'Max',
-        align: 'right',
-        pointer: 'ruleFromLeft',
-        lineDash: '4 3',
-      },
-    ]"
+    :annotations="[ruleAnnotation]"
     :chart-padding="{ top: 24, right: 24 }"
-    :height="240"
+    :height="260"
     x-label="Days"
     y-label="Cases"
+    :menu="false"
   />
+  <div class="annotation-controls">
+    <SelectBox
+      v-model="ruleKind"
+      label="Rule"
+      :options="[
+        { value: 'ruleX', label: 'ruleX' },
+        { value: 'ruleY', label: 'ruleY' },
+        { value: 'ruleUp', label: 'ruleUp' },
+        { value: 'ruleDown', label: 'ruleDown' },
+        { value: 'ruleFromLeft', label: 'ruleFromLeft' },
+        { value: 'ruleFromRight', label: 'ruleFromRight' },
+      ]"
+    />
+    <SelectBox
+      v-model="ruleSide"
+      label="Label side"
+      :options="[
+        { value: 'left', label: 'Left' },
+        { value: 'right', label: 'Right' },
+        { value: 'above', label: 'Above' },
+        { value: 'below', label: 'Below' },
+      ]"
+    />
+    <SelectBox
+      v-model="ruleRotate"
+      label="Label rotation"
+      :options="[
+        { value: '0', label: 'None' },
+        { value: '-90', label: '-90° (reads up)' },
+        { value: '90', label: '90° (reads down)' },
+      ]"
+    />
+    <SelectBox
+      v-model="ruleDash"
+      label="Line dash"
+      :options="[
+        { value: 'solid', label: 'Solid' },
+        { value: 'dashed', label: 'Dashed' },
+        { value: 'dotted', label: 'Dotted' },
+      ]"
+    />
+    <SelectBox
+      v-model="ruleOutline"
+      label="Outline"
+      :options="annotationOutlineOptions"
+    />
+    <SelectBox
+      v-model="ruleBlend"
+      label="Blend mode"
+      :options="annotationBlendOptions"
+    />
+  </div>
 
 <template #code>
 
@@ -1338,104 +1310,19 @@ positioned from the anchor as usual via `offset`.
   :annotations="[
     {
       x: 5,
-      y: 30,
-      offset: { x: 8, y: 14 },
-      text: 'Peak',
+      y: 14,
+      offset: { x: -6, y: 0 },
+      text: 'Peak day',
       pointer: 'ruleX',
-      lineDash: '4 3',
-    },
-    {
-      x: 5,
-      y: 30,
-      offset: { x: -8, y: -6 },
-      text: 'Max',
-      align: 'right',
-      pointer: 'ruleFromLeft',
-      lineDash: '4 3',
-    },
-  ]"
-  :chart-padding="{ top: 24, right: 24 }"
-  :height="240"
-  x-label="Days"
-  y-label="Cases"
-/>
-```
-
-  </template>
-</ComponentDemo>
-
-### Vertical labels and blending
-
-`rotate` turns the label about its position, in degrees clockwise: `-90` reads bottom to top beside a `"ruleX"` line. Set `align` explicitly for rotated text, since it runs along the rotated baseline (`"left"` extends away from the position in reading direction). `textOutlineColor` and `textOutlineWidth` style the text halo apart from the line halo (`outlineColor` / `outlineWidth`), and `blendMode` applies a CSS `mix-blend-mode` to the whole annotation so it combines with the series under it instead of covering them.
-
-<ComponentDemo>
-  <LineChart
-    :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
-    :annotations="[
-      {
-        x: 3,
-        y: 0,
-        offset: { x: -6, y: -8 },
-        text: 'Interventions begin',
-        align: 'left',
-        rotate: -90,
-        pointer: 'ruleX',
-        lineDash: '4 3',
-        outlineWidth: 0,
-        textOutlineWidth: 3,
-      },
-      {
-        x: 7,
-        y: 0,
-        offset: { x: 6, y: -8 },
-        text: 'Peak passed',
-        align: 'left',
-        rotate: -90,
-        pointer: 'ruleX',
-        color: '#fb7e38',
-        blendMode: 'multiply',
-        outlineWidth: 0,
-      },
-    ]"
-    :chart-padding="{ top: 24, right: 24 }"
-    :height="240"
-    x-label="Days"
-    y-label="Cases"
-  />
-
-<template #code>
-
-```vue
-<LineChart
-  :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
-  :annotations="[
-    {
-      x: 3,
-      y: 0,
-      offset: { x: -6, y: -8 },
-      text: 'Interventions begin',
       align: 'left',
       rotate: -90,
-      pointer: 'ruleX',
       lineDash: '4 3',
       outlineWidth: 0,
       textOutlineWidth: 3,
     },
-    {
-      x: 7,
-      y: 0,
-      offset: { x: 6, y: -8 },
-      text: 'Peak passed',
-      align: 'left',
-      rotate: -90,
-      pointer: 'ruleX',
-      color: '#fb7e38',
-      blendMode: 'multiply',
-      outlineWidth: 0,
-    },
   ]"
   :chart-padding="{ top: 24, right: 24 }"
-  :height="240"
+  :height="260"
   x-label="Days"
   y-label="Cases"
 />
@@ -1443,6 +1330,20 @@ positioned from the anchor as usual via `offset`.
 
   </template>
 </ComponentDemo>
+
+<style>
+.annotation-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: end;
+  width: 100%;
+  margin-top: 12px;
+}
+.annotation-controls > * {
+  flex: 1 1 150px;
+}
+</style>
 
 ### Draggable markers
 
@@ -1494,6 +1395,88 @@ const sectionDemoSections = computed(() => [
     description: "Mitigation period",
   },
 ]);
+const annotationOutlineOptions = [
+  { value: "both", label: "Text and line" },
+  { value: "text", label: "Text only" },
+  { value: "line", label: "Line only" },
+  { value: "none", label: "None" },
+];
+const annotationBlendOptions = [
+  { value: "normal", label: "Normal" },
+  { value: "multiply", label: "Multiply" },
+  { value: "screen", label: "Screen" },
+  { value: "difference", label: "Difference" },
+];
+function annotationOutline(kind) {
+  if (kind === "text") return { outlineWidth: 0, textOutlineWidth: 3 };
+  if (kind === "line") return { textOutlineWidth: 0 };
+  if (kind === "none") return { outlineWidth: 0 };
+  return {};
+}
+
+const pointerKind = ref("curved");
+const pointerPosition = ref("above-right");
+const pointerOutline = ref("both");
+const pointerBlend = ref("normal");
+const pointerArrow = ref(true);
+const pointerOffsets = {
+  above: { x: 0, y: -50 },
+  "above-right": { x: 50, y: -36 },
+  right: { x: 70, y: 0 },
+  "below-right": { x: 50, y: 50 },
+  below: { x: 0, y: 50 },
+  "below-left": { x: -50, y: 50 },
+  left: { x: -70, y: 0 },
+  "above-left": { x: -50, y: -36 },
+};
+const pointerAnnotation = computed(() => ({
+  x: 3,
+  y: 15,
+  offset: pointerOffsets[pointerPosition.value],
+  text: "**Cluster**\n_Day 3_",
+  pointer: pointerKind.value,
+  arrow: pointerArrow.value,
+  blendMode: pointerBlend.value,
+  color: pointerBlend.value === "normal" ? undefined : "#fb7e38",
+  ...annotationOutline(pointerOutline.value),
+}));
+
+const ruleKind = ref("ruleX");
+const ruleSide = ref("left");
+const ruleRotate = ref("-90");
+const ruleDash = ref("dashed");
+const ruleOutline = ref("text");
+const ruleBlend = ref("normal");
+const ruleAnnotation = computed(() => {
+  const rotate = Number(ruleRotate.value);
+  const side = ruleSide.value;
+  const offset =
+    side === "left"
+      ? { x: -6, y: rotate ? 0 : 4 }
+      : side === "right"
+        ? { x: 6, y: rotate ? 0 : 4 }
+        : side === "above"
+          ? { x: rotate ? 0 : 4, y: -8 }
+          : { x: rotate ? 0 : 4, y: rotate ? 8 : 18 };
+  return {
+    x: 5,
+    y: 14,
+    offset,
+    text: "Peak day",
+    pointer: ruleKind.value,
+    align: rotate ? "left" : undefined,
+    rotate: rotate || undefined,
+    lineDash:
+      ruleDash.value === "dashed"
+        ? "4 3"
+        : ruleDash.value === "dotted"
+          ? "1 3"
+          : undefined,
+    blendMode: ruleBlend.value,
+    color: ruleBlend.value === "normal" ? undefined : "#fb7e38",
+    ...annotationOutline(ruleOutline.value),
+  };
+});
 const isolation = ref(12);
 const recovery = ref(32);
 const markers = computed({

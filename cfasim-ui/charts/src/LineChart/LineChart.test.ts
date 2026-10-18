@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount } from "@vue/test-utils";
 import LineChart from "./LineChart.vue";
+import type { ChartAnnotation } from "../_shared/annotations.js";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import * as download from "../ChartMenu/download.js";
 
@@ -1985,7 +1986,7 @@ describe("LineChart", () => {
             {
               x: 1,
               y: 0,
-              offset: { x: -6, y: -8 },
+              offset: { x: 6, y: -8 },
               text: "Peak",
               pointer: "ruleX",
               rotate: -90,
@@ -2004,6 +2005,43 @@ describe("LineChart", () => {
       const x = text.attributes("x");
       const y = text.attributes("y");
       expect(text.attributes("transform")).toBe(`rotate(-90 ${x} ${y})`);
+      // Offset to the right of the rule: the glyph body would extend back
+      // across it, so the text hangs from its baseline instead.
+      expect(text.attributes("dominant-baseline")).toBe("hanging");
+    });
+
+    it("keeps rotated text on the far side of its position from the anchor", () => {
+      const base = { x: 1, y: 0, text: "A\nB", pointer: "ruleX" as const };
+      const mountWith = (annotation: ChartAnnotation) =>
+        mount(LineChart, {
+          props: {
+            data: [0, 10, 20],
+            annotations: [annotation],
+            height: 200,
+            width: 400,
+            menu: false,
+          },
+        }).find("g.chart-annotations text");
+      const left = mountWith({
+        ...base,
+        offset: { x: -6, y: -8 },
+        rotate: -90,
+      });
+      expect(left.attributes("dominant-baseline")).toBeUndefined();
+      // Two lines stack toward the rule, so the block shifts up one line
+      // height (13 * 1.2) and its last line sits on the baseline.
+      const single = mountWith({
+        ...base,
+        text: "A",
+        offset: { x: -6, y: -8 },
+        rotate: -90,
+      });
+      expect(
+        Number(single.attributes("y")) - Number(left.attributes("y")),
+      ).toBeCloseTo(13 * 1.2);
+      const unrotated = mountWith({ ...base, offset: { x: 6, y: -8 } });
+      expect(unrotated.attributes("dominant-baseline")).toBeUndefined();
+      expect(unrotated.attributes("transform")).toBeUndefined();
     });
 
     it("suppresses the outline passes when outlineWidth is 0", () => {
@@ -2226,6 +2264,38 @@ describe("LineChart", () => {
       // Path is not driving the arrow via marker-start anymore.
       const path = group.find("path:not(.annotation-outline)");
       expect(path.attributes("marker-start")).toBeUndefined();
+    });
+
+    it("aims a curved pointer's arrow along the curve, not the vertical tangent", () => {
+      const angleFor = (offset: { x: number; y: number }) => {
+        const wrapper = mount(LineChart, {
+          props: {
+            data: [0, 10, 20],
+            annotations: [{ x: 1, y: 10, offset, text: "Peak" }],
+            height: 200,
+            width: 400,
+            menu: false,
+          },
+        });
+        const transform = wrapper
+          .find("g.chart-annotations polygon:not(.annotation-outline)")
+          .attributes("transform")!;
+        return Number(/rotate\((-?[\d.]+)\)/.exec(transform)![1]);
+      };
+      // Label above-right: the curve rises then turns right, so the head
+      // points down and a little left, between the tangent (90) and the
+      // chord to the label.
+      const tight = angleFor({ x: 60, y: -20 });
+      expect(tight).toBeGreaterThan(90);
+      expect(tight).toBeLessThan(180);
+      // A taller curve leaves the head closer to vertical.
+      const tall = angleFor({ x: 60, y: -120 });
+      expect(tall).toBeGreaterThan(90);
+      expect(tall).toBeLessThan(tight);
+      // Label below-right: head points up and a little left.
+      const below = angleFor({ x: 60, y: 40 });
+      expect(below).toBeLessThan(-90);
+      expect(below).toBeGreaterThan(-180);
     });
 
     it("omits the inline arrow when arrow: false", () => {

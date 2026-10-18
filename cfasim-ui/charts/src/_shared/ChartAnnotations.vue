@@ -33,13 +33,15 @@ const BOLD_FONT_WEIGHT = 700;
 const DEFAULT_OUTLINE_COLOR = "var(--color-bg-0, #fff)";
 const DEFAULT_OUTLINE_WIDTH = 3;
 const DEFAULT_LINE_WIDTH = 1;
-const ANCHOR_GAP_PX = 4;
+const ANCHOR_GAP_PX = 2;
 const LABEL_GAP_PX = 6;
 const LINE_HEIGHT_RATIO = 1.2;
 // Ratio of font-size that puts the pointer endpoint at the visual center
 // of a text line (between baseline and cap-height). Lands on the x-height
 // middle for most fonts.
 const LINE_CENTER_RATIO = 0.35;
+// Length of the arrow head from tip to base (see the polygon `points`).
+const ARROW_LENGTH_PX = 6;
 
 interface TextRun {
   text: string;
@@ -61,6 +63,7 @@ interface RenderedAnnotation {
   textOutlineColor: string;
   textOutlineWidth: number;
   textTransform?: string;
+  textBaseline?: "hanging";
   blendMode?: BlendMode;
   pointerPath: string;
   lineColor: string;
@@ -148,6 +151,22 @@ const items = computed<RenderedAnnotation[]>(() => {
 
     const lines = a.text.split("\n").map(parseInline);
 
+    // Rotated text keeps to the side of its position facing away from
+    // the anchor: when the glyph body (text-space "up", rotated) would
+    // extend back toward the anchor, hang the text from its baseline
+    // instead, and when it extends away, shift a multi-line block so
+    // its last line sits on the baseline.
+    let textY = labelY;
+    let textBaseline: RenderedAnnotation["textBaseline"];
+    if (a.rotate) {
+      const rad = (a.rotate * Math.PI) / 180;
+      const toward = offsetX * Math.sin(rad) - offsetY * Math.cos(rad);
+      if (toward < 0) textBaseline = "hanging";
+      else if (toward > 0 && lines.length > 1) {
+        textY -= (lines.length - 1) * fontSize * LINE_HEIGHT_RATIO;
+      }
+    }
+
     let rule: RenderedAnnotation["rule"];
     let pointerPath = "";
     let arrowTip: RenderedAnnotation["arrowTip"];
@@ -171,7 +190,7 @@ const items = computed<RenderedAnnotation[]>(() => {
     out.push({
       lines,
       textX: labelX,
-      textY: labelY,
+      textY,
       textAnchor,
       dy: fontSize * LINE_HEIGHT_RATIO,
       fontSize,
@@ -184,7 +203,8 @@ const items = computed<RenderedAnnotation[]>(() => {
       textTransform: a.rotate
         ? `rotate(${a.rotate} ${labelX} ${labelY})`
         : undefined,
-      blendMode: a.blendMode,
+      textBaseline,
+      blendMode: a.blendMode === "normal" ? undefined : a.blendMode,
       pointerPath,
       lineColor,
       lineWidth,
@@ -322,14 +342,39 @@ function buildPointerPath(
   const ex = lx - xDir * LABEL_GAP_PX;
   const ey = targetY;
   // Control sits at (sx, targetY) so the curve emerges from the start
-  // tangent vertically and lands on the label horizontally —
-  // a clean quarter-arc shape. The start tangent is (0, yDir), so the
-  // arrow points (0, -yDir) — straight up when yDir=1, down when yDir=-1.
-  const angle = yDir > 0 ? -90 : 90;
+  // tangent vertically and lands on the label horizontally, a clean
+  // quarter-arc shape. The arrow is aimed along the chord from the tip
+  // to the point about one head length down the curve rather than along
+  // the exact (vertical) start tangent: a tight curve bends away within
+  // the head's own length, and the tangent then visibly misses it.
+  const angle = quadStartAngle(sx, sy, sx, targetY, ex, ey);
   return {
     path: `M${sx},${sy} Q${sx},${targetY} ${ex},${ey}`,
     arrow: { x: sx, y: sy, angle },
   };
+}
+
+/**
+ * Angle (degrees) of an arrow whose tip sits at the start of the
+ * quadratic Bezier `p0, p1, p2`, aimed from the point one head length
+ * along the curve back to the tip.
+ */
+function quadStartAngle(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+): number {
+  const chord = Math.hypot(x2 - x0, y2 - y0);
+  const poly = Math.hypot(x1 - x0, y1 - y0) + Math.hypot(x2 - x1, y2 - y1);
+  const length = (chord + poly) / 2;
+  const t = length > 0 ? Math.min(1, ARROW_LENGTH_PX / length) : 1;
+  const u = 1 - t;
+  const bx = u * u * x0 + 2 * u * t * x1 + t * t * x2;
+  const by = u * u * y0 + 2 * u * t * y1 + t * t * y2;
+  return (Math.atan2(y0 - by, x0 - bx) * 180) / Math.PI;
 }
 </script>
 
@@ -415,6 +460,7 @@ function buildPointerPath(
         :stroke="item.textOutlineColor"
         :stroke-width="item.textOutlineWidth"
         :transform="item.textTransform"
+        :dominant-baseline="item.textBaseline"
         stroke-linejoin="round"
         paint-order="stroke fill"
       >
