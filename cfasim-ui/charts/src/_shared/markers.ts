@@ -67,8 +67,8 @@ export interface ChartMarker {
   labelBackground?: boolean | string;
   /**
    * Padding inside the label pill in pixels: one number for all sides
-   * or `{ x, y }`. Default: `{ x: 6, y: 5 }`. Only applies with
-   * `labelBackground`.
+   * or `{ x, y }`. Default: `MARKER_PILL_PADDING` (`{ x: 6, y: 5 }`).
+   * Only applies with `labelBackground`.
    */
   labelPadding?: number | { x?: number; y?: number };
   /** Whether the marker can be dragged along the x-axis. Default: true. */
@@ -186,4 +186,59 @@ export function layoutMarkerLabels(
     };
   }
   return placements;
+}
+
+export const MARKER_PILL_PADDING = { x: 6, y: 5 } as const;
+const MARKER_PILL_RADIUS = 3;
+/** Cap height as a fraction of font size; label boxes are built on it. */
+export const MARKER_CAP_HEIGHT_RATIO = 0.75;
+
+/** The marker's pill padding, or `null` when it has no pill. */
+export function markerPillPadding(
+  m: ChartMarker,
+): { x: number; y: number } | null {
+  if (!m.labelBackground) return null;
+  const p = m.labelPadding;
+  if (typeof p === "number") return { x: p, y: p };
+  return { x: p?.x ?? MARKER_PILL_PADDING.x, y: p?.y ?? MARKER_PILL_PADDING.y };
+}
+
+/**
+ * Vertical extent of a marker label around its baseline: the cap height
+ * above and the descender space below for plain text, or the pill's
+ * edges (cap height plus padding above, padding below, so caps center
+ * and descenders tuck into the bottom padding) when `pad` is given.
+ */
+export function markerLabelBox(
+  fontSize: number,
+  pad: { x: number; y: number } | null,
+): { ascent: number; descent: number } {
+  const cap = fontSize * MARKER_CAP_HEIGHT_RATIO;
+  return pad
+    ? { ascent: cap + pad.y, descent: pad.y }
+    : { ascent: cap, descent: fontSize - cap };
+}
+
+/**
+ * A label pill flush against the marker line at `x` (flat on that side)
+ * and rounded on the far corners, extending `dir` (1 right, -1 left).
+ */
+export function markerPillPath(
+  x: number,
+  top: number,
+  bottom: number,
+  width: number,
+  dir: 1 | -1,
+): string {
+  const r = Math.min(MARKER_PILL_RADIUS, width / 2, (bottom - top) / 2);
+  const far = x + dir * width;
+  const inner = far - dir * r;
+  const sweep = dir === 1 ? 1 : 0;
+  return (
+    `M${x},${top} L${inner},${top} ` +
+    `A${r},${r} 0 0 ${sweep} ${far},${top + r} ` +
+    `L${far},${bottom - r} ` +
+    `A${r},${r} 0 0 ${sweep} ${inner},${bottom} ` +
+    `L${x},${bottom} Z`
+  );
 }

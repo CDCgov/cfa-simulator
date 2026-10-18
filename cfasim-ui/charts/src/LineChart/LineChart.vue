@@ -36,7 +36,12 @@ import {
   positionLegendItems,
   layoutMarkerLabels,
   markerDashArray,
+  markerPillPadding,
+  markerLabelBox,
+  markerPillPath,
+  nearestSortedIndex,
   pickContrastColor,
+  blendStyle,
   resolveLabelStyle,
   parseDate,
   isAllDates,
@@ -1254,17 +1259,22 @@ function formatXValue(
   return formatTick(display, decimals);
 }
 
-/** Date unit the x ticks are labeled in, so other readouts can match. */
-const xDateTickUnit = computed<DateTickUnit | undefined>(() => {
+/**
+ * Tick positions and the unit they are labeled in on a date axis. Date
+ * labels are short ("May 21"), so a date axis fits a tick per 60px: an
+ * 84-day span on a 650px plot gets weekly ticks. Undefined otherwise.
+ */
+const xDateTicks = computed(() => {
   if (!xIsDate.value) return undefined;
   const { min: xMin, max: xMax } = xDomain.value;
   if (xMin === xMax) return undefined;
-  return (
-    props.xTicks != null
-      ? placedDateTicks(xMin, xMax, props.xTicks)
-      : pickDateTicks(xMin, xMax, innerW.value / 60, tz.value)
-  ).unit;
+  return props.xTicks != null
+    ? placedDateTicks(xMin, xMax, props.xTicks)
+    : pickDateTicks(xMin, xMax, innerW.value / 60, tz.value);
 });
+
+/** Date unit the x ticks are labeled in, so other readouts can match. */
+const xDateTickUnit = computed(() => xDateTicks.value?.unit);
 
 const xTickItems = computed(() => {
   const { min: xMin, max: xMax } = xDomain.value;
@@ -1278,13 +1288,8 @@ const xTickItems = computed(() => {
 
   let values: number[];
   let unit: DateTickUnit | undefined;
-  if (isDate) {
-    // Date labels are short ("May 21"), so a date axis fits a tick per
-    // 60px: an 84-day span on a 650px plot gets weekly ticks.
-    const picked =
-      props.xTicks != null
-        ? placedDateTicks(xMin, xMax, props.xTicks)
-        : pickDateTicks(xMin, xMax, innerW.value / 60, tz.value);
+  const picked = xDateTicks.value;
+  if (isDate && picked) {
     unit = picked.unit;
     // Run through computeTickValues so the clip-to-range semantics
     // match the numeric path. xMin is already 0, so `ticks` is used
@@ -1351,38 +1356,74 @@ function toCsv(): string {
  * point index.
  */
 const hoverGrid = computed<number[]>(() => {
+  const visible = tooltipSeries.value;
+  return visible.length === allSeries.value.length
+    ? allSeriesXs.value
+    : sortedSeriesXs(visible.map((t) => t.series));
+});
+
+/** Series that take part in the tooltip, with their `allSeries` index. */
+const tooltipSeries = computed(() => {
+  const out: { series: ResolvedSeries; index: number }[] = [];
+  allSeries.value.forEach((series, index) => {
+    if (series.showInTooltip === false || isHidden(series.legend)) return;
+    out.push({ series, index });
+  });
+  return out;
+});
+
+/** Sorted union of the x positions of every point in `series`. */
+function sortedSeriesXs(series: readonly ResolvedSeries[]): number[] {
   const xs = new Set<number>();
-  for (const s of allSeries.value) {
-    if (s.showInTooltip === false || isHidden(s.legend)) continue;
+  for (const s of series) {
     for (let i = 0; i < s.data.length; i++) {
       const x = seriesXAt(s, i);
       if (isFinite(x)) xs.add(x);
     }
   }
   return Array.from(xs).sort((a, b) => a - b);
-});
+}
+
+/** Sorted x positions of every series point, for `snap: true` markers. */
+const allSeriesXs = computed(() => sortedSeriesXs(allSeries.value));
+
+/**
+ * Per series with explicit x values, its point indices ordered by x and
+ * those x values, so the nearest point to an x is a binary search.
+ * Index-x series need no table: the nearest point is the rounded x.
+ */
+const seriesXOrder = computed(() =>
+  allSeries.value.map((s) => {
+    if (!s.x) return null;
+    const order: number[] = [];
+    for (let i = 0; i < s.data.length; i++) {
+      if (isFinite(seriesXAt(s, i))) order.push(i);
+    }
+    order.sort((a, b) => seriesXAt(s, a) - seriesXAt(s, b));
+    return { order, xs: order.map((i) => seriesXAt(s, i)) };
+  }),
+);
+
+/** Index of the point in series `si` closest to a data-space x. */
+function nearestSeriesIndex(si: number, targetX: number): number | null {
+  const len = allSeries.value[si].data.length;
+  if (len === 0) return null;
+  const sorted = seriesXOrder.value[si];
+  if (!sorted) return Math.min(len - 1, Math.max(0, Math.round(targetX)));
+  const k = nearestSortedIndex(sorted.xs, targetX);
+  return k === null ? null : sorted.order[k];
+}
 
 /** Index of the grid position closest to a data-space x. */
 function nearestGridIndex(targetX: number): number | null {
-  const grid = hoverGrid.value;
-  if (grid.length === 0 || !isFinite(targetX)) return null;
-  let lo = 0;
-  let hi = grid.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (grid[mid] < targetX) lo = mid + 1;
-    else hi = mid;
-  }
-  if (lo > 0 && targetX - grid[lo - 1] <= grid[lo] - targetX) return lo - 1;
-  return lo;
+  return nearestSortedIndex(hoverGrid.value, targetX);
 }
 
 /** Data-space x of the hovered grid position. */
 const hoverDataX = computed(() => {
   const idx = hoverIndex.value;
   if (idx === null) return null;
-  const x = hoverGrid.value[idx];
-  return x === undefined ? null : x;
+  return hoverGrid.value[idx] ?? null;
 });
 
 const hoverX = computed(() =>
@@ -1404,27 +1445,9 @@ function inPlotY(py: number): boolean {
   );
 }
 
-/** Index of the series point closest to the given data-space x. */
-function nearestIndex(s: ResolvedSeries, targetX: number): number | null {
-  const len = s.data.length;
-  if (len === 0) return null;
-  let bestIdx = 0;
-  let bestDist = Infinity;
-  for (let i = 0; i < len; i++) {
-    const svx = seriesXAt(s, i);
-    if (!isFinite(svx)) continue;
-    const d = Math.abs(svx - targetX);
-    if (d < bestDist) {
-      bestDist = d;
-      bestIdx = i;
-    }
-  }
-  return bestDist === Infinity ? null : bestIdx;
-}
-
 /**
- * Nearest point per tooltip-visible series at the hovered x — one
- * `nearestIndex` pass feeding both the hover dots and the tooltip values.
+ * Nearest point per tooltip-visible series at the hovered x, feeding
+ * both the hover dots and the tooltip values.
  */
 const hoverPoints = computed(() => {
   const targetX = hoverDataX.value;
@@ -1438,11 +1461,8 @@ const hoverPoints = computed(() => {
     x: number;
     y: number;
   }[] = [];
-  const series = allSeries.value;
-  for (let i = 0; i < series.length; i++) {
-    const s = series[i];
-    if (s.showInTooltip === false || isHidden(s.legend)) continue;
-    const nIdx = nearestIndex(s, targetX);
+  for (const { series: s, index: i } of tooltipSeries.value) {
+    const nIdx = nearestSeriesIndex(i, targetX);
     const value = nIdx !== null ? Number(s.data[nIdx]) : NaN;
     const finite = isFinite(value);
     const lower = nIdx !== null && s.lower ? Number(s.lower[nIdx]) : NaN;
@@ -1551,19 +1571,14 @@ const markersHaveLabels = computed(() =>
   (props.markers ?? []).some((m) => m.label),
 );
 
-/**
- * Tallest labeled-marker label; sizes the reserved top room. A pill
- * reaches the cap height plus its padding above the baseline.
- */
+/** Tallest labeled-marker label (font size or pill ascent); sizes the reserved top room. */
 const maxMarkerLabelHeight = computed(() => {
   let max = 0;
   for (const m of props.markers ?? []) {
     if (!m.label) continue;
     const fontSize = m.labelStyle?.fontSize ?? MARKER_LABEL_FONT_SIZE;
-    const pill = m.labelBackground
-      ? MARKER_CAP_HEIGHT_RATIO * fontSize + markerPillPadding(m).y
-      : 0;
-    max = Math.max(max, fontSize, pill);
+    const { ascent } = markerLabelBox(fontSize, markerPillPadding(m));
+    max = Math.max(max, fontSize, ascent);
   }
   return max;
 });
@@ -1657,16 +1672,29 @@ const legendToggleItems = computed(() =>
 );
 
 const MARKER_LABEL_FONT_SIZE = 12;
-const MARKER_LABEL_ROW_HEIGHT = 15;
+/** Vertical gap between stacked label rows. */
+const MARKER_LABEL_ROW_GAP = 3;
 /** Estimated character width as a fraction of the label font size. */
 const MARKER_LABEL_CHAR_FACTOR = 0.6;
-const MARKER_PILL_PAD_X = 6;
-const MARKER_PILL_PAD_Y = 5;
-const MARKER_PILL_RADIUS = 3;
-/** Cap height as a fraction of font size; the pill centers this box. */
-const MARKER_CAP_HEIGHT_RATIO = 0.75;
 /** Gap between a dragged marker's value readout and the line / x axis. */
 const MARKER_VALUE_GAP = 4;
+
+function markerTextWidth(text: string, fontSize: number): number {
+  return text.length * fontSize * MARKER_LABEL_CHAR_FACTOR;
+}
+
+/** The current x shown above the x axis while a marker is dragged. */
+interface MarkerReadout {
+  text: string;
+  x: number;
+  anchor: "start" | "end";
+  fontSize: number;
+  fontWeight: number | string;
+  fill: string;
+  outlineColor: string;
+  outlineWidth: number;
+  blendMode?: BlendMode;
+}
 
 interface RenderedMarker {
   index: number;
@@ -1690,21 +1718,10 @@ interface RenderedMarker {
   /** Pill fill behind the label, when `labelBackground` is set. */
   labelBg?: string;
   labelBgPath?: string;
-  pillPadX: number;
-  pillPadY: number;
   /** Top of the marker line: the plot top, or the label's bottom edge. */
   lineTop: number;
-  /** Current x shown above the x axis while dragging (`showValueOnDrag`). */
-  value?: string;
-  valueX: number;
-  valueY: number;
-  valueAnchor: "start" | "end";
-  valueFontSize: number;
-  valueFontWeight: number | string;
-  valueFill: string;
-  valueOutlineColor: string;
-  valueOutlineWidth: number;
-  valueBlendMode?: BlendMode;
+  /** Present only while this marker is dragged (`showValueOnDrag`). */
+  readout?: MarkerReadout;
   draggable: boolean;
   hitTop: number;
   ariaLabel: string;
@@ -1736,6 +1753,11 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
   const drag = markerDragState.value;
   const off = xIsDate.value ? 0 : xDisplayOffset.value;
   const out: RenderedMarker[] = [];
+  const labeled: {
+    r: RenderedMarker;
+    pad: { x: number; y: number } | null;
+    box: { ascent: number; descent: number };
+  }[] = [];
   for (let i = 0; i < ms.length; i++) {
     const m = ms[i];
     let xv = drag?.index === i ? drag.x : markerInternalX(m);
@@ -1749,17 +1771,28 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
     const color = m.color ?? "#999";
     const labelBg =
       m.labelBackground === true ? color : m.labelBackground || undefined;
-    const pad = markerPillPadding(m);
-    const valueStyle = resolveLabelStyle(m.valueStyle, {
-      fontSize: style.fontSize,
-    });
-    const value =
-      m.showValueOnDrag !== false && drag?.index === i
-        ? m.valueFormat
-          ? m.valueFormat(markerEmitX(xv))
-          : formatXValue(xv, 0, xDateTickUnit.value)
-        : undefined;
-    out.push({
+    const xText = formatXValue(xv, 0, xDateTickUnit.value);
+    let readout: MarkerReadout | undefined;
+    if (m.showValueOnDrag !== false && drag?.index === i) {
+      const valueStyle = resolveLabelStyle(m.valueStyle, {
+        fontSize: style.fontSize,
+      });
+      readout = {
+        text: m.valueFormat ? m.valueFormat(markerEmitX(xv)) : xText,
+        x: 0,
+        anchor: "start",
+        fontSize: valueStyle.fontSize,
+        fontWeight: valueStyle.fontWeight ?? 400,
+        fill: valueStyle.fill,
+        outlineColor:
+          m.valueOutlineColor ??
+          m.labelOutlineColor ??
+          "var(--color-bg-0, #fff)",
+        outlineWidth: m.valueOutlineWidth ?? 3,
+        blendMode: m.valueBlendMode,
+      };
+    }
+    const r: RenderedMarker = {
       index: i,
       internalX: xv,
       px: xPixel(xv),
@@ -1782,120 +1815,72 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
       labelOutlineColor: m.labelOutlineColor ?? "var(--color-bg-0, #fff)",
       labelOutlineWidth: m.labelOutlineWidth ?? (labelBg ? 0 : 3),
       labelBg,
-      pillPadX: pad.x,
-      pillPadY: pad.y,
       lineTop: padding.value.top,
-      value,
-      valueX: 0,
-      valueY: 0,
-      valueAnchor: "start",
-      valueFontSize: valueStyle.fontSize,
-      valueFontWeight: valueStyle.fontWeight ?? 400,
-      valueFill: valueStyle.fill,
-      valueOutlineColor:
-        m.valueOutlineColor ?? m.labelOutlineColor ?? "var(--color-bg-0, #fff)",
-      valueOutlineWidth: m.valueOutlineWidth ?? 3,
-      valueBlendMode: m.valueBlendMode,
+      readout,
       draggable: m.draggable !== false,
       hitTop: padding.value.top,
       ariaLabel: m.label ?? `Marker ${i + 1}`,
       ariaNow: xv + off,
-      ariaText: formatXValue(xv, 0, xDateTickUnit.value),
-    });
+      ariaText: xText,
+    };
+    out.push(r);
+    if (m.label) {
+      const pad = labelBg ? markerPillPadding(m) : null;
+      labeled.push({ r, pad, box: markerLabelBox(style.fontSize, pad) });
+    }
   }
-  const labeled = out.filter((r) => r.label);
-  const textWidth = (r: RenderedMarker) =>
-    r.label!.length * r.labelFontSize * MARKER_LABEL_CHAR_FACTOR;
-  const pillHeight = (r: RenderedMarker) =>
-    r.labelFontSize * MARKER_CAP_HEIGHT_RATIO + 2 * r.pillPadY;
   const placements = layoutMarkerLabels(
-    labeled.map((r) => ({
+    labeled.map(({ r, pad }) => ({
       x: r.px,
-      width: textWidth(r) + (r.labelBg ? 2 * r.pillPadX : 0),
+      width: markerTextWidth(r.label!, r.labelFontSize) + (pad ? 2 * pad.x : 0),
     })),
     { left: padding.value.left, right: padding.value.left + innerW.value },
   );
-  // Rows are spaced to the tallest pill so stacked pills do not overlap.
-  let rowHeight = MARKER_LABEL_ROW_HEIGHT;
-  for (const r of labeled) {
-    if (r.labelBg) rowHeight = Math.max(rowHeight, pillHeight(r) + 2);
+  // Rows are spaced to the tallest label box so stacked labels clear each other.
+  let rowHeight = 0;
+  for (const { box } of labeled) {
+    rowHeight = Math.max(rowHeight, box.ascent + box.descent);
   }
-  labeled.forEach((r, j) => {
+  rowHeight += MARKER_LABEL_ROW_GAP;
+  labeled.forEach(({ r, pad, box }, j) => {
     const p = placements[j];
     const dir = p.anchor === "start" ? 1 : -1;
     r.anchor = p.anchor;
     // Flush with the line's outer edge, not its center, so the text (or
     // pill) does not read as offset from a thick line.
     const edge = p.x - dir * (r.strokeWidth / 2);
-    r.labelX = r.labelBg ? edge + dir * r.pillPadX : edge;
+    r.labelX = pad ? edge + dir * pad.x : edge;
     r.labelY = padding.value.top - props.markerLabelGap + p.row * rowHeight;
-    r.hitTop = Math.min(r.labelY - r.labelFontSize, padding.value.top);
-    // A label pushed down a row sits inside the plot, so its line starts
-    // under the text instead of poking out above it.
-    r.lineTop = Math.max(
-      padding.value.top,
-      r.labelY + r.labelFontSize * (1 - MARKER_CAP_HEIGHT_RATIO),
-    );
-    if (r.labelBg) {
-      // The baseline sits one padding above the pill bottom, so caps are
-      // centered and descenders hang into the bottom padding.
-      const bottom = r.labelY + r.pillPadY;
-      const top = bottom - pillHeight(r);
+    r.hitTop = Math.min(r.labelY - box.ascent, padding.value.top);
+    const bottom = r.labelY + box.descent;
+    // A pill always meets its line; a plain label keeps the gap above the
+    // plot unless a lower row has pushed it inside, where the line then
+    // starts under the text instead of poking out above it.
+    r.lineTop = pad ? bottom : Math.max(padding.value.top, bottom);
+    if (pad) {
       r.labelBgPath = markerPillPath(
         edge,
-        top,
+        r.labelY - box.ascent,
         bottom,
-        textWidth(r) + 2 * r.pillPadX,
+        markerTextWidth(r.label!, r.labelFontSize) + 2 * pad.x,
         dir,
       );
-      r.lineTop = bottom;
     }
   });
   // The drag readout sits just above the x axis, on the label's side of
   // the line (or whichever side fits for an unlabeled marker).
-  const left = padding.value.left;
-  const right = left + innerW.value;
+  const right = padding.value.left + innerW.value;
   for (const r of out) {
-    if (!r.value) continue;
-    const w = r.value.length * r.valueFontSize * MARKER_LABEL_CHAR_FACTOR;
-    const fitsRight = r.px + MARKER_VALUE_GAP + w <= right;
-    const flip = r.label ? r.anchor === "end" : !fitsRight;
-    r.valueAnchor = flip ? "end" : "start";
-    r.valueX = r.px + (flip ? -1 : 1) * MARKER_VALUE_GAP;
-    r.valueY = padding.value.top + innerH.value - MARKER_VALUE_GAP;
+    const v = r.readout;
+    if (!v) continue;
+    const flip = r.label
+      ? r.anchor === "end"
+      : r.px + MARKER_VALUE_GAP + markerTextWidth(v.text, v.fontSize) > right;
+    v.anchor = flip ? "end" : "start";
+    v.x = r.px + (flip ? -1 : 1) * MARKER_VALUE_GAP;
   }
   return out;
 });
-
-function markerPillPadding(m: ChartMarker): { x: number; y: number } {
-  const p = m.labelPadding;
-  if (typeof p === "number") return { x: p, y: p };
-  return { x: p?.x ?? MARKER_PILL_PAD_X, y: p?.y ?? MARKER_PILL_PAD_Y };
-}
-
-/**
- * A label pill flush against the marker line at `x` (flat on that side)
- * and rounded on the far corners, extending `dir` (1 right, -1 left).
- */
-function markerPillPath(
-  x: number,
-  top: number,
-  bottom: number,
-  width: number,
-  dir: 1 | -1,
-): string {
-  const r = Math.min(MARKER_PILL_RADIUS, width / 2, (bottom - top) / 2);
-  const far = x + dir * width;
-  const inner = far - dir * r;
-  const sweep = dir === 1 ? 1 : 0;
-  return (
-    `M${x},${top} L${inner},${top} ` +
-    `A${r},${r} 0 0 ${sweep} ${far},${top + r} ` +
-    `L${far},${bottom - r} ` +
-    `A${r},${r} 0 0 ${sweep} ${inner},${bottom} ` +
-    `L${x},${bottom} Z`
-  );
-}
 
 let markerDragCleanup: (() => void) | null = null;
 onBeforeUnmount(() => markerDragCleanup?.());
@@ -1916,18 +1901,6 @@ function clampMarkerX(xv: number): number {
   return Math.min(max, Math.max(min, xv));
 }
 
-/** Sorted x positions of every series point, for `snap: true` markers. */
-const markerSnapGrid = computed<number[]>(() => {
-  const xs = new Set<number>();
-  for (const s of allSeries.value) {
-    for (let i = 0; i < s.data.length; i++) {
-      const x = seriesXAt(s, i);
-      if (isFinite(x)) xs.add(x);
-    }
-  }
-  return Array.from(xs).sort((a, b) => a - b);
-});
-
 /**
  * Origin a numeric `snap` step counts from: the first date on a date
  * axis, else the axis origin (so steps land on display multiples).
@@ -1946,22 +1919,13 @@ function snapMarkerX(m: ChartMarker, xv: number, dir: -1 | 0 | 1 = 0): number {
   if (typeof snap === "number") {
     if (!(snap > 0)) return xv;
     const origin = markerSnapOrigin();
-    const steps = (xv - origin) / snap;
-    const n = dir === 0 ? Math.round(steps) : Math.round(steps) + dir;
+    const n = Math.round((xv - origin) / snap) + dir;
     return clampMarkerX(origin + n * snap);
   }
-  const grid = markerSnapGrid.value;
-  if (grid.length === 0) return xv;
-  let lo = 0;
-  let hi = grid.length - 1;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (grid[mid] < xv) lo = mid + 1;
-    else hi = mid;
-  }
-  let idx = lo;
-  if (lo > 0 && xv - grid[lo - 1] <= grid[lo] - xv) idx = lo - 1;
-  idx = Math.min(grid.length - 1, Math.max(0, idx + dir));
+  const grid = allSeriesXs.value;
+  const nearest = nearestSortedIndex(grid, xv);
+  if (nearest === null) return xv;
+  const idx = Math.min(grid.length - 1, Math.max(0, nearest + dir));
   return clampMarkerX(grid[idx]);
 }
 
@@ -2007,20 +1971,16 @@ function onMarkerPointerDown(index: number, e: PointerEvent) {
     window.removeEventListener("pointercancel", cancel);
     markerDragCleanup = null;
   };
+  const pointerTarget = (ev: PointerEvent) =>
+    snapMarkerX(m, clampMarkerX(markerPointerX(ev.clientX) + grabOffset));
   const move = (ev: PointerEvent) => {
-    const xv = snapMarkerX(
-      m,
-      clampMarkerX(markerPointerX(ev.clientX) + grabOffset),
-    );
+    const xv = pointerTarget(ev);
     markerDragState.value = { index, x: xv };
     emitMarkerUpdate(index, xv, false);
   };
   const finish = (ev: PointerEvent) => {
     cleanup();
-    const xv = snapMarkerX(
-      m,
-      clampMarkerX(markerPointerX(ev.clientX) + grabOffset),
-    );
+    const xv = pointerTarget(ev);
     markerDragState.value = null;
     emitMarkerUpdate(index, xv, true);
   };
@@ -2236,7 +2196,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             :fill="a.color ?? 'currentColor'"
             :fill-opacity="a.opacity ?? 0.2"
             stroke="none"
-            :style="a.blendMode ? { mixBlendMode: a.blendMode } : undefined"
+            :style="blendStyle(a.blendMode)"
           />
           <!-- series whiskers (under their lines and dots) -->
           <ChartIntervals
@@ -2265,7 +2225,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
               :stroke-width="s.strokeWidth ?? 1.5"
               :stroke-opacity="s.lineOpacity ?? s.opacity ?? lineOpacity"
               :stroke-dasharray="s.dashed ? '6 3' : undefined"
-              :style="s.blendMode ? { mixBlendMode: s.blendMode } : undefined"
+              :style="blendStyle(s.blendMode)"
             />
             <template v-if="s.dots">
               <circle
@@ -2277,7 +2237,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
                 :fill="s.dotFill ?? s.color ?? 'currentColor'"
                 :fill-opacity="s.dotOpacity ?? s.opacity ?? lineOpacity"
                 :stroke="s.dotStroke ?? 'none'"
-                :style="s.blendMode ? { mixBlendMode: s.blendMode } : undefined"
+                :style="blendStyle(s.blendMode)"
               />
             </template>
           </template>
@@ -2419,17 +2379,17 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             :stroke-dasharray="m.dash"
           />
           <path
-            v-if="m.label && m.labelBgPath"
+            v-if="m.labelBgPath"
             data-testid="marker-label-bg"
             class="line-chart-marker-pill"
             :d="m.labelBgPath"
             :fill="m.labelBg"
-            :style="m.draggable ? { cursor: 'ew-resize' } : undefined"
             @pointerdown="onMarkerPointerDown(m.index, $event)"
           />
           <text
             v-if="m.label"
             data-testid="marker-label"
+            class="line-chart-marker-label"
             :x="m.labelX"
             :y="m.labelY"
             :text-anchor="m.anchor"
@@ -2440,30 +2400,27 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             :stroke-width="m.labelOutlineWidth"
             stroke-linejoin="round"
             paint-order="stroke fill"
-            :style="m.draggable ? { cursor: 'ew-resize' } : undefined"
             @pointerdown="onMarkerPointerDown(m.index, $event)"
           >
             {{ m.label }}
           </text>
           <text
-            v-if="m.value"
+            v-if="m.readout"
             data-testid="marker-value"
-            :x="m.valueX"
-            :y="m.valueY"
-            :text-anchor="m.valueAnchor"
-            :font-size="m.valueFontSize"
-            :font-weight="m.valueFontWeight"
-            :fill="m.valueFill"
-            :stroke="m.valueOutlineColor"
-            :stroke-width="m.valueOutlineWidth"
+            :x="m.readout.x"
+            :y="padding.top + innerH - MARKER_VALUE_GAP"
+            :text-anchor="m.readout.anchor"
+            :font-size="m.readout.fontSize"
+            :font-weight="m.readout.fontWeight"
+            :fill="m.readout.fill"
+            :stroke="m.readout.outlineColor"
+            :stroke-width="m.readout.outlineWidth"
             stroke-linejoin="round"
             paint-order="stroke fill"
             pointer-events="none"
-            :style="
-              m.valueBlendMode ? { mixBlendMode: m.valueBlendMode } : undefined
-            "
+            :style="blendStyle(m.readout.blendMode)"
           >
-            {{ m.value }}
+            {{ m.readout.text }}
           </text>
           <line
             v-if="m.draggable"
@@ -2658,6 +2615,10 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
 
 .line-chart-marker-pill {
   transition: filter 120ms;
+}
+.line-chart-marker.is-draggable
+  :is(.line-chart-marker-pill, .line-chart-marker-label) {
+  cursor: ew-resize;
 }
 .line-chart-marker.is-draggable:hover .line-chart-marker-pill,
 .line-chart-marker:has(.line-chart-marker-hit:focus-visible)

@@ -240,6 +240,16 @@ export interface ChartCommonProps {
   chartPadding?: ChartPadding;
 }
 
+/**
+ * Inline style for a `mix-blend-mode`, or nothing for `undefined` /
+ * `"normal"` (the CSS default), so an untouched element gets no style.
+ */
+export function blendStyle(
+  mode: BlendMode | undefined,
+): { mixBlendMode: BlendMode } | undefined {
+  return mode && mode !== "normal" ? { mixBlendMode: mode } : undefined;
+}
+
 /** Payload emitted on `hover` from a cartesian chart. */
 export type ChartHoverPayload = { index: number } | null;
 

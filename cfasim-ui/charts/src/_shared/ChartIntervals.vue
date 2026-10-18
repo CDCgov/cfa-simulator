@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { blendStyle } from "./chartProps.js";
 import {
   intervalGeometry,
   resolveIntervalStyle,
@@ -71,11 +72,7 @@ const items = computed<RenderedInterval[]>(() => {
       data-testid="interval"
       :stroke-opacity="item.style.opacity"
       :fill-opacity="item.style.opacity"
-      :style="
-        item.style.blendMode
-          ? { mixBlendMode: item.style.blendMode }
-          : undefined
-      "
+      :style="blendStyle(item.style.blendMode)"
     >
       <!-- Outline pass: whisker and caps in the page color at a wider stroke. -->
       <template v-if="item.style.outlineWidth > 0">
