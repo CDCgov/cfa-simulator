@@ -3144,6 +3144,92 @@ describe("LineChart", () => {
       menu: false,
     };
 
+    it("draws a label pill on the line, flat on the line side", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          ...baseProps,
+          markers: [
+            { x: 5, label: "Peak", color: "#0057b7", labelBackground: true },
+          ],
+        },
+      });
+      const pill = wrapper.find('[data-testid="marker-label-bg"]');
+      expect(pill.attributes("fill")).toBe("#0057b7");
+      // Flat edge on the line at x=320, rounded corners on the far side.
+      const d = pill.attributes("d")!;
+      expect(d.startsWith("M320,")).toBe(true);
+      expect(d.endsWith("L320,29 Z")).toBe(true);
+      expect(d.match(/A/g)?.length).toBe(2);
+      // Text is inset from the line, light on the dark fill, no halo.
+      const label = wrapper.find('[data-testid="marker-label"]');
+      expect(label.attributes("x")).toBe("326");
+      expect(label.attributes("fill")).toBe("#ffffff");
+      expect(label.attributes("stroke-width")).toBe("0");
+      // The pill reserves cap height 9 + padding 5 above the baseline, so the
+      // plot top is 10 + 7 + 14 = 31 and the baseline 24; the line runs up
+      // to the pill bottom (24 + 5 = 29).
+      const line = wrapper.find('[data-testid="marker-line"]');
+      expect(line.attributes("y1")).toBe("29");
+      expect(line.attributes("y2")).toBe("270");
+    });
+
+    it("sizes the pill from labelPadding and reserves top room for it", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          ...baseProps,
+          markers: [
+            {
+              x: 5,
+              label: "Peak",
+              labelBackground: true,
+              labelPadding: { x: 10, y: 6 },
+            },
+          ],
+        },
+      });
+      // Reserved top = gap 7 + max(12, cap 9 + pad 6 = 15) → plot top 10 + 22 = 32.
+      const label = wrapper.find('[data-testid="marker-label"]');
+      expect(label.attributes("x")).toBe("330");
+      expect(label.attributes("y")).toBe("25");
+      const d = wrapper
+        .find('[data-testid="marker-label-bg"]')
+        .attributes("d")!;
+      // Bottom = 25 + 6 = 31, height = 9 + 12 → top 10, the svg edge.
+      expect(d.startsWith("M320,10 ")).toBe(true);
+      expect(d.endsWith("L320,31 Z")).toBe(true);
+      expect(wrapper.find('[data-testid="marker-line"]').attributes("y1")).toBe(
+        "31",
+      );
+    });
+
+    it("fills the pill with a given color and keeps an explicit text color", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          ...baseProps,
+          markers: [
+            {
+              x: 9.8,
+              label: "A long marker label",
+              labelBackground: "#fde68a",
+              labelStyle: { color: "#123456" },
+            },
+          ],
+        },
+      });
+      const pill = wrapper.find('[data-testid="marker-label-bg"]');
+      expect(pill.attributes("fill")).toBe("#fde68a");
+      const label = wrapper.find('[data-testid="marker-label"]');
+      expect(label.attributes("fill")).toBe("#123456");
+      // Near the right edge the label flips left of the line and the pill
+      // extends leftward from it.
+      expect(label.attributes("text-anchor")).toBe("end");
+      const lineX = Number(
+        wrapper.find('[data-testid="marker-line"]').attributes("x1"),
+      );
+      expect(Number(label.attributes("x"))).toBe(lineX - 6);
+      expect(pill.attributes("d")!.startsWith(`M${lineX},`)).toBe(true);
+    });
+
     it("renders a full-height dashed line with a halo'd label above the plot", () => {
       const wrapper = mount(LineChart, {
         props: { ...baseProps, markers: [{ x: 5, label: "Isolation" }] },

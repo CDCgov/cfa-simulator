@@ -51,8 +51,26 @@ export interface ChartMarker {
    * stays readable over series lines. Default: `var(--color-bg-0, #fff)`.
    */
   labelOutlineColor?: string;
-  /** Label outline stroke width in pixels. `0` disables. Default: 3. */
+  /**
+   * Label outline stroke width in pixels. `0` disables. Default: 3, or
+   * 0 when the label has a `labelBackground`.
+   */
   labelOutlineWidth?: number;
+  /**
+   * Draw the label on a filled pill that sits on top of the marker line:
+   * flat where it meets the line, rounded on its other corners. `true`
+   * fills it with the marker `color`; a string is a fill of its own. The
+   * text defaults to white or near-black, whichever reads better on the
+   * fill, unless `labelStyle.color` is set. A draggable marker's pill
+   * darkens on hover and keyboard focus.
+   */
+  labelBackground?: boolean | string;
+  /**
+   * Padding inside the label pill in pixels: one number for all sides
+   * or `{ x, y }`. Default: `{ x: 6, y: 5 }`. Only applies with
+   * `labelBackground`.
+   */
+  labelPadding?: number | { x?: number; y?: number };
   /** Whether the marker can be dragged along the x-axis. Default: true. */
   draggable?: boolean;
 }

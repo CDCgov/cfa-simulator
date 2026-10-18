@@ -36,6 +36,7 @@ import {
   positionLegendItems,
   layoutMarkerLabels,
   markerDashArray,
+  pickContrastColor,
   resolveLabelStyle,
   parseDate,
   isAllDates,
@@ -1538,12 +1539,19 @@ const markersHaveLabels = computed(() =>
   (props.markers ?? []).some((m) => m.label),
 );
 
-/** Tallest labeled-marker font size; sizes the reserved top room. */
-const maxMarkerLabelFontSize = computed(() => {
+/**
+ * Tallest labeled-marker label; sizes the reserved top room. A pill
+ * reaches the cap height plus its padding above the baseline.
+ */
+const maxMarkerLabelHeight = computed(() => {
   let max = 0;
   for (const m of props.markers ?? []) {
     if (!m.label) continue;
-    max = Math.max(max, m.labelStyle?.fontSize ?? MARKER_LABEL_FONT_SIZE);
+    const fontSize = m.labelStyle?.fontSize ?? MARKER_LABEL_FONT_SIZE;
+    const pill = m.labelBackground
+      ? MARKER_CAP_HEIGHT_RATIO * fontSize + markerPillPadding(m).y
+      : 0;
+    max = Math.max(max, fontSize, pill);
   }
   return max;
 });
@@ -1560,7 +1568,7 @@ const markerChartPadding = computed<ChartPadding | undefined>(() => {
       : { ...(cp ?? {}) };
   return {
     ...base,
-    top: (base.top ?? 0) + props.markerLabelGap + maxMarkerLabelFontSize.value,
+    top: (base.top ?? 0) + props.markerLabelGap + maxMarkerLabelHeight.value,
   };
 });
 
@@ -1640,6 +1648,11 @@ const MARKER_LABEL_FONT_SIZE = 12;
 const MARKER_LABEL_ROW_HEIGHT = 15;
 /** Estimated character width as a fraction of the label font size. */
 const MARKER_LABEL_CHAR_FACTOR = 0.6;
+const MARKER_PILL_PAD_X = 6;
+const MARKER_PILL_PAD_Y = 5;
+const MARKER_PILL_RADIUS = 3;
+/** Cap height as a fraction of font size; the pill centers this box. */
+const MARKER_CAP_HEIGHT_RATIO = 0.75;
 
 interface RenderedMarker {
   index: number;
@@ -1660,6 +1673,13 @@ interface RenderedMarker {
   labelFill: string;
   labelOutlineColor: string;
   labelOutlineWidth: number;
+  /** Pill fill behind the label, when `labelBackground` is set. */
+  labelBg?: string;
+  labelBgPath?: string;
+  pillPadX: number;
+  pillPadY: number;
+  /** Top of the marker line: the plot top, or the pill's bottom edge. */
+  lineTop: number;
   draggable: boolean;
   hitTop: number;
   ariaLabel: string;
@@ -1701,11 +1721,15 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
     const style = resolveLabelStyle(m.labelStyle, {
       fontSize: MARKER_LABEL_FONT_SIZE,
     });
+    const color = m.color ?? "#999";
+    const labelBg =
+      m.labelBackground === true ? color : m.labelBackground || undefined;
+    const pad = markerPillPadding(m);
     out.push({
       index: i,
       internalX: xv,
       px: xPixel(xv),
-      color: m.color ?? "#999",
+      color,
       strokeWidth: m.strokeWidth ?? 1.5,
       dash: markerDashArray(m),
       outline: m.outline === true,
@@ -1717,9 +1741,16 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
       anchor: "start",
       labelFontSize: style.fontSize,
       labelFontWeight: style.fontWeight ?? 600,
-      labelFill: style.fill,
+      labelFill:
+        labelBg && !m.labelStyle?.color
+          ? pickContrastColor(labelBg)
+          : style.fill,
       labelOutlineColor: m.labelOutlineColor ?? "var(--color-bg-0, #fff)",
-      labelOutlineWidth: m.labelOutlineWidth ?? 3,
+      labelOutlineWidth: m.labelOutlineWidth ?? (labelBg ? 0 : 3),
+      labelBg,
+      pillPadX: pad.x,
+      pillPadY: pad.y,
+      lineTop: padding.value.top,
       draggable: m.draggable !== false,
       hitTop: padding.value.top,
       ariaLabel: m.label ?? `Marker ${i + 1}`,
@@ -1728,25 +1759,76 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
     });
   }
   const labeled = out.filter((r) => r.label);
+  const textWidth = (r: RenderedMarker) =>
+    r.label!.length * r.labelFontSize * MARKER_LABEL_CHAR_FACTOR;
+  const pillHeight = (r: RenderedMarker) =>
+    r.labelFontSize * MARKER_CAP_HEIGHT_RATIO + 2 * r.pillPadY;
   const placements = layoutMarkerLabels(
     labeled.map((r) => ({
       x: r.px,
-      width: r.label!.length * r.labelFontSize * MARKER_LABEL_CHAR_FACTOR,
+      width: textWidth(r) + (r.labelBg ? 2 * r.pillPadX : 0),
     })),
     { left: padding.value.left, right: padding.value.left + innerW.value },
   );
+  // Rows are spaced to the tallest pill so stacked pills do not overlap.
+  let rowHeight = MARKER_LABEL_ROW_HEIGHT;
+  for (const r of labeled) {
+    if (r.labelBg) rowHeight = Math.max(rowHeight, pillHeight(r) + 2);
+  }
   labeled.forEach((r, j) => {
     const p = placements[j];
-    r.labelX = p.x;
+    const dir = p.anchor === "start" ? 1 : -1;
     r.anchor = p.anchor;
-    r.labelY =
-      padding.value.top -
-      props.markerLabelGap +
-      p.row * MARKER_LABEL_ROW_HEIGHT;
+    r.labelX = r.labelBg ? p.x + dir * r.pillPadX : p.x;
+    r.labelY = padding.value.top - props.markerLabelGap + p.row * rowHeight;
     r.hitTop = Math.min(r.labelY - r.labelFontSize, padding.value.top);
+    if (r.labelBg) {
+      // The baseline sits one padding above the pill bottom, so caps are
+      // centered and descenders hang into the bottom padding.
+      const bottom = r.labelY + r.pillPadY;
+      const top = bottom - pillHeight(r);
+      r.labelBgPath = markerPillPath(
+        r.px,
+        top,
+        bottom,
+        textWidth(r) + 2 * r.pillPadX,
+        dir,
+      );
+      r.lineTop = Math.min(padding.value.top, bottom);
+    }
   });
   return out;
 });
+
+function markerPillPadding(m: ChartMarker): { x: number; y: number } {
+  const p = m.labelPadding;
+  if (typeof p === "number") return { x: p, y: p };
+  return { x: p?.x ?? MARKER_PILL_PAD_X, y: p?.y ?? MARKER_PILL_PAD_Y };
+}
+
+/**
+ * A label pill flush against the marker line at `x` (flat on that side)
+ * and rounded on the far corners, extending `dir` (1 right, -1 left).
+ */
+function markerPillPath(
+  x: number,
+  top: number,
+  bottom: number,
+  width: number,
+  dir: 1 | -1,
+): string {
+  const r = Math.min(MARKER_PILL_RADIUS, width / 2, (bottom - top) / 2);
+  const far = x + dir * width;
+  const inner = far - dir * r;
+  const sweep = dir === 1 ? 1 : 0;
+  return (
+    `M${x},${top} L${inner},${top} ` +
+    `A${r},${r} 0 0 ${sweep} ${far},${top + r} ` +
+    `L${far},${bottom - r} ` +
+    `A${r},${r} 0 0 ${sweep} ${inner},${bottom} ` +
+    `L${x},${bottom} Z`
+  );
+}
 
 let markerDragCleanup: (() => void) | null = null;
 onBeforeUnmount(() => markerDragCleanup?.());
@@ -2187,12 +2269,13 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           v-for="m in renderedMarkers"
           :key="'marker' + m.index"
           class="line-chart-marker"
+          :class="{ 'is-draggable': m.draggable }"
         >
           <line
             v-if="m.outline"
             data-testid="marker-outline"
             :x1="m.px"
-            :y1="padding.top"
+            :y1="m.lineTop"
             :x2="m.px"
             :y2="padding.top + innerH"
             :stroke="m.outlineColor"
@@ -2201,12 +2284,21 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           <line
             data-testid="marker-line"
             :x1="m.px"
-            :y1="padding.top"
+            :y1="m.lineTop"
             :x2="m.px"
             :y2="padding.top + innerH"
             :stroke="m.color"
             :stroke-width="m.strokeWidth"
             :stroke-dasharray="m.dash"
+          />
+          <path
+            v-if="m.label && m.labelBgPath"
+            data-testid="marker-label-bg"
+            class="line-chart-marker-pill"
+            :d="m.labelBgPath"
+            :fill="m.labelBg"
+            :style="m.draggable ? { cursor: 'ew-resize' } : undefined"
+            @pointerdown="onMarkerPointerDown(m.index, $event)"
           />
           <text
             v-if="m.label"
@@ -2417,6 +2509,14 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
   flex-shrink: 0;
 }
 
+.line-chart-marker-pill {
+  transition: filter 120ms;
+}
+.line-chart-marker.is-draggable:hover .line-chart-marker-pill,
+.line-chart-marker:has(.line-chart-marker-hit:focus-visible)
+  .line-chart-marker-pill {
+  filter: brightness(0.85);
+}
 .line-chart-marker-hit {
   outline: none;
 }

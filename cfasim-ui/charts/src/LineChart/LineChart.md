@@ -1505,7 +1505,7 @@ const styledMarkers = ref([
     label: "Peak",
     color: "#0057b7",
     dash: "2 6",
-    labelStyle: { color: "#0057b7" },
+    labelBackground: true,
   },
 ]);
 </script>
@@ -1596,7 +1596,13 @@ The line's style is configurable per marker: `color`, `strokeWidth`,
 `outline: true` for a page-colored stroke behind the line. The label's
 text styles via `labelStyle` and its legibility stroke via
 `labelOutlineColor` / `labelOutlineWidth` (set `0` to disable). Set
-`draggable: false` to pin a marker in place.
+`labelBackground: true` to draw the label on a pill in the marker color
+(or pass a color), flat where it sits on the line and rounded on its
+other corners, padded by `labelPadding` (a number or `{ x, y }`, default
+6 by 5); the text turns white or near-black to suit the fill unless
+`labelStyle.color` says otherwise, and a draggable marker's pill darkens
+on hover and keyboard focus. Set `draggable: false` to pin a marker in
+place.
 
 <ComponentDemo>
   <LineChart
@@ -1638,7 +1644,7 @@ const markers = ref([
     label: "Peak",
     color: "#0057b7",
     dash: "2 6",
-    labelStyle: { color: "#0057b7" },
+    labelBackground: true,
   },
 ]);
 </script>
@@ -1664,7 +1670,9 @@ interface ChartMarker {
   outlineWidth?: number; // extra width added to strokeWidth (default: 4)
   labelStyle?: LabelStyle; // { fontSize?, color?, fontWeight? } — defaults 12 / currentColor / 600
   labelOutlineColor?: string; // label legibility stroke (default: var(--color-bg-0, #fff))
-  labelOutlineWidth?: number; // default: 3; 0 disables
+  labelOutlineWidth?: number; // default: 3 (0 with labelBackground); 0 disables
+  labelBackground?: boolean | string; // pill behind the label: true = marker color
+  labelPadding?: number | { x?: number; y?: number }; // pill padding (default: { x: 6, y: 5 })
   draggable?: boolean; // default: true
 }
 ```
