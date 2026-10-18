@@ -3586,6 +3586,105 @@ describe("LineChart", () => {
       wrapper.unmount();
     });
 
+    it("snaps drags and arrow keys to series x positions", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          ...baseProps,
+          x: [0, 3, 4, 10],
+          data: [0, 5, 5, 0],
+          markers: [{ x: 3, label: "A", snap: true }],
+        },
+        attachTo: document.body,
+      });
+      const hit = wrapper.find('[data-testid="marker-hit"]');
+      // x 3 is at 50 + 3 * 54 = 212; 70px right (x ≈ 4.3) snaps to 4.
+      await hit.trigger("pointerdown", { clientX: 212, pointerId: 1 });
+      window.dispatchEvent(new MouseEvent("pointermove", { clientX: 282 }));
+      await nextTick();
+      expect(wrapper.find('[data-testid="marker-line"]').attributes("x1")).toBe(
+        "266",
+      );
+      window.dispatchEvent(new MouseEvent("pointerup", { clientX: 282 }));
+      await nextTick();
+      let updated = wrapper.emitted("update:markers")!.at(-1)![0] as {
+        x: number;
+      }[];
+      expect(updated[0].x).toBe(4);
+      await wrapper.setProps({ markers: updated });
+      // Arrow keys step through the grid: 4 → 10, then back to 4.
+      await hit.trigger("keydown", { key: "ArrowRight" });
+      updated = wrapper.emitted("update:markers")!.at(-1)![0] as {
+        x: number;
+      }[];
+      expect(updated[0].x).toBe(10);
+      await wrapper.setProps({ markers: updated });
+      await hit.trigger("keydown", { key: "ArrowLeft" });
+      updated = wrapper.emitted("update:markers")!.at(-1)![0] as {
+        x: number;
+      }[];
+      expect(updated[0].x).toBe(4);
+      wrapper.unmount();
+    });
+
+    it("snaps to a numeric step from the axis origin", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 5, 10, 5, 0],
+          xMin: 10,
+          width: 600,
+          height: 300,
+          menu: false,
+          markers: [{ x: 11, snap: 2.5 }],
+        },
+        attachTo: document.body,
+      });
+      // Display 10..14 over 540px → 135px per unit; x 11 is at 185.
+      const hit = wrapper.find('[data-testid="marker-hit"]');
+      await hit.trigger("pointerdown", { clientX: 185, pointerId: 1 });
+      window.dispatchEvent(new MouseEvent("pointermove", { clientX: 320 }));
+      await nextTick();
+      window.dispatchEvent(new MouseEvent("pointerup", { clientX: 320 }));
+      await nextTick();
+      let updated = wrapper.emitted("update:markers")!.at(-1)![0] as {
+        x: number;
+      }[];
+      // Display 12 snaps to the 12.5 multiple of 2.5.
+      expect(updated[0].x).toBe(12.5);
+      await wrapper.setProps({ markers: updated });
+      await hit.trigger("keydown", { key: "ArrowLeft" });
+      updated = wrapper.emitted("update:markers")!.at(-1)![0] as {
+        x: number;
+      }[];
+      expect(updated[0].x).toBe(10);
+      wrapper.unmount();
+    });
+
+    it("snaps to whole days on a date axis", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          x: ["2026-01-01", "2026-01-11"],
+          y: [0, 10],
+          width: 600,
+          height: 300,
+          menu: false,
+          markers: [{ x: "2026-01-06", snap: 86400000 }],
+        },
+        attachTo: document.body,
+      });
+      const hit = wrapper.find('[data-testid="marker-hit"]');
+      await hit.trigger("pointerdown", { clientX: 320, pointerId: 1 });
+      // 54px per day; 80px is 1.48 days → snaps to Jan 7.
+      window.dispatchEvent(new MouseEvent("pointermove", { clientX: 400 }));
+      await nextTick();
+      window.dispatchEvent(new MouseEvent("pointerup", { clientX: 400 }));
+      await nextTick();
+      const updated = wrapper.emitted("update:markers")!.at(-1)![0] as {
+        x: Date;
+      }[];
+      expect(updated[0].x.toISOString()).toBe("2026-01-07T00:00:00.000Z");
+      wrapper.unmount();
+    });
+
     it("skips markers with unparseable x values", () => {
       const wrapper = mount(LineChart, {
         props: { ...baseProps, markers: [{ x: "not-a-date" }, { x: 5 }] },

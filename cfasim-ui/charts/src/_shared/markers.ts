@@ -74,6 +74,15 @@ export interface ChartMarker {
   /** Whether the marker can be dragged along the x-axis. Default: true. */
   draggable?: boolean;
   /**
+   * Snap the marker while dragging. `true` snaps to the x positions of
+   * the chart's series (indices, explicit `x` values, or dates), and a
+   * number snaps to multiples of that step in axis units (data units
+   * from the axis origin, or milliseconds from the first date). Arrow
+   * keys then step from one snap position to the next. Default: no
+   * snapping.
+   */
+  snap?: boolean | number;
+  /**
    * While the marker is being dragged, show its current `x` just above
    * the x axis beside the line, formatted like the x axis unless
    * `valueFormat` is set. Default: true; set `false` to hide it.
