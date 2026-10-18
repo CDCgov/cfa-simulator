@@ -1364,6 +1364,86 @@ positioned from the anchor as usual via `offset`.
   </template>
 </ComponentDemo>
 
+### Vertical labels and blending
+
+`rotate` turns the label about its position, in degrees clockwise: `-90` reads bottom to top beside a `"ruleX"` line. Set `align` explicitly for rotated text, since it runs along the rotated baseline (`"left"` extends away from the position in reading direction). `textOutlineColor` and `textOutlineWidth` style the text halo apart from the line halo (`outlineColor` / `outlineWidth`), and `blendMode` applies a CSS `mix-blend-mode` to the whole annotation so it combines with the series under it instead of covering them.
+
+<ComponentDemo>
+  <LineChart
+    :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
+    :annotations="[
+      {
+        x: 3,
+        y: 0,
+        offset: { x: -6, y: -8 },
+        text: 'Interventions begin',
+        align: 'left',
+        rotate: -90,
+        pointer: 'ruleX',
+        lineDash: '4 3',
+        outlineWidth: 0,
+        textOutlineWidth: 3,
+      },
+      {
+        x: 7,
+        y: 0,
+        offset: { x: 6, y: -8 },
+        text: 'Peak passed',
+        align: 'left',
+        rotate: -90,
+        pointer: 'ruleX',
+        color: '#fb7e38',
+        blendMode: 'multiply',
+        outlineWidth: 0,
+      },
+    ]"
+    :chart-padding="{ top: 24, right: 24 }"
+    :height="240"
+    x-label="Days"
+    y-label="Cases"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
+  :annotations="[
+    {
+      x: 3,
+      y: 0,
+      offset: { x: -6, y: -8 },
+      text: 'Interventions begin',
+      align: 'left',
+      rotate: -90,
+      pointer: 'ruleX',
+      lineDash: '4 3',
+      outlineWidth: 0,
+      textOutlineWidth: 3,
+    },
+    {
+      x: 7,
+      y: 0,
+      offset: { x: 6, y: -8 },
+      text: 'Peak passed',
+      align: 'left',
+      rotate: -90,
+      pointer: 'ruleX',
+      color: '#fb7e38',
+      blendMode: 'multiply',
+      outlineWidth: 0,
+    },
+  ]"
+  :chart-padding="{ top: 24, right: 24 }"
+  :height="240"
+  x-label="Days"
+  y-label="Cases"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Draggable markers
 
 Use `markers` to draw vertical lines spanning the full plot height, each

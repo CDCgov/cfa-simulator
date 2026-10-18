@@ -1,3 +1,5 @@
+import type { BlendMode } from "./chartProps.js";
+
 /**
  * Shared annotation API for charts. Each chart projects an annotation's
  * data-space `(x, y)` to pixels with its own scales and hands the resolved
@@ -48,6 +50,33 @@ export interface ChartAnnotation {
    * arrow tip outline pass. Set to `0` to disable the outline. Default: 3.
    */
   outlineWidth?: number;
+  /**
+   * Outline color for the text only. Defaults to `outlineColor`, so the
+   * text halo and the line halo can be set apart (say, a white text halo
+   * over a line with no outline).
+   */
+  textOutlineColor?: string;
+  /**
+   * Outline stroke width for the text only, in pixels. Defaults to
+   * `outlineWidth`. Set to `0` to outline the line but not the text.
+   */
+  textOutlineWidth?: number;
+  /**
+   * Rotation of the label in degrees, clockwise, about its reference
+   * position (the anchor plus `offset`). `-90` reads bottom to top,
+   * which suits a label beside a `"ruleX"` line. `align` then runs along
+   * the rotated baseline: `"left"` extends the text away from the
+   * reference point in reading direction. Pointer geometry is computed
+   * for unrotated text, so pair rotation with a rule or `pointer: "none"`.
+   */
+  rotate?: number;
+  /**
+   * CSS `mix-blend-mode` for the whole annotation (line, arrow, text and
+   * their outlines), so a label can sit over series without hiding them.
+   * A light outline disappears under `"multiply"`; set `outlineWidth` or
+   * `textOutlineWidth` to `0` there to avoid paying for one.
+   */
+  blendMode?: BlendMode;
   /**
    * Horizontal alignment of the label relative to its anchor position.
    * When omitted, derived from the sign of `offset.x`: positive →
