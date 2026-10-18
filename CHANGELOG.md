@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.9.2] - 2026-10-18
+
+### Bug Fixes
+
+- **charts:** Size marker label pills from measured text width
+
 ## [0.9.1] - 2026-10-18
 
 ### Bug Fixes
