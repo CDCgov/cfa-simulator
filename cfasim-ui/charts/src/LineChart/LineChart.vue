@@ -1680,7 +1680,7 @@ interface RenderedMarker {
   labelBgPath?: string;
   pillPadX: number;
   pillPadY: number;
-  /** Top of the marker line: the plot top, or the pill's bottom edge. */
+  /** Top of the marker line: the plot top, or the label's bottom edge. */
   lineTop: number;
   /** Current x shown above the x axis while dragging (`showValueOnDrag`). */
   value?: string;
@@ -1815,6 +1815,12 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
     r.labelX = r.labelBg ? p.x + dir * r.pillPadX : p.x;
     r.labelY = padding.value.top - props.markerLabelGap + p.row * rowHeight;
     r.hitTop = Math.min(r.labelY - r.labelFontSize, padding.value.top);
+    // A label pushed down a row sits inside the plot, so its line starts
+    // under the text instead of poking out above it.
+    r.lineTop = Math.max(
+      padding.value.top,
+      r.labelY + r.labelFontSize * (1 - MARKER_CAP_HEIGHT_RATIO),
+    );
     if (r.labelBg) {
       // The baseline sits one padding above the pill bottom, so caps are
       // centered and descenders hang into the bottom padding.
@@ -1827,7 +1833,7 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
         textWidth(r) + 2 * r.pillPadX,
         dir,
       );
-      r.lineTop = Math.min(padding.value.top, bottom);
+      r.lineTop = bottom;
     }
   });
   // The drag readout sits just above the x axis, on the label's side of
