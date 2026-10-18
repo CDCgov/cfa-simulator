@@ -3179,12 +3179,13 @@ describe("LineChart", () => {
       expect(pill.attributes("fill")).toBe("#0057b7");
       // Flat edge on the line at x=320, rounded corners on the far side.
       const d = pill.attributes("d")!;
-      expect(d.startsWith("M320,")).toBe(true);
-      expect(d.endsWith("L320,29 Z")).toBe(true);
+      // The pill is flush with the line's outer edge (320 - 1.5 / 2).
+      expect(d.startsWith("M319.25,")).toBe(true);
+      expect(d.endsWith("L319.25,29 Z")).toBe(true);
       expect(d.match(/A/g)?.length).toBe(2);
       // Text is inset from the line, light on the dark fill, no halo.
       const label = wrapper.find('[data-testid="marker-label"]');
-      expect(label.attributes("x")).toBe("326");
+      expect(label.attributes("x")).toBe("325.25");
       expect(label.attributes("fill")).toBe("#ffffff");
       expect(label.attributes("stroke-width")).toBe("0");
       // The pill reserves cap height 9 + padding 5 above the baseline, so the
@@ -3211,14 +3212,14 @@ describe("LineChart", () => {
       });
       // Reserved top = gap 7 + max(12, cap 9 + pad 6 = 15) → plot top 10 + 22 = 32.
       const label = wrapper.find('[data-testid="marker-label"]');
-      expect(label.attributes("x")).toBe("330");
+      expect(label.attributes("x")).toBe("329.25");
       expect(label.attributes("y")).toBe("25");
       const d = wrapper
         .find('[data-testid="marker-label-bg"]')
         .attributes("d")!;
       // Bottom = 25 + 6 = 31, height = 9 + 12 → top 10, the svg edge.
-      expect(d.startsWith("M320,10 ")).toBe(true);
-      expect(d.endsWith("L320,31 Z")).toBe(true);
+      expect(d.startsWith("M319.25,10 ")).toBe(true);
+      expect(d.endsWith("L319.25,31 Z")).toBe(true);
       expect(wrapper.find('[data-testid="marker-line"]').attributes("y1")).toBe(
         "31",
       );
@@ -3248,8 +3249,8 @@ describe("LineChart", () => {
       const lineX = Number(
         wrapper.find('[data-testid="marker-line"]').attributes("x1"),
       );
-      expect(Number(label.attributes("x"))).toBe(lineX - 6);
-      expect(pill.attributes("d")!.startsWith(`M${lineX},`)).toBe(true);
+      expect(Number(label.attributes("x"))).toBe(lineX + 0.75 - 6);
+      expect(pill.attributes("d")!.startsWith(`M${lineX + 0.75},`)).toBe(true);
     });
 
     it("renders a full-height dashed line with a halo'd label above the plot", () => {
@@ -3267,7 +3268,7 @@ describe("LineChart", () => {
       const label = wrapper.find('[data-testid="marker-label"]');
       expect(label.text()).toBe("Isolation");
       // left edge aligned over the line
-      expect(label.attributes("x")).toBe("320");
+      expect(label.attributes("x")).toBe("319.25");
       // baseline sits markerLabelGap above the top of the line (29 - 7)
       expect(label.attributes("y")).toBe("22");
       expect(label.attributes("text-anchor")).toBe("start");
