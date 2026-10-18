@@ -1653,6 +1653,8 @@ const MARKER_PILL_PAD_Y = 5;
 const MARKER_PILL_RADIUS = 3;
 /** Cap height as a fraction of font size; the pill centers this box. */
 const MARKER_CAP_HEIGHT_RATIO = 0.75;
+/** Gap between a dragged marker's value readout and the line / x axis. */
+const MARKER_VALUE_GAP = 4;
 
 interface RenderedMarker {
   index: number;
@@ -1680,10 +1682,17 @@ interface RenderedMarker {
   pillPadY: number;
   /** Top of the marker line: the plot top, or the pill's bottom edge. */
   lineTop: number;
-  /** Current x shown under the label while dragging (`showValueOnDrag`). */
+  /** Current x shown above the x axis while dragging (`showValueOnDrag`). */
   value?: string;
+  valueX: number;
   valueY: number;
+  valueAnchor: "start" | "end";
+  valueFontSize: number;
+  valueFontWeight: number | string;
+  valueFill: string;
+  valueOutlineColor: string;
   valueOutlineWidth: number;
+  valueBlendMode?: BlendMode;
   draggable: boolean;
   hitTop: number;
   ariaLabel: string;
@@ -1729,8 +1738,11 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
     const labelBg =
       m.labelBackground === true ? color : m.labelBackground || undefined;
     const pad = markerPillPadding(m);
+    const valueStyle = resolveLabelStyle(m.valueStyle, {
+      fontSize: style.fontSize,
+    });
     const value =
-      m.showValueOnDrag && m.label && drag?.index === i
+      m.showValueOnDrag !== false && drag?.index === i
         ? m.valueFormat
           ? m.valueFormat(markerEmitX(xv))
           : formatXValue(xv, 0)
@@ -1762,8 +1774,16 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
       pillPadY: pad.y,
       lineTop: padding.value.top,
       value,
+      valueX: 0,
       valueY: 0,
-      valueOutlineWidth: m.labelOutlineWidth ?? 3,
+      valueAnchor: "start",
+      valueFontSize: valueStyle.fontSize,
+      valueFontWeight: valueStyle.fontWeight ?? 400,
+      valueFill: valueStyle.fill,
+      valueOutlineColor:
+        m.valueOutlineColor ?? m.labelOutlineColor ?? "var(--color-bg-0, #fff)",
+      valueOutlineWidth: m.valueOutlineWidth ?? 3,
+      valueBlendMode: m.valueBlendMode,
       draggable: m.draggable !== false,
       hitTop: padding.value.top,
       ariaLabel: m.label ?? `Marker ${i + 1}`,
@@ -1795,7 +1815,6 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
     r.labelX = r.labelBg ? p.x + dir * r.pillPadX : p.x;
     r.labelY = padding.value.top - props.markerLabelGap + p.row * rowHeight;
     r.hitTop = Math.min(r.labelY - r.labelFontSize, padding.value.top);
-    r.valueY = r.labelY + r.labelFontSize * 1.25;
     if (r.labelBg) {
       // The baseline sits one padding above the pill bottom, so caps are
       // centered and descenders hang into the bottom padding.
@@ -1809,10 +1828,21 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
         dir,
       );
       r.lineTop = Math.min(padding.value.top, bottom);
-      // The value sits just under the pill, caps 3px below its edge.
-      r.valueY = bottom + 3 + r.labelFontSize * MARKER_CAP_HEIGHT_RATIO;
     }
   });
+  // The drag readout sits just above the x axis, on the label's side of
+  // the line (or whichever side fits for an unlabeled marker).
+  const left = padding.value.left;
+  const right = left + innerW.value;
+  for (const r of out) {
+    if (!r.value) continue;
+    const w = r.value.length * r.valueFontSize * MARKER_LABEL_CHAR_FACTOR;
+    const fitsRight = r.px + MARKER_VALUE_GAP + w <= right;
+    const flip = r.label ? r.anchor === "end" : !fitsRight;
+    r.valueAnchor = flip ? "end" : "start";
+    r.valueX = r.px + (flip ? -1 : 1) * MARKER_VALUE_GAP;
+    r.valueY = padding.value.top + innerH.value - MARKER_VALUE_GAP;
+  }
   return out;
 });
 
@@ -2337,16 +2367,20 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           <text
             v-if="m.value"
             data-testid="marker-value"
-            :x="m.labelX"
+            :x="m.valueX"
             :y="m.valueY"
-            :text-anchor="m.anchor"
-            :font-size="m.labelFontSize"
-            :fill="m.labelBg ? 'currentColor' : m.labelFill"
-            :stroke="m.labelOutlineColor"
+            :text-anchor="m.valueAnchor"
+            :font-size="m.valueFontSize"
+            :font-weight="m.valueFontWeight"
+            :fill="m.valueFill"
+            :stroke="m.valueOutlineColor"
             :stroke-width="m.valueOutlineWidth"
             stroke-linejoin="round"
             paint-order="stroke fill"
             pointer-events="none"
+            :style="
+              m.valueBlendMode ? { mixBlendMode: m.valueBlendMode } : undefined
+            "
           >
             {{ m.value }}
           </text>

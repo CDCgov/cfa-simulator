@@ -5,7 +5,7 @@
  * labels that would overlap drop down to the next row.
  */
 
-import type { LabelStyle } from "./chartProps.js";
+import type { BlendMode, LabelStyle } from "./chartProps.js";
 
 export interface ChartMarker {
   /**
@@ -74,10 +74,9 @@ export interface ChartMarker {
   /** Whether the marker can be dragged along the x-axis. Default: true. */
   draggable?: boolean;
   /**
-   * While the marker is being dragged, show its current `x` under the
-   * label (below the pill when it has a `labelBackground`) in regular
-   * text, formatted like the x axis unless `valueFormat` is set. Only
-   * markers with a `label` show it. Default: false.
+   * While the marker is being dragged, show its current `x` just above
+   * the x axis beside the line, formatted like the x axis unless
+   * `valueFormat` is set. Default: true; set `false` to hide it.
    */
   showValueOnDrag?: boolean;
   /**
@@ -85,6 +84,17 @@ export interface ChartMarker {
    * `x` in its own coordinate space (a `Date` on a date axis).
    */
   valueFormat?: (x: number | Date) => string;
+  /**
+   * Text style of the drag value (`fontSize`, `color`, `fontWeight`).
+   * Defaults: the label's font size, currentColor, weight 400.
+   */
+  valueStyle?: LabelStyle;
+  /** Legibility stroke color behind the drag value. Default: `labelOutlineColor`. */
+  valueOutlineColor?: string;
+  /** Drag value outline width in pixels. `0` disables. Default: 3. */
+  valueOutlineWidth?: number;
+  /** CSS `mix-blend-mode` for the drag value text. */
+  valueBlendMode?: BlendMode;
 }
 
 /** Payload emitted on `marker-drag` / `marker-drag-end`. */

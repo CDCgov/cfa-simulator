@@ -1360,9 +1360,11 @@ from your refs in a writable computed and split drag updates back out in
 its setter, as below. (Alternatively, listen to `marker-drag` and dispatch
 on `payload.index` or `payload.marker.label`.)
 
-Drag the lines below (or focus one and use the arrow keys). With
-`showValueOnDrag: true` a marker shows its current `x` under the label
-while it is dragged, formatted like the x axis or through `valueFormat`:
+Drag the lines below (or focus one and use the arrow keys). While a
+marker is dragged it shows its current `x` just above the x axis,
+formatted like the x axis or through `valueFormat` and styled with
+`valueStyle`, `valueOutlineColor` / `valueOutlineWidth` and
+`valueBlendMode`; set `showValueOnDrag: false` to hide it:
 
 <script setup>
 import { ref, computed } from "vue";
@@ -1483,8 +1485,8 @@ const isolation = ref(12);
 const recovery = ref(32);
 const markers = computed({
   get: () => [
-    { x: isolation.value, label: "Isolation", showValueOnDrag: true },
-    { x: recovery.value, label: "Recovery", showValueOnDrag: true },
+    { x: isolation.value, label: "Isolation" },
+    { x: recovery.value, label: "Recovery" },
   ],
   set: ([a, b]) => {
     isolation.value = a.x;
@@ -1508,7 +1510,6 @@ const styledMarkers = ref([
     color: "#0057b7",
     dash: "2 6",
     labelBackground: true,
-    showValueOnDrag: true,
   },
 ]);
 </script>
@@ -1543,8 +1544,8 @@ const recovery = ref(32);
 // markers array, the setter splits drag updates back out.
 const markers = computed({
   get: () => [
-    { x: isolation.value, label: "Isolation", showValueOnDrag: true },
-    { x: recovery.value, label: "Recovery", showValueOnDrag: true },
+    { x: isolation.value, label: "Isolation" },
+    { x: recovery.value, label: "Recovery" },
   ],
   set: ([a, b]) => {
     isolation.value = a.x;
@@ -1648,7 +1649,6 @@ const markers = ref([
     color: "#0057b7",
     dash: "2 6",
     labelBackground: true,
-    showValueOnDrag: true,
   },
 ]);
 </script>
@@ -1678,8 +1678,12 @@ interface ChartMarker {
   labelBackground?: boolean | string; // pill behind the label: true = marker color
   labelPadding?: number | { x?: number; y?: number }; // pill padding (default: { x: 6, y: 5 })
   draggable?: boolean; // default: true
-  showValueOnDrag?: boolean; // show the current x under the label while dragging
+  showValueOnDrag?: boolean; // current x above the x axis while dragging (default: true)
   valueFormat?: (x: number | Date) => string; // formats that value (default: like the x axis)
+  valueStyle?: LabelStyle; // drag value text style (defaults: label font size / currentColor / 400)
+  valueOutlineColor?: string; // drag value halo (default: labelOutlineColor)
+  valueOutlineWidth?: number; // default: 3; 0 disables
+  valueBlendMode?: BlendMode; // mix-blend-mode for the drag value text
 }
 ```
 
