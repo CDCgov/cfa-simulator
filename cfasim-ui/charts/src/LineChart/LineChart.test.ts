@@ -1947,6 +1947,65 @@ describe("LineChart", () => {
       expect(outlineArrow.exists()).toBe(true);
     });
 
+    it("styles the text outline apart from the line outline", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 10,
+              offset: { x: 30, y: -20 },
+              text: "Peak",
+              outlineColor: "#fff",
+              outlineWidth: 4,
+              textOutlineColor: "#000",
+              textOutlineWidth: 1,
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const group = wrapper.find("g.chart-annotations");
+      expect(group.find("path.annotation-outline").attributes("stroke")).toBe(
+        "#fff",
+      );
+      const text = group.find("text");
+      expect(text.attributes("stroke")).toBe("#000");
+      expect(text.attributes("stroke-width")).toBe("1");
+    });
+
+    it("rotates the label about its position and blends the annotation", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [0, 10, 20],
+          annotations: [
+            {
+              x: 1,
+              y: 0,
+              offset: { x: -6, y: -8 },
+              text: "Peak",
+              pointer: "ruleX",
+              rotate: -90,
+              blendMode: "multiply",
+            },
+          ],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      const group = wrapper.find("g.chart-annotations");
+      const item = group.find("g");
+      expect(item.attributes("style")).toContain("mix-blend-mode: multiply");
+      const text = group.find("text");
+      const x = text.attributes("x");
+      const y = text.attributes("y");
+      expect(text.attributes("transform")).toBe(`rotate(-90 ${x} ${y})`);
+    });
+
     it("suppresses the outline passes when outlineWidth is 0", () => {
       const wrapper = mount(LineChart, {
         props: {

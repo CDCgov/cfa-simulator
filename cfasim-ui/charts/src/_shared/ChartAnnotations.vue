@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { ChartAnnotation } from "./annotations.js";
+import type { BlendMode } from "./chartProps.js";
 import type { ChartBounds } from "./useChartPadding.js";
 
 const props = withDefaults(
@@ -57,6 +58,10 @@ interface RenderedAnnotation {
   color: string;
   outlineColor: string;
   outlineWidth: number;
+  textOutlineColor: string;
+  textOutlineWidth: number;
+  textTransform?: string;
+  blendMode?: BlendMode;
   pointerPath: string;
   lineColor: string;
   lineWidth: number;
@@ -131,6 +136,8 @@ const items = computed<RenderedAnnotation[]>(() => {
     const fontWeight = a.fontWeight ?? DEFAULT_FONT_WEIGHT;
     const outlineColor = a.outlineColor ?? DEFAULT_OUTLINE_COLOR;
     const outlineWidth = a.outlineWidth ?? DEFAULT_OUTLINE_WIDTH;
+    const textOutlineColor = a.textOutlineColor ?? outlineColor;
+    const textOutlineWidth = a.textOutlineWidth ?? outlineWidth;
     const lineColor = a.lineColor ?? color;
     const lineWidth = a.lineWidth ?? DEFAULT_LINE_WIDTH;
     const lineDash = resolveDash(a.lineDash);
@@ -172,6 +179,12 @@ const items = computed<RenderedAnnotation[]>(() => {
       color,
       outlineColor,
       outlineWidth,
+      textOutlineColor,
+      textOutlineWidth,
+      textTransform: a.rotate
+        ? `rotate(${a.rotate} ${labelX} ${labelY})`
+        : undefined,
+      blendMode: a.blendMode,
       pointerPath,
       lineColor,
       lineWidth,
@@ -322,7 +335,11 @@ function buildPointerPath(
 
 <template>
   <g class="chart-annotations" pointer-events="none">
-    <template v-for="(item, i) in items" :key="i">
+    <g
+      v-for="(item, i) in items"
+      :key="i"
+      :style="item.blendMode ? { mixBlendMode: item.blendMode } : undefined"
+    >
       <!--
         Outline pass. Each shape is rendered first in `outlineColor` at a
         wider stroke so the rule line, pointer, and arrow tip stay legible
@@ -395,8 +412,9 @@ function buildPointerPath(
         :font-size="item.fontSize"
         :font-weight="item.fontWeight"
         :fill="item.color"
-        :stroke="item.outlineColor"
-        :stroke-width="item.outlineWidth"
+        :stroke="item.textOutlineColor"
+        :stroke-width="item.textOutlineWidth"
+        :transform="item.textTransform"
         stroke-linejoin="round"
         paint-order="stroke fill"
       >
@@ -415,6 +433,6 @@ function buildPointerPath(
           >
         </tspan>
       </text>
-    </template>
+    </g>
   </g>
 </template>
