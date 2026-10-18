@@ -3145,6 +3145,27 @@ describe("LineChart", () => {
       menu: false,
     };
 
+    it("starts a lower-row label's line under its text", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          ...baseProps,
+          markers: [
+            { x: 5, label: "Alpha" },
+            { x: 5.2, label: "Beta" },
+          ],
+        },
+      });
+      const labels = wrapper.findAll('[data-testid="marker-label"]');
+      const lines = wrapper.findAll('[data-testid="marker-line"]');
+      // Row 0 keeps the gap above the plot top (29).
+      expect(labels[0].attributes("y")).toBe("22");
+      expect(lines[0].attributes("y1")).toBe("29");
+      // Row 1 drops 15px into the plot; its line begins 3px below the
+      // baseline (12 * 0.25) instead of at the plot top.
+      expect(labels[1].attributes("y")).toBe("37");
+      expect(lines[1].attributes("y1")).toBe("40");
+    });
+
     it("draws a label pill on the line, flat on the line side", () => {
       const wrapper = mount(LineChart, {
         props: {
