@@ -9,23 +9,30 @@ import { nationalCityMarkers, stateCityMarkers } from "@cfasim-ui/charts/us-citi
 const nationalCities = nationalCityMarkers();
 const californiaCities = stateCityMarkers("06");
 
-// One row per state for the state-labels demo, deterministic-ish values.
+// One row per state and territory, deterministic-ish values. The territory
+// rows only go to the albersUsaTerritories demo: under the default
+// projection they draw as nothing and the map warns.
 import statesTopoForLabels from "us-atlas/states-10m.json";
-const stateLabelData = computed(() =>
+const territoryData = computed(() =>
   statesTopoForLabels.objects.states.geometries.map((g, i) => ({
     id: String(g.id).padStart(2, "0"),
     value: (i * 41) % 100,
   })),
+);
+const stateLabelData = computed(() =>
+  territoryData.value.filter((d) => d.id <= "56"),
 );
 
 // Build one row per county (~3,143) with a deterministic-ish value so the
 // perf example can render every region with a custom tooltip.
 const denseCountyData = computed(() => {
   const geoms = countiesTopoForPerf.objects.counties.geometries;
-  return geoms.map((g, i) => ({
-    id: String(g.id).padStart(5, "0"),
-    value: (i * 37) % 100,
-  }));
+  return geoms
+    .map((g, i) => ({
+      id: String(g.id).padStart(5, "0"),
+      value: (i * 37) % 100,
+    }))
+    .filter((d) => d.id < "57");
 });
 
 // Focus demo state — bound directly to v-model:focus. The component
@@ -749,6 +756,49 @@ the state draw. An unknown value logs a warning and shows the full map.
     { id: '06059', value: 65 }, // Orange
   ]"
   title="California cases by county"
+  :legend-title="'Cases'"
+  :height="400"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### US territories (`projection="albersUsaTerritories"`)
+
+`us-atlas` includes Puerto Rico, the Virgin Islands, Guam, the Northern
+Marianas and American Samoa, but the default `"albersUsa"` projection only
+places the 50 states and DC, so the territories draw as nothing (the map
+warns once when any of them has data). `"albersUsaTerritories"` draws them as
+enlarged insets: Puerto Rico and the Virgin Islands right of Florida, the
+Pacific territories in a column west of the coast. The fit leaves room beside
+each inset for its `state-labels` callout. The Northern Marianas inset shows
+the southern islands (Rota, Tinian, Saipan).
+
+<ComponentDemo>
+  <ChoroplethMap
+    :topology="statesTopo"
+    projection="albersUsaTerritories"
+    state-labels
+    :data="territoryData"
+    title="Cases by state and territory"
+    :legend-title="'Cases'"
+    :height="400"
+  />
+
+<template #code>
+
+```vue
+<ChoroplethMap
+  :topology="statesTopo"
+  projection="albersUsaTerritories"
+  state-labels
+  :data="[
+    { id: '06', value: 100 },
+    { id: '72', value: 80 }, // Puerto Rico
+    { id: '66', value: 40 }, // Guam
+  ]"
+  title="Cases by state and territory"
   :legend-title="'Cases'"
   :height="400"
 />
@@ -1621,9 +1671,17 @@ interface RegionsSource {
 
 The `projection` prop. Defaults to `"albersUsa"` for US maps and `"mercator"` with `regions`; always fitted to the drawn regions.
 
+`"albersUsa"` places only the 50 states and DC: the island territories in `us-atlas` (Puerto Rico, the Virgin Islands, Guam, the Northern Marianas, American Samoa) draw as nothing, and the map warns once when any of them has data. `"albersUsaTerritories"` (also exported as `geoAlbersUsaTerritories`) adds them as enlarged insets.
+
+See [US territories](#us-territories-projection-albersusaterritories) for a demo.
+
 ```ts
 type MapProjectionName =
-  "albersUsa" | "mercator" | "equirectangular" | "equalEarth";
+  | "albersUsa"
+  | "albersUsaTerritories"
+  | "mercator"
+  | "equirectangular"
+  | "equalEarth";
 
 type MapProjection =
   MapProjectionName | ((width: number, height: number) => GeoProjection);

@@ -20,6 +20,7 @@ import {
   type GeoProjection,
   type GeoPermissibleObjects,
 } from "d3-geo";
+import { geoAlbersUsaTerritories } from "../_shared/albersUsaTerritories.js";
 import {
   zoom as d3Zoom,
   zoomIdentity,
@@ -211,7 +212,11 @@ export interface RegionsSource {
 }
 
 export type MapProjectionName =
-  "albersUsa" | "mercator" | "equirectangular" | "equalEarth";
+  | "albersUsa"
+  | "albersUsaTerritories"
+  | "mercator"
+  | "equirectangular"
+  | "equalEarth";
 
 /**
  * A named d3-geo projection, or a factory returning any `GeoProjection`
@@ -237,8 +242,11 @@ const props = withDefaults(
      */
     regions?: RegionsSource;
     /**
-     * Map projection: `"albersUsa"` (the US-mode default), `"mercator"` (the
-     * default with `regions`), `"equirectangular"`, `"equalEarth"`, or a
+     * Map projection: `"albersUsa"` (the US-mode default; 50 states + DC),
+     * `"albersUsaTerritories"` (Albers USA plus insets for Puerto Rico, the
+     * Virgin Islands, Guam, the Northern Marianas and American Samoa),
+     * `"mercator"` (the default with `regions`), `"equirectangular"`,
+     * `"equalEarth"`, or a
      * factory `(width, height) => GeoProjection` for any other d3-geo
      * projection. Always fitted to the drawn regions. The d3-geo projections
      * are re-exported from `@cfasim-ui/charts` (`geoMercator`, ...).
@@ -2209,13 +2217,15 @@ const tightFitAmount = computed(() => {
   return Math.max(0, Math.min(1, Number(v)));
 });
 
-// Predicate marking a feature id as Alaska (FIPS 02) or Hawaii (15), so the
+// Predicate marking a feature id as off the contiguous US (Alaska, Hawaii,
+// and the territories that albersUsaTerritories draws as insets), so the
 // projection can re-fit to just the contiguous US. States/counties key off
 // the FIPS prefix directly; HSA ids are HSA codes, so an HSA has to be placed
 // through the `fipsToHsa` table (null until that lazy chunk loads, so the crop
 // kicks in once it's ready). Each id is read at the level it renders at, which
 // mixed-level maps make per-feature.
-const isAkHiFeature = computed<((id: string) => boolean) | null>(() => {
+const OFF_CONUS_STATES = new Set(["02", "15", "60", "66", "69", "72", "78"]);
+const isOffConusFeature = computed<((id: string) => boolean) | null>(() => {
   const hsaStates = hsaToState.value;
   const usesHsas =
     props.geoType === "hsas" ||
@@ -2223,26 +2233,27 @@ const isAkHiFeature = computed<((id: string) => boolean) | null>(() => {
   if (usesHsas && !hsaStates) return null;
   return (id) => {
     const st = stateOfId(levelOf(id), id, hsaStates);
-    return st === "02" || st === "15";
+    return st != null && OFF_CONUS_STATES.has(st);
   };
 });
 
-// The national fit target with Alaska and Hawaii removed, so the projection
+// The national fit target with Alaska, Hawaii and the territories removed, so the projection
 // can be re-fit to just the contiguous US. Null when the crop is off, in
-// single-state mode, before the AK/HI predicate is ready, or when nothing was
+// single-state mode, before the off-CONUS predicate is ready, or when nothing was
 // removed — the projection then uses the plain full fit.
 const conusFeaturesGeo = computed(() => {
   if (tightFitAmount.value <= 0 || stateFips.value) return null;
-  const isAkHi = isAkHiFeature.value;
-  if (!isAkHi) return null;
+  const isOffConus = isOffConusFeature.value;
+  if (!isOffConus) return null;
   const fc = featuresGeo.value;
-  const kept = fc.features.filter((f) => !isAkHi(String(f.id)));
+  const kept = fc.features.filter((f) => !isOffConus(String(f.id)));
   if (kept.length === fc.features.length) return null;
   return { type: "FeatureCollection" as const, features: kept };
 });
 
 const NAMED_PROJECTIONS: Record<MapProjectionName, () => GeoProjection> = {
   albersUsa: geoAlbersUsa,
+  albersUsaTerritories: geoAlbersUsaTerritories,
   mercator: geoMercator,
   equirectangular: geoEquirectangular,
   equalEarth: geoEqualEarth,
@@ -2606,6 +2617,45 @@ function valueFor(featureId: string): number | string | undefined {
   const dataId = baseToDataId(featureId);
   return dataId == null ? undefined : dataMap.value.get(dataId);
 }
+
+// Features the projection places nowhere (Albers USA drops the island
+// territories), or null when it places none, which fitProjection's Mercator
+// fallback handles. Null-ness doesn't depend on the fit, so an unfitted
+// projection keeps this off the resize path, and data changes only re-check
+// this list.
+const unplacedFeatureIds = computed<string[] | null>(() => {
+  const path = geoPath(newProjection());
+  const unplaced: string[] = [];
+  let placed = false;
+  for (const f of featuresGeo.value.features) {
+    if (Number.isFinite(path.bounds(f)[0][0])) placed = true;
+    else unplaced.push(String(f.id));
+  }
+  return placed ? unplaced : null;
+});
+
+// Regions with data that draw as nothing; warns again only when that set
+// changes.
+let lastUnplacedWarning = "";
+watch(
+  () =>
+    (unplacedFeatureIds.value ?? []).filter((id) => valueFor(id) !== undefined),
+  (unplaced) => {
+    const key = unplaced.join(",");
+    if (key === lastUnplacedWarning) return;
+    lastUnplacedWarning = key;
+    if (!unplaced.length) return;
+    const shown = unplaced.slice(0, 5).join(", ");
+    const more = unplaced.length > 5 ? ", …" : "";
+    const hint = isGeneric.value
+      ? ""
+      : ' Use `projection="albersUsaTerritories"` to draw the US territories.';
+    console.warn(
+      `[ChoroplethMap] the projection cannot place ${unplaced.length} region${unplaced.length === 1 ? "" : "s"} with data (${shown}${more}).${hint}`,
+    );
+  },
+  { immediate: true },
+);
 
 function stopStyleFor(id: string): ResolvedStopStyle | undefined {
   const value = valueFor(id);

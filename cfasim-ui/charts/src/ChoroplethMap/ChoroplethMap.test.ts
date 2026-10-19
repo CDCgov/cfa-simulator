@@ -500,6 +500,71 @@ describe("ChoroplethMap", () => {
     expect(pathFor(wrapper, "36").attributes("fill")).toBe("rgb(0,0,0)");
   });
 
+  it("warns once about regions with data the projection cannot place", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const data = [
+      { id: "06", value: 1 },
+      { id: "72", value: 2 },
+    ];
+    const wrapper = mount(ChoroplethMap, {
+      props: { topology: statesTopo, width: 600, height: 400, data },
+    });
+    const unplaced = () =>
+      warn.mock.calls.filter(([m]) => String(m).includes("cannot place"));
+    expect(unplaced()).toHaveLength(1);
+    expect(String(unplaced()[0][0])).toContain("1 region with data (72)");
+    expect(pathFor(wrapper, "72").attributes("d") ?? "").toBe("");
+    warn.mockRestore();
+  });
+
+  it("warns again only when the set of unplaced regions changes", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const unplaced = () =>
+      warn.mock.calls.filter(([m]) => String(m).includes("cannot place"));
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        data: [{ id: "72", value: 1 }],
+      },
+    });
+    await wrapper.setProps({ data: [{ id: "72", value: 2 }] });
+    expect(unplaced()).toHaveLength(1);
+    await wrapper.setProps({
+      data: [
+        { id: "72", value: 2 },
+        { id: "66", value: 3 },
+      ],
+    });
+    expect(unplaced()).toHaveLength(2);
+    expect(String(unplaced()[1][0])).toContain("2 regions with data");
+    await wrapper.setProps({ projection: "albersUsaTerritories" });
+    expect(unplaced()).toHaveLength(2);
+    warn.mockRestore();
+  });
+
+  it("draws Puerto Rico with the albersUsaTerritories projection", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const wrapper = mount(ChoroplethMap, {
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        projection: "albersUsaTerritories",
+        data: [
+          { id: "06", value: 1 },
+          { id: "72", value: 2 },
+        ],
+      },
+    });
+    const d = pathFor(wrapper, "72").attributes("d") ?? "";
+    expect(d).toMatch(/^M[\d.]+,[\d.]+/);
+    expect(d).not.toContain("NaN");
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it("warns on an invalid domain and falls back to the data extent", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const wrapper = mount(ChoroplethMap, {

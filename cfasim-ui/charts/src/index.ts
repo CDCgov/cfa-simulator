@@ -35,6 +35,7 @@ export {
   geoEqualEarth,
   type GeoProjection,
 } from "d3-geo";
+export { geoAlbersUsaTerritories } from "./_shared/albersUsaTerritories.js";
 export { default as ChartTooltip } from "./ChartTooltip/ChartTooltip.vue";
 export {
   default as DataTable,
