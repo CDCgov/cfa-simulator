@@ -1,6 +1,20 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.9.3] - 2026-10-19
+
+### Bug Fixes
+
+- **charts:** Coarsen date ticks until measured labels fit
+
+### Chores
+
+- Raise charts JS bundle size limit to 66 KB
+
+### Features
+
+- **charts:** Add albersUsaTerritories projection, warn on unplaced map regions
+
 ## [0.9.2] - 2026-10-18
 
 ### Bug Fixes
