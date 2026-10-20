@@ -3,8 +3,8 @@
 /**
  * Two-step release flow:
  *   1. `node scripts/version.mjs <patch|minor|major>`
- *        Bumps versions across npm/cargo/pypi packages, refreshes Cargo.lock,
- *        and prepends a new section to CHANGELOG.md for the unreleased
+ *        Bumps versions across npm/cargo/pypi packages, refreshes Cargo.lock
+ *        and uv.lock, and prepends a new section to CHANGELOG.md for the unreleased
  *        commits since the latest tag. Past sections are left untouched so
  *        manual edits survive. Leaves everything unstaged so you can review
  *        and edit before committing.
@@ -47,6 +47,7 @@ const TRACKED_FILES = [
   ...PYPROJECT_TOMLS,
   ...EMBEDDED_COPIES.map(([, dst]) => dst),
   "Cargo.lock",
+  "cfasim-model-py/uv.lock",
   "models/src/reed-frost/model/Cargo.lock",
   "models/src/ixa-example/model/Cargo.lock",
   "CHANGELOG.md",
@@ -117,6 +118,7 @@ function bumpAll(type) {
     "cargo check --manifest-path models/src/ixa-example/model/Cargo.toml",
     { stdio: "inherit" },
   );
+  execSync("uv lock", { cwd: "cfasim-model-py", stdio: "inherit" });
 
   const tag = `v${newVersion}`;
   if (
