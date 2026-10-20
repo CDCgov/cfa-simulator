@@ -1,6 +1,6 @@
 {
   "name": "@cfasim-ui/wasm",
-  "version": "0.9.3",
+  "version": "0.10.0",
   "type": "module",
   "description": "WebAssembly integration for cfasim-ui",
   "license": "Apache-2.0",

@@ -1,6 +1,16 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.10.0] - 2026-10-20
+
+### Bug Fixes
+
+- **release:** Refresh and stage cfasim-model-py uv.lock on version bump
+
+### Features
+
+- Cfasim serve, a local task server for Python and Rust projects
+
 ## [0.9.3] - 2026-10-19
 
 ### Bug Fixes
