@@ -125,16 +125,31 @@ describe("runWasm", () => {
     const initId = old.posted[old.posted.length - 3].id;
     const otherId = lastPosted(old).id;
 
-    const message = "Model trapped during initialization: unreachable";
-    old.reply({ id: initId, error: message, trap: "init" });
-    await expect(init).rejects.toThrow(message);
-    await expect(sameModel).rejects.toThrow(message);
+    const message = "Model panicked or aborted while initializing";
+    vi.useFakeTimers();
+    try {
+      old.reply({ id: initId, error: message, trap: "init" });
+      await expect(init).rejects.toThrow(message);
+      await expect(sameModel).rejects.toThrow(message);
 
-    const fresh = FakeWorker.current();
-    expect(old.terminated).toBe(true);
-    expect(fresh.posted.map((m) => m.id)).toEqual([otherId]);
-    fresh.reply({ id: otherId, result: "ok" });
-    await expect(otherModel).resolves.toBe("ok");
+      const fresh = FakeWorker.current();
+      expect(old.terminated).toBe(true);
+      expect(fresh.posted.map((m) => m.id)).toEqual([otherId]);
+      fresh.reply({ id: otherId, result: "ok" });
+      await expect(otherModel).resolves.toBe("ok");
+
+      // Within the retry window a new call into that model is rejected
+      // without reaching the worker; afterwards it is sent again.
+      await expect(runWasm("broken", "a")).rejects.toThrow(message);
+      expect(fresh.posted).toHaveLength(1);
+      vi.advanceTimersByTime(2000);
+      const later = runWasm("broken", "a");
+      expect(fresh.posted).toHaveLength(2);
+      fresh.reply({ id: lastPosted(fresh).id, result: "fixed" });
+      await expect(later).resolves.toBe("fixed");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("fails pending calls on a worker error and starts fresh after a short wait", async () => {

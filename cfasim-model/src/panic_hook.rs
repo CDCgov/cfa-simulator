@@ -8,12 +8,17 @@
 //! instead. Both are called by the worker, never by model code.
 
 use std::cell::RefCell;
+use std::sync::Mutex;
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
+// The hook is process-global but `take_panic` runs on the thread that made
+// the call, so the text is kept per thread and, for a panic on another
+// thread (wasm-bindgen-rayon, a native task's spawned thread), globally.
 thread_local! {
     static LAST_PANIC: RefCell<Option<String>> = const { RefCell::new(None) };
 }
+static LAST_PANIC_ANY: Mutex<Option<String>> = Mutex::new(None);
 
 /// The hook info's `Display` (`panicked at <file>:<line>:<col>:\n<message>`)
 /// joined onto one line. Taking the rendered text keeps this off the
@@ -28,6 +33,9 @@ pub fn install_panic_hook() {
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let text = describe_panic(&info.to_string());
+        if let Ok(mut slot) = LAST_PANIC_ANY.try_lock() {
+            *slot = Some(text.clone());
+        }
         LAST_PANIC.with(|last| {
             if let Ok(mut slot) = last.try_borrow_mut() {
                 *slot = Some(text);
@@ -37,9 +45,15 @@ pub fn install_panic_hook() {
     }));
 }
 
-/// The last recorded panic, cleared on read.
+/// The last recorded panic, cleared on read: this thread's, else any
+/// thread's.
 pub fn take_panic() -> Option<String> {
-    LAST_PANIC.with(|last| last.try_borrow_mut().ok().and_then(|mut slot| slot.take()))
+    let local = LAST_PANIC.with(|last| last.try_borrow_mut().ok().and_then(|mut slot| slot.take()));
+    let any = LAST_PANIC_ANY
+        .try_lock()
+        .ok()
+        .and_then(|mut slot| slot.take());
+    local.or(any)
 }
 
 #[cfg(feature = "wasm")]
@@ -76,7 +90,8 @@ mod tests {
         }));
         install_panic_hook();
 
-        assert_eq!(take_panic(), None);
+        // The thread-local slot wins over the global one, which a neighbor
+        // may fill at any time, so these reads are deterministic.
         let result = std::panic::catch_unwind(|| panic!("rate must be <= 5, got {}", 9));
         assert!(result.is_err());
         let calls_seen = calls.load(Ordering::SeqCst);
@@ -86,8 +101,33 @@ mod tests {
         assert!(text.starts_with("panicked at "), "{text}");
         assert!(text.contains("panic_hook.rs:"), "{text}");
         assert!(calls_seen >= 1, "previous hook ran {calls_seen} times");
-        assert_eq!(take_panic(), None, "cleared on read");
 
+        let _ = std::panic::catch_unwind(|| panic!("second"));
+        let text = take_panic().expect("second panic recorded");
+        assert!(text.ends_with(": second"), "{text}");
+
+        let _ = std::panic::take_hook();
+
+        // A panic on another thread is still readable from this one.
+        LAST_PANIC_ANY.lock().unwrap().take();
+        std::thread::spawn(|| {
+            let _ = std::panic::catch_unwind(|| panic!("elsewhere"));
+        })
+        .join()
+        .unwrap();
+        let text = LAST_PANIC_ANY.lock().unwrap().take();
+        assert!(
+            text.is_none(),
+            "hook was removed, so nothing recorded: {text:?}"
+        );
+        install_panic_hook();
+        std::thread::spawn(|| {
+            let _ = std::panic::catch_unwind(|| panic!("elsewhere"));
+        })
+        .join()
+        .unwrap();
+        let text = take_panic().expect("other thread's panic recorded");
+        assert!(text.starts_with("panicked at "), "{text}");
         let _ = std::panic::take_hook();
     }
 }

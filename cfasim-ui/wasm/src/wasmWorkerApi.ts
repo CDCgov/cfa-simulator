@@ -27,6 +27,10 @@ let workerDeadError: Error | null = null;
 let workerDiedAt = 0;
 const WORKER_RETRY_MS = 2000;
 
+// Models whose initialization trapped, with the same retry window: each
+// retry costs a worker and a module load.
+const initTraps = new Map<string, { error: Error; at: number }>();
+
 function newWorker(): Worker {
   const w = new Worker(new URL("./wasm.worker.ts", import.meta.url), {
     type: "module",
@@ -84,21 +88,21 @@ function sameCall(a: WorkerMessage, b: WorkerMessage): boolean {
 }
 
 /**
- * Swap in a fresh worker after a WebAssembly trap. A Rust panic aborts
- * without unwinding, so the old instance may be left with poisoned state
- * (a `RefCell` still borrowed, a half-updated cache) that would fail every
- * later call. The other in-flight calls move to the new worker, except
- * those that would trap the same way: the same call again, or any call
- * into a model whose initialization trapped. Calls with other inputs are
- * re-sent even though they may trap too, each costing another replacement:
- * failing them instead would report an error for inputs that might work and
- * never retry them.
+ * Replace the worker after a trap, since the old instance may be poisoned
+ * (a panic never unwinds). Other in-flight calls move to the new worker,
+ * except those that would trap the same way: the same call again, or any
+ * call into a model whose init trapped. Calls with other inputs are re-sent
+ * even though they may trap too, each costing another replacement: failing
+ * them would report an error for inputs that might work and never retry.
  */
 function replaceWorker(
   trapped: WorkerMessage,
   kind: WasmTrapKind,
   error: Error,
 ): void {
+  if (kind === "init") {
+    initTraps.set(trapped.model, { error, at: Date.now() });
+  }
   restartWorker();
   for (const [id, entry] of Array.from(pending)) {
     const doomed =
@@ -127,6 +131,13 @@ export function runWasm(
       return Promise.reject(workerDeadError);
     }
     restartWorker();
+  }
+  const initTrap = initTraps.get(model);
+  if (initTrap) {
+    if (Date.now() - initTrap.at < WORKER_RETRY_MS) {
+      return Promise.reject(initTrap.error);
+    }
+    initTraps.delete(model);
   }
   return new Promise((resolve, reject) => {
     const id = ++lastId;

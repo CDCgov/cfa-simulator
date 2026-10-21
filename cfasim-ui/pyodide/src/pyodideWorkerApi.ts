@@ -86,7 +86,7 @@ function requestResponse(
       if (event.data?.id !== id) return;
       entry.worker.removeEventListener("message", listener);
       entry.pending.delete(id);
-      if (event.data.error) {
+      if (event.data.error !== undefined) {
         resolve({ error: event.data.error });
       } else {
         resolve({ result: unwrapResponse(event.data) });

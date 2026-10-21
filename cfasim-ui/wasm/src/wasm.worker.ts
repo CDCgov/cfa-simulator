@@ -5,6 +5,7 @@ import {
   postModelOutputsWithTransfer,
   postErrorWithTransfer,
 } from "@cfasim-ui/shared/transfer";
+import type { WasmTrapKind } from "@cfasim-ui/shared/transfer";
 import {
   describeWasmTrap,
   describeWasmInitTrap,
@@ -43,11 +44,8 @@ function ensureModule(model: string): Promise<WasmModule> {
       } else {
         await mod.default();
       }
-      // Exported by cfasim-model releases after 0.10.0: records each panic's
-      // message and location so a trap can be reported as more than
-      // "unreachable".
-      // Installed after init so it chains onto any hook the model's own
-      // start function set.
+      // cfasim-model's panic recorder (releases after 0.10.0). Installed after
+      // init so it chains onto any hook the model's start function set.
       mod.__cfasim_install_panic_hook?.();
       return mod;
     })();
@@ -96,11 +94,19 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
       postWithTransfer(self, id, result);
     }
   } catch (error) {
-    const trapMessage = error instanceof Error ? error.message : String(error);
-    if (isWasmTrap(error) && mod) {
-      // A Rust panic (or abort) does not unwind: destructors never ran, so
-      // the instance may hold poisoned state. The main thread replaces the
-      // worker when it sees `trap`.
+    if (!isWasmTrap(error)) {
+      const text = error instanceof Error ? error.message : String(error);
+      console.error(`[wasm-worker] ${model}.${fn} failed: ${text}`, error);
+      postErrorWithTransfer(self, id, error);
+      return;
+    }
+    // The instance is unusable after a trap: a panic does not unwind, so
+    // destructors never ran, and the glue keeps a half-initialized instance
+    // when init trapped. The main thread replaces the worker on `trap`.
+    const trapMessage = (error as Error).message;
+    let message: string;
+    let trap: WasmTrapKind;
+    if (mod) {
       const takePanic = mod.__cfasim_take_panic;
       let panic: string | undefined;
       try {
@@ -108,21 +114,13 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
       } catch {
         // Reading the string allocates, which can trap again after an OOM.
       }
-      const message = describeWasmTrap(trapMessage, panic, !!takePanic);
-      console.error(`[wasm-worker] ${model}.${fn} failed: ${message}`, error);
-      postErrorWithTransfer(self, id, new Error(message), { trap: "call" });
-      return;
+      message = describeWasmTrap(trapMessage, panic, !!takePanic);
+      trap = "call";
+    } else {
+      message = describeWasmInitTrap(trapMessage);
+      trap = "init";
     }
-    if (isWasmTrap(error)) {
-      // The glue stores the instance before running the start function and
-      // returns it to every later init call, so a trap in init can only be
-      // retried in a new worker.
-      const message = describeWasmInitTrap(trapMessage);
-      console.error(`[wasm-worker] ${model}.${fn} failed: ${message}`, error);
-      postErrorWithTransfer(self, id, new Error(message), { trap: "init" });
-      return;
-    }
-    console.error(`[wasm-worker] ${model}.${fn} failed:`, error);
-    postErrorWithTransfer(self, id, error);
+    console.error(`[wasm-worker] ${model}.${fn} failed: ${message}`, error);
+    postErrorWithTransfer(self, id, new Error(message), { trap });
   }
 };
