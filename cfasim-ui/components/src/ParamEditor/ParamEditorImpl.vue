@@ -7,12 +7,34 @@ import {
   onMounted,
   onUnmounted,
 } from "vue";
-import { Codemirror } from "vue-codemirror";
 import { json as jsonLang } from "@codemirror/lang-json";
 import { yaml as yamlLang } from "@codemirror/lang-yaml";
-import { StreamLanguage } from "@codemirror/language";
+import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import {
+  StreamLanguage,
+  bracketMatching,
+  defaultHighlightStyle,
+  foldGutter,
+  foldKeymap,
+  indentOnInput,
+  indentUnit,
+  syntaxHighlighting,
+} from "@codemirror/language";
 import { toml as tomlMode } from "@codemirror/legacy-modes/mode/toml";
-import { EditorView, keymap } from "@codemirror/view";
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { Compartment, EditorState } from "@codemirror/state";
+import {
+  EditorView,
+  crosshairCursor,
+  drawSelection,
+  dropCursor,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  highlightSpecialChars,
+  keymap,
+  lineNumbers,
+  rectangularSelection,
+} from "@codemirror/view";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 import Box from "../Box/Box.vue";
@@ -156,13 +178,46 @@ onUnmounted(() => {
   document.removeEventListener("pointerdown", onDocumentPointerDown);
 });
 
-const extensions = computed(() => [
+// The editor is a bare EditorView rather than vue-codemirror: that
+// wrapper hard-codes CodeMirror's `basicSetup`, which drags the search
+// panel, lint and the autocompletion popup into the lazy chunk for
+// nothing. The list below is basicSetup without those packages, so there
+// is no in-editor Ctrl-F or selection-match highlighting.
+const language = computed(() =>
   format.value === "json"
     ? jsonLang()
     : format.value === "yaml"
       ? yamlLang()
       : StreamLanguage.define(tomlMode),
+);
+const languageCompartment = new Compartment();
+const extensions = [
+  languageCompartment.of(language.value),
+  lineNumbers(),
+  highlightActiveLineGutter(),
+  highlightSpecialChars(),
+  history(),
+  foldGutter(),
+  drawSelection(),
+  dropCursor(),
+  EditorState.allowMultipleSelections.of(true),
+  indentOnInput(),
+  syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+  bracketMatching(),
+  closeBrackets(),
+  rectangularSelection(),
+  crosshairCursor(),
+  highlightActiveLine(),
+  EditorState.tabSize.of(2),
+  indentUnit.of("  "),
   EditorView.lineWrapping,
+  EditorView.updateListener.of((update) => {
+    if (update.docChanged) {
+      const doc = update.state.doc.toString();
+      if (doc !== text.value) text.value = doc;
+    }
+    if (update.focusChanged && !update.view.hasFocus) handleBlur();
+  }),
   // Bind Cmd/Ctrl+S to Apply and stop the browser from intercepting it
   // for its own "Save page as…" dialog.
   keymap.of([
@@ -174,8 +229,33 @@ const extensions = computed(() => [
         return true;
       },
     },
+    ...closeBracketsKeymap,
+    ...defaultKeymap,
+    ...historyKeymap,
+    ...foldKeymap,
   ]),
-]);
+];
+
+const editorHost = useTemplateRef<HTMLDivElement>("editorHost");
+let view: EditorView | undefined;
+
+onMounted(() => {
+  view = new EditorView({
+    parent: editorHost.value!,
+    state: EditorState.create({ doc: text.value, extensions }),
+  });
+});
+onUnmounted(() => view?.destroy());
+
+watch(text, (next) => {
+  if (!view || next === view.state.doc.toString()) return;
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: next },
+  });
+});
+watch(language, (next) => {
+  view?.dispatch({ effects: languageCompartment.reconfigure(next) });
+});
 
 // `YYYYMMDD-HHMMSS` in local time — readable, sortable, and filesystem-safe
 // on Windows (no colons). Computed at export time so the name reflects
@@ -262,14 +342,10 @@ async function onFileChange(e: Event) {
         @change="onFileChange"
       />
     </div>
-    <Codemirror
-      v-model="text"
-      :extensions="extensions"
-      :style="{ height, fontSize }"
-      :indent-with-tab="false"
-      :tab-size="2"
+    <div
+      ref="editorHost"
       class="param-editor-cm"
-      @blur="handleBlur"
+      :style="{ height, fontSize }"
     />
     <div class="param-editor-error-region" role="status">
       <Box v-if="error" variant="error" class="param-editor-error">

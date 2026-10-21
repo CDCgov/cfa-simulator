@@ -237,7 +237,7 @@ export interface AreaSectionLayout {
   rowHeight?: number;
 }
 
-interface LineChartProps extends ChartCommonProps {
+export interface LineChartProps extends ChartCommonProps {
   /** Y-values. Equivalent to `data`. If both are set, `y` wins. */
   y?: LineChartData;
   /** Y-values (alternative name for `y`). */

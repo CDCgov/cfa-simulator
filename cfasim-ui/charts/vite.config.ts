@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import dts from "vite-plugin-dts";
+import { libBuildOptions } from "../libOutput.mjs";
 
 export default defineConfig({
   plugins: [
@@ -8,6 +9,7 @@ export default defineConfig({
     dts({
       tsconfigPath: "./tsconfig.json",
       cleanVueFileName: true,
+      exclude: ["**/*.test.ts", "**/*.spec.ts", "**/*.testUtils.ts"],
     }),
   ],
   build: {
@@ -21,17 +23,6 @@ export default defineConfig({
       formats: ["es"],
       cssFileName: "index",
     },
-    rollupOptions: {
-      external: [
-        "vue",
-        "reka-ui",
-        "@cfasim-ui/shared",
-        "d3-geo",
-        "d3-selection",
-        "d3-transition",
-        "d3-zoom",
-        "topojson-client",
-      ],
-    },
+    rollupOptions: libBuildOptions(new URL("./package.json", import.meta.url)),
   },
 });
