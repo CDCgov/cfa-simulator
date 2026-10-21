@@ -132,6 +132,12 @@ importers:
       '@cfasim-ui/shared':
         specifier: workspace:*
         version: link:../shared
+      '@codemirror/autocomplete':
+        specifier: 6.20.3
+        version: 6.20.3
+      '@codemirror/commands':
+        specifier: 6.10.4
+        version: 6.10.4
       '@codemirror/lang-json':
         specifier: 6.0.2
         version: 6.0.2
@@ -144,15 +150,15 @@ importers:
       '@codemirror/legacy-modes':
         specifier: 6.5.3
         version: 6.5.3
+      '@codemirror/state':
+        specifier: 6.7.1
+        version: 6.7.1
       '@codemirror/view':
         specifier: 6.43.6
         version: 6.43.6
       '@internationalized/date':
         specifier: 3.12.2
         version: 3.12.2
-      codemirror:
-        specifier: 6.0.2
-        version: 6.0.2
       reka-ui:
         specifier: 2.10.1
         version: 2.10.1(vue@3.5.40(typescript@6.0.3))
@@ -162,9 +168,6 @@ importers:
       vue:
         specifier: 3.5.40
         version: 3.5.40(typescript@6.0.3)
-      vue-codemirror:
-        specifier: 6.1.1
-        version: 6.1.1(codemirror@6.0.2)(vue@3.5.40(typescript@6.0.3))
       yaml:
         specifier: 2.9.0
         version: 2.9.0
@@ -466,12 +469,6 @@ packages:
 
   '@codemirror/legacy-modes@6.5.3':
     resolution: {integrity: sha512-xCsmIzH78MyWkib9jlPaaun57XNkfbMIhagfaZVd0iLTqlpw3jXaIcbZm72MTmmn64eTZpBVNjbyYh+QXnxRsg==}
-
-  '@codemirror/lint@6.9.7':
-    resolution: {integrity: sha512-28/+iWLYxKxsvGYhSYL7zaCZqLz5+FFFDq9tVsvGv9kv8RY4fFAchJ5WX9M3YrrRlTIsECjsXPqeNgnSmNP2dg==}
-
-  '@codemirror/search@6.7.1':
-    resolution: {integrity: sha512-uMe5UO6PamJtSHrXhhHOzSX3ReWtiJrva6GnPMwSOrZtiExb5X5eExhr2OUZQVvdxPsKpY3Ro2mFbQadpPWmHA==}
 
   '@codemirror/state@6.7.1':
     resolution: {integrity: sha512-9QzNDgE4EYDnAHfrTlR2lwiPciiOymLtwKK+8yHQzCc7GXhAP9xdEbEJFy2IWB1j9UGUl9BsgMmTo/ImA02T7A==}
@@ -1361,9 +1358,6 @@ packages:
   chokidar@5.0.0:
     resolution: {integrity: sha512-TQMmc3w+5AxjpL8iIiwebF73dRDF4fBIieAqGn9RGCWaEVwQ6Fb2cGe31Yns0RRIzii5goJ1Y7xbMwo1TxMplw==}
     engines: {node: '>= 20.19.0'}
-
-  codemirror@6.0.2:
-    resolution: {integrity: sha512-VhydHotNW5w1UGK0Qj96BwSk/Zqbp9WbnyK2W/eVMv4QyF41INRGpjUhFJY7/uDNuudSc33a/PKr4iDqRduvHw==}
 
   color-convert@2.0.1:
     resolution: {integrity: sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==}
@@ -2333,12 +2327,6 @@ packages:
   vscode-uri@3.1.0:
     resolution: {integrity: sha512-/BpdSx+yCQGnCvecbyXdxHDkuk55/G3xwnC0GqY4gmQ3j+A+g8kzzgB4Nk/SINjqn6+waqw3EgbVF2QKExkRxQ==}
 
-  vue-codemirror@6.1.1:
-    resolution: {integrity: sha512-rTAYo44owd282yVxKtJtnOi7ERAcXTeviwoPXjIc6K/IQYUsoDkzPvw/JDFtSP6T7Cz/2g3EHaEyeyaQCKoDMg==}
-    peerDependencies:
-      codemirror: 6.x
-      vue: 3.5.40
-
   vue-component-type-helpers@3.3.7:
     resolution: {integrity: sha512-Skkhw9agYSgsWqv7bxSOGJZa9SaiJbZVGdXuFWnrzKaQYHnw9qbjD630rw6RyMqDbp54nfLCLw5SZA55if7JLg==}
 
@@ -2626,18 +2614,6 @@ snapshots:
   '@codemirror/legacy-modes@6.5.3':
     dependencies:
       '@codemirror/language': 6.12.4
-
-  '@codemirror/lint@6.9.7':
-    dependencies:
-      '@codemirror/state': 6.7.1
-      '@codemirror/view': 6.43.6
-      crelt: 1.0.7
-
-  '@codemirror/search@6.7.1':
-    dependencies:
-      '@codemirror/state': 6.7.1
-      '@codemirror/view': 6.43.6
-      crelt: 1.0.7
 
   '@codemirror/state@6.7.1':
     dependencies:
@@ -3433,16 +3409,6 @@ snapshots:
   chokidar@5.0.0:
     dependencies:
       readdirp: 5.0.0
-
-  codemirror@6.0.2:
-    dependencies:
-      '@codemirror/autocomplete': 6.20.3
-      '@codemirror/commands': 6.10.4
-      '@codemirror/language': 6.12.4
-      '@codemirror/lint': 6.9.7
-      '@codemirror/search': 6.7.1
-      '@codemirror/state': 6.7.1
-      '@codemirror/view': 6.43.6
 
   color-convert@2.0.1:
     dependencies:
@@ -4409,15 +4375,6 @@ snapshots:
       - msw
 
   vscode-uri@3.1.0: {}
-
-  vue-codemirror@6.1.1(codemirror@6.0.2)(vue@3.5.40(typescript@6.0.3)):
-    dependencies:
-      '@codemirror/commands': 6.10.4
-      '@codemirror/language': 6.12.4
-      '@codemirror/state': 6.7.1
-      '@codemirror/view': 6.43.6
-      codemirror: 6.0.2
-      vue: 3.5.40(typescript@6.0.3)
 
   vue-component-type-helpers@3.3.7: {}
 

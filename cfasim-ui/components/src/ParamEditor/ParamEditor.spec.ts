@@ -72,9 +72,8 @@ test("exports the current text with a timestamped default filename", async ({
 
 test("applies the fontSize prop to the editor", async ({ page }) => {
   await page.goto("./cfasim-ui/components/param-editor");
-  // The "Custom font size" demo passes font-size="16px". vue-codemirror
-  // applies the wrapper's :style to the inner .cm-editor (the .v-codemirror
-  // wrapper is display:contents), so assert on that element.
+  // The "Custom font size" demo passes font-size="16px" on the editor host;
+  // the inner .cm-editor inherits it, so assert on that element.
   const editor = page.locator(".param-editor-cm .cm-editor").nth(2);
   await expect(editor).toBeVisible();
   await expect(editor).toHaveCSS("font-size", "16px");

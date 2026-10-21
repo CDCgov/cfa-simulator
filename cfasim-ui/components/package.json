@@ -38,15 +38,16 @@
   "dependencies": {
     "@internationalized/date": "3.12.2",
     "@cfasim-ui/shared": "workspace:*",
+    "@codemirror/autocomplete": "6.20.3",
+    "@codemirror/commands": "6.10.4",
     "@codemirror/lang-json": "6.0.2",
     "@codemirror/lang-yaml": "6.1.3",
     "@codemirror/language": "6.12.4",
     "@codemirror/legacy-modes": "6.5.3",
+    "@codemirror/state": "6.7.1",
     "@codemirror/view": "6.43.6",
-    "codemirror": "6.0.2",
     "reka-ui": "2.10.1",
     "smol-toml": "1.9.0",
-    "vue-codemirror": "6.1.1",
     "yaml": "2.9.0"
   },
   "peerDependencies": {
