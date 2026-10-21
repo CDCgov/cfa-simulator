@@ -97,7 +97,7 @@ run = "cargo fmt"
 
 # Run Rust tests
 [taskgroup.cli.test]
-run = "cargo test"
+run = "cargo test && cargo test -p cfasim-model --all-features"
 
 # Lint Rust code
 [taskgroup.cli.lint]

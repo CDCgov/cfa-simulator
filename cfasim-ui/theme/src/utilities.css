@@ -500,6 +500,9 @@
   .text-tertiary {
     color: var(--color-text-tertiary) !important;
   }
+  .text-error {
+    color: var(--color-error) !important;
+  }
 
   /* Visually hidden: hides content visually but keeps it available to
      screen readers. Focusable elements reappear on keyboard focus. Pinned to

@@ -24,10 +24,12 @@ struct SimulateArgs {
 
 /// Runs `n_simulations` independent realizations (seeds `0..n_simulations`)
 /// and returns one `time` column plus one `values_{i}` column per run, so
-/// the frontend can spaghetti-plot them.
+/// the frontend can spaghetti-plot them. An `Err` reaches the page as the
+/// `error` from `useOutputs`; a panic does too, with its file and line.
 #[wasm_bindgen]
-pub fn simulate(args: &str) -> JsValue {
-    let args: SimulateArgs = serde_json::from_str(args).expect("invalid simulate args");
+pub fn simulate(args: &str) -> Result<JsValue, JsError> {
+    let args: SimulateArgs = serde_json::from_str(args)
+        .map_err(|e| JsError::new(&format!("invalid simulate args: {e}")))?;
 
     let params = Parameters {
         infection_rate: args.infection_rate,
@@ -50,5 +52,5 @@ pub fn simulate(args: &str) -> JsValue {
         series = series.add_f64(&format!("values_{i}"), values);
     }
 
-    model_outputs([("series", series)])
+    Ok(model_outputs([("series", series)]))
 }

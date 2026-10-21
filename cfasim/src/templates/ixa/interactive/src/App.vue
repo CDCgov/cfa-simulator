@@ -17,7 +17,7 @@ const { useOutputs } = useModel("{{ module_name }}");
 // Bundle params as a JSON string so Rust deserializes a single `SimulateArgs`
 // struct (see `src/lib.rs`) instead of receiving each field positionally.
 const simArgs = computed(() => ({ json: JSON.stringify(params) }));
-const { outputs, loading } = useOutputs("simulate", simArgs);
+const { outputs, loading, error } = useOutputs("simulate", simArgs);
 
 // One translucent series per realization; the overlap reads as a fan.
 const series = computed(() => {
@@ -54,6 +54,7 @@ const series = computed(() => {
     </template>
     <h1>{{ project_name }}</h1>
     <p v-if="loading">Loading...</p>
+    <p v-else-if="error" class="text-error" v-text="error" />
     <LineChart
       v-else-if="series.length"
       :series="series"
