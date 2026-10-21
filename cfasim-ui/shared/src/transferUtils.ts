@@ -8,6 +8,8 @@ interface ModelOutputsResponsePayload {
   >;
 }
 
+export type WasmTrapKind = "call" | "init";
+
 export interface TransferableResponse {
   id: number;
   result?: unknown;
@@ -15,6 +17,13 @@ export interface TransferableResponse {
   bufferType?: string;
   modelOutputs?: ModelOutputsResponsePayload;
   error?: string;
+  /**
+   * The call died in a WebAssembly trap and the instance is no longer
+   * trustworthy: `"call"` inside the function, `"init"` while the module was
+   * initializing (its glue keeps the half-initialized instance, so only a new
+   * worker can retry).
+   */
+  trap?: WasmTrapKind;
 }
 
 const TYPED_ARRAY_CONSTRUCTORS: Record<
@@ -94,10 +103,12 @@ export function postErrorWithTransfer(
   port: typeof globalThis,
   id: number,
   error: unknown,
+  options: { trap?: WasmTrapKind } = {},
 ): void {
   port.postMessage({
     id,
     error: error instanceof Error ? error.message : String(error),
+    ...(options.trap ? { trap: options.trap } : {}),
   } satisfies TransferableResponse);
 }
 

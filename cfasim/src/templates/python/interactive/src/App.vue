@@ -9,7 +9,7 @@ const defaults = { steps: 10, rate: 2.5 };
 const params = reactive({ ...defaults });
 const { reset } = useUrlParams(params, defaults);
 const { useOutputs } = useModel("{{ module_name }}");
-const { outputs, loading } = useOutputs("simulate", params);
+const { outputs, loading, error } = useOutputs("simulate", params);
 </script>
 
 <template>
@@ -22,6 +22,7 @@ const { outputs, loading } = useOutputs("simulate", params);
     </template>
     <h1>{{ project_name }}</h1>
     <p v-if="loading">Loading...</p>
+    <p v-else-if="error" class="text-error" v-text="error" />
     <LineChart
       v-else-if="outputs?.series"
       :data="Array.from(outputs.series.column('values'))"

@@ -18,6 +18,33 @@ test("reed-frost model renders", async ({ page }) => {
   await expect(page.getByLabel("Population")).toBeVisible();
 });
 
+test("reed-frost reports a Rust panic and recovers on the next run", async ({
+  page,
+}) => {
+  // p = 2 makes the binomial probability exceed 1, which the model unwraps.
+  await page.goto("/reed-frost?p=2");
+  const error = page.locator("p", { hasText: "Model panicked at" });
+  await expect(error).toBeVisible({ timeout: 30_000 });
+  await expect(error).toContainText("src/model.rs:");
+  await expect(error).toContainText("ProbabilityTooLarge");
+
+  // The worker is replaced after the trap, so a valid run still works. The
+  // worker logs a timing line only when a call succeeds; the error is
+  // cleared when a run starts, so it alone would not prove the run finished.
+  const succeeded = page.waitForEvent("console", {
+    predicate: (msg) => /rust_example\.simulate \d/.test(msg.text()),
+    timeout: 30_000,
+  });
+  // Home moves the p slider to its minimum.
+  const slider = page.getByRole("slider", { name: "Transmission prob (p)" });
+  await slider.focus();
+  await slider.press("Home");
+  await expect(slider).toHaveAttribute("aria-valuenow", "0");
+  await succeeded;
+  await expect(error).toHaveCount(0);
+  await expect(page.locator(".line-chart-wrapper")).toBeVisible();
+});
+
 test("wasm urls carry the build hash from the vite plugin", async ({
   page,
 }) => {

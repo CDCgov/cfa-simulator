@@ -12,6 +12,7 @@ use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "tasks")]
 pub mod outputs_file;
+pub mod panic_hook;
 #[cfg(feature = "tasks")]
 pub mod tasks;
 

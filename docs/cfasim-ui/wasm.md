@@ -63,6 +63,34 @@ const { outputs, loading } = useOutputs("simulate", params);
 | `error`   | `Ref<string>`                      | Error message if the call failed   |
 | `loading` | `Ref<boolean>`                     | `true` while running               |
 
+## Errors and panics
+
+Both `run` and `useOutputs` set `error` to a string when a call fails, and the worker logs the same text with `console.error` as `[wasm-worker] <model>.<fn> failed: ...`, followed by the thrown error for its stack.
+
+For failures the model expects, return a `Result` and let wasm-bindgen throw it. The `Err` message is what the page sees:
+
+```rust
+#[wasm_bindgen]
+pub fn simulate(args: &str) -> Result<JsValue, JsError> {
+    let args: SimulateArgs = serde_json::from_str(args)
+        .map_err(|e| JsError::new(&format!("invalid simulate args: {e}")))?;
+    // ...
+    Ok(model_outputs([("series", series)]))
+}
+```
+
+A panic (`panic!`, `unwrap`, `expect`, an index out of range, ...) aborts the WebAssembly instance with an `unreachable` trap, which on its own carries no message. `cfasim-model` installs a panic hook that records the message and location, and the worker reports it as:
+
+```
+Model panicked at src/lib.rs:21:9: rate must be <= 5, got 9
+```
+
+An `unreachable` trap with nothing recorded is reported as an abort: the allocator giving up, or a panic after the model replaced the hook. Models built against cfasim-model 0.10.0 or older have no hook; their traps say so and ask for a rebuild.
+
+A panic does not unwind, so a `RefCell` borrow or a half-updated cache inside the instance stays poisoned, and a stack overflow (reported by the engine as a `RangeError`) leaves the wasm stack pointer wherever it was. After either, `runWasm` terminates the worker and starts a fresh one, re-sending the other calls that were in flight. Queued repeats of the trapped call, and every queued call into a model whose initialization trapped, fail with the same error instead, and that model is not retried for two seconds. The next call pays the module init cost again, as after `cancelWasm`.
+
+No `console_error_panic_hook` is needed in the model. One set from a `#[wasm_bindgen(start)]` function keeps working, since the hook from `cfasim-model` is installed after init and chains in front of it. A hook set later, such as `set_once()` at the top of an exported function, replaces the chain, and panics after that are reported without their message.
+
 ## ModelOutput
 
 A columnar data structure for model results. Each column is a typed array (`Float64Array`, `Int32Array`, `Uint32Array`, or `Uint8Array`).

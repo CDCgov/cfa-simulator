@@ -4,7 +4,7 @@ export {
   postErrorWithTransfer,
   unwrapResponse,
 } from "./transferUtils.js";
-export type { TransferableResponse } from "./transferUtils.js";
+export type { TransferableResponse, WasmTrapKind } from "./transferUtils.js";
 export { ModelOutput, isoDate, DATE_MISSING } from "./ModelOutput.js";
 export type {
   ColumnDescriptor,
@@ -19,7 +19,13 @@ export type {
   ModelOutputsFileHeader,
   ModelOutputsFileTable,
 } from "./decodeModelOutputs.js";
-export { describeWorkerError, MESSAGEERROR_TEXT } from "./workerError.js";
+export {
+  describeWorkerError,
+  describeWasmTrap,
+  describeWasmInitTrap,
+  isWasmTrap,
+  MESSAGEERROR_TEXT,
+} from "./workerError.js";
 export { formatNumber, isNumberFormat } from "./formatNumber.js";
 export type { NumberFormat, NumberFormatPreset } from "./formatNumber.js";
 export {
