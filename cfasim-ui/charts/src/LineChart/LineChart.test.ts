@@ -2009,6 +2009,10 @@ describe("LineChart", () => {
       // Offset to the right of the rule: the glyph body would extend back
       // across it, so the text hangs from its baseline instead.
       expect(text.attributes("dominant-baseline")).toBe("hanging");
+      // WebKit only honors the baseline on the tspan holding the glyphs.
+      expect(text.find("tspan tspan").attributes("dominant-baseline")).toBe(
+        "hanging",
+      );
     });
 
     it("keeps rotated text on the far side of its position from the anchor", () => {

@@ -461,6 +461,11 @@ function quadStartAngle(
         stroke-linejoin="round"
         paint-order="stroke fill"
       >
+        <!--
+          dominant-baseline is repeated on the innermost tspans: WebKit
+          only applies it on the element that holds the glyphs, so Safari
+          drew hanging rotated labels on the baseline side.
+        -->
         <tspan
           v-for="(line, li) in item.lines"
           :key="li"
@@ -472,6 +477,7 @@ function quadStartAngle(
             :key="ri"
             :font-weight="run.bold ? BOLD_FONT_WEIGHT : undefined"
             :font-style="run.italic ? 'italic' : undefined"
+            :dominant-baseline="item.textBaseline"
             >{{ run.text }}</tspan
           >
         </tspan>
