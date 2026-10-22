@@ -418,7 +418,7 @@ const summary = computed(() => {
       <h2>Parameters</h2>
       <div class="sidebar-controls">
         <Toggle v-model="useEditor" label="Edit as code" />
-        <Button variant="secondary" @click="reset">Reset</Button>
+        <Button variant="secondary" @click="reset()">Reset</Button>
       </div>
     </div>
     <ParamEditor

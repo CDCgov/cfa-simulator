@@ -202,6 +202,10 @@ importers:
       vue:
         specifier: 3.5.40
         version: 3.5.40(typescript@6.0.3)
+    devDependencies:
+      '@types/node':
+        specifier: 26.1.1
+        version: 26.1.1
 
   cfasim-ui/server:
     dependencies:
@@ -231,6 +235,9 @@ importers:
         specifier: 3.5.40
         version: 3.5.40(typescript@6.0.3)
     devDependencies:
+      '@types/node':
+        specifier: 26.1.1
+        version: 26.1.1
       '@vue/test-utils':
         specifier: 2.4.11
         version: 2.4.11(@vue/compiler-dom@3.5.40)(@vue/server-renderer@3.5.40)(vue@3.5.40(typescript@6.0.3))
@@ -258,6 +265,10 @@ importers:
       vue:
         specifier: 3.5.40
         version: 3.5.40(typescript@6.0.3)
+    devDependencies:
+      '@types/node':
+        specifier: 26.1.1
+        version: 26.1.1
 
   docs:
     dependencies:
@@ -329,6 +340,9 @@ importers:
         specifier: 5.2.0
         version: 5.2.0(@vue/compiler-sfc@3.5.40)(rolldown@1.1.5)(rollup@4.62.2)(vite@8.1.5(@types/node@26.1.1)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3))
     devDependencies:
+      '@types/topojson-specification':
+        specifier: 1.0.5
+        version: 1.0.5
       '@vitejs/plugin-vue':
         specifier: 6.0.8
         version: 6.0.8(vite@8.1.5(@types/node@26.1.1)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3))

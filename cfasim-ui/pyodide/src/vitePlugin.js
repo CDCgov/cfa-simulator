@@ -36,6 +36,7 @@ export function cfasimPyodide(options) {
     ...new Set([...DEFAULT_PYODIDE_PACKAGES, ...extraPackages]),
   ];
 
+  /** @param {string} root */
   function build(root) {
     const publicDir = resolve(root, "public");
     mkdirSync(publicDir, { recursive: true });

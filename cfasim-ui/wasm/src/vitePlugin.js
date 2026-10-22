@@ -44,6 +44,7 @@ export function hashWasmOutput(outDir, name) {
 export function cfasimWasm(options) {
   const modelDir = options?.model ?? "model";
 
+  /** @param {string} root */
   function build(root) {
     const name = (options?.name ?? basename(root)).replace(/-/g, "_");
     const outDir = resolve(root, "public", "wasm", name);
