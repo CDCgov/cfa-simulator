@@ -91,3 +91,46 @@ test("multi-handle slider exposes group and per-thumb ARIA", async ({
   await expect(covThumb).toHaveAttribute("aria-valuenow", "0.2");
   await expect(covThumb).toHaveAttribute("aria-valuetext", "20%");
 });
+
+test("disabled ranges block drags and keyboard steps", async ({ page }) => {
+  await page.goto("./cfasim-ui/components/number-input");
+  const season = field(page, "Season window");
+  const mask = await season
+    .locator(".slider-track")
+    .evaluate((el) => getComputedStyle(el).maskImage);
+  expect(mask).toContain("linear-gradient");
+  const thumbs = season.locator(".slider-thumb");
+  await expect(thumbs.first()).toHaveAttribute("aria-valuemin", "20");
+  await expect(thumbs.first()).toHaveAttribute("aria-valuemax", "90");
+
+  // Home targets 0, inside the first blocked stretch.
+  await thumbs.first().focus();
+  await page.keyboard.press("Home");
+  await expect(thumbs.first()).toHaveAttribute("aria-valuenow", "20");
+  await page.keyboard.press("ArrowLeft");
+  await expect(thumbs.first()).toHaveAttribute("aria-valuenow", "20");
+
+  // The upper handle starts at 70; stepping down past 60 jumps to 40.
+  await thumbs.nth(1).focus();
+  for (let i = 0; i < 10; i++) await page.keyboard.press("ArrowLeft");
+  await expect(thumbs.nth(1)).toHaveAttribute("aria-valuenow", "60");
+  await page.keyboard.press("ArrowLeft");
+  await expect(thumbs.nth(1)).toHaveAttribute("aria-valuenow", "40");
+  await page.keyboard.press("ArrowRight");
+  await expect(thumbs.nth(1)).toHaveAttribute("aria-valuenow", "60");
+
+  // A drag released near 47 lands on the near edge of the middle stretch.
+  const track = season.locator(".slider-track");
+  const box = (await track.boundingBox())!;
+  const thumbBox = (await thumbs.nth(1).boundingBox())!;
+  await page.mouse.move(
+    thumbBox.x + thumbBox.width / 2,
+    thumbBox.y + thumbBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.47, box.y + box.height / 2, {
+    steps: 5,
+  });
+  await page.mouse.up();
+  await expect(thumbs.nth(1)).toHaveAttribute("aria-valuenow", "40");
+});

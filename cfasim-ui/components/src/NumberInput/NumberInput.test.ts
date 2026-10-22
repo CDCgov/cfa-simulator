@@ -1640,4 +1640,215 @@ describe("NumberInput", () => {
       expect(input.attributes("aria-invalid")).toBe("true");
     });
   });
+
+  describe("disabledRanges", () => {
+    function mountRange(props: Record<string, unknown> = {}) {
+      const commits: NumberRange[] = [];
+      const wrapper = mount(NumberInput, {
+        attachTo: document.body,
+        props: {
+          range: [30, 70] as NumberRange,
+          min: 0,
+          max: 100,
+          label: "Window",
+          disabledRanges: [
+            [0, 20],
+            [40, 60],
+          ] as NumberRange[],
+          "onUpdate:range": (v: NumberRange | undefined) => {
+            if (v) commits.push(v);
+            wrapper.setProps({ range: v });
+          },
+          ...props,
+        },
+      });
+      return { wrapper, commits };
+    }
+
+    it("snaps and validates through split lower/upper bindings", async () => {
+      const lowers: number[] = [];
+      const uppers: number[] = [];
+      const wrapper = mount(NumberInput, {
+        attachTo: document.body,
+        props: {
+          lower: 30,
+          upper: 70,
+          min: 0,
+          max: 100,
+          label: "Window",
+          disabledRanges: [
+            [0, 20],
+            [40, 60],
+          ] as NumberRange[],
+          "onUpdate:lower": (v: number | undefined) => {
+            if (v != null) lowers.push(v);
+            wrapper.setProps({ lower: v });
+          },
+          "onUpdate:upper": (v: number | undefined) => {
+            if (v != null) uppers.push(v);
+            wrapper.setProps({ upper: v });
+          },
+        },
+      });
+      const slider = wrapper.findComponent({ name: "SliderRoot" });
+      slider.vm.$emit("valueCommit", [5, 52]);
+      expect(lowers.at(-1)).toBe(20);
+      expect(uppers.at(-1)).toBe(60);
+      await nextTick();
+
+      await wrapper.findAll(".slider-thumb")[1].trigger("keydown", {
+        key: "ArrowLeft",
+      });
+      slider.vm.$emit("valueCommit", [20, 59]);
+      slider.vm.$emit("update:modelValue", [20, 59]);
+      expect(uppers.at(-1)).toBe(40);
+
+      await wrapper.setProps({ upper: 50 });
+      expect(wrapper.find(".input-error").text()).toBe(
+        "Unavailable: 40–60 (upper)",
+      );
+      wrapper.unmount();
+    });
+
+    it("leaves values alone when the whole track is blocked", async () => {
+      const updates: number[] = [];
+      const wrapper = mount(NumberInput, {
+        props: {
+          modelValue: 50,
+          slider: true,
+          min: 0,
+          max: 100,
+          disabledRanges: [[0, 100]] as NumberRange[],
+          "onUpdate:modelValue": (v: number | undefined) => {
+            if (v != null) updates.push(v);
+          },
+        },
+      });
+      wrapper
+        .findComponent({ name: "SliderRoot" })
+        .vm.$emit("valueCommit", [30]);
+      expect(updates).toEqual([30]);
+      await wrapper.setProps({ modelValue: 30 });
+      expect(wrapper.find(".input-error").text()).toBe("Unavailable: 0–100");
+    });
+
+    it("snaps a dragged handle to the nearest allowed value", async () => {
+      const { wrapper, commits } = mountRange();
+      const slider = wrapper.findComponent({ name: "SliderRoot" });
+      slider.vm.$emit("valueCommit", [10, 70]);
+      expect(commits.at(-1)).toEqual([20, 70]);
+      slider.vm.$emit("valueCommit", [20, 52]);
+      expect(commits.at(-1)).toEqual([20, 60]);
+      slider.vm.$emit("valueCommit", [20, 48]);
+      expect(commits.at(-1)).toEqual([20, 40]);
+      wrapper.unmount();
+    });
+
+    it("keyboard steps jump across a blocked range", async () => {
+      const { wrapper, commits } = mountRange({ range: [20, 40] });
+      const thumbs = wrapper.findAll(".slider-thumb");
+      const slider = wrapper.findComponent({ name: "SliderRoot" });
+
+      // reka emits valueCommit and update:modelValue for one key press.
+      await thumbs[1].trigger("keydown", { key: "ArrowRight" });
+      slider.vm.$emit("valueCommit", [20, 41]);
+      slider.vm.$emit("update:modelValue", [20, 41]);
+      expect(commits.at(-1)).toEqual([20, 60]);
+      await nextTick();
+
+      await thumbs[1].trigger("keydown", { key: "ArrowLeft" });
+      slider.vm.$emit("valueCommit", [20, 59]);
+      expect(commits.at(-1)).toEqual([20, 40]);
+      await nextTick();
+
+      // Nothing allowed below 20, so stepping down stays put.
+      await thumbs[0].trigger("keydown", { key: "ArrowLeft" });
+      slider.vm.$emit("valueCommit", [19, 40]);
+      expect(commits.at(-1)).toEqual([20, 40]);
+      wrapper.unmount();
+    });
+
+    it("pointer moves after a key press snap to the nearest value again", async () => {
+      const { wrapper, commits } = mountRange({ range: [20, 40] });
+      const slider = wrapper.findComponent({ name: "SliderRoot" });
+      await wrapper.findAll(".slider-thumb")[1].trigger("keydown", {
+        key: "ArrowRight",
+      });
+      await wrapper.find(".slider-container").trigger("pointerdown");
+      slider.vm.$emit("valueCommit", [20, 45]);
+      expect(commits.at(-1)).toEqual([20, 40]);
+      wrapper.unmount();
+    });
+
+    it("snaps onto the step grid", () => {
+      const updates: number[] = [];
+      const wrapper = mount(NumberInput, {
+        props: {
+          modelValue: 50,
+          slider: true,
+          min: 0,
+          max: 100,
+          step: 5,
+          disabledRanges: [[0, 22]] as NumberRange[],
+          "onUpdate:modelValue": (v: number | undefined) => {
+            if (v != null) updates.push(v);
+          },
+        },
+      });
+      wrapper
+        .findComponent({ name: "SliderRoot" })
+        .vm.$emit("valueCommit", [10]);
+      expect(updates).toEqual([25]);
+    });
+
+    it("exposes the reachable bounds as aria-valuemin/max", async () => {
+      const { wrapper } = mountRange({
+        disabledRanges: [
+          [0, 20],
+          [80, 100],
+        ],
+      });
+      await nextTick();
+      for (const thumb of wrapper.findAll(".slider-thumb")) {
+        expect(thumb.attributes("aria-valuemin")).toBe("20");
+        expect(thumb.attributes("aria-valuemax")).toBe("80");
+      }
+      await wrapper.setProps({ disabledRanges: [] });
+      await nextTick();
+      expect(wrapper.find(".slider-thumb").attributes("aria-valuemin")).toBe(
+        "0",
+      );
+      wrapper.unmount();
+    });
+
+    it("flags a value set inside a blocked range", async () => {
+      const { wrapper } = mountRange();
+      await wrapper.setProps({ range: [10, 70] });
+      expect(wrapper.find(".input-error").text()).toBe(
+        "Unavailable: 0–20 (lower)",
+      );
+      await wrapper.setProps({ range: [20, 60] });
+      expect(wrapper.find(".input-error").exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it("text input arrow keys skip a blocked range", async () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          modelValue: 40,
+          disabledRanges: [[40, 60]] as NumberRange[],
+          "onUpdate:modelValue": (v: number | undefined) =>
+            wrapper.setProps({ modelValue: v }),
+        },
+      });
+      const input = wrapper.find("input");
+      await input.trigger("keydown", { key: "ArrowUp" });
+      expect(wrapper.props("modelValue")).toBe(60);
+      await input.trigger("keydown", { key: "ArrowDown" });
+      expect(wrapper.props("modelValue")).toBe(40);
+      await input.setValue("50");
+      await input.trigger("blur");
+      expect(wrapper.find(".input-error").text()).toBe("Unavailable: 40–60");
+    });
+  });
 });

@@ -20,6 +20,7 @@ const cutpoints = ref([10, 40, 75])
 const tiers = ref([25, 50, 80])
 const barSegments = ref([20, 45, 70])
 const barNone = ref(60)
+const seasonWindow = ref([30, 70])
 const dayMs = 24 * 60 * 60 * 1000
 const dateStart = Date.UTC(2024, 0, 1)
 const dateEnd = Date.UTC(2024, 11, 31)
@@ -387,6 +388,46 @@ const tiers = ref([25, 50, 80]);
 
 `bar` works in every mode, so a plain `slider` or a two-handle range can use
 `"none"` or `"segments"` too.
+
+### Disabled ranges
+
+`disabled-ranges` removes stretches of the track that handles can't land in.
+Drags snap to the nearest allowed value and arrow keys jump across the gap.
+
+<ComponentDemo>
+  <div style="width: 300px">
+    <NumberInput
+      v-model:range="seasonWindow"
+      label="Season window"
+      :min="0"
+      :max="100"
+      :disabled-ranges="[[0, 20], [40, 60], [90, 100]]"
+    />
+  </div>
+
+<template #code>
+
+```vue
+<script setup>
+import { ref } from "vue";
+const seasonWindow = ref([30, 70]);
+</script>
+
+<NumberInput
+  v-model:range="seasonWindow"
+  label="Season window"
+  :min="0"
+  :max="100"
+  :disabled-ranges="[
+    [0, 20],
+    [40, 60],
+    [90, 100],
+  ]"
+/>
+```
+
+  </template>
+</ComponentDemo>
 
 ### Accessibility
 

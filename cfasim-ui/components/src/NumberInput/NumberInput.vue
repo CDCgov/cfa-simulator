@@ -42,6 +42,11 @@ interface Props extends FieldProps {
   // Per-segment colors for `bar="segments"`, cycled if shorter than the
   // segment count. Defaults to a ramp of --color-primary.
   segmentColors?: string[];
+  // Intervals of the track the handles can't land in, left out of the drawn
+  // track. Edges stay selectable unless they are the track's own min/max, so
+  // [[0, 20]] on a 0 to 100 track allows 20 to 100. Drags snap to the nearest
+  // allowed value; keyboard steps jump across a blocked interval.
+  disabledRanges?: NumberRange[];
   numberType?: "integer" | "float";
   required?: boolean;
   decimals?: number;
@@ -106,6 +111,86 @@ onMounted(() => {
 const sliderMin = computed(() => props.min ?? 0);
 const sliderMax = computed(() => props.max ?? (props.percent ? 1 : 100));
 const sliderStep = computed(() => props.step ?? (props.percent ? 0.01 : 1));
+
+// `disabledRanges` clamped to the track, ordered, and merged where they
+// touch or overlap.
+const blockedRanges = computed<NumberRange[]>(() => {
+  const lo = sliderMin.value;
+  const hi = sliderMax.value;
+  const ranges = (props.disabledRanges ?? [])
+    .map(([a, b]): NumberRange => [
+      Math.max(lo, Math.min(a, b)),
+      Math.min(hi, Math.max(a, b)),
+    ])
+    .filter(([a, b]) => b > a)
+    .sort((x, y) => x[0] - y[0]);
+  const merged: NumberRange[] = [];
+  for (const [a, b] of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+    else merged.push([a, b]);
+  }
+  return merged;
+});
+
+function blockedRangeAt(v: number): NumberRange | undefined {
+  return blockedRanges.value.find(
+    ([a, b]) =>
+      (v > a || (v === a && a <= sliderMin.value)) &&
+      (v < b || (v === b && b >= sliderMax.value)),
+  );
+}
+
+// The selectable stretches between blocked ranges, shrunk onto the step grid
+// so a snapped handle never lands between steps.
+const allowedRanges = computed<NumberRange[]>(() => {
+  const lo = sliderMin.value;
+  const hi = sliderMax.value;
+  const step = sliderStep.value;
+  const d = Math.max(countDecimals(step), countDecimals(lo));
+  const toGrid = (v: number, round: (x: number) => number) =>
+    roundToDecimals(round((v - lo) / step) * step + lo, d);
+  const gaps: NumberRange[] = [];
+  let cursor = lo;
+  for (const [a, b] of blockedRanges.value) {
+    if (a > cursor) gaps.push([cursor, a]);
+    cursor = b;
+  }
+  if (hi > cursor) gaps.push([cursor, hi]);
+  return gaps
+    .map(([a, b]): NumberRange => [
+      toGrid(a, (x) => Math.ceil(x - 1e-9)),
+      toGrid(b, (x) => Math.floor(x + 1e-9)),
+    ])
+    .filter(([a, b]) => b >= a);
+});
+
+// Moves `v` out of a blocked range: in the direction of travel when there is
+// an allowed value that way, otherwise to the nearest one.
+function snapToAllowed(v: number, direction: number): number {
+  const ranges = allowedRanges.value;
+  if (blockedRanges.value.length === 0 || ranges.length === 0) return v;
+  if (ranges.some(([a, b]) => v >= a && v <= b)) return v;
+  if (direction > 0) {
+    const next = ranges.find(([a]) => a > v);
+    if (next) return next[0];
+  } else if (direction < 0) {
+    for (let i = ranges.length - 1; i >= 0; i--) {
+      if (ranges[i][1] < v) return ranges[i][1];
+    }
+  }
+  let best = v;
+  let bestDistance = Infinity;
+  for (const [a, b] of ranges) {
+    const candidate = Math.min(b, Math.max(a, v));
+    const distance = Math.abs(candidate - v);
+    if (distance < bestDistance) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
 
 // Count fractional digits in a finite number's decimal representation.
 // Uses toPrecision + parseFloat to mask float-multiplication artifacts
@@ -339,6 +424,10 @@ function validateScalar(v: number): string | undefined {
   if (inputMax.value != null && display > inputMax.value) {
     return `Max ${inputMax.value}${props.percent ? "%" : ""}`;
   }
+  const blocked = blockedRangeAt(v);
+  if (blocked) {
+    return `Unavailable: ${formatSliderValue(blocked[0])}–${formatSliderValue(blocked[1])}`;
+  }
   return undefined;
 }
 
@@ -400,8 +489,32 @@ function commit() {
   sliderArrayLocal.value = [next];
 }
 
+// Handle positions when the current key press started. Keyboard steps snap
+// in their direction of travel relative to these (ArrowRight at the lower
+// edge of a blocked range would otherwise snap straight back); pointer moves
+// snap to the nearest allowed value. reka emits both `valueCommit` and
+// `update:modelValue` for one key press, so both must see the same origin.
+let keyOrigin: number[] | null = null;
+
+function onSliderKeydown() {
+  keyOrigin = [...sliderArrayLocal.value];
+}
+
+function onSliderPointerdown() {
+  keyOrigin = null;
+}
+
+function snapSliderArray(v: number[]): number[] {
+  if (blockedRanges.value.length === 0) return v;
+  const origin = keyOrigin;
+  const snapped = v.map((x, i) =>
+    snapToAllowed(x, origin?.[i] !== undefined ? Math.sign(x - origin[i]) : 0),
+  );
+  return snapped.length > 1 ? snapped.sort((a, b) => a - b) : snapped;
+}
+
 function commitSliderArray(v: number[], asModel: boolean): void {
-  const coerced = v.map(coerceInteger);
+  const coerced = snapSliderArray(v.map(coerceInteger));
   sliderArrayLocal.value = coerced;
   if (!isRange && !isMulti) {
     local.value = formatForDisplay(toDisplay(coerced[0]));
@@ -471,22 +584,61 @@ function segmentColor(i: number, count: number): string {
   return `color-mix(in srgb, var(--color-primary) ${weight}%, var(--color-bg-3))`;
 }
 
+function trackPercent(v: number): number {
+  const span = sliderMax.value - sliderMin.value;
+  return Math.min(100, Math.max(0, ((v - sliderMin.value) / span) * 100));
+}
+
 // One band per handle: min → first, first → second, …, leaving the track
 // past the last handle empty.
 const segments = computed(() => {
-  const span = sliderMax.value - sliderMin.value;
-  if (!(span > 0)) return [];
+  if (!(sliderMax.value - sliderMin.value > 0)) return [];
   const stops = [sliderMin.value, ...sliderArrayLocal.value];
-  const pct = (v: number) =>
-    Math.min(100, Math.max(0, ((v - sliderMin.value) / span) * 100));
   return stops.slice(1).map((_, i) => {
-    const start = pct(stops[i]);
+    const start = trackPercent(stops[i]);
     return {
       left: start,
-      width: Math.max(0, pct(stops[i + 1]) - start),
+      width: Math.max(0, trackPercent(stops[i + 1]) - start),
       color: segmentColor(i, stops.length - 1),
     };
   });
+});
+
+// Cuts the blocked stretches out of the track, range fill included, so they
+// read as gaps.
+const trackMask = computed(() => {
+  if (blockedRanges.value.length === 0) return undefined;
+  const holes = blockedRanges.value.map(([a, b]) => {
+    const left = trackPercent(a);
+    const right = trackPercent(b);
+    return `#000 ${left}%, transparent ${left}% ${right}%, #000 ${right}%`;
+  });
+  const mask = `linear-gradient(90deg, #000 0%, ${holes.join(", ")}, #000 100%)`;
+  return { maskImage: mask, webkitMaskImage: mask };
+});
+
+// reka-ui binds aria-valuemin/max to the track's min/max after our attrs, so
+// the reachable bounds are written onto the thumbs after each render.
+const sliderContainer = ref<HTMLElement>();
+const ariaBounds = computed<NumberRange>(() => {
+  const ranges = allowedRanges.value;
+  if (blockedRanges.value.length === 0 || ranges.length === 0) {
+    return [sliderMin.value, sliderMax.value];
+  }
+  return [ranges[0][0], ranges[ranges.length - 1][1]];
+});
+
+function applyAriaBounds() {
+  const [lo, hi] = ariaBounds.value;
+  sliderContainer.value?.querySelectorAll('[role="slider"]').forEach((el) => {
+    el.setAttribute("aria-valuemin", String(lo));
+    el.setAttribute("aria-valuemax", String(hi));
+  });
+}
+
+onMounted(applyAriaBounds);
+watch([ariaBounds, () => sliderArrayLocal.value.length], applyAriaBounds, {
+  flush: "post",
 });
 
 function onSliderUpdate(v: number[] | undefined) {
@@ -508,8 +660,8 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
   if (props.numberType === "integer") next = Math.trunc(next);
   if (inputMin.value != null) next = Math.max(next, inputMin.value);
   if (inputMax.value != null) next = Math.min(next, inputMax.value);
-  local.value = formatForDisplay(next);
-  const nextModel = fromDisplay(next);
+  const nextModel = snapToAllowed(fromDisplay(next), direction);
+  local.value = formatForDisplay(toDisplay(nextModel));
   model.value = nextModel;
   sliderArrayLocal.value = [nextModel];
 }
@@ -555,7 +707,13 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
     <span v-if="validationError" :id="errorId" class="input-error" role="alert">
       {{ validationError }}
     </span>
-    <div v-if="isSlider" class="slider-container">
+    <div
+      v-if="isSlider"
+      ref="sliderContainer"
+      class="slider-container"
+      @keydown.capture="onSliderKeydown"
+      @pointerdown.capture="onSliderPointerdown"
+    >
       <SliderRoot
         class="slider-root"
         :role="isMultiHandle ? 'group' : undefined"
@@ -569,6 +727,7 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
       >
         <SliderTrack
           class="slider-track"
+          :style="trackMask"
           :class="{ 'slider-track-segmented': barMode === 'segments' }"
         >
           <SliderRange v-if="barMode === 'range'" class="slider-range" />
