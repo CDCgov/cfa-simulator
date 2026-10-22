@@ -792,7 +792,7 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
   display: flex;
   flex-direction: column;
   gap: 0.25em;
-  padding-top: 1.5em;
+  padding-top: 0.875em;
 }
 
 .slider-current {
@@ -800,8 +800,9 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
   bottom: 100%;
   left: 50%;
   transform: translateX(-50%);
-  margin-bottom: 1px;
+  margin-bottom: 2px;
   font-size: var(--font-size-xs);
+  line-height: 1;
   color: var(--color-text-secondary);
   white-space: nowrap;
   pointer-events: none;
