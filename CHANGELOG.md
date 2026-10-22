@@ -1,6 +1,17 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.12.0] - 2026-10-22
+
+### Bug Fixes
+
+- **charts:** Set dominant-baseline on annotation tspans so Safari hangs rotated labels
+- **charts:** Keep marker touch drags alive when the finger leaves the handle
+
+### Features
+
+- **server:** Accumulate emitted tables across a run and finalize on return
+
 ## [0.11.0] - 2026-10-22
 
 ### Chores
