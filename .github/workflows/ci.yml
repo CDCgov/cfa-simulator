@@ -81,6 +81,13 @@ jobs:
       - uses: ./.github/actions/setup-node
       - uses: astral-sh/setup-uv@v7
       - uses: ./.github/actions/setup-rust
+      # The demo models are excluded from the cargo workspace and build into
+      # their own target dirs, which setup-rust's cache does not cover.
+      - uses: actions/cache@v5
+        with:
+          path: models/src/*/model/target
+          key: models-wasm-${{ runner.os }}-${{ hashFiles('models/src/*/model/Cargo.lock') }}
+          restore-keys: models-wasm-${{ runner.os }}-
       - uses: ./.github/actions/setup-playwright
       - run: echo "week=$(date +%G-W%V)" >> "$GITHUB_OUTPUT"
         id: week
