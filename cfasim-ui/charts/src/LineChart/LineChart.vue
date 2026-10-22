@@ -2044,10 +2044,15 @@ function onMarkerPointerDown(index: number, e: PointerEvent) {
   // Keep the grab point fixed under the pointer instead of snapping the
   // line to the pointer x (the hit strip is wider than the line).
   const grabOffset = start - markerPointerX(e.clientX);
+  // Chrome ignores touch-action on SVG descendants, so once a finger
+  // moves it starts a page scroll and fires pointercancel, ending the
+  // drag. Cancelling touchmove keeps the gesture ours.
+  const blockScroll = (ev: TouchEvent) => ev.preventDefault();
   const cleanup = () => {
     window.removeEventListener("pointermove", move);
     window.removeEventListener("pointerup", finish);
     window.removeEventListener("pointercancel", cancel);
+    window.removeEventListener("touchmove", blockScroll);
     markerDragCleanup = null;
   };
   const pointerTarget = (ev: PointerEvent) =>
@@ -2070,6 +2075,7 @@ function onMarkerPointerDown(index: number, e: PointerEvent) {
   window.addEventListener("pointermove", move);
   window.addEventListener("pointerup", finish);
   window.addEventListener("pointercancel", cancel);
+  window.addEventListener("touchmove", blockScroll, { passive: false });
   markerDragCleanup = cleanup;
   markerDragState.value = { index, x: start };
 }

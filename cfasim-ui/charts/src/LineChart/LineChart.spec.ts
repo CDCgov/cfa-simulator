@@ -79,6 +79,59 @@ test("markers drag along the x-axis and update the bound model", async ({
   expect(movedBox!.x).toBeGreaterThan(startX + 60);
 });
 
+test.describe("touch", () => {
+  test.use({ hasTouch: true });
+
+  test("a marker keeps dragging when the finger leaves it", async ({
+    page,
+    context,
+    browserName,
+  }) => {
+    test.skip(browserName !== "chromium", "touch is dispatched through CDP");
+    await page.goto("./cfasim-ui/charts/line-chart");
+    const readout = page.locator(".marker-demo-readout");
+    await expect(readout).toContainText("Isolation: day 12.0");
+
+    const hit = page.locator('[data-testid="marker-hit"]').first();
+    await hit.scrollIntoViewIfNeeded();
+    const box = (await hit.boundingBox())!;
+    const x0 = box.x + box.width / 2;
+    const y0 = box.y + box.height / 2;
+    await page.evaluate(() => {
+      (window as any).__cancelled = 0;
+      window.addEventListener("pointercancel", () => {
+        (window as any).__cancelled++;
+      });
+    });
+
+    // Chrome ignores touch-action on SVG descendants: without the
+    // component cancelling touchmove, the page scroll claims the
+    // gesture after a few pixels and the drag ends in pointercancel.
+    const cdp = await context.newCDPSession(page);
+    const touch = (
+      type: "touchStart" | "touchMove" | "touchEnd",
+      x = 0,
+      y = 0,
+    ) =>
+      cdp.send("Input.dispatchTouchEvent", {
+        type,
+        touchPoints: type === "touchEnd" ? [] : [{ x, y }],
+      });
+    await touch("touchStart", x0, y0);
+    for (let i = 1; i <= 10; i++) {
+      // Drifts upward past the plot while moving right.
+      await touch("touchMove", x0 + 12 * i, y0 - 30 * i);
+      await page.waitForTimeout(16);
+    }
+    await touch("touchEnd");
+
+    expect(await page.evaluate(() => (window as any).__cancelled)).toBe(0);
+    const line = page.locator('[data-testid="marker-line"]').first();
+    const movedBox = (await line.boundingBox())!;
+    expect(movedBox.x).toBeGreaterThan(x0 + 100);
+  });
+});
+
 test("marker labels respond to arrow keys", async ({ page }) => {
   await page.goto("./cfasim-ui/charts/line-chart");
   const readout = page.locator(".marker-demo-readout");
