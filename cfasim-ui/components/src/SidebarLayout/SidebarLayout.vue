@@ -28,6 +28,8 @@ export interface Tab {
 const props = defineProps<{
   hideTopbar?: boolean;
   tabs?: Tab[];
+  /** Max width of the main content: a CSS length, or a number of pixels. Default 1024px. */
+  maxWidth?: string | number;
 }>();
 
 const tab = defineModel<string>("tab");
@@ -52,6 +54,14 @@ onUnmounted(() => {
 function toggle() {
   collapsed.value = !collapsed.value;
 }
+
+const mainContentStyle = computed(() => {
+  const w = props.maxWidth;
+  if (w === undefined) return undefined;
+  return {
+    "--main-content-max-width": typeof w === "number" ? `${w}px` : w,
+  };
+});
 
 const isRouterMode = computed(() => !!router && props.tabs?.some((t) => t.to));
 
@@ -154,7 +164,7 @@ if (globals) {
           </div>
         </div>
         <div class="MainScroll">
-          <div class="MainContent">
+          <div class="MainContent" :style="mainContentStyle">
             <slot />
           </div>
         </div>
@@ -177,7 +187,7 @@ if (globals) {
           </div>
         </div>
         <div class="MainScroll">
-          <div class="MainContent">
+          <div class="MainContent" :style="mainContentStyle">
             <slot />
           </div>
         </div>
@@ -362,7 +372,7 @@ if (globals) {
 }
 
 .MainContent {
-  max-width: 1024px;
+  max-width: var(--main-content-max-width, 1024px);
   padding: 0 var(--space-4);
 }
 

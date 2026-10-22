@@ -101,3 +101,27 @@ describe("SidebarLayout collapse accessibility", () => {
     expect(wrapper.find(".Toggle--expand").attributes("inert")).toBeUndefined();
   });
 });
+
+describe("SidebarLayout maxWidth", () => {
+  it("leaves the default width to CSS when unset", () => {
+    const wrapper = mount(SidebarLayout);
+    expect(wrapper.find(".MainContent").attributes("style")).toBeUndefined();
+  });
+
+  it("sets the content max width from a number or CSS length", async () => {
+    const wrapper = mount(SidebarLayout, { props: { maxWidth: 1400 } });
+    const style = () =>
+      (wrapper.find(".MainContent").element as HTMLElement).style;
+    expect(style().getPropertyValue("--main-content-max-width")).toBe("1400px");
+    await wrapper.setProps({ maxWidth: "none" });
+    expect(style().getPropertyValue("--main-content-max-width")).toBe("none");
+  });
+
+  it("applies to the tabbed layout", () => {
+    const wrapper = mount(SidebarLayout, {
+      props: { tabs, maxWidth: "80rem" },
+    });
+    const el = wrapper.find(".MainContent").element as HTMLElement;
+    expect(el.style.getPropertyValue("--main-content-max-width")).toBe("80rem");
+  });
+});

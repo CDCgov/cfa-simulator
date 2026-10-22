@@ -42,11 +42,12 @@ When the sidebar is collapsed it is marked [`inert`](https://developer.mozilla.o
 
 ## Props
 
-| Prop          | Type      | Default     | Description                                          |
-| ------------- | --------- | ----------- | ---------------------------------------------------- |
-| `hideTopbar`  | `boolean` | `false`     | Hides the topbar that contains the light/dark toggle |
-| `tabs`        | `Tab[]`   | `undefined` | Array of tab definitions to render in the main area  |
-| `v-model:tab` | `string`  | `undefined` | The active tab value (two-way binding)               |
+| Prop          | Type               | Default     | Description                                                                     |
+| ------------- | ------------------ | ----------- | ------------------------------------------------------------------------------- |
+| `hideTopbar`  | `boolean`          | `false`     | Hides the topbar that contains the light/dark toggle                            |
+| `tabs`        | `Tab[]`            | `undefined` | Array of tab definitions to render in the main area                             |
+| `maxWidth`    | `string \| number` | `1024px`    | Max width of the main content: a CSS length (`"none"` for full width) or pixels |
+| `v-model:tab` | `string`           | `undefined` | The active tab value (two-way binding)                                          |
 
 ### Tab type
 
