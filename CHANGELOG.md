@@ -1,6 +1,26 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.12.1] - 2026-10-22
+
+### Bug Fixes
+
+- **charts:** Resolve light-dark and nested var colors in exported SVG and PNG
+
+### Chores
+
+- Typecheck shared, wasm, pyodide, and models
+
+### Features
+
+- **ui:** Add disabledRanges to NumberInput slider
+- **ui:** Tighten spacing between NumberInput slider and its label
+- **ui:** Add maxWidth prop to SidebarLayout
+- **theme:** Add alias tokens for bg, surface, text-muted, accent, and danger
+- **ui:** Let SelectBox autocomplete clear via a clear button or deleting text, add required
+- **ui:** Keep NumberInput's last value when a required field is cleared
+- **charts:** Export chart download helpers, add svgToPngBlob and background option
+
 ## [0.12.0] - 2026-10-22
 
 ### Bug Fixes
