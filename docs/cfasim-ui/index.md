@@ -43,6 +43,8 @@ cfasim-ui is the shared component and theming library you use to make simulators
 - [DataTable](./charts/data-table) — table for columnar data or ModelOutput
 - [LineChart](./charts/line-chart) — responsive SVG line chart
 
+The export helpers behind the chart menu (standalone SVG, PNG blobs, file downloads) are documented under [Chart export](./export).
+
 ## Runtimes
 
 - [Pyodide](./pyodide) — run Python models via Pyodide Web Workers

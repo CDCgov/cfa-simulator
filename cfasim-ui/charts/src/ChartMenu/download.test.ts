@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { prepareSvgForExport } from "./download.js";
+import { prepareSvgForExport, svgToString } from "./download.js";
 
 function mountSvg(html: string): SVGSVGElement {
   const host = document.createElement("div");
@@ -92,5 +92,37 @@ describe("prepareSvgForExport", () => {
 
     const rect = svg.querySelector("rect") as SVGRectElement;
     expect(rect.getAttribute("fill")).toBe("var(--my-fill)");
+  });
+
+  it("paints a background rect behind the chart when asked", () => {
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = `<svg><circle r="1" /></svg>`;
+    document.body.appendChild(wrapper);
+    cleanup.push(wrapper);
+
+    const svg = wrapper.querySelector("svg") as SVGSVGElement;
+    expect(prepareSvgForExport(svg).querySelector("rect")).toBeNull();
+
+    const clone = prepareSvgForExport(svg, { background: "#123456" });
+    const first = clone.firstElementChild as SVGElement;
+    expect(first.tagName.toLowerCase()).toBe("rect");
+    expect(first.getAttribute("fill")).toBe("#123456");
+    expect(first.getAttribute("width")).toBe("100%");
+    expect(svg.querySelector("rect")).toBeNull();
+  });
+});
+
+describe("svgToString", () => {
+  it("serializes the standalone clone", () => {
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = `<svg width="10" height="10"><circle r="1" /></svg>`;
+    document.body.appendChild(wrapper);
+
+    const svg = wrapper.querySelector("svg") as SVGSVGElement;
+    const xml = svgToString(svg, { background: "white" });
+    expect(xml).toMatch(/^<svg[^>]*xmlns="http:\/\/www.w3.org\/2000\/svg"/);
+    expect(xml).toContain('fill="white"');
+    expect(xml).toContain("<circle");
+    wrapper.remove();
   });
 });

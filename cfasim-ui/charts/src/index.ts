@@ -61,3 +61,15 @@ export type {
 } from "./_shared/chartProps.js";
 export type { ChartMarker, ChartMarkerDragPayload } from "./_shared/markers.js";
 export type { BlendMode, LineMarkStyle } from "./_shared/chartProps.js";
+export {
+  downloadBlob,
+  downloadCsv,
+  prepareSvgForExport,
+  saveCanvasPng,
+  savePng,
+  saveSvg,
+  svgToPngBlob,
+  svgToString,
+  type PngExportOptions,
+  type SvgExportOptions,
+} from "./ChartMenu/download.js";

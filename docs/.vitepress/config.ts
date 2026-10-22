@@ -141,7 +141,10 @@ export default defineConfig({
           {
             text: "Charts",
             collapsed: false,
-            items: componentSidebarItems("charts"),
+            items: [
+              ...componentSidebarItems("charts"),
+              { text: "Chart export", link: "/cfasim-ui/export" },
+            ],
           },
           {
             text: "Runtimes",

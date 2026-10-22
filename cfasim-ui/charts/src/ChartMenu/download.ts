@@ -1,3 +1,4 @@
+/** Download `blob` as a file named `name` (extension included). */
 export function downloadBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -41,11 +42,19 @@ function resolveVarExpression(expr: string): string {
   return expr;
 }
 
+export interface SvgExportOptions {
+  /** Fill painted behind the chart. Default: none (transparent). */
+  background?: string;
+}
+
 /** Clone `svg` and inline the styles that don't survive a standalone render:
  *  inherited `color`/`font-*` on the root (so `currentColor` and unset
  *  font-family resolve), and `var(--…)` / `light-dark(…)` fill and stroke
  *  attributes replaced by the colors the page shows. */
-export function prepareSvgForExport(svg: SVGSVGElement): SVGSVGElement {
+export function prepareSvgForExport(
+  svg: SVGSVGElement,
+  options: SvgExportOptions = {},
+): SVGSVGElement {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
 
@@ -72,37 +81,87 @@ export function prepareSvgForExport(svg: SVGSVGElement): SVGSVGElement {
     }
   });
 
+  if (options.background) {
+    const rect = document.createElementNS(svg.namespaceURI, "rect");
+    rect.setAttribute("width", "100%");
+    rect.setAttribute("height", "100%");
+    rect.setAttribute("fill", options.background);
+    clone.insertBefore(rect, clone.firstChild);
+  }
+
   return clone;
 }
 
-export function saveSvg(svg: SVGSVGElement, filename: string) {
-  const clone = prepareSvgForExport(svg);
-  const xml = new XMLSerializer().serializeToString(clone);
-  downloadBlob(new Blob([xml], { type: "image/svg+xml" }), `${filename}.svg`);
+/** Serialize a standalone copy of `svg` (see `prepareSvgForExport`). */
+export function svgToString(
+  svg: SVGSVGElement,
+  options: SvgExportOptions = {},
+): string {
+  return new XMLSerializer().serializeToString(
+    prepareSvgForExport(svg, options),
+  );
 }
 
-export function savePng(svg: SVGSVGElement, filename: string) {
-  const clone = prepareSvgForExport(svg);
-  const xml = new XMLSerializer().serializeToString(clone);
-  const svgBlob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
-  const url = URL.createObjectURL(svgBlob);
-  const img = new Image();
+/** Download a standalone copy of `svg` as `<filename>.svg`. */
+export function saveSvg(
+  svg: SVGSVGElement,
+  filename: string,
+  options: SvgExportOptions = {},
+) {
+  downloadBlob(
+    new Blob([svgToString(svg, options)], { type: "image/svg+xml" }),
+    `${filename}.svg`,
+  );
+}
+
+export interface PngExportOptions extends SvgExportOptions {
+  /** Pixels per CSS pixel. Default: 2. */
+  scale?: number;
+}
+
+/** Rasterize `svg` to a PNG blob at its rendered size times `scale`. */
+export async function svgToPngBlob(
+  svg: SVGSVGElement,
+  options: PngExportOptions = {},
+): Promise<Blob> {
+  const { scale = 2 } = options;
   const w = svg.width.baseVal.value || svg.clientWidth;
   const h = svg.height.baseVal.value || svg.clientHeight;
-  const scale = 2;
-  img.onload = () => {
+  const url = URL.createObjectURL(
+    new Blob([svgToString(svg, options)], {
+      type: "image/svg+xml;charset=utf-8",
+    }),
+  );
+  try {
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("Could not render the chart SVG"));
+      img.src = url;
+    });
     const canvas = document.createElement("canvas");
     canvas.width = w * scale;
     canvas.height = h * scale;
     const ctx = canvas.getContext("2d")!;
     ctx.scale(scale, scale);
     ctx.drawImage(img, 0, 0, w, h);
-    canvas.toBlob((blob) => {
-      if (blob) downloadBlob(blob, `${filename}.png`);
-    });
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/png"),
+    );
+    if (!blob) throw new Error("Could not encode the chart PNG");
+    return blob;
+  } finally {
     URL.revokeObjectURL(url);
-  };
-  img.src = url;
+  }
+}
+
+/** Download `svg` rasterized as `<filename>.png`. */
+export async function savePng(
+  svg: SVGSVGElement,
+  filename: string,
+  options: PngExportOptions = {},
+) {
+  downloadBlob(await svgToPngBlob(svg, options), `${filename}.png`);
 }
 
 /**
@@ -116,6 +175,7 @@ export function saveCanvasPng(canvas: HTMLCanvasElement, filename: string) {
   }, "image/png");
 }
 
+/** Download `csv` as `<filename>.csv`. */
 export function downloadCsv(csv: string, filename: string) {
   downloadBlob(new Blob([csv], { type: "text/csv" }), `${filename}.csv`);
 }

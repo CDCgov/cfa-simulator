@@ -368,3 +368,30 @@ test("Save as SVG resolves theme colors to what the page shows", async ({
   expect(xml).toMatch(/id="export-direct" fill="rgb\(0, 0, 0\)"/);
   expect(xml).not.toMatch(/(fill|stroke)="[^"]*(var|light-dark)\(/);
 });
+
+test("Save as PNG downloads the chart at twice its size", async ({ page }) => {
+  await page.goto("./cfasim-ui/charts/line-chart");
+  const wrapper = page.locator(".line-chart-wrapper").first();
+  await expect(wrapper).toBeVisible();
+  const size = await wrapper.locator(":scope > svg").evaluate((svg) => ({
+    w: (svg as SVGSVGElement).width.baseVal.value,
+    h: (svg as SVGSVGElement).height.baseVal.value,
+  }));
+
+  await wrapper.getByRole("button", { name: "Chart options" }).click();
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("menuitem", { name: "Save as PNG" }).click(),
+  ]);
+  // The PNG signature plus the IHDR chunk fit in the first stream chunk.
+  const stream = await download.createReadStream();
+  const head: Uint8Array = (await stream[Symbol.asyncIterator]().next()).value;
+  stream.destroy();
+  const view = new DataView(head.buffer, head.byteOffset, head.byteLength);
+
+  expect(download.suggestedFilename()).toMatch(/\.png$/);
+  expect(String.fromCharCode(...head.subarray(1, 4))).toBe("PNG");
+  // IHDR width and height, big-endian, right after the 8-byte signature.
+  expect(view.getUint32(16)).toBe(size.w * 2);
+  expect(view.getUint32(20)).toBe(size.h * 2);
+});
