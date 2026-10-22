@@ -121,9 +121,9 @@ run = "pnpm dev"
 depends = ["build"]
 run = "pnpm exec vite build"
 
-# E2E tests for models
+# E2E tests for models, against the production build served by vite preview
 [taskgroup.models.test]
-depends = ["build"]
+depends = ["models.build"]
 run = "pnpm exec playwright test --config playwright.config.ts"
 git_hook = "pre-push"
 
