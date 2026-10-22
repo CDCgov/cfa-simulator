@@ -31,6 +31,20 @@ def slow_progress(ctx, steps: int = 50, delay: float = 0.2):
 
 
 @task
+def emit_only(ctx):
+    """Streams two tables and returns nothing; the run still ends final."""
+    ctx.emit({"a": ModelOutput().add_u32("i", np.arange(2))})
+    ctx.emit(b=ModelOutput().add_u32("i", np.arange(3)))
+
+
+@task
+def reshape(ctx):
+    """Re-emits a table with different columns; the warning must reach every run's log."""
+    ctx.emit(a=ModelOutput().add_u32("i", np.arange(1)))
+    ctx.emit(a=ModelOutput().add_f64("x", np.zeros(1)))
+
+
+@task
 def boom(ctx):
     raise RuntimeError("kaboom")
 

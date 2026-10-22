@@ -41,7 +41,7 @@ def simulate(ctx, steps: int = 10, rate: float = 2.5):
     return run_simulate(steps, rate)
 ```
 
-A task takes the context first and its inputs as keyword arguments, sent by the page as JSON. Return `model_outputs(...)` as a Pyodide model would, a dict of pandas or polars DataFrames, or call `ctx.emit(outputs)` for partial results along the way. Anything else a run produces (CSVs, figures, a report) goes in `ctx.run_dir`, and the page can list and download it.
+A task takes the context first and its inputs as keyword arguments, sent by the page as JSON. Return `model_outputs(...)` as a Pyodide model would, a dict of pandas or polars DataFrames, or call `ctx.emit(outputs)` for results along the way: emitted tables accumulate, so each call adds what is new (`ctx.emit(prior=frame)` works too) and the page shows everything emitted so far. Anything else a run produces (CSVs, figures, a report) goes in `ctx.run_dir`, and the page can list and download it.
 
 ## The page
 

@@ -7,7 +7,7 @@ the module and runs tasks one at a time. Nothing here imports beyond the
 standard library and numpy.
 """
 
-from .context import TaskContext
+from .context import SchemaChangeWarning, TaskContext
 from .tasks import task
 
-__all__ = ["task", "TaskContext"]
+__all__ = ["task", "TaskContext", "SchemaChangeWarning"]

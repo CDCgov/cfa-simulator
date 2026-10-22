@@ -128,8 +128,45 @@ def test_partial_emits(worker, tmp_path):
     outputs = [e for e in events if e["type"] == "outputs"]
     assert [(o["revision"], o["partial"], o["names"]) for o in outputs] == [
         (1, True, ["partial"]),
-        (2, False, ["final"]),
+        (2, False, ["partial", "final"]),
     ]
+    decoded = read_outputs(tmp_path / "outputs.cfasim")
+    assert list(decoded["outputs"]) == ["partial", "final"]
+
+
+def test_emit_only_task_ends_with_a_final_revision(worker, tmp_path):
+    worker.read_event()
+    worker.send(
+        cmd="run",
+        run_id="r",
+        task="emit_only",
+        inputs={},
+        run_dir=str(tmp_path),
+        csv=True,
+    )
+    events = worker.read_until("done", "error")
+    outputs = [e for e in events if e["type"] == "outputs"]
+    assert [(o["revision"], o["partial"], o["names"]) for o in outputs] == [
+        (1, True, ["a"]),
+        (2, True, ["a", "b"]),
+        (2, False, ["a", "b"]),
+    ]
+    assert events[-1]["type"] == "done"
+    assert (tmp_path / "a.csv").exists() and (tmp_path / "b.csv").exists()
+
+
+def test_schema_change_warning_reaches_every_run(worker, tmp_path):
+    worker.read_event()
+    for run in ("one", "two"):
+        worker.send(
+            cmd="run", run_id=run, task="reshape", inputs={}, run_dir=str(tmp_path)
+        )
+        events = worker.read_until("done", "error")
+        assert events[-1]["type"] == "done"
+        logs = [e["line"] for e in events if e["type"] == "log"]
+        assert any(
+            "replaced table 'a' with a different schema" in line for line in logs
+        ), run
 
 
 def test_error_and_unknown_task(worker, tmp_path):

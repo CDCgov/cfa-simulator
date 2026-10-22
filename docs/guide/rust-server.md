@@ -30,7 +30,7 @@ my-project/
 
 The scaffolded `src/main.rs` registers one task, `simulate`, with an inputs struct (`steps`, `rate`) and a `Default` for it, and calls `compute` from `src/lib.rs`. [Writing tasks in Rust](../cfasim-ui/server#writing-tasks-in-rust) walks through the same shape and lists what `Context` offers.
 
-A task takes the context first and an inputs struct deserialized from the JSON the page sends; the struct's `Default` describes the parameters (names and defaults) to the page, so give every field a default. Return `Outputs`, or call `ctx.emit(&outputs, true)?` for partial results along the way. Anything else a run produces (CSVs, figures, a report) goes in `ctx.run_dir()`, and the page can list and download it. `println!` inside a task lands in the run log. Inputs must be a struct (or `()` for none): a misspelled input name is rejected by the server before the run starts.
+A task takes the context first and an inputs struct deserialized from the JSON the page sends; the struct's `Default` describes the parameters (names and defaults) to the page, so give every field a default. Return `Outputs`, or call `ctx.emit(outputs)?` for results along the way: emitted tables accumulate, so each call adds what is new and the page shows everything emitted so far. Anything else a run produces (CSVs, figures, a report) goes in `ctx.run_dir()`, and the page can list and download it. `println!` inside a task lands in the run log. Inputs must be a struct (or `()` for none): a misspelled input name is rejected by the server before the run starts.
 
 The model itself stays in `src/lib.rs` as plain functions, so `cargo test` never needs the server.
 

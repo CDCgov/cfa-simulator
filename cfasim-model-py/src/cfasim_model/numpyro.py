@@ -162,7 +162,7 @@ def posterior_outputs(
             # The HPDI keys are named after `prob`, so read them positionally.
             site_rows.append([np.asarray(v).reshape(-1) for v in stats[name].values()])
     else:
-        # numpyro's split R-hat needs 4 draws per chain; an early partial
+        # numpyro's split R-hat needs 4 draws per chain; an early chunked
         # emit gets the summary statistics with NaN diagnostics.
         for arr in grouped.values():
             flat = arr.reshape(chains * draws, -1)
@@ -196,9 +196,9 @@ def run_mcmc(
     """Run ``mcmc`` and report progress through ``ctx``.
 
     With ``chunks > 1`` the sampling phase is split into equal pieces; after
-    each piece the posterior so far is emitted as partial outputs, so a UI can
-    show it filling in. Returns the samples grouped by chain. Afterwards
-    ``mcmc.get_samples()`` only holds the last chunk; use the return value.
+    each piece the posterior so far is emitted, so a UI can show it filling
+    in. Returns the samples grouped by chain. Afterwards ``mcmc.get_samples()``
+    only holds the last chunk; use the return value.
     """
     if chunks < 1:
         raise ValueError("chunks must be at least 1")
@@ -207,7 +207,7 @@ def run_mcmc(
         mcmc.run(rng_key, **model_kwargs)
         samples = _grouped_samples(mcmc, True)
         ctx.progress(1.0, "done")
-        ctx.emit(posterior_outputs(samples, sites=sites, prob=prob), partial=False)
+        ctx.emit(posterior_outputs(samples, sites=sites, prob=prob))
         return samples
 
     num_samples = mcmc.num_samples
@@ -239,10 +239,7 @@ def run_mcmc(
                 warmup_share + (1 - warmup_share) * (i + 1) / chunks,
                 f"chunk {i + 1}/{chunks}",
             )
-            ctx.emit(
-                posterior_outputs(samples, sites=sites, prob=prob),
-                partial=i + 1 < chunks,
-            )
+            ctx.emit(posterior_outputs(samples, sites=sites, prob=prob))
     finally:
         mcmc.num_samples = num_samples
     return samples

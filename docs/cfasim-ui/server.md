@@ -25,14 +25,14 @@ def simulate(ctx, steps: int = 10, rate: float = 2.5):
 
 The context gives a task three hooks and one directory:
 
-| Member                            | Purpose                                                                                                                |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `ctx.progress(fraction, message)` | Report progress in `[0, 1]` with an optional label                                                                     |
-| `ctx.log(line)`                   | Append a line to the run log. `print()` and `sys.stderr` output is captured too, including progress bars that use `\r` |
-| `ctx.emit(outputs, partial=True)` | Write `outputs.cfasim` now and tell the page a new revision is available. Call it repeatedly to stream partial results |
-| `ctx.run_dir`                     | The run's folder. Write CSVs, figures, or reports there; the page can list and download them                           |
+| Member                            | Purpose                                                                                                                                                                                                                                                     |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.progress(fraction, message)` | Report progress in `[0, 1]` with an optional label                                                                                                                                                                                                          |
+| `ctx.log(line)`                   | Append a line to the run log. `print()` and `sys.stderr` output is captured too, including progress bars that use `\r`                                                                                                                                      |
+| `ctx.emit(outputs, **tables)`     | Publish tables as a new revision of `outputs.cfasim`. Tables accumulate across emits (a repeated name replaces the earlier table, with a `SchemaChangeWarning` if its columns changed), so call it repeatedly to stream results; `ctx.clear()` forgets them |
+| `ctx.run_dir`                     | The run's folder. Write CSVs, figures, or reports there; the page can list and download them                                                                                                                                                                |
 
-A task may also return (or `emit`) a dict of pandas or polars DataFrames; each becomes a table through `ModelOutput.from_dataframe`, so a calibration task is usually "run the model, return the frames to plot". Inputs arrive as JSON; the server describes each task's parameters from its signature and rejects unknown or missing inputs before anything runs.
+A task may also return (or `emit`) a dict of pandas or polars DataFrames; each becomes a table through `ModelOutput.from_dataframe`, so a calibration task is usually "run the model, return the frames to plot". The run's final revision is the state when the task returns, merged with whatever it returned: a task that only emits still ends with a final revision, and CSVs (with `--csv`) are written then. Inputs arrive as JSON; the server describes each task's parameters from its signature and rejects unknown or missing inputs before anything runs.
 
 ## Writing tasks in Rust
 
@@ -76,12 +76,12 @@ fn main() {
 
 A task takes `&mut Context` and an inputs struct that is `Serialize + Deserialize + Default`: the defaults describe its parameters to the page, and the JSON the page sends is deserialized into it (a task without inputs takes `()`). It returns `Outputs` (named `ModelOutput` tables) or any error that converts into `Box<dyn Error>`, so `?` works with `anyhow` and `std::io`. A panic inside a task fails the run, not the worker.
 
-| Member                            | Purpose                                                                                                                                                                                                     |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ctx.progress(fraction, message)` | Report progress in `[0, 1]`; an empty message means none                                                                                                                                                    |
-| `ctx.log(line)`                   | Append a line to the run log. `println!` inside a task lands there too; `eprintln!` goes to the terminal. A child process inherits stdout, which is the event stream: pipe its stdout or point it at stderr |
-| `ctx.emit(&outputs, partial)?`    | Write `outputs.cfasim` now and tell the page a new revision is available; returns `io::Result<()>`                                                                                                          |
-| `ctx.run_dir()`                   | The run's folder for CSVs, figures, or reports                                                                                                                                                              |
+| Member                            | Purpose                                                                                                                                                                                                             |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.progress(fraction, message)` | Report progress in `[0, 1]`; an empty message means none                                                                                                                                                            |
+| `ctx.log(line)`                   | Append a line to the run log. `println!` inside a task lands there too; `eprintln!` goes to the terminal. A child process inherits stdout, which is the event stream: pipe its stdout or point it at stderr         |
+| `ctx.emit(outputs)?`              | Publish tables as a new revision of `outputs.cfasim`; returns `io::Result<()>`. Tables accumulate across emits as in Python (a replaced table whose columns changed logs a warning), and `ctx.clear()` forgets them |
+| `ctx.run_dir()`                   | The run's folder for CSVs, figures, or reports                                                                                                                                                                      |
 
 `Tasks::serve()` reads commands from stdin until `cfasim serve` closes it. `cfasim_model::outputs_file` has the file writer (`write_outputs`, `write_csvs`) if a plain binary wants to produce `.cfasim` files on its own.
 
@@ -259,15 +259,15 @@ Errors are `{ "error": "message" }` with a 4xx status.
 
 Every frame's `data` is JSON with `type`, `run_id`, `seq`, `time`, plus:
 
-| Event       | Fields                         | Meaning                                                                           |
-| ----------- | ------------------------------ | --------------------------------------------------------------------------------- |
-| `status`    | `status`                       | The run moved from queued to running                                              |
-| `progress`  | `fraction`, `message`          | Progress in `[0, 1]`                                                              |
-| `log`       | `stream`, `line`, `overwrite`  | A log line; `overwrite: true` replaces the previous overwrite line of that stream |
-| `outputs`   | `revision`, `partial`, `names` | A new `outputs.cfasim` is available; the client fetches `/outputs`                |
-| `done`      |                                | Finished successfully (terminal)                                                  |
-| `error`     | `message`, `traceback`         | Failed (terminal)                                                                 |
-| `cancelled` |                                | Cancelled (terminal)                                                              |
+| Event       | Fields                         | Meaning                                                                                                                                                                                                                             |
+| ----------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`    | `status`                       | The run moved from queued to running                                                                                                                                                                                                |
+| `progress`  | `fraction`, `message`          | Progress in `[0, 1]`                                                                                                                                                                                                                |
+| `log`       | `stream`, `line`, `overwrite`  | A log line; `overwrite: true` replaces the previous overwrite line of that stream                                                                                                                                                   |
+| `outputs`   | `revision`, `partial`, `names` | A new `outputs.cfasim` is available; the client fetches `/outputs`. `partial` is false once the task has returned; when it returned nothing new, the last revision is announced again with `partial: false` and the same `revision` |
+| `done`      |                                | Finished successfully (terminal)                                                                                                                                                                                                    |
+| `error`     | `message`, `traceback`         | Failed (terminal)                                                                                                                                                                                                                   |
+| `cancelled` |                                | Cancelled (terminal)                                                                                                                                                                                                                |
 
 ### Outputs file
 

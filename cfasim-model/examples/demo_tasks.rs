@@ -59,7 +59,7 @@ fn slow(ctx: &mut Context, inputs: SlowInputs) -> Result<Outputs> {
         ctx.progress(f64::from(i) / f64::from(inputs.steps), &format!("step {i}"));
         if i == 1 {
             let partial = ModelOutput::new(2).add_u32("i", vec![0, 1]);
-            ctx.emit(&Outputs::new().add("partial", partial), true)?;
+            ctx.emit(Outputs::new().add("partial", partial))?;
         }
         sleep(Duration::from_secs_f64(inputs.delay));
     }

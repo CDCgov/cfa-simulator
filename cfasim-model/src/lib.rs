@@ -86,6 +86,15 @@ impl ModelOutput {
         &self.columns
     }
 
+    /// Column names and wire types, the part of a table that should stay fixed
+    /// across emits (enum labels may grow).
+    pub fn schema(&self) -> Vec<(&str, &'static str)> {
+        self.columns
+            .iter()
+            .map(|(n, c)| (n.as_str(), c.type_name()))
+            .collect()
+    }
+
     pub fn add_f64(mut self, name: &str, data: Vec<f64>) -> Self {
         self.columns.push((name.to_string(), ColumnData::F64(data)));
         self
@@ -190,6 +199,29 @@ impl Outputs {
     pub fn add(mut self, name: &str, output: ModelOutput) -> Self {
         self.tables.push((name.to_string(), output));
         self
+    }
+
+    /// Take `other`'s tables: one with a name already here replaces it in
+    /// place, the rest are appended in order. Returns the names of replaced
+    /// tables whose [`ModelOutput::schema`] changed.
+    pub fn merge(&mut self, other: Outputs) -> Vec<String> {
+        let mut changed = Vec::new();
+        for (name, output) in other.tables {
+            match self.tables.iter_mut().find(|(n, _)| *n == name) {
+                Some(slot) => {
+                    if slot.1.schema() != output.schema() {
+                        changed.push(name);
+                    }
+                    slot.1 = output;
+                }
+                None => self.tables.push((name, output)),
+            }
+        }
+        changed
+    }
+
+    pub fn clear(&mut self) {
+        self.tables.clear();
     }
 
     pub fn tables(&self) -> &[(String, ModelOutput)] {

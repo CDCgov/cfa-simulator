@@ -58,11 +58,16 @@ pub const OUTPUTS_FILENAME: &str = "outputs.cfasim";
 ///
 /// `run_dir` belongs to the task: write CSVs, figures, or reports there and the
 /// server lists and serves them under `/api/runs/{id}/files`.
+///
+/// Tables emitted during a run accumulate: each `emit` adds to (or replaces by
+/// name) what earlier emits published, and the whole set is written as the
+/// next revision. The accumulated tables are held in memory until the run ends.
 pub struct Context {
     run_id: String,
     run_dir: PathBuf,
     write_csv: bool,
     revision: u32,
+    outputs: Outputs,
 }
 
 impl Context {
@@ -100,19 +105,52 @@ impl Context {
         );
     }
 
-    /// Write `outputs.cfasim` now and tell the page a new revision exists.
+    /// Publish tables as a new revision of `outputs.cfasim`.
     ///
-    /// Call it repeatedly with `partial = true` to stream intermediate results;
-    /// the worker emits a task's returned outputs as the final revision.
-    pub fn emit(&mut self, outputs: &Outputs, partial: bool) -> io::Result<()> {
-        write_outputs(&self.run_dir.join(OUTPUTS_FILENAME), outputs)?;
-        if self.write_csv && !partial {
-            write_csvs(&self.run_dir, outputs)?;
+    /// Tables from earlier emits stay unless a new one has the same name. Call
+    /// it repeatedly to stream intermediate results; the run's final revision
+    /// is the state when the task returns, merged with whatever it returned.
+    pub fn emit(&mut self, outputs: Outputs) -> io::Result<()> {
+        self.publish(outputs, false)
+    }
+
+    /// Forget the tables emitted so far; the next emit starts from nothing.
+    pub fn clear(&mut self) {
+        self.outputs.clear();
+    }
+
+    fn publish(&mut self, outputs: Outputs, final_: bool) -> io::Result<()> {
+        for name in self.outputs.merge(outputs) {
+            self.log(&format!(
+                "warning: emit replaced table {name:?} with a different schema"
+            ));
         }
+        write_outputs(&self.run_dir.join(OUTPUTS_FILENAME), &self.outputs)?;
         self.revision += 1;
+        self.announce(final_)
+    }
+
+    /// Publish what the task returned, if anything, as the final revision.
+    ///
+    /// With empty `outputs` the last revision is re-announced as final; a run
+    /// that never emitted gets no outputs event at all.
+    fn finish(&mut self, outputs: Outputs) -> io::Result<()> {
+        if !outputs.is_empty() {
+            return self.publish(outputs, true);
+        }
+        if self.revision == 0 {
+            return Ok(());
+        }
+        self.announce(true)
+    }
+
+    fn announce(&mut self, final_: bool) -> io::Result<()> {
+        if final_ && self.write_csv {
+            write_csvs(&self.run_dir, &self.outputs)?;
+        }
         self.send(
             "outputs",
-            json!({ "revision": self.revision, "partial": partial, "names": outputs.names() }),
+            json!({ "revision": self.revision, "partial": !final_, "names": self.outputs.names() }),
         );
         Ok(())
     }
@@ -326,6 +364,7 @@ impl Tasks {
             run_dir: PathBuf::from(command["run_dir"].as_str().unwrap_or(".")),
             write_csv: command["csv"].as_bool().unwrap_or(false),
             revision: 0,
+            outputs: Outputs::new(),
         };
         let inputs = command
             .get("inputs")
@@ -349,11 +388,9 @@ impl Tasks {
         };
         match result {
             Ok(outputs) => {
-                if !outputs.is_empty() {
-                    if let Err(e) = ctx.emit(&outputs, false) {
-                        post_error(&run_id, format!("writing outputs: {e}"));
-                        return;
-                    }
+                if let Err(e) = ctx.finish(outputs) {
+                    post_error(&run_id, format!("writing outputs: {e}"));
+                    return;
                 }
                 post("done", Some(&run_id), json!({}));
             }
@@ -428,8 +465,54 @@ mod tests {
             run_dir: std::env::temp_dir(),
             write_csv: false,
             revision: 0,
+            outputs: Outputs::new(),
         };
         assert!((tasks.tasks[0].run)(&mut ctx, json!({})).is_ok());
+    }
+
+    #[test]
+    fn emits_accumulate_in_the_outputs_file() {
+        use crate::ModelOutput;
+        let run_dir = std::env::temp_dir().join(format!("cfasim-emit-{}", std::process::id()));
+        std::fs::create_dir_all(&run_dir).unwrap();
+        let mut ctx = Context {
+            run_id: "r".into(),
+            run_dir: run_dir.clone(),
+            write_csv: true,
+            revision: 0,
+            outputs: Outputs::new(),
+        };
+        let table = |n: u32| ModelOutput::new(n as usize).add_u32("i", (0..n).collect());
+        ctx.emit(Outputs::new().add("a", table(1))).unwrap();
+        ctx.emit(Outputs::new().add("b", table(2)).add("a", table(3)))
+            .unwrap();
+        assert_eq!(ctx.revision(), 2);
+        assert_eq!(ctx.outputs.names(), ["a", "b"]);
+        assert_eq!(ctx.outputs.tables()[0].1.len(), 3);
+        assert!(!run_dir.join("a.csv").exists());
+        ctx.finish(Outputs::new()).unwrap();
+        assert_eq!(ctx.revision(), 2);
+        assert!(run_dir.join("a.csv").exists() && run_dir.join("b.csv").exists());
+        ctx.clear();
+        ctx.emit(Outputs::new().add("c", table(1))).unwrap();
+        assert_eq!(ctx.outputs.names(), ["c"]);
+        std::fs::remove_dir_all(run_dir).unwrap();
+    }
+
+    #[test]
+    fn merge_reports_schema_changes() {
+        use crate::ModelOutput;
+        let mut acc = Outputs::new()
+            .add("a", ModelOutput::new(1).add_u32("i", vec![0]))
+            .add("b", ModelOutput::new(1).add_u32("i", vec![0]));
+        let changed = acc.merge(
+            Outputs::new()
+                .add("a", ModelOutput::new(2).add_u32("i", vec![0, 1]))
+                .add("b", ModelOutput::new(1).add_f64("i", vec![0.0]))
+                .add("c", ModelOutput::new(1).add_u32("i", vec![0])),
+        );
+        assert_eq!(changed, ["b"]);
+        assert_eq!(acc.names(), ["a", "b", "c"]);
     }
 
     #[test]

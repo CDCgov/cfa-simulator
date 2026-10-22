@@ -154,8 +154,8 @@ class FakeCtx:
     def progress(self, fraction, message=None):
         self.progress_calls.append((round(fraction, 3), message))
 
-    def emit(self, outputs, *, partial=True):
-        self.emits.append((normalize_outputs(outputs), partial))
+    def emit(self, outputs):
+        self.emits.append(normalize_outputs(outputs))
 
 
 def test_run_mcmc_single_chunk(fake_numpyro):
@@ -165,7 +165,7 @@ def test_run_mcmc_single_chunk(fake_numpyro):
     assert mcmc.calls[0][3] == {"y": 1}
     assert samples["x"].shape == (1, 8)
     assert ctx.progress_calls[-1] == (1.0, "done")
-    assert len(ctx.emits) == 1 and ctx.emits[0][1] is False
+    assert len(ctx.emits) == 1
 
 
 def test_run_mcmc_chunked(fake_numpyro):
@@ -176,14 +176,9 @@ def test_run_mcmc_chunked(fake_numpyro):
     assert all(c[2] == 2 for c in mcmc.calls[1:])
     assert mcmc.num_samples == 8
     np.testing.assert_array_equal(samples["x"][0], np.arange(8))
-    assert [p for p, _ in ctx.emits] and [partial for _, partial in ctx.emits] == [
-        True,
-        True,
-        True,
-        False,
-    ]
-    assert ctx.emits[0][0]["outputs"]["posterior"]["length"] == 2
-    assert ctx.emits[-1][0]["outputs"]["posterior"]["length"] == 8
+    assert len(ctx.emits) == 4
+    assert ctx.emits[0]["outputs"]["posterior"]["length"] == 2
+    assert ctx.emits[-1]["outputs"]["posterior"]["length"] == 8
     fractions = [f for f, _ in ctx.progress_calls]
     assert fractions == sorted(fractions)
     assert fractions[1] == 0.5 and fractions[-1] == 1.0

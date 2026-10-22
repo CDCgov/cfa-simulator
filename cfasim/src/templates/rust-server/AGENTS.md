@@ -13,7 +13,7 @@ The JSON output gives every component's `name`, `slug`, `keywords`, and absolute
 `{{ project_name }}` is a [cfasim](https://cdcgov.github.io/cfa-simulator/docs/) simulation whose Rust model runs natively as **tasks on a local server**, not in the browser. The Vue page starts a task, streams its progress, and plots the outputs; every run is saved under `output/<run_id>/`.
 
 - Rust model: `src/lib.rs` — pure functions (e.g. `compute`), unit-tested with `cargo test`
-- Tasks: `src/main.rs` — the tasks binary. Functions registered with `Tasks::new().task(name, f)` from `cfasim_model::tasks` take `ctx: &mut Context` (`ctx.progress(fraction, message)`, `ctx.log(line)`, `ctx.emit(&outputs, partial)`, `ctx.run_dir()`) and an inputs struct (`Serialize + Deserialize + Default`, whose defaults describe the parameters to the page), and return `Outputs`
+- Tasks: `src/main.rs` — the tasks binary. Functions registered with `Tasks::new().task(name, f)` from `cfasim_model::tasks` take `ctx: &mut Context` (`ctx.progress(fraction, message)`, `ctx.log(line)`, `ctx.emit(outputs)`, `ctx.run_dir()`) and an inputs struct (`Serialize + Deserialize + Default`, whose defaults describe the parameters to the page), and return `Outputs`
 - Vue frontend: `interactive/src/App.vue` — wires UI components to the server via `useServerModel` from `cfasim-ui/server`
 - UI library: [`cfasim-ui`](https://cdcgov.github.io/cfa-simulator/docs/cfasim-ui/) — Vue components, charts, and composables; see the [Server](https://cdcgov.github.io/cfa-simulator/docs/cfasim-ui/server) page for the task API and protocol
 
@@ -31,7 +31,7 @@ The JSON output gives every component's `name`, `slug`, `keywords`, and absolute
 
 - Import UI components from `cfasim-ui/components`, charts from `cfasim-ui/charts`, the server composables from `cfasim-ui/server`, and utilities from `cfasim-ui/shared`.
 - Keep model logic in `src/lib.rs` as pure functions and call them from thin task functions in `src/main.rs`, so `cargo test` never needs the server.
-- Task inputs arrive as JSON and are deserialized with serde; `#[serde(default)]` plus a `Default` impl gives every input a default the page can show. Tasks return `Outputs` or call `ctx.emit(&outputs, true)?` for partial results; anything else a run produces (CSVs, figures) goes in `ctx.run_dir()`.
+- Task inputs arrive as JSON and are deserialized with serde; `#[serde(default)]` plus a `Default` impl gives every input a default the page can show. Tasks return `Outputs` or call `ctx.emit(outputs)?` for results along the way (emitted tables accumulate across calls); anything else a run produces (CSVs, figures) goes in `ctx.run_dir()`.
 - `println!` inside a task lands in the run log; `eprintln!` goes to the terminal. A child process spawned from a task inherits stdout, which is the event stream, so pipe its stdout or send it to stderr.
 - Icons: render Material Symbols with `<Icon icon="..." />` from `cfasim-ui/components`. A base set (e.g. `help`, `dark_mode`) works out of the box; to use any other icon you must register it — see [Registering icons](https://cdcgov.github.io/cfa-simulator/docs/cfasim-ui/components/icon#registering-icons). No icon webfont is loaded.
 - Use `useUrlParams` (from `cfasim-ui/shared`) to sync reactive parameters to the URL query string.

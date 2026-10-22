@@ -25,13 +25,14 @@ import math
 import os
 import sys
 import traceback
+import warnings
 from pathlib import Path
 
 import numpy as np
 
 from . import events
 from .capture import capture_output
-from .context import TaskContext
+from .context import SchemaChangeWarning, TaskContext
 from .tasks import get_registry, import_task_module
 
 SKIP_DIRS = frozenset({".venv", "venv", "site-packages", "node_modules", "__pycache__"})
@@ -120,15 +121,16 @@ def run_task(registry, post, command: dict) -> None:
     )
     spec = registry.get(name)
     failure = None
+    # The default filter shows a warning once per source line for the life of
+    # the process, which is every run of this worker; re-arm it per run.
+    warnings.simplefilter("always", SchemaChangeWarning)
     # The terminal event goes out after the capture block, so whatever the
     # capture flushes at the end (a last line without a newline) precedes it.
     with capture_output(post, run_id):
         try:
             if spec is None:
                 raise LookupError(f"unknown task {name!r}")
-            result = spec.fn(ctx, **inputs)
-            if result is not None:
-                ctx.emit(result, partial=False)
+            ctx._finish(spec.fn(ctx, **inputs))
         except BaseException as exc:  # noqa: BLE001 - any failure is the run's error
             failure = (f"{type(exc).__name__}: {exc}", traceback.format_exc())
     if failure is None:

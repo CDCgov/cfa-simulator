@@ -18,8 +18,8 @@ class Ctx:
     def progress(self, fraction, message=None):
         pass
 
-    def emit(self, outputs, *, partial=True):
-        self.emits.append((normalize_outputs(outputs), partial))
+    def emit(self, outputs):
+        self.emits.append(normalize_outputs(outputs))
 
 
 def model():
@@ -45,9 +45,9 @@ def test_chunked_run_mcmc(num_samples, chunks):
         ctx, make_mcmc(num_samples), jax.random.PRNGKey(0), chunks=chunks
     )
     assert samples["mu"].shape == (2, num_samples)
-    assert [partial for _, partial in ctx.emits] == [True] * (chunks - 1) + [False]
+    assert len(ctx.emits) == chunks
     per_chunk = num_samples // chunks
-    for i, (outputs, _) in enumerate(ctx.emits):
+    for i, outputs in enumerate(ctx.emits):
         draws = per_chunk * (i + 1)
         summary = outputs["outputs"]["summary"]
         stats = dict(zip([c["name"] for c in summary["columns"]], summary["buffers"]))

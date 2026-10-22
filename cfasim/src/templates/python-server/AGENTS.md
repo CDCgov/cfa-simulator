@@ -34,7 +34,7 @@ The JSON output gives every component's `name`, `slug`, `keywords`, and absolute
 
 - Import UI components from `cfasim-ui/components`, charts from `cfasim-ui/charts`, the server composables from `cfasim-ui/server`, and utilities from `cfasim-ui/shared`.
 - Keep model logic in pure functions and call them from thin `@task` wrappers so pytest never needs the server.
-- Task inputs arrive as JSON (numbers, strings, booleans, lists, dicts). Tasks return `model_outputs(...)` or call `ctx.emit(...)` for partial results; anything else a run produces (CSVs, figures) goes in `ctx.run_dir`.
+- Task inputs arrive as JSON (numbers, strings, booleans, lists, dicts). Tasks return `model_outputs(...)` or call `ctx.emit(...)` for results along the way (emitted tables accumulate across calls); anything else a run produces (CSVs, figures) goes in `ctx.run_dir`.
 - Icons: render Material Symbols with `<Icon icon="..." />` from `cfasim-ui/components`. A base set (e.g. `help`, `dark_mode`) works out of the box; to use any other icon you must register it — see [Registering icons](https://cdcgov.github.io/cfa-simulator/docs/cfasim-ui/components/icon#registering-icons). No icon webfont is loaded.
 - Use `useUrlParams` (from `cfasim-ui/shared`) to sync reactive parameters to the URL query string.
 - The server keeps one worker process alive between runs, so module-level setup in `tasks.py` (for example `numpyro.set_host_device_count`) runs once per worker. Editing a task file restarts the worker after the current run.
