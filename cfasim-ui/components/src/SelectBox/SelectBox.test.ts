@@ -128,6 +128,65 @@ describe("SelectBox", () => {
       expect(toggle.attributes("tabindex")).toBe("-1");
     });
 
+    it("shows a clear button only when there is something to clear", async () => {
+      const wrapper = mount(SelectBox, {
+        props: { options, modelValue: "", autocomplete: true },
+      });
+      expect(wrapper.find(".select-clear").exists()).toBe(false);
+      await wrapper.setProps({ modelValue: "daily" });
+      const clear = wrapper.find(".select-clear");
+      expect(clear.attributes("aria-label")).toBe("Clear");
+      expect(clear.attributes("tabindex")).toBe("-1");
+    });
+
+    it("clears the value and input from the clear button", async () => {
+      const wrapper = mount(SelectBox, {
+        props: {
+          options,
+          modelValue: "weekly",
+          autocomplete: true,
+          "onUpdate:modelValue": (v: string | undefined) =>
+            wrapper.setProps({ modelValue: v }),
+        },
+        attachTo: document.body,
+      });
+      await wrapper.find(".select-clear").trigger("click");
+      expect(wrapper.emitted("update:modelValue")).toEqual([[""]]);
+      const input = wrapper.find(".select-input").element as HTMLInputElement;
+      expect(input.value).toBe("");
+      expect(document.activeElement).toBe(input);
+      expect(wrapper.find(".select-clear").exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it("clears the value when the input text is deleted", async () => {
+      const wrapper = mount(SelectBox, {
+        props: { options, modelValue: "weekly", autocomplete: true },
+      });
+      const input = wrapper.find(".select-input");
+      await input.setValue("Week");
+      expect(wrapper.emitted("update:modelValue")).toBeUndefined();
+      await input.setValue("");
+      expect(wrapper.emitted("update:modelValue")).toEqual([[""]]);
+    });
+
+    it("keeps a required value: no clear button, deleting text does not clear", async () => {
+      const wrapper = mount(SelectBox, {
+        props: {
+          options,
+          modelValue: "weekly",
+          autocomplete: true,
+          required: true,
+        },
+      });
+      expect(wrapper.find(".select-clear").exists()).toBe(false);
+      const input = wrapper.find(".select-input");
+      expect(input.attributes("aria-required")).toBe("true");
+      await input.setValue("");
+      expect(wrapper.emitted("update:modelValue")).toBeUndefined();
+      expect(wrapper.find(".select-clear").exists()).toBe(false);
+    });
+
     it("falls back to ariaLabel when no label is given", () => {
       const wrapper = mount(SelectBox, {
         props: {

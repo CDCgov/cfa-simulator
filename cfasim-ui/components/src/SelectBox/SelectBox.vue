@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   ComboboxAnchor,
+  ComboboxCancel,
   ComboboxContent,
   ComboboxEmpty,
   ComboboxInput,
@@ -20,6 +21,7 @@ import {
   SelectValue,
   SelectViewport,
 } from "reka-ui";
+import { ref } from "vue";
 import Icon from "../Icon/Icon.vue";
 import FieldLabel from "../_internal/FieldLabel.vue";
 import { useField, type FieldProps } from "../_internal/field";
@@ -37,6 +39,11 @@ interface Props extends FieldProps {
   placeholder?: string;
   /** Turn the field into a filterable single-select autocomplete (combobox). */
   autocomplete?: boolean;
+  /**
+   * A value is required. In autocomplete mode there is no clear button, and
+   * deleting the text restores the selected label on close.
+   */
+  required?: boolean;
 }
 
 const props = defineProps<Props>();
@@ -46,6 +53,30 @@ const { id, labelId, ariaProps } = useField(props);
 // Shows the selected option's label in the combobox input when not filtering.
 function displayValue(value: string) {
   return props.options.find((o) => o.value === value)?.label ?? "";
+}
+
+// Text typed since the list opened. Not a v-model on ComboboxInput: reka
+// re-emits its stale prop a tick after setting the label, which blanks it.
+const searchTerm = ref("");
+
+// reka refills the input with the selected label on close, so deleting the
+// text would never clear the value. Clear it as soon as the input is emptied.
+function onInput(event: Event) {
+  searchTerm.value = (event.target as HTMLInputElement).value;
+  if (searchTerm.value === "" && model.value && !props.required) {
+    model.value = "";
+  }
+}
+
+function onOpenChange(open: boolean) {
+  if (!open) searchTerm.value = "";
+}
+
+// ComboboxCancel empties the DOM input and refocuses it; the value and our
+// copy of the search term are ours to reset.
+function clear() {
+  model.value = "";
+  searchTerm.value = "";
 }
 </script>
 
@@ -65,6 +96,7 @@ function displayValue(value: string) {
       v-model="model"
       open-on-click
       class="select-combobox-root"
+      @update:open="onOpenChange"
     >
       <ComboboxAnchor class="select-anchor">
         <ComboboxInput
@@ -72,8 +104,20 @@ function displayValue(value: string) {
           class="select-input"
           :display-value="displayValue"
           :placeholder="placeholder"
+          :aria-required="required || undefined"
           v-bind="ariaProps"
+          @input="onInput"
         />
+        <ComboboxCancel
+          v-if="!required && (model || searchTerm)"
+          class="select-clear"
+          aria-label="Clear"
+          @click="clear"
+        >
+          <span class="select-icon" aria-hidden="true">
+            <Icon icon="close" :size="16" />
+          </span>
+        </ComboboxCancel>
         <ComboboxTrigger class="select-icon-button" aria-label="Toggle options">
           <span class="select-icon" aria-hidden="true">
             <Icon icon="keyboard_arrow_down" :size="16" />
@@ -108,7 +152,11 @@ function displayValue(value: string) {
     </ComboboxRoot>
 
     <SelectRoot v-else v-model="model">
-      <SelectTrigger class="select-trigger" v-bind="ariaProps">
+      <SelectTrigger
+        class="select-trigger"
+        :aria-required="required || undefined"
+        v-bind="ariaProps"
+      >
         <SelectValue :placeholder="placeholder" />
         <span class="select-icon" aria-hidden="true">
           <Icon icon="keyboard_arrow_down" :size="16" />
@@ -227,7 +275,8 @@ function displayValue(value: string) {
   color: var(--color-text-secondary);
 }
 
-.select-icon-button {
+.select-icon-button,
+.select-clear {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
@@ -236,6 +285,14 @@ function displayValue(value: string) {
   background: none;
   color: inherit;
   cursor: pointer;
+}
+
+.select-clear {
+  color: var(--color-text-secondary);
+}
+
+.select-clear:hover {
+  color: inherit;
 }
 
 .select-icon {

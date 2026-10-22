@@ -14,6 +14,7 @@ filterable single-select combobox: type to narrow the options, just like
 import { ref } from 'vue'
 const interval = ref('weekly')
 const state = ref('')
+const frequency = ref('daily')
 </script>
 
 <ComponentDemo>
@@ -94,6 +95,8 @@ DOM.
 
 Add `autocomplete` to make the field filterable. Type to narrow the list; the
 selected option's label fills the input. `v-model` is still a single `string`.
+To clear the selection, press the × button or delete the input's text; either
+sets `v-model` to `""`.
 
 <ComponentDemo>
   <div style="width: 240px">
@@ -138,6 +141,46 @@ const state = ref("");
   </template>
 </ComponentDemo>
 
+### Required value
+
+Add `required` when the field must always hold a value. The × is hidden and
+deleting the text no longer clears the selection: the selected label comes
+back when the field closes.
+
+<ComponentDemo>
+  <div style="width: 240px">
+    <SelectBox
+      v-model="frequency"
+      autocomplete
+      required
+      label="Frequency"
+      :options="[
+        { value: 'daily', label: 'Daily' },
+        { value: 'weekly', label: 'Weekly' },
+        { value: 'monthly', label: 'Monthly' },
+      ]"
+    />
+  </div>
+
+<template #code>
+
+```vue
+<SelectBox
+  v-model="frequency"
+  autocomplete
+  required
+  label="Frequency"
+  :options="[
+    { value: 'daily', label: 'Daily' },
+    { value: 'weekly', label: 'Weekly' },
+    { value: 'monthly', label: 'Monthly' },
+  ]"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ## Accessibility
 
 In the default mode the field is a reka-ui Select; with `autocomplete` it's a
@@ -153,9 +196,12 @@ reka-ui Combobox following the
   the label is also wired to the input via `for`/`id`, so clicking it focuses
   the field; use `hide-label` to keep the label for screen readers while hiding
   it visually, or `aria-label` when there's no visible label text.
-- The chevron is a labelled toggle (`aria-label="Toggle options"`) kept out of
-  the tab order, and native browser autofill is disabled so it can't cover the
-  option list.
+- The chevron is a labelled toggle (`aria-label="Toggle options"`) and the ×
+  a labelled `Clear` button, both kept out of the tab order (keyboard users
+  clear by deleting the text), and native browser autofill is disabled so it
+  can't cover the option list.
+- `required` sets `aria-required` on the input (or the trigger without
+  `autocomplete`).
 
 <!--@include: ./_api/select-box.md-->
 
