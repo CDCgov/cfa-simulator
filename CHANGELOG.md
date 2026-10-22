@@ -1,6 +1,20 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.11.0] - 2026-10-22
+
+### Chores
+
+- **ci:** Cache the demo models' cargo targets and run the models e2e against the built app
+
+### Features
+
+- **wasm:** Better handling of wasm errors
+
+### Performance
+
+- **ui:** Ship per-module ESM with deps external, drop vue-codemirror, add consumer-build size check
+
 ## [0.10.0] - 2026-10-20
 
 ### Bug Fixes
