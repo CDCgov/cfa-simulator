@@ -331,3 +331,40 @@ test("tooltip stops at every x of every series, not just the first", async ({
   // Daily series has 29 points; the weekly one adds none outside that set.
   expect(labels.size).toBe(29);
 });
+
+test("Save as SVG resolves theme colors to what the page shows", async ({
+  page,
+}) => {
+  await page.goto("./cfasim-ui/charts/line-chart");
+  await page.evaluate(() => document.documentElement.classList.add("dark"));
+  const wrapper = page.locator(".line-chart-wrapper").first();
+  await expect(wrapper).toBeVisible();
+  // A paint through an alias token (var → var → light-dark) and a direct
+  // light-dark(): neither resolves once the svg leaves the page.
+  await wrapper.evaluate((el) => {
+    const svg = el.querySelector(":scope > svg")!;
+    for (const [id, fill] of [
+      ["alias", "var(--color-bg)"],
+      ["direct", "light-dark(#ffffff, #000000)"],
+    ]) {
+      const rect = document.createElementNS(svg.namespaceURI, "rect");
+      rect.id = `export-${id}`;
+      rect.setAttribute("fill", fill);
+      svg.appendChild(rect);
+    }
+  });
+
+  await wrapper.getByRole("button", { name: "Chart options" }).click();
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("menuitem", { name: "Save as SVG" }).click(),
+  ]);
+  const stream = await download.createReadStream();
+  let xml = "";
+  for await (const chunk of stream) xml += chunk;
+
+  expect(download.suggestedFilename()).toMatch(/\.svg$/);
+  expect(xml).toMatch(/id="export-alias" fill="rgb\(26, 26, 26\)"/);
+  expect(xml).toMatch(/id="export-direct" fill="rgb\(0, 0, 0\)"/);
+  expect(xml).not.toMatch(/(fill|stroke)="[^"]*(var|light-dark)\(/);
+});

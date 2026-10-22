@@ -17,17 +17,15 @@ const ROOT_INHERITED_PROPS = [
   "font-weight",
 ] as const;
 
-/** Presentation attributes that may contain `var(--…)` references. The
- *  fallback inside `var(--name, #fff)` is the only thing that renders when
- *  the custom property is undefined outside the page context — so we
- *  resolve them against the document's CSS custom properties before
- *  serializing. */
+/** Presentation attributes that may contain `var(--…)` or `light-dark(…)`.
+ *  Neither resolves in a standalone file, so they are replaced with the
+ *  paint the live element computed before serializing. */
 const VAR_RESOLVABLE_ATTRS = ["fill", "stroke"] as const;
+const THEME_PAINT = /var\(|light-dark\(/;
 
-/** Resolve a single `var(--name)` or `var(--name, fallback)` expression.
- *  Looks the name up on `document.documentElement` (where theme tokens are
- *  declared); falls back to the in-expression fallback, then the original
- *  expression if neither resolves. */
+/** Fallback when the live element has no computed paint (happy-dom): look a
+ *  single `var(--name, fallback)` up on `document.documentElement`. A token
+ *  defined with `light-dark()` or another `var()` comes back unresolved. */
 function resolveVarExpression(expr: string): string {
   const match = expr.match(
     /^\s*var\(\s*(--[\w-]+)\s*(?:,\s*([^)]*?)\s*)?\)\s*$/,
@@ -45,8 +43,8 @@ function resolveVarExpression(expr: string): string {
 
 /** Clone `svg` and inline the styles that don't survive a standalone render:
  *  inherited `color`/`font-*` on the root (so `currentColor` and unset
- *  font-family resolve), and any `var(--…)` references in fill/stroke
- *  attributes resolved against the document. */
+ *  font-family resolve), and `var(--…)` / `light-dark(…)` fill and stroke
+ *  attributes replaced by the colors the page shows. */
 export function prepareSvgForExport(svg: SVGSVGElement): SVGSVGElement {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
@@ -63,13 +61,16 @@ export function prepareSvgForExport(svg: SVGSVGElement): SVGSVGElement {
     [existingRootStyle, ...rootStyleParts].filter(Boolean).join("; "),
   );
 
-  for (const target of clone.querySelectorAll<SVGElement>("*")) {
+  // cloneNode keeps the tree shape, so the two lists line up by index.
+  const live = svg.querySelectorAll<SVGElement>("*");
+  clone.querySelectorAll<SVGElement>("*").forEach((target, i) => {
     for (const attr of VAR_RESOLVABLE_ATTRS) {
       const raw = target.getAttribute(attr);
-      if (!raw || !raw.includes("var(")) continue;
-      target.setAttribute(attr, resolveVarExpression(raw));
+      if (!raw || !THEME_PAINT.test(raw)) continue;
+      const computed = window.getComputedStyle(live[i]).getPropertyValue(attr);
+      target.setAttribute(attr, computed || resolveVarExpression(raw));
     }
-  }
+  });
 
   return clone;
 }
