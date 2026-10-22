@@ -165,7 +165,9 @@ describe("NumberInput", () => {
     const input = wrapper.find("input");
     await input.setValue("");
     await input.trigger("blur");
-    expect(wrapper.props("modelValue")).toBeUndefined();
+    // The model keeps its last number; only the field shows the error.
+    expect(wrapper.emitted("update:modelValue")).toBeUndefined();
+    expect(wrapper.props("modelValue")).toBe(42);
     expect(wrapper.find(".input-error").text()).toBe("Required");
     expect(input.attributes("aria-invalid")).toBe("true");
     expect(input.attributes("aria-required")).toBe("true");
@@ -175,13 +177,39 @@ describe("NumberInput", () => {
     await input.trigger("focus");
     await input.trigger("blur");
     expect((input.element as HTMLInputElement).value).toBe("");
-    expect(wrapper.props("modelValue")).toBeUndefined();
+    expect(wrapper.props("modelValue")).toBe(42);
     expect(wrapper.find(".input-error").text()).toBe("Required");
 
     // Entering a valid number clears the error.
     await input.setValue("7");
     await input.trigger("blur");
     expect(wrapper.props("modelValue")).toBe(7);
+    expect(wrapper.find(".input-error").exists()).toBe(false);
+  });
+
+  it("never emits undefined when required, even in live mode", async () => {
+    vi.useFakeTimers();
+    try {
+      const wrapper = mount(NumberInput, {
+        props: { modelValue: 42, required: true, live: true },
+      });
+      const input = wrapper.find("input");
+      await input.setValue("");
+      vi.advanceTimersByTime(400);
+      await input.trigger("blur");
+      expect(wrapper.emitted("update:modelValue")).toBeUndefined();
+      expect(wrapper.find(".input-error").text()).toBe("Required");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("emits undefined on clear when not required", async () => {
+    const wrapper = mount(NumberInput, { props: { modelValue: 42 } });
+    const input = wrapper.find("input");
+    await input.setValue("");
+    await input.trigger("blur");
+    expect(wrapper.emitted("update:modelValue")).toEqual([[undefined]]);
     expect(wrapper.find(".input-error").exists()).toBe(false);
   });
 

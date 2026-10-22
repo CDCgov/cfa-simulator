@@ -619,7 +619,9 @@ shows tenths of a percent). Set `decimals` explicitly to override.
 
 ### Required
 
-With `required`, clearing the field shows a validation error on commit.
+With `required`, clearing the field shows a validation error on commit and
+`v-model` keeps its last number, so the bound value is never `undefined`.
+Without it, clearing the field sets `v-model` to `undefined`.
 
 <ComponentDemo>
   <div style="width: 300px">

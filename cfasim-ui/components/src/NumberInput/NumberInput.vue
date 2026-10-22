@@ -453,9 +453,11 @@ function commit() {
   // it). Default `v-model` is scalar-only.
   const current = model.value;
   if (local.value.trim() === "") {
+    validationError.value = validate(undefined);
+    // Like a min/max error, a required field keeps its last value.
+    if (validationError.value) return;
     model.value = undefined;
     sliderArrayLocal.value = modelToSliderArray(undefined);
-    validationError.value = validate(undefined);
     return;
   }
   // Strip any characters that can't be part of a valid number literal.
