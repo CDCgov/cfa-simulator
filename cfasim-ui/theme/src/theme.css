@@ -43,6 +43,16 @@
   --color-success: light-dark(#28a745, #40c057);
   --color-warning: light-dark(#ffc107, #ffd43b);
 
+  /* Aliases for common token names, so they follow the theme and dark mode */
+  --color-bg: var(--color-bg-0);
+  --color-bg-subtle: var(--color-bg-1);
+  --color-surface: var(--color-bg-0);
+  --color-surface-muted: var(--color-bg-1);
+  --color-surface-hover: var(--color-bg-2);
+  --color-text-muted: var(--color-text-secondary);
+  --color-accent: var(--color-primary);
+  --color-danger: var(--color-error);
+
   /* Typography */
   --font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
