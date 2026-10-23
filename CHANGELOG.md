@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.12.2] - 2026-10-23
+
+### Bug Fixes
+
+- **charts:** Keep marks on a zoomed chart's data boundary whole instead of clipping them
+
 ## [0.12.1] - 2026-10-22
 
 ### Bug Fixes
