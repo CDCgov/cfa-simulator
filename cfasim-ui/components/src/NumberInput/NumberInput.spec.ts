@@ -99,6 +99,7 @@ test("disabled ranges block drags and keyboard steps", async ({ page }) => {
     .locator(".slider-track")
     .evaluate((el) => getComputedStyle(el).maskImage);
   expect(mask).toContain("linear-gradient");
+  await expect(season.locator(".slider-blocked")).toHaveCount(3);
   const thumbs = season.locator(".slider-thumb");
   await expect(thumbs.first()).toHaveAttribute("aria-valuemin", "20");
   await expect(thumbs.first()).toHaveAttribute("aria-valuemax", "90");

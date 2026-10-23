@@ -619,6 +619,13 @@ const trackMask = computed(() => {
   return { maskImage: mask, webkitMaskImage: mask };
 });
 
+const blockedBands = computed(() =>
+  blockedRanges.value.map(([a, b]) => {
+    const left = trackPercent(a);
+    return { left, width: Math.max(0, trackPercent(b) - left) };
+  }),
+);
+
 // reka-ui binds aria-valuemin/max to the track's min/max after our attrs, so
 // the reachable bounds are written onto the thumbs after each render.
 const sliderContainer = ref<HTMLElement>();
@@ -745,6 +752,13 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
             }"
           />
         </SliderTrack>
+        <span
+          v-for="(band, i) in blockedBands"
+          :key="`blocked-${i}`"
+          class="slider-blocked"
+          aria-hidden="true"
+          :style="{ left: `${band.left}%`, width: `${band.width}%` }"
+        />
         <SliderThumb
           v-for="(v, i) in sliderArrayLocal"
           :key="i"
@@ -835,6 +849,24 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
   border-radius: var(--radius-full);
 }
 
+/* Each gap the track mask cuts out gets a dotted line. Centered by layout,
+   not a transform, so the 1px dots land on whole pixels. */
+.slider-blocked {
+  position: absolute;
+  inset-block: 0;
+  height: 3px;
+  margin-block: auto;
+  background-image: linear-gradient(
+    90deg,
+    var(--color-border-hover) 1px,
+    transparent 1px
+  );
+  background-size: 3px 1px;
+  background-repeat: repeat-x;
+  background-position: 0 center;
+  pointer-events: none;
+}
+
 /* Clip square-cornered segments to the track's rounded ends. */
 .slider-track-segmented {
   overflow: hidden;
@@ -857,6 +889,10 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
 
   .slider-range {
     background-color: Highlight;
+  }
+
+  .slider-blocked {
+    background-image: linear-gradient(90deg, GrayText 1px, transparent 1px);
   }
 }
 
