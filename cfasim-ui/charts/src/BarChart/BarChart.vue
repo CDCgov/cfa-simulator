@@ -52,6 +52,7 @@ import {
   type LabelStyle,
   type ChartPadding,
   type BrushBox,
+  type PlotClipEdges,
 } from "../_shared/index.js";
 
 export type BarChartData = ChartData;
@@ -669,11 +670,35 @@ const fullValueExtent = computed(() =>
  * Visible value extent: a box zoom's window, else the extent of the
  * visible categories (so the axis rescales while zoomed along them).
  */
+/** Value extent of the visible categories' data. */
+const visibleValueExtent = computed(() => {
+  const { start, end } = visibleRange.value;
+  return dataValueExtent(start, end);
+});
+
 const valueExtent = computed(() => {
   const w = valueWindow.value;
   if (w) return { min: w.min, max: w.max, range: w.max - w.min || 1 };
+  return visibleValueExtent.value;
+});
+
+/**
+ * Plot edges the zoom window does not cut through: the category edges
+ * clamped to the first/last category, and the value edges while the value
+ * axis rescales to the visible bars (or a box edge at or past their
+ * extent). Whisker dots and caps on those edges are left whole.
+ */
+const clipOpen = computed<PlotClipEdges>(() => {
   const { start, end } = visibleRange.value;
-  return dataValueExtent(start, end);
+  const catLo = start <= 0;
+  const catHi = end >= categoryCount.value - 1;
+  const v = valueExtent.value;
+  const dv = visibleValueExtent.value;
+  const valLo = v.min <= dv.min;
+  const valHi = v.max >= dv.max;
+  return isVertical.value
+    ? { left: catLo, right: catHi, bottom: valLo, top: valHi }
+    : { top: catLo, bottom: catHi, left: valLo, right: valHi };
 });
 
 /** Size (in pixels) of the categorical axis. */
@@ -1741,6 +1766,7 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
           :padding="padding"
           :inner-w="innerW"
           :inner-h="innerH"
+          :open="clipOpen"
         />
         <ChartTitle
           :title="title"

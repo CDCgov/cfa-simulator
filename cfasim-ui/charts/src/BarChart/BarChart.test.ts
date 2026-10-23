@@ -2177,6 +2177,55 @@ describe("BarChart", () => {
       expect(wrapper.find("clipPath").exists()).toBe(true);
     });
 
+    it("leaves the marks on the visible value extent whole", async () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          ...zoomProps,
+          intervals: [{ x: 2, lower: 1, upper: 6, value: 6 }],
+        },
+      });
+      await brush(
+        wrapper,
+        { clientX: 50 + 54 * 1.5 },
+        { clientX: 50 + 54 * 3.5 },
+      );
+      // The value axis rescales to the visible marks, so the whisker's dot
+      // sits on the plot's top edge: the clip opens along the value axis
+      // and stays exact on the category edges, which cut bars off.
+      const clip = wrapper.find("clipPath rect");
+      const plotTop = Number(overlay(wrapper).attributes("y"));
+      const plotH = Number(overlay(wrapper).attributes("height"));
+      expect(clip.attributes("x")).toBe("50");
+      expect(clip.attributes("width")).toBe("540");
+      const clipTop = Number(clip.attributes("y"));
+      const dot = wrapper.find(".interval-dot");
+      expect(Number(dot.attributes("cy"))).toBe(plotTop);
+      expect(clipTop).toBeLessThanOrEqual(
+        plotTop - Number(dot.attributes("r")),
+      );
+      expect(clipTop + Number(clip.attributes("height"))).toBeGreaterThan(
+        plotTop + plotH,
+      );
+    });
+
+    it("clips a box zoom exactly on the value edge that cuts the bars", async () => {
+      const wrapper = mount(BarChart, { props: zoomProps });
+      const top = Number(overlay(wrapper).attributes("y"));
+      const h = Number(overlay(wrapper).attributes("height"));
+      await brush(
+        wrapper,
+        { clientX: 50 + 54 * 3.5, clientY: top + h / 2 },
+        { clientX: 50 + 54 * 5.5, clientY: top + h },
+      );
+      // The 50 spike continues past the window's top; the baseline is
+      // the data's own floor.
+      const clip = wrapper.find("clipPath rect");
+      expect(Number(clip.attributes("y"))).toBe(top);
+      expect(Number(clip.attributes("height"))).toBeGreaterThan(h);
+      expect(clip.attributes("x")).toBe("50");
+      expect(clip.attributes("width")).toBe("540");
+    });
+
     it("keeps a summary line aligned with the box-zoomed value axis", async () => {
       // The line's own scale is 0..1 over the full plot height.
       const wrapper = mount(BarChart, {

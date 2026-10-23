@@ -8,6 +8,12 @@ export {
   computeLogTickValues,
   type ScaleType,
 } from "./scale.js";
+export {
+  plotClipRect,
+  PLOT_CLIP_OVERHANG,
+  type PlotClipEdges,
+  type PlotClipRect,
+} from "./plotClip.js";
 export { useChartSize, type ChartSizeOptions } from "./useChartSize.js";
 export {
   useChartPadding,

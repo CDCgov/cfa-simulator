@@ -880,9 +880,11 @@ covers two kinds of zoom:
   selection becomes a box and the value axis zooms to it too.
 
 Pass `zoom="x"` to allow only the category zoom, whatever the drag's
-shape. While zoomed, a reset button appears at the top right;
-double-clicking the plot also resets, and <kbd>Esc</kbd> cancels a drag
-in progress.
+shape. While zoomed, marks outside the window are clipped at the edges
+the window cuts through; marks on an edge that is the visible data's own
+boundary (a whisker's dot at the top of the rescaled value axis) are left
+whole. A reset button appears at the top right; double-clicking the plot
+also resets, and <kbd>Esc</kbd> cancels a drag in progress.
 
 Drag-to-zoom is a mouse gesture. On touch screens (and with a pen) a drag
 keeps scrubbing the tooltip and scrolling the page, so the chart stays at

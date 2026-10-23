@@ -1750,7 +1750,10 @@ covers two kinds of zoom:
   becomes a box and the chart zooms both axes to it.
 
 Pass `zoom="x"` to allow only the x-range zoom, whatever the drag's
-height. While zoomed, marks outside the window are clipped and a reset
+height. While zoomed, marks outside the window are clipped at the edges
+the window cuts through; an edge that is the visible data's own boundary
+(the top and bottom of a rescaled y axis, or an x edge at the first or
+last point) leaves the dots and whisker caps sitting on it whole. A reset
 button appears at the top right; double-clicking the plot also resets,
 and <kbd>Esc</kbd> cancels a drag in progress. Repeated drags zoom
 further in, up to 10,000× per axis.

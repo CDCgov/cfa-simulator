@@ -3886,6 +3886,59 @@ describe("LineChart", () => {
       expect(Math.max(...ys)).toBe(60);
     });
 
+    it("leaves the marks on the window's extreme points whole", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          ...zoomProps,
+          series: [{ data: zoomProps.data, dots: true, dotRadius: 4 }],
+        },
+      });
+      await brush(wrapper, 158, 374);
+      await release(wrapper, 374);
+      // y rescales to the window's data (20..60), so the dots at x = 2 and
+      // x = 6 sit on the plot's bottom and top edges: the clip opens there
+      // and stays exact on the x edges, which cut through the line.
+      const clip = wrapper.find("clipPath rect");
+      expect(clip.attributes("x")).toBe("50");
+      expect(clip.attributes("width")).toBe("540");
+      expect(Number(clip.attributes("y"))).toBeLessThanOrEqual(10 - 4);
+      expect(
+        Number(clip.attributes("y")) + Number(clip.attributes("height")),
+      ).toBeGreaterThanOrEqual(270 + 4);
+      const cys = wrapper
+        .findAll("circle")
+        .map((c) => Number(c.attributes("cy")));
+      expect(cys).toContain(270);
+      expect(cys).toContain(10);
+    });
+
+    it("clips a box zoom exactly on the edges that cut through data", async () => {
+      const wrapper = mount(LineChart, { props: zoomProps });
+      // x = 2..6 (data 20..60), y = 40..80: the bottom edge cuts the line,
+      // nothing rises above the top edge.
+      await boxBrush(
+        wrapper,
+        { clientX: 158, clientY: 62 },
+        { clientX: 374, clientY: 166 },
+      );
+      const clip = wrapper.find("clipPath rect");
+      expect(Number(clip.attributes("y"))).toBeLessThan(10);
+      expect(
+        Number(clip.attributes("y")) + Number(clip.attributes("height")),
+      ).toBe(270);
+    });
+
+    it("opens the clip on an x edge clamped to the data's extent", async () => {
+      const wrapper = mount(LineChart, { props: zoomProps });
+      // Dragged past the plot's right edge (x = 590): the window ends at
+      // the last point, so that edge is open while the left one is exact.
+      await brush(wrapper, 158, 700);
+      await release(wrapper, 700);
+      const clip = wrapper.find("clipPath rect");
+      expect(clip.attributes("x")).toBe("50");
+      expect(Number(clip.attributes("width"))).toBeGreaterThan(540);
+    });
+
     it('never draws a box with zoom="x"', async () => {
       const wrapper = mount(LineChart, {
         props: { ...zoomProps, zoom: "x" as const },

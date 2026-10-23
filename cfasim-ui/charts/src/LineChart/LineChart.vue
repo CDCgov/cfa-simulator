@@ -80,6 +80,7 @@ import {
   type ChartMarkerDragPayload,
   type ChartPadding,
   type BrushBox,
+  type PlotClipEdges,
 } from "../_shared/index.js";
 
 /**
@@ -788,6 +789,11 @@ function dataYExtent(win: { min: number; max: number } | null) {
 
 const fullYExtent = computed(() => dataYExtent(null));
 
+/** Y extent of the data the x-window shows. */
+const visibleYExtent = computed(() =>
+  xZoomed.value ? dataYExtent(xDomain.value) : fullYExtent.value,
+);
+
 /**
  * Visible y extent: a box zoom's window, else the data's extent. While
  * only x is zoomed, y rescales to what the x-window shows.
@@ -795,7 +801,25 @@ const fullYExtent = computed(() => dataYExtent(null));
 const extent = computed(() => {
   const y = yWindow.value;
   if (y) return { min: y.min, max: y.max, range: y.max - y.min || 1 };
-  return xZoomed.value ? dataYExtent(xDomain.value) : fullYExtent.value;
+  return visibleYExtent.value;
+});
+
+/**
+ * Plot edges the zoom window does not cut through: the x edges clamped
+ * to the data's extent, and the y edges while y rescales to the visible
+ * data (or a box edge at or past it). Marks on those edges are left whole.
+ */
+const clipOpen = computed<PlotClipEdges>(() => {
+  const x = xDomain.value;
+  const fx = xExtent.value;
+  const y = extent.value;
+  const vy = visibleYExtent.value;
+  return {
+    left: x.min <= fx.min,
+    right: x.max >= fx.max,
+    bottom: y.min <= vy.min,
+    top: y.max >= vy.max,
+  };
 });
 
 function yPixel(v: number): number {
@@ -2145,6 +2169,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           :padding="padding"
           :inner-w="innerW"
           :inner-h="innerH"
+          :open="clipOpen"
         />
         <!-- taller clip for section fills that extend to the label bar -->
         <ChartPlotClip
@@ -2153,6 +2178,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           :padding="padding"
           :inner-w="innerW"
           :inner-h="innerH + sectionLayout.barOffset"
+          :open="{ left: clipOpen.left, right: clipOpen.right }"
         />
         <ChartTitle :title="title" :title-style="titleStyle" :bounds="bounds" />
         <!-- inline legend -->
