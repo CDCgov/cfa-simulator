@@ -1,3 +1,4 @@
+/// <reference path="../svg.d.ts" />
 // The base icon set, registered on first use of <Icon> so `icon="..."` works
 // with zero setup. These are bundled into the published package (each import
 // inlines a ~0.3-0.6 KB SVG at build time), so consumers need no install.

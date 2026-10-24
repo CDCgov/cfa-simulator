@@ -23,18 +23,22 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "@cfasim-ui/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
     "./hsa-mapping": {
+      "@cfasim-ui/source": "./src/hsa-mapping.ts",
       "types": "./dist/hsa-mapping.d.ts",
       "import": "./dist/hsa-mapping.js"
     },
     "./us-cities": {
+      "@cfasim-ui/source": "./src/us-cities.ts",
       "types": "./dist/us-cities.d.ts",
       "import": "./dist/us-cities.js"
     },
     "./us-hsa-topology": {
+      "@cfasim-ui/source": "./src/us-hsa-topology.ts",
       "types": "./dist/us-hsa-topology.d.ts",
       "import": "./dist/us-hsa-topology.js"
     },
