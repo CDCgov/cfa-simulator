@@ -65,6 +65,9 @@ import {
   type ChartTooltipValue,
   type BlendMode,
   type LineMarkStyle,
+  type PerPoint,
+  atPoint,
+  isPointFn,
   type ChartMarker,
   type ChartMarkerDragPayload,
   type ChartPadding,
@@ -115,8 +118,8 @@ export interface Series extends LineMarkStyle {
   x?: LineChartXInput;
   /** Overrides `opacity` for the line stroke only. */
   lineOpacity?: number;
-  /** Overrides `opacity` for the dots only. */
-  dotOpacity?: number;
+  /** Overrides `opacity` for the dots only; one value or one per point. */
+  dotOpacity?: PerPoint<number>;
   /** Draw the line. Default true. */
   line?: boolean;
   /**
@@ -136,7 +139,8 @@ export interface Series extends LineMarkStyle {
    * `outline` is true.
    */
   outlineWidth?: number;
-  dotFill?: string;
+  /** Dot fill color; one color or one per point. Defaults to `color`. */
+  dotFill?: PerPoint<string>;
   dotStroke?: string;
   /**
    * Whether this series contributes a value to the tooltip and shows a
@@ -863,16 +867,47 @@ function seriesCurve(s: ResolvedSeries): LineCurve | undefined {
   return s.curve ?? props.curve;
 }
 
-function toPoints(s: ResolvedSeries): { x: number; y: number }[] {
+interface DotPoint {
+  x: number;
+  y: number;
+  r: number;
+  fill: string;
+  opacity: number;
+}
+
+/** Dot positions with their `PerPoint` styles resolved. */
+function toPoints(s: ResolvedSeries, seriesIndex: number): DotPoint[] {
   const data = s.data;
-  const pts: { x: number; y: number }[] = [];
-  const win = cullWindow.value;
-  const xAt = (i: number) => seriesXAt(s, i);
+  const pts: DotPoint[] = [];
+  const zoomed = cullWindow.value !== null;
+  const left = padding.value.left;
+  const right = left + innerW.value;
+  const color = s.color ?? "currentColor";
+  const fn = [s.dotRadius, s.dotFill, s.dotOpacity].some(isPointFn);
   for (let i = 0; i < data.length; i++) {
     const xv = seriesXAt(s, i);
     if (!isFinite(data[i]) || !isFinite(xv)) continue;
-    if (win && !nearWindow(xAt, i, data.length, win)) continue;
-    pts.push({ x: xPixel(xv), y: yPixel(data[i]) });
+    const point = fn
+      ? {
+          value: data[i],
+          index: i,
+          x: xv + xDisplayOffset.value,
+          seriesIndex,
+          color,
+        }
+      : undefined;
+    const x = xPixel(xv);
+    const r = atPoint(s.dotRadius, i, point) ?? (s.strokeWidth ?? 1.5) + 1;
+    // Cull by the whole circle: a large radius can reach into the window.
+    if (zoomed && (x + r < left || x - r > right)) continue;
+    pts.push({
+      x,
+      y: yPixel(data[i]),
+      r,
+      fill: atPoint(s.dotFill, i, point) ?? color,
+      opacity:
+        atPoint(s.dotOpacity, i, point) ?? s.opacity ?? props.lineOpacity,
+    });
   }
   return pts;
 }
@@ -1000,13 +1035,17 @@ function sectionColor(sec: AreaSection): string {
 
 /** Per-series path (and dot points when enabled). */
 const seriesRender = computed(() =>
-  allSeries.value
-    .filter((s) => !isHidden(s.legend))
-    .map((s) => ({
-      s,
-      path: s.line !== false ? toPath(s) : "",
-      points: s.dots ? toPoints(s) : [],
-    })),
+  allSeries.value.flatMap((s, i) =>
+    isHidden(s.legend)
+      ? []
+      : [
+          {
+            s,
+            path: s.line !== false ? toPath(s) : "",
+            points: s.dots ? toPoints(s, i) : [],
+          },
+        ],
+  ),
 );
 
 /** Per-area fill path. */
@@ -2441,9 +2480,9 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
                 :key="j"
                 :cx="pt.x"
                 :cy="pt.y"
-                :r="s.dotRadius ?? (s.strokeWidth ?? 1.5) + 1"
-                :fill="s.dotFill ?? s.color ?? 'currentColor'"
-                :fill-opacity="s.dotOpacity ?? s.opacity ?? lineOpacity"
+                :r="pt.r"
+                :fill="pt.fill"
+                :fill-opacity="pt.opacity"
                 :stroke="s.dotStroke ?? 'none'"
                 :style="blendStyle(s.blendMode)"
               />

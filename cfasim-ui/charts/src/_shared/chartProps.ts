@@ -85,8 +85,8 @@ export interface LineMarkStyle {
   curve?: LineCurve;
   /** Draw a dot at each sample point. Default false. */
   dots?: boolean;
-  /** Radius of each dot in pixels. */
-  dotRadius?: number;
+  /** Radius of each dot in pixels, or one per point (see `PerPoint`). */
+  dotRadius?: PerPoint<number>;
   /** Label shown in the inline legend. */
   legend?: string;
   /**
@@ -250,6 +250,57 @@ export interface ChartCommonProps {
    * overlays room to extend past the data area without clipping.
    */
   chartPadding?: ChartPadding;
+}
+
+/** Whether a `PerPoint` style is a function, which needs a `PointContext`. */
+export function isPointFn(v: unknown): boolean {
+  return typeof v === "function";
+}
+
+/** The point a `PerPoint` style function is styling. */
+export interface PointContext {
+  /** The point's value. */
+  value: number;
+  /** Its index in the series' data. */
+  index: number;
+  /**
+   * Its x position in data units: epoch ms on a date axis, and the
+   * category index on a BarChart without a continuous `x`.
+   */
+  x: number;
+  /** Index of its series (or BarChart summary line). */
+  seriesIndex: number;
+  /** That series' resolved color. */
+  color: string;
+}
+
+/**
+ * A dot style that is one value for every point, an array (or typed
+ * array) parallel to the data with one value per point, or a function of
+ * the point, e.g. sizes or colors encoding a third variable on a scatter
+ * plot. `undefined` or `NaN` (from any of them) falls back to the default,
+ * so a typed array can mark missing entries with `NaN`.
+ */
+export type PerPoint<T> =
+  T | ArrayLike<T> | ((point: PointContext) => T | undefined);
+
+/**
+ * A `PerPoint` style's value for point `index`. `point` is only read by a
+ * function style, so callers build it only when one is set.
+ */
+export function atPoint<T>(
+  v: PerPoint<T> | undefined,
+  index: number,
+  point?: PointContext,
+): T | undefined {
+  const r =
+    typeof v === "function"
+      ? (v as (p: PointContext) => T | undefined)(point!)
+      : typeof v === "object" && v !== null
+        ? (v as ArrayLike<T>)[index]
+        : v;
+  // NaN is the only value not equal to itself.
+  return r === r ? r : undefined;
 }
 
 /**

@@ -917,6 +917,82 @@ Set `dots: true` to draw a dot at every point. `dotRadius`, `dotFill` and
   </template>
 </ComponentDemo>
 
+### Scatter with per-point size and color
+
+`dotRadius`, `dotFill` and `dotOpacity` also take an array (or typed
+array) parallel to the data, one value per point, so a `line: false`
+series becomes a scatter plot that encodes more variables, like
+Vega-Lite's `size`, `color` and `opacity` channels. Map your data to radii
+and colors yourself; an entry that is `undefined` (or `NaN` in a typed
+array) falls back to the series default. The chart reserves no room for
+dots, so give large ones space at the plot edges with `chart-padding`.
+
+They also take a function of the point, `{ value, index, x, seriesIndex,
+color }` (`color` is the series' resolved color), which suits one style
+shared across series. For example, keep each series' color but mark
+points over a threshold:
+
+```ts
+const dotFill = (p) => (p.value > 100 ? "#dc2626" : p.color);
+const series = runs.map((data) => ({ data, dots: true, dotFill }));
+```
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      {
+        x: [1.2, 1.8, 2.1, 2.6, 3.0, 3.4, 3.9, 4.3, 4.8, 5.5],
+        data: [12, 18, 15, 26, 30, 24, 38, 35, 44, 52],
+        line: false,
+        dots: true,
+        dotRadius: [3, 5, 4, 8, 10, 6, 12, 9, 14, 16],
+        dotFill: ['#93c5fd', '#93c5fd', '#93c5fd', '#3b82f6', '#3b82f6', '#3b82f6', '#1d4ed8', '#1d4ed8', '#1e3a8a', '#1e3a8a'],
+        dotOpacity: 0.8,
+      },
+    ]"
+    :height="220"
+    :chart-padding="16"
+    x-label="R₀"
+    y-label="Peak cases (%)"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    {
+      x: [1.2, 1.8, 2.1, 2.6, 3.0, 3.4, 3.9, 4.3, 4.8, 5.5],
+      data: [12, 18, 15, 26, 30, 24, 38, 35, 44, 52],
+      line: false,
+      dots: true,
+      // one radius and one color per point
+      dotRadius: [3, 5, 4, 8, 10, 6, 12, 9, 14, 16],
+      dotFill: [
+        '#93c5fd',
+        '#93c5fd',
+        '#93c5fd',
+        '#3b82f6',
+        '#3b82f6',
+        '#3b82f6',
+        '#1d4ed8',
+        '#1d4ed8',
+        '#1e3a8a',
+        '#1e3a8a',
+      ],
+      dotOpacity: 0.8,
+    },
+  ]"
+  :height="220"
+  :chart-padding="16"
+  x-label="R₀"
+  y-label="Peak cases (%)"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Many trajectories with low opacity
 
 For an ensemble of model runs, draw every trajectory faintly with the
@@ -2130,15 +2206,15 @@ interface Series {
   curve?: LineCurve; // "linear" | "step" | "step-before" | "step-after" | "monotone"
   opacity?: number;
   lineOpacity?: number; // overrides opacity for the line only
-  dotOpacity?: number; // overrides opacity for the dots only
+  dotOpacity?: PerPoint<number>; // overrides opacity for the dots only
   blendMode?: BlendMode; // CSS mix-blend-mode for the line and dots
   line?: boolean; // default: true
   outline?: boolean; // page-colored stroke drawn behind the line
   outlineColor?: string; // default: var(--color-bg-0, #fff)
   outlineWidth?: number; // extra width added to strokeWidth (default: 4)
   dots?: boolean;
-  dotRadius?: number;
-  dotFill?: string;
+  dotRadius?: PerPoint<number>; // one value, or one per point
+  dotFill?: PerPoint<string>;
   dotStroke?: string;
   legend?: string; // inline legend label, also names the tooltip row
   showInLegend?: boolean; // default: true when legend is set
@@ -2147,6 +2223,23 @@ interface Series {
   lower?: LineChartData; // per-point whisker bounds, parallel to y
   upper?: LineChartData;
   intervalStyle?: IntervalStyle; // styles those whiskers
+}
+```
+
+### PerPoint
+
+```ts
+// One value for every dot, one per point (array or typed array, parallel
+// to the data), or a function of the point. undefined / NaN falls back to
+// the default.
+type PerPoint<T> = T | ArrayLike<T> | ((point: PointContext) => T | undefined);
+
+interface PointContext {
+  value: number; // the point's value
+  index: number; // its index in the series' data
+  x: number; // data units; epoch ms on a date axis
+  seriesIndex: number;
+  color: string; // the series' resolved color
 }
 ```
 

@@ -66,6 +66,9 @@ import {
   visitCurveWindow,
   type CurvePoint,
   type LineCurve,
+  type PerPoint,
+  atPoint,
+  isPointFn,
 } from "../_shared/index.js";
 import {
   buildBarSlots,
@@ -1303,7 +1306,7 @@ type StyledSummaryLine = {
   blendMode?: BlendMode;
   curve?: LineCurve;
   dots: boolean;
-  dotRadius: number;
+  dotRadius?: PerPoint<number>;
   /** Null on the bars' shared value axis. */
   extent: { min: number; max: number } | null;
   legend?: string;
@@ -1312,7 +1315,8 @@ type StyledSummaryLine = {
 
 type ResolvedSummaryLine = StyledSummaryLine & {
   pathD: string;
-  points: { x: number; y: number }[];
+  /** Dot positions with their `PerPoint` radius resolved. */
+  points: { x: number; y: number; r: number }[];
 };
 
 /** Compute the line's own value extent. */
@@ -1378,7 +1382,7 @@ const summaryLinesStyled = computed<StyledSummaryLine[]>(() => {
       blendMode: line.blendMode,
       curve: line.curve,
       dots: line.dots ?? false,
-      dotRadius: line.dotRadius ?? (line.strokeWidth ?? 2) + 1,
+      dotRadius: line.dotRadius,
       extent: line.scale === "shared" ? null : computeLineExtent(line),
       legend: line.legend,
       showInLegend: line.showInLegend !== false,
@@ -1411,7 +1415,7 @@ const summaryLinesResolved = computed<ResolvedSummaryLine[]>(() => {
   const positions = summaryLinePositions.value;
   return summaryLinesStyled.value.flatMap((line, i): ResolvedSummaryLine[] => {
     if (isHidden(line.legend)) return [];
-    const points: CurvePoint[] = [];
+    const points: ResolvedSummaryLine["points"] = [];
     let d = "";
     let run: CurvePoint[] = [];
     const axis = isVertical.value ? "x" : "y";
@@ -1426,7 +1430,13 @@ const summaryLinesResolved = computed<ResolvedSummaryLine[]>(() => {
       const p = line.extent
         ? projectLinePoint(xv, yv, line.extent)
         : placePoint(positionPixel(xv), valuePixel(yv));
-      points.push(p);
+      if (line.dots) {
+        const point = isPointFn(line.dotRadius)
+          ? { value: yv, index: j, x: xv, seriesIndex: i, color: line.color }
+          : undefined;
+        const r = atPoint(line.dotRadius, j, point);
+        points.push({ ...p, r: r ?? line.strokeWidth + 1 });
+      }
       run.push(p);
     }
     d += curvePath(run, line.curve, { axis });
@@ -2556,7 +2566,7 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
                 :key="'sld' + i + '-' + j"
                 :cx="pt.x"
                 :cy="pt.y"
-                :r="line.dotRadius"
+                :r="pt.r"
                 :fill="line.color"
                 :fill-opacity="line.opacity"
                 :style="blendStyle(line.blendMode)"

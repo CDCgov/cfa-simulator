@@ -117,8 +117,10 @@ export type {
   LabelStyle,
   BlendMode,
   LineMarkStyle,
+  PerPoint,
+  PointContext,
 } from "./chartProps.js";
-export { blendStyle } from "./chartProps.js";
+export { blendStyle, atPoint, isPointFn } from "./chartProps.js";
 export {
   parseRgb,
   resolveColorToRgb,

@@ -74,7 +74,12 @@ export type {
   ChartTooltipBaseProps,
 } from "./_shared/chartProps.js";
 export type { ChartMarker, ChartMarkerDragPayload } from "./_shared/markers.js";
-export type { BlendMode, LineMarkStyle } from "./_shared/chartProps.js";
+export type {
+  BlendMode,
+  LineMarkStyle,
+  PerPoint,
+  PointContext,
+} from "./_shared/chartProps.js";
 export type { LineCurve } from "./_shared/curve.js";
 export {
   downloadBlob,

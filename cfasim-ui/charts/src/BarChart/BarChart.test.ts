@@ -1678,6 +1678,23 @@ describe("BarChart", () => {
       expect(wrapper.findAll("circle").length).toBe(3);
     });
 
+    it("sizes summary-line dots per point", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20, 30],
+          categories: ["a", "b", "c"],
+          summaryLines: [
+            { data: [1, NaN, 3], dots: true, dotRadius: [2, 9, 4] },
+          ],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const radii = wrapper.findAll("circle").map((c) => c.attributes("r"));
+      expect(radii).toEqual(["2", "4"]);
+    });
+
     it("skips non-finite points without breaking the path", () => {
       const wrapper = mount(BarChart, {
         props: {

@@ -176,6 +176,47 @@ describe("LineChart", () => {
     expect(wrapper.findAll("circle").length).toBe(2);
   });
 
+  it("applies per-point dot styles from arrays and functions", () => {
+    const wrapper = mount(LineChart, {
+      props: {
+        series: [
+          {
+            data: [0, NaN, 20],
+            dots: true,
+            dotRadius: [2, 9, 4],
+            dotFill: ["red", "green", "blue"],
+            // NaN marks a missing entry and falls back to the default.
+            dotOpacity: new Float64Array([0.5, 1, NaN]),
+          },
+          {
+            data: [5, 30],
+            color: "purple",
+            dots: true,
+            dotFill: (p) =>
+              p.value > 10 ? "orange" : `${p.color}/${p.seriesIndex}`,
+            dotRadius: (p) => (p.index === 0 ? undefined : 7),
+          },
+        ],
+        height: 100,
+        menu: false,
+      },
+    });
+    // The skipped NaN point does not shift the styles of the ones after it.
+    const circles = wrapper
+      .findAll("circle")
+      .map((c) => [
+        c.attributes("r"),
+        c.attributes("fill"),
+        c.attributes("fill-opacity"),
+      ]);
+    expect(circles).toEqual([
+      ["2", "red", "0.5"],
+      ["4", "blue", "1"],
+      ["2.5", "purple/1", "1"],
+      ["7", "orange", "1"],
+    ]);
+  });
+
   it("applies dotRadius", () => {
     const wrapper = mount(LineChart, {
       props: {
@@ -4009,6 +4050,29 @@ describe("LineChart", () => {
       expect(
         Math.max(...tickNumbers(wrapper, "y-tick")),
       ).toBeGreaterThanOrEqual(100);
+    });
+
+    it("culls dots by their circle while zoomed", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          ...zoomProps,
+          data: undefined,
+          series: [
+            {
+              data: zoomProps.data,
+              line: false,
+              dots: true,
+              // Point 8 sits two steps past the x = 2..6 window but is big
+              // enough to reach into it.
+              dotRadius: (p) => (p.index === 8 ? 300 : 3),
+            },
+          ],
+        },
+      });
+      await brush(wrapper, 158, 374);
+      await release(wrapper, 374);
+      const radii = wrapper.findAll("circle").map((c) => c.attributes("r"));
+      expect(radii).toEqual(["3", "3", "3", "3", "3", "300"]);
     });
 
     it("keeps monotone tangents at the culled edges of the zoom window", async () => {
