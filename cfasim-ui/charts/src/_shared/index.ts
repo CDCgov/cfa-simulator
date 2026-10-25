@@ -120,6 +120,7 @@ export type {
   PointContext,
 } from "./chartProps.js";
 export { blendStyle, atPoint, isPointFn } from "./chartProps.js";
+export { CATEGORICAL_COLORS } from "./palette.js";
 export {
   parseRgb,
   resolveColorToRgb,

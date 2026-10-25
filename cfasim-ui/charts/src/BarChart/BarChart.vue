@@ -69,6 +69,7 @@ import {
   type PerPoint,
   atPoint,
   isPointFn,
+  CATEGORICAL_COLORS,
 } from "../_shared/index.js";
 import {
   buildBarSlots,
@@ -249,7 +250,7 @@ export interface BarLabelStyle extends LabelStyle {
   minSize?: number;
 }
 
-interface BarChartProps extends ChartCommonProps {
+export interface BarChartProps extends ChartCommonProps {
   /** Single-series values. Equivalent to `y`. */
   data?: BarChartData;
   /** Single-series values (alias for `data`). */
@@ -1462,17 +1463,8 @@ function defaultLineColor(i: number): string {
   return DEFAULT_LINE_COLORS[i % DEFAULT_LINE_COLORS.length];
 }
 
-const DEFAULT_COLORS = [
-  "var(--color-primary, #3b82f6)",
-  "var(--color-accent, #f59e0b)",
-  "var(--color-success, #10b981)",
-  "var(--color-danger, #ef4444)",
-  "var(--color-info, #6366f1)",
-  "var(--color-warning, #d97706)",
-];
-
 function defaultColor(i: number): string {
-  return DEFAULT_COLORS[i % DEFAULT_COLORS.length];
+  return CATEGORICAL_COLORS[i % CATEGORICAL_COLORS.length];
 }
 
 const formatTooltipValue = makeTooltipValueFormatter(
