@@ -44,6 +44,11 @@ export {
   type ColumnAlign,
   type ColumnConfig,
   type ColumnWidth,
+  type CellSlotProps,
+  type CellTemplateFn,
+  type CellValue,
+  type SortDirection,
+  type TableSort,
 } from "./DataTable/DataTable.vue";
 export type { CityMarker, PlacedCity } from "./ChoroplethMap/cityLayout.js";
 export {

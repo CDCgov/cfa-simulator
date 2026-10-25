@@ -20,3 +20,44 @@ test("DataTable scrolls horizontally instead of overflowing a narrow viewport", 
   expect(box.outerRight).toBeLessThanOrEqual(box.parentRight + 0.5);
   expect(box.scrollWidth).toBeGreaterThan(box.clientWidth);
 });
+
+test("DataTable sorts rows when a sortable header is clicked", async ({
+  page,
+}) => {
+  await page.goto("./cfasim-ui/charts/data-table");
+  const table = page
+    .locator(".demo-preview .TableOuter")
+    .filter({ has: page.getByRole("button", { name: "Cases" }) });
+  const header = table.getByRole("columnheader", { name: "Cases" });
+  const cases = table.locator("tbody tr td:nth-child(2)");
+
+  await table.getByRole("button", { name: "Cases" }).click();
+  await expect(header).toHaveAttribute("aria-sort", "ascending");
+  await expect(cases).toHaveText(["88", "412", "1204", "5310"]);
+
+  await table.getByRole("button", { name: "Cases" }).press("Enter");
+  await expect(header).toHaveAttribute("aria-sort", "descending");
+  await expect(cases).toHaveText(["5310", "1204", "412", "88"]);
+
+  await expect(table.getByRole("button", { name: "Rate" })).toHaveCount(0);
+});
+
+test("DataTable renders several columns through one shared cell template", async ({
+  page,
+}) => {
+  await page.goto("./cfasim-ui/charts/data-table");
+  const table = page
+    .locator(".demo-preview .TableOuter")
+    .filter({ hasText: "Stroke" });
+  const row = table.locator("tbody tr").first();
+  const swatches = row.locator("td span[style] > span");
+  await expect(swatches).toHaveCount(2);
+  await expect(swatches.nth(0)).toHaveCSS(
+    "background-color",
+    "rgb(158, 202, 225)",
+  );
+  await expect(swatches.nth(1)).toHaveCSS(
+    "background-color",
+    "rgb(43, 140, 190)",
+  );
+});

@@ -174,6 +174,119 @@ cell in a column — handy when whole-column styling (background, border,
 font weight) should match across the header and data. `cellClass` keeps
 its meaning (body cells only).
 
+### Sortable columns
+
+Pass `sortable` to make every column header a button that sorts the rows.
+Clicking a header cycles ascending, descending, then back to the data's
+own order. Numbers and dates sort numerically, strings naturally
+(`"x2"` before `"x10"`), enum columns by label, and missing values (empty,
+`NaN`, missing dates) always sort last. Sorting happens before `max-rows`
+is applied, and CSV exports follow the displayed order. Set
+`sortable` in `column-config` to opt individual columns in or out, and bind
+`v-model:sort` (`{ column, direction } | null`) to control or read the
+sort.
+
+<ComponentDemo>
+  <DataTable
+    :data="{ state: ['Ohio', 'Texas', 'Maine', 'Iowa'], cases: [1204, 5310, 88, 412], rate: [0.012, 0.018, 0.006, 0.013] }"
+    sortable
+    :column-config="{
+      state: { label: 'State' },
+      cases: { label: 'Cases', align: 'right' },
+      rate: { label: 'Rate', format: 'percent:1', sortable: false },
+    }"
+  />
+
+<template #code>
+
+```vue
+<script setup lang="ts">
+import { ref } from "vue";
+import type { TableSort } from "@cfasim-ui/charts";
+
+const sort = ref<TableSort | null>(null);
+</script>
+
+<template>
+  <DataTable
+    v-model:sort="sort"
+    :data="{
+      state: ['Ohio', 'Texas', 'Maine', 'Iowa'],
+      cases: [1204, 5310, 88, 412],
+      rate: [0.012, 0.018, 0.006, 0.013],
+    }"
+    sortable
+    :column-config="{
+      state: { label: 'State' },
+      cases: { label: 'Cases', align: 'right' },
+      rate: { label: 'Rate', format: 'percent:1', sortable: false },
+    }"
+  />
+</template>
+```
+
+  </template>
+</ComponentDemo>
+
+### Custom cell content
+
+To render cells with your own markup or components, such as a color
+swatch, set `template` on a column in `column-config` and pass a
+`<template #name>` with that name. Several columns can share one template.
+It gets `{ value, text, row, column }`: the raw value, the default text (with
+`format` applied), the row index in the source data (unaffected by
+sorting) and the column name. Templates only change what is displayed:
+sorting uses the raw values and CSV exports use the text.
+
+`template` can also be a function `(value, row) => name | undefined` that
+picks a template per cell from the data; returning `undefined` renders the
+plain text. For example, to render missing colors as text instead of a
+swatch:
+
+```ts
+fill: { template: (value) => (value ? "swatch" : undefined) },
+```
+
+<ComponentDemo>
+  <DataTable
+    :data="{ series: ['Susceptible', 'Infected', 'Recovered'], fill: ['#9ecae1', '#fc9272', '#a1d99b'], stroke: ['#2b8cbe', '#e34a33', '#31a354'] }"
+    :column-config="{ series: { label: 'Series' }, fill: { label: 'Fill', template: 'swatch' }, stroke: { label: 'Stroke', template: 'swatch' } }"
+  >
+    <template #swatch="{ value, text }">
+      <span style="display: inline-flex; align-items: center; gap: 0.5em">
+        <span :style="{ width: '1em', height: '1em', borderRadius: '2px', background: value }" />
+        {{ text }}
+      </span>
+    </template>
+  </DataTable>
+
+<template #code>
+
+```vue
+<DataTable
+  :data="{
+    series: ['Susceptible', 'Infected', 'Recovered'],
+    fill: ['#9ecae1', '#fc9272', '#a1d99b'],
+    stroke: ['#2b8cbe', '#e34a33', '#31a354'],
+  }"
+  :column-config="{
+    series: { label: 'Series' },
+    fill: { label: 'Fill', template: 'swatch' },
+    stroke: { label: 'Stroke', template: 'swatch' },
+  }"
+>
+  <template #swatch="{ value, text }">
+    <span class="swatch-cell">
+      <span class="swatch" :style="{ background: value }" />
+      {{ text }}
+    </span>
+  </template>
+</DataTable>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Full width
 
 By default the table sizes to its content (columns default to a fixed
@@ -358,6 +471,29 @@ interface ColumnConfig {
   /** Allow cell contents to wrap. Default `false` (nowrap + ellipsis). */
   wrap?: boolean;
   format?: NumberFormat | ((value: CellValue, row: number) => string);
+  /** Override the table-level `sortable` prop for this column. */
+  sortable?: boolean;
+  /**
+   * Name of a `<template #name>` that renders this column's body cells, or
+   * a function choosing one per cell (`undefined` = plain text).
+   */
+  template?:
+    | string
+    | ((value: CellValue | undefined, row: number) => string | undefined);
+}
+
+interface CellSlotProps {
+  value: CellValue | undefined;
+  /** Default text, with `format` applied. */
+  text: string;
+  /** Row index in the source data, unaffected by sorting. */
+  row: number;
+  column: string;
+}
+
+interface TableSort {
+  column: string;
+  direction: "asc" | "desc";
 }
 
 type CellValue = number | string | boolean;

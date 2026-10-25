@@ -247,6 +247,229 @@ describe("Table", () => {
     expect(th.attributes("style")).toBeUndefined();
   });
 
+  describe("cell slots", () => {
+    it("renders columns through the template named in columnConfig", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: {
+            name: ["a", "b"],
+            fill: ["#f00", "#00f"],
+            stroke: ["#0f0", "#000"],
+          },
+          columnConfig: {
+            fill: { template: "swatch", format: (v: unknown) => `c:${v}` },
+            stroke: { template: "swatch" },
+          },
+        },
+        slots: {
+          swatch: `<template #swatch="{ value, text, row, column }">
+            <span class="swatch" :data-value="value">{{ text }}/{{ row }}/{{ column }}</span>
+          </template>`,
+        },
+      });
+      const tds = wrapper.findAll("tbody tr")[1].findAll("td");
+      expect(tds[0].text()).toBe("b");
+      expect(tds[0].find(".swatch").exists()).toBe(false);
+      expect(tds[1].find(".swatch").attributes("data-value")).toBe("#00f");
+      expect(tds[1].text()).toBe("c:#00f/1/fill");
+      expect(tds[2].text()).toBe("#000/1/stroke");
+    });
+
+    it("picks a template per cell from a function", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { delta: [-2, 3, 0] },
+          columnConfig: {
+            delta: {
+              template: (v: unknown, row: number) =>
+                row === 2 ? undefined : (v as number) < 0 ? "down" : "up",
+            },
+          },
+        },
+        slots: {
+          up: `<template #up="{ text }"><b>+{{ text }}</b></template>`,
+          down: `<template #down="{ text }"><i>{{ text }}</i></template>`,
+        },
+      });
+      const tds = wrapper.findAll("tbody td");
+      expect(tds[0].find("i").text()).toBe("-2");
+      expect(tds[1].find("b").text()).toBe("+3");
+      expect(tds[2].html()).not.toMatch(/<[bi]>/);
+      expect(tds[2].text()).toBe("0");
+    });
+
+    it("falls back to text when the named template is not provided", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { a: [1] },
+          columnConfig: { a: { template: "missing" } },
+        },
+      });
+      expect(wrapper.find("tbody td").text()).toBe("1");
+    });
+
+    it("passes source row indices when sorted, and CSV keeps the text", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { v: [3, 1, 2] },
+          columnConfig: { v: { template: "rowCell" } },
+          sort: { column: "v", direction: "asc" },
+          downloadLink: true,
+        },
+        slots: {
+          rowCell: `<template #rowCell="{ row }"><em>row {{ row }}</em></template>`,
+        },
+      });
+      expect(wrapper.findAll("tbody td").map((td) => td.text())).toEqual([
+        "row 1",
+        "row 2",
+        "row 0",
+      ]);
+      const href = wrapper
+        .find(".data-table-download-link")
+        .attributes("href")!;
+      expect(decodeURIComponent(href.split(",")[1])).toBe("v\n1\n2\n3");
+    });
+  });
+
+  describe("sorting", () => {
+    const column = (wrapper: ReturnType<typeof mount>, i: number) =>
+      wrapper.findAll("tbody tr").map((tr) => tr.findAll("td")[i].text());
+
+    it("renders no sort buttons by default", () => {
+      const wrapper = mount(DataTable, { props: { data: { day: [0, 1] } } });
+      expect(wrapper.find(".data-table-sort-button").exists()).toBe(false);
+      expect(wrapper.find("th").attributes("aria-sort")).toBeUndefined();
+    });
+
+    it("cycles ascending, descending, then original order", async () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { name: ["b", "c", "a"], cases: [20, 5, 10] },
+          sortable: true,
+        },
+      });
+      const button = wrapper.findAll(".data-table-sort-button")[1];
+      const th = wrapper.findAll("th")[1];
+
+      await button.trigger("click");
+      expect(column(wrapper, 1)).toEqual(["5", "10", "20"]);
+      expect(column(wrapper, 0)).toEqual(["c", "a", "b"]);
+      expect(th.attributes("aria-sort")).toBe("ascending");
+      expect(wrapper.emitted("update:sort")![0]).toEqual([
+        { column: "cases", direction: "asc" },
+      ]);
+
+      await button.trigger("click");
+      expect(column(wrapper, 1)).toEqual(["20", "10", "5"]);
+      expect(th.attributes("aria-sort")).toBe("descending");
+
+      await button.trigger("click");
+      expect(column(wrapper, 1)).toEqual(["20", "5", "10"]);
+      expect(th.attributes("aria-sort")).toBeUndefined();
+      expect(wrapper.emitted("update:sort")![2]).toEqual([null]);
+    });
+
+    it("sorts strings naturally and keeps missing values last", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { id: ["x10", "x2", "", "x1"], v: [3, NaN, 1, 2] },
+          sort: { column: "v", direction: "desc" },
+        },
+      });
+      expect(column(wrapper, 1)).toEqual(["3", "2", "1", "NaN"]);
+      return wrapper
+        .setProps({ sort: { column: "id", direction: "asc" } })
+        .then(() => {
+          expect(column(wrapper, 0)).toEqual(["x1", "x2", "x10", ""]);
+        });
+    });
+
+    it("sorts enums by label and dates by day, missing dates last", () => {
+      const output = new ModelOutput(
+        3,
+        [
+          { name: "state", type: "enum", enumLabels: ["S", "", "R"] },
+          { name: "when", type: "date" },
+        ],
+        [
+          new Uint32Array([0, 1, 2]),
+          new Uint32Array([20458, 0xffffffff, 20000]),
+        ],
+      );
+      const wrapper = mount(DataTable, {
+        props: { data: output, sort: { column: "state", direction: "asc" } },
+      });
+      expect(column(wrapper, 0)).toEqual(["R", "S", ""]);
+      return wrapper
+        .setProps({ sort: { column: "when", direction: "desc" } })
+        .then(() => {
+          expect(column(wrapper, 1)).toEqual(["2026-01-05", "2024-10-04", ""]);
+        });
+    });
+
+    it("sorts before applying maxRows and passes original rows to format", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { cases: [1, 30, 20, 40] },
+          maxRows: 2,
+          sort: { column: "cases", direction: "desc" },
+          columnConfig: { cases: { format: (v, row) => `${v}@${row}` } },
+        },
+      });
+      expect(column(wrapper, 0)).toEqual(["40@3", "30@1"]);
+    });
+
+    it("clears the sort when its column leaves the data", async () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { a: [2, 1], b: [3, 4] },
+          sort: { column: "b", direction: "desc" },
+        },
+      });
+      await wrapper.setProps({ data: { a: [2, 1] } });
+      expect(wrapper.emitted("update:sort")!.at(-1)).toEqual([null]);
+      expect(column(wrapper, 0)).toEqual(["2", "1"]);
+    });
+
+    it("lets columnConfig opt columns in or out", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { a: [1], b: [2], c: [3] },
+          sortable: true,
+          columnConfig: { b: { sortable: false } },
+        },
+      });
+      const ths = wrapper.findAll("th");
+      expect(ths.map((th) => th.find("button").exists())).toEqual([
+        true,
+        false,
+        true,
+      ]);
+      const only = mount(DataTable, {
+        props: {
+          data: { a: [1], b: [2] },
+          columnConfig: { b: { sortable: true } },
+        },
+      });
+      expect(only.findAll(".data-table-sort-button")).toHaveLength(1);
+    });
+
+    it("exports CSV in the displayed order", () => {
+      const wrapper = mount(DataTable, {
+        props: {
+          data: { cases: [2, 1, 3] },
+          sort: { column: "cases", direction: "asc" },
+          downloadLink: true,
+        },
+      });
+      const href = wrapper
+        .find(".data-table-download-link")
+        .attributes("href")!;
+      expect(decodeURIComponent(href.split(",")[1])).toBe("cases\n1\n2\n3");
+    });
+  });
+
   describe("download menu", () => {
     it("renders the menu by default with a Download item", () => {
       const wrapper = mount(DataTable, {
