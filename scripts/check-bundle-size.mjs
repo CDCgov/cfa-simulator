@@ -7,12 +7,15 @@ const root = resolve(import.meta.dirname, "..");
 
 // JS limits are measured the way a consumer pays for them: a tiny Vite app
 // that imports the named exports from the built package is bundled in
-// memory (nothing is written), and the gzipped size of every emitted JS
-// chunk is compared against `limit`. `vue` is external, everything else the
-// import pulls in (reka-ui, d3, CodeMirror, ...) counts. `lazyChunks` pins
-// how many dynamic-import chunks the build may emit, so a component that is
-// meant to stay out of the eager bundle (ParamEditor's editor, the HSA
-// mapping) is caught the moment it leaks in.
+// memory (nothing is written), and the gzipped size of the JS the page loads
+// up front (the entry chunk plus everything it imports statically) is
+// compared against `limit`. `vue` is external, everything else the import
+// pulls in (reka-ui, d3, CodeMirror, ...) counts. `lazyChunks` pins how
+// many dynamic-import chunks the build may emit, so a component that is
+// meant to stay out of the eager bundle (ParamEditor's editor, Hint's
+// tooltip, the HSA mapping) is caught the moment it leaks in; `lazyLimit`
+// bounds the rest of the chunks together, including any chunk the bundler
+// splits out for modules two lazy chunks share.
 const SCENARIOS = [
   {
     name: "components: Button only",
@@ -22,47 +25,58 @@ const SCENARIOS = [
     lazyChunks: 0,
   },
   {
+    // A labeled field: the (?) trigger is eager, the tooltip behind it
+    // (reka Tooltip + floating-ui) is a lazy chunk.
+    name: "components: TextInput only",
+    pkg: "@cfasim-ui/components",
+    imports: ["TextInput"],
+    limit: 3 * KB,
+    lazyChunks: 1,
+    lazyLimit: 20 * KB,
+  },
+  {
     name: "components: ParamEditor (eager part)",
     pkg: "@cfasim-ui/components",
     imports: ["ParamEditor"],
     limit: 12 * KB,
-    lazyChunks: 1,
-    // The editor itself (CodeMirror + YAML/TOML) loads on first mount.
+    // The editor itself (CodeMirror + YAML/TOML) loads on first mount; its
+    // format SelectBox carries the Hint tooltip chunk with it.
+    lazyChunks: 2,
     lazyLimit: 200 * KB,
   },
   {
     name: "components: everything",
     pkg: "@cfasim-ui/components",
     imports: "*",
-    limit: 84 * KB,
-    lazyChunks: 2,
+    limit: 80 * KB,
+    lazyChunks: 3,
   },
   {
     name: "charts: DataTable only",
     pkg: "@cfasim-ui/charts",
     imports: ["DataTable"],
-    limit: 30 * KB,
+    limit: 6 * KB,
     lazyChunks: 0,
   },
   {
     name: "charts: LineChart only",
     pkg: "@cfasim-ui/charts",
     imports: ["LineChart"],
-    limit: 52 * KB,
+    limit: 28 * KB,
     lazyChunks: 0,
   },
   {
     name: "charts: BarChart only",
     pkg: "@cfasim-ui/charts",
     imports: ["BarChart"],
-    limit: 48 * KB,
+    limit: 25 * KB,
     lazyChunks: 0,
   },
   {
     name: "charts: ChoroplethMap only",
     pkg: "@cfasim-ui/charts",
     imports: ["ChoroplethMap"],
-    limit: 82 * KB,
+    limit: 57 * KB,
     lazyChunks: 1,
     lazyLimit: 26 * KB,
   },
@@ -70,7 +84,7 @@ const SCENARIOS = [
     name: "charts: everything",
     pkg: "@cfasim-ui/charts",
     imports: "*",
-    limit: 112 * KB,
+    limit: 106 * KB,
     lazyChunks: 1,
   },
 ];
@@ -129,12 +143,23 @@ async function buildScenario(scenario) {
   const chunks = [result].flat()[0].output.filter((o) => o.type === "chunk");
   const gz = (list) =>
     gzipSync(Buffer.concat(list.map((c) => Buffer.from(c.code)))).length;
-  const eager = chunks.filter((c) => !c.isDynamicEntry);
-  const lazy = chunks.filter((c) => c.isDynamicEntry);
+  // Eager = the entry chunk and every chunk it reaches through static
+  // imports. A chunk split out for modules that two lazy chunks share is
+  // not a dynamic entry, but it only loads with one of them.
+  const byName = new Map(chunks.map((c) => [c.fileName, c]));
+  const eagerNames = new Set();
+  const queue = chunks.filter((c) => c.isEntry).map((c) => c.fileName);
+  for (const name of queue) {
+    if (eagerNames.has(name)) continue;
+    eagerNames.add(name);
+    queue.push(...(byName.get(name)?.imports ?? []));
+  }
+  const eager = chunks.filter((c) => eagerNames.has(c.fileName));
+  const lazy = chunks.filter((c) => !eagerNames.has(c.fileName));
   return {
     eager: gz(eager),
     lazy: lazy.length ? gz(lazy) : 0,
-    lazy_n: lazy.length,
+    lazy_n: chunks.filter((c) => c.isDynamicEntry).length,
   };
 }
 
