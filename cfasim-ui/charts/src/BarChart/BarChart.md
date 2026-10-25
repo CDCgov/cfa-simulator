@@ -23,7 +23,7 @@ A responsive SVG bar chart supporting single, grouped, stacked, and overlay
 series in either vertical (column) or horizontal orientation. Shares axis,
 tooltip, menu, and CSV export wiring with [`LineChart`](./line-chart).
 
-## Examples
+## Layouts
 
 ### Single series
 
@@ -216,7 +216,9 @@ contrast).
 
 ### Horizontal orientation
 
-On touch devices the tooltip scrubs along the category axis: drag horizontally on a vertical (column) chart and vertically on a horizontal chart. A swipe in the other direction scrolls the page instead of being captured by the chart.
+Set `orientation="horizontal"` to lay the categories down the side and
+run the bars left to right, which suits long category names. Every
+layout works in either orientation; `x-label` then titles the value axis.
 
 <ComponentDemo>
   <BarChart
@@ -244,15 +246,215 @@ On touch devices the tooltip scrubs along the category axis: drag horizontally o
   </template>
 </ComponentDemo>
 
+## Axes and labels
+
+### Custom value tick format
+
+Use `value-tick-format` to format the value-axis labels. `tooltip-value-format` controls the tooltip values independently; if omitted, the tooltip uses `value-tick-format`.
+
+<ComponentDemo>
+  <BarChart
+    :data="[0.12, 0.34, 0.56, 0.78]"
+    :categories="['A', 'B', 'C', 'D']"
+    :value-tick-format="(v) => `${(v * 100).toFixed(0)}%`"
+    :tooltip-value-format="(v) => `${(v * 100).toFixed(1)}%`"
+    :height="220"
+    y-label="Coverage"
+    tooltip-trigger="hover"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :data="[0.12, 0.34, 0.56, 0.78]"
+  :categories="['A', 'B', 'C', 'D']"
+  :value-tick-format="(v) => `${(v * 100).toFixed(0)}%`"
+  :tooltip-value-format="(v) => `${(v * 100).toFixed(1)}%`"
+  :height="220"
+  y-label="Coverage"
+  tooltip-trigger="hover"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Date categories
+
+When every entry of `categories` parses as a date (`YYYY-MM-DD` string
+or `Date` instance), labels switch to date-aware formatting and the
+chart thins them to clean date boundaries (week / month / year
+depending on range). Bar positions stay ordinal: every category gets
+a bar, and only the labels are thinned.
+
+<ComponentDemo>
+  <BarChart
+    :data="[12, 18, 24, 35, 41, 38, 29, 21, 14, 9, 7, 4]"
+    :categories="['2026-01-05','2026-01-12','2026-01-19','2026-01-26','2026-02-02','2026-02-09','2026-02-16','2026-02-23','2026-03-02','2026-03-09','2026-03-16','2026-03-23']"
+    :height="220"
+    y-label="% ED visits"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :data="[12, 18, 24, 35, 41, 38, 29, 21, 14, 9, 7, 4]"
+  :categories="[
+    '2026-01-05',
+    '2026-01-12',
+    '2026-01-19',
+    '2026-01-26',
+    '2026-02-02',
+    '2026-02-09',
+    '2026-02-16',
+    '2026-02-23',
+    '2026-03-02',
+    '2026-03-09',
+    '2026-03-16',
+    '2026-03-23',
+  ]"
+  :height="220"
+  y-label="% ED visits"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+Use `date-format` to override the auto-picked preset. Same values as
+LineChart's `x-tick-format` (e.g. `"iso"`, `"month-year"`, an
+`Intl.DateTimeFormatOptions` object, or a `(ms, unit?) => string`
+function).
+
+### Crowded categorical labels
+
+Non-date categorical labels are also thinned when they don't all fit:
+the chart estimates label width from character count and font size,
+then strides through the categories so adjacent labels never overlap.
+Every bar still renders; only the tick labels are skipped.
+
+<ComponentDemo>
+  <BarChart
+    data-testid="thinned-bar-chart"
+    :data="[3, 5, 8, 12, 18, 24, 31, 27, 22, 16, 11, 7, 4, 2]"
+    :categories="['2.11', '2.33', '2.56', '2.78', '3.00', '3.22', '3.44', '3.67', '3.89', '4.11', '4.33', '4.56', '4.78', '5.00']"
+    :width="380"
+    :height="220"
+    x-label="R₀"
+    y-label="Frequency"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :data="[3, 5, 8, 12, 18, 24, 31, 27, 22, 16, 11, 7, 4, 2]"
+  :categories="[
+    '2.11',
+    '2.33',
+    '2.56',
+    '2.78',
+    '3.00',
+    '3.22',
+    '3.44',
+    '3.67',
+    '3.89',
+    '4.11',
+    '4.33',
+    '4.56',
+    '4.78',
+    '5.00',
+  ]"
+  :height="220"
+  x-label="R₀"
+  y-label="Frequency"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Logarithmic value axis
+
+Set `value-scale-type="log"` to switch the value axis to base-10 log
+scaling. Non-positive values collapse to the axis floor, and
+`valueMin <= 0` is ignored. With `layout="stacked"`, individual segment
+sizes are no longer proportional to their raw values, but the cumulative
+top still represents the sum.
+
+<ComponentDemo>
+  <BarChart
+    :data="[3, 24, 180, 1450, 9800]"
+    :categories="['Wk1', 'Wk2', 'Wk3', 'Wk4', 'Wk5']"
+    value-scale-type="log"
+    :height="220"
+    x-label="Week"
+    y-label="Cases"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :data="[3, 24, 180, 1450, 9800]"
+  :categories="['Wk1', 'Wk2', 'Wk3', 'Wk4', 'Wk5']"
+  value-scale-type="log"
+  :height="220"
+  x-label="Week"
+  y-label="Cases"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Grid lines
+
+Value-axis grid lines are on by default. Set `value-grid` to `false` to
+drop them, or pass a `GridStyle` object to change their weight, color,
+opacity, or pattern (`lineStyle: "dashed" | "dotted"`, or a raw
+`lineDash`). The chart-level `grid-style` prop supplies the same defaults
+on both charts; see
+[GridStyle](./line-chart#gridstyle) for the fields.
+
+<ComponentDemo>
+  <BarChart
+    :series="[
+      { data: [42, 55, 61, 48], color: '#0057b7', legend: 'Scenario A' },
+      { data: [35, 47, 52, 44], color: '#fb7e38', legend: 'Scenario B' },
+    ]"
+    :categories="['Q1', 'Q2', 'Q3', 'Q4']"
+    :height="220"
+    y-label="Cases"
+    :value-grid="{ lineStyle: 'dashed', color: '#6b7280', opacity: 0.4 }"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :series="series"
+  :categories="['Q1', 'Q2', 'Q3', 'Q4']"
+  :height="220"
+  y-label="Cases"
+  :value-grid="{ lineStyle: 'dashed', color: '#6b7280', opacity: 0.4 }"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Value labels on bars
 
 Set `bar-labels` to write values directly on the bars (pair with
 `:value-axis="false"` for an axis-free look). Pass an options object to tune:
 
-- `format` — a `NumberFormat` or `(value, ctx) => string` (`ctx` has
+- `format`: a `NumberFormat` or `(value, ctx) => string` (`ctx` has
   `categoryIndex` / `seriesIndex`); return `""` to drop a label.
-- `align` — `"center"` (default), `"start"`, or `"end"` within the segment.
-- `color` — auto-contrast per segment by default, or a fixed color.
+- `align`: `"center"` (default), `"start"`, or `"end"` within the segment.
+- `color`: auto-contrast per segment by default, or a fixed color.
 - Small/overlapping labels overflow past the segment edge and are spread
   apart (`overlap: "shift"`) or dropped (`overlap: "hide"`).
 
@@ -372,173 +574,13 @@ of letting them pile up.
   </template>
 </ComponentDemo>
 
-### Custom value tick format
-
-Use `value-tick-format` to format the value-axis labels. `tooltip-value-format` controls the tooltip values independently; if omitted, the tooltip uses `value-tick-format`.
-
-<ComponentDemo>
-  <BarChart
-    :data="[0.12, 0.34, 0.56, 0.78]"
-    :categories="['A', 'B', 'C', 'D']"
-    :value-tick-format="(v) => `${(v * 100).toFixed(0)}%`"
-    :tooltip-value-format="(v) => `${(v * 100).toFixed(1)}%`"
-    :height="220"
-    y-label="Coverage"
-    tooltip-trigger="hover"
-  />
-
-<template #code>
-
-```vue
-<BarChart
-  :data="[0.12, 0.34, 0.56, 0.78]"
-  :categories="['A', 'B', 'C', 'D']"
-  :value-tick-format="(v) => `${(v * 100).toFixed(0)}%`"
-  :tooltip-value-format="(v) => `${(v * 100).toFixed(1)}%`"
-  :height="220"
-  y-label="Coverage"
-  tooltip-trigger="hover"
-/>
-```
-
-  </template>
-</ComponentDemo>
-
-### Date categories
-
-When every entry of `categories` parses as a date (`YYYY-MM-DD` string
-or `Date` instance), labels switch to date-aware formatting and the
-chart thins them to clean date boundaries (week / month / year
-depending on range). Bar positions stay ordinal — every category gets
-a bar — only the labels are thinned.
-
-<ComponentDemo>
-  <BarChart
-    :data="[12, 18, 24, 35, 41, 38, 29, 21, 14, 9, 7, 4]"
-    :categories="['2026-01-05','2026-01-12','2026-01-19','2026-01-26','2026-02-02','2026-02-09','2026-02-16','2026-02-23','2026-03-02','2026-03-09','2026-03-16','2026-03-23']"
-    :height="220"
-    y-label="% ED visits"
-  />
-
-<template #code>
-
-```vue
-<BarChart
-  :data="[12, 18, 24, 35, 41, 38, 29, 21, 14, 9, 7, 4]"
-  :categories="[
-    '2026-01-05',
-    '2026-01-12',
-    '2026-01-19',
-    '2026-01-26',
-    '2026-02-02',
-    '2026-02-09',
-    '2026-02-16',
-    '2026-02-23',
-    '2026-03-02',
-    '2026-03-09',
-    '2026-03-16',
-    '2026-03-23',
-  ]"
-  :height="220"
-  y-label="% ED visits"
-/>
-```
-
-  </template>
-</ComponentDemo>
-
-Use `date-format` to override the auto-picked preset. Same values as
-LineChart's `x-tick-format` (e.g. `"iso"`, `"month-year"`, an
-`Intl.DateTimeFormatOptions` object, or a `(ms, unit?) => string`
-function).
-
-### Crowded categorical labels
-
-Non-date categorical labels are also thinned when they don't all fit:
-the chart estimates label width from character count and font size,
-then strides through the categories so adjacent labels never overlap.
-Every bar still renders — only the tick labels are skipped.
-
-<ComponentDemo>
-  <BarChart
-    data-testid="thinned-bar-chart"
-    :data="[3, 5, 8, 12, 18, 24, 31, 27, 22, 16, 11, 7, 4, 2]"
-    :categories="['2.11', '2.33', '2.56', '2.78', '3.00', '3.22', '3.44', '3.67', '3.89', '4.11', '4.33', '4.56', '4.78', '5.00']"
-    :width="380"
-    :height="220"
-    x-label="R₀"
-    y-label="Frequency"
-  />
-
-<template #code>
-
-```vue
-<BarChart
-  :data="[3, 5, 8, 12, 18, 24, 31, 27, 22, 16, 11, 7, 4, 2]"
-  :categories="[
-    '2.11',
-    '2.33',
-    '2.56',
-    '2.78',
-    '3.00',
-    '3.22',
-    '3.44',
-    '3.67',
-    '3.89',
-    '4.11',
-    '4.33',
-    '4.56',
-    '4.78',
-    '5.00',
-  ]"
-  :height="220"
-  x-label="R₀"
-  y-label="Frequency"
-/>
-```
-
-  </template>
-</ComponentDemo>
-
-### Logarithmic value axis
-
-Set `value-scale-type="log"` to switch the value axis to base-10 log
-scaling. Non-positive values collapse to the axis floor, and
-`valueMin <= 0` is ignored. With `layout="stacked"`, individual segment
-sizes are no longer proportional to their raw values, but the cumulative
-top still represents the sum.
-
-<ComponentDemo>
-  <BarChart
-    :data="[3, 24, 180, 1450, 9800]"
-    :categories="['Wk1', 'Wk2', 'Wk3', 'Wk4', 'Wk5']"
-    value-scale-type="log"
-    :height="220"
-    x-label="Week"
-    y-label="Cases"
-  />
-
-<template #code>
-
-```vue
-<BarChart
-  :data="[3, 24, 180, 1450, 9800]"
-  :categories="['Wk1', 'Wk2', 'Wk3', 'Wk4', 'Wk5']"
-  value-scale-type="log"
-  :height="220"
-  x-label="Week"
-  y-label="Cases"
-/>
-```
-
-  </template>
-</ComponentDemo>
+## Overlays
 
 ### Summary line overlay
 
 Layer a curve (KDE, rolling mean, target) on top of the bars with
-`summary-lines`. Each line scales to **its own value extent** —
-independent of the bar axis — so a probability-density curve in
+`summary-lines`. Each line scales to **its own value extent**,
+independent of the bar axis, so a probability-density curve in
 `[0, 0.02]` and a histogram in `[0, 500]` can share the same chart.
 
 <ComponentDemo>
@@ -601,48 +643,12 @@ independent of the bar axis — so a probability-density curve in
 </ComponentDemo>
 
 Each line accepts `color`, `strokeWidth`, `dashed`, `opacity`,
-`blendMode`, `dots`, and `dotRadius` for styling — same vocabulary as
+`blendMode`, `dots`, and `dotRadius` for styling, the same vocabulary as
 `LineChart` series (both extend `LineMarkStyle`). Override the line's
 extent with `valueMin` / `valueMax`. Pass `x: number[]` (in
-category-index space — `0` is the first category center, fractional
+category-index space: `0` is the first category center, fractional
 values land between) to plot at custom positions; useful when the
 summary samples are denser or sparser than the histogram bins.
-
-### Grid lines
-
-Value-axis grid lines are on by default. Set `value-grid` to `false` to
-drop them, or pass a `GridStyle` object to change their weight, color,
-opacity, or pattern (`lineStyle: "dashed" | "dotted"`, or a raw
-`lineDash`). The chart-level `grid-style` prop supplies the same defaults
-on both charts; see
-[GridStyle](./line-chart#gridstyle) for the fields.
-
-<ComponentDemo>
-  <BarChart
-    :series="[
-      { data: [42, 55, 61, 48], color: '#0057b7', legend: 'Scenario A' },
-      { data: [35, 47, 52, 44], color: '#fb7e38', legend: 'Scenario B' },
-    ]"
-    :categories="['Q1', 'Q2', 'Q3', 'Q4']"
-    :height="220"
-    y-label="Cases"
-    :value-grid="{ lineStyle: 'dashed', color: '#6b7280', opacity: 0.4 }"
-  />
-
-<template #code>
-
-```vue
-<BarChart
-  :series="series"
-  :categories="['Q1', 'Q2', 'Q3', 'Q4']"
-  :height="220"
-  y-label="Cases"
-  :value-grid="{ lineStyle: 'dashed', color: '#6b7280', opacity: 0.4 }"
-/>
-```
-
-  </template>
-</ComponentDemo>
 
 ### Intervals
 
@@ -760,7 +766,7 @@ orientation the whisker runs sideways and the caps stand upright. See
 ### Annotations
 
 Pin callouts to specific bars with `annotations`. `x` is the category
-index (fractional values land between categories — e.g. `x: 1.5` sits at
+index (fractional values land between categories, e.g. `x: 1.5` sits at
 the boundary between categories 1 and 2). `y` is on the value axis. See
 [`LineChart` → Annotations](./line-chart#annotations) for the full
 `ChartAnnotation` shape.
@@ -867,6 +873,46 @@ anchor. `lineColor`, `lineWidth`, and `lineDash` style the line.
   </template>
 </ComponentDemo>
 
+## Interaction
+
+### Tooltip
+
+Rows are named by `legend` or `tooltipLabel`, and `tooltip-title` formats the heading. The slot works like [LineChart's](./line-chart#tooltip), plus `category`.
+
+On touch devices the tooltip scrubs along the category axis: drag horizontally on a vertical (column) chart and vertically on a horizontal chart. A swipe in the other direction scrolls the page instead of being captured by the chart.
+
+<ComponentDemo>
+  <BarChart
+    :series="[
+      { data: [12, 19, 7, 24], legend: '2024', color: '#0057b7' },
+      { data: [15, 22, 9, 20], legend: '2025', color: '#fb7e38' },
+    ]"
+    :categories="['North', 'South', 'East', 'West']"
+    :height="220"
+    y-label="Cases"
+    tooltip-trigger="hover"
+    :tooltip-title="(label) => `${label} region`"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :series="[
+    { data: [12, 19, 7, 24], legend: '2024', color: '#0057b7' },
+    { data: [15, 22, 9, 20], legend: '2025', color: '#fb7e38' },
+  ]"
+  :categories="['North', 'South', 'East', 'West']"
+  :height="220"
+  y-label="Cases"
+  tooltip-trigger="hover"
+  :tooltip-title="(label) => `${label} region`"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Zoom
 
 Set `zoom` to let readers click and drag on the plot to zoom. One gesture
@@ -911,42 +957,6 @@ its full extent there.
   y-label="Cases"
   tooltip-trigger="hover"
   zoom
-/>
-```
-
-  </template>
-</ComponentDemo>
-
-### Tooltip
-
-Rows are named by `legend` or `tooltipLabel`, and `tooltip-title` formats the heading. The slot works like [LineChart's](./line-chart#tooltip), plus `category`.
-
-<ComponentDemo>
-  <BarChart
-    :series="[
-      { data: [12, 19, 7, 24], legend: '2024', color: '#0057b7' },
-      { data: [15, 22, 9, 20], legend: '2025', color: '#fb7e38' },
-    ]"
-    :categories="['North', 'South', 'East', 'West']"
-    :height="220"
-    y-label="Cases"
-    tooltip-trigger="hover"
-    :tooltip-title="(label) => `${label} region`"
-  />
-
-<template #code>
-
-```vue
-<BarChart
-  :series="[
-    { data: [12, 19, 7, 24], legend: '2024', color: '#0057b7' },
-    { data: [15, 22, 9, 20], legend: '2025', color: '#fb7e38' },
-  ]"
-  :categories="['North', 'South', 'East', 'West']"
-  :height="220"
-  y-label="Cases"
-  tooltip-trigger="hover"
-  :tooltip-title="(label) => `${label} region`"
 />
 ```
 
@@ -1029,7 +1039,5 @@ over the legend, outside the `<svg>`. The buttons sit in a group named "Show
 or hide series", are reachable with <kbd>Tab</kbd>, activate with
 <kbd>Enter</kbd> or <kbd>Space</kbd>, and report whether the mark is shown
 through `aria-pressed`. They stay in place while the chart is expanded.
-
-## API
 
 <!-- @include: ./_api/bar-chart.md -->

@@ -21,7 +21,217 @@ keywords:
 
 A responsive SVG line chart with support for multiple series, axis labels, and custom styling.
 
-## Examples
+<script setup>
+import { ref, computed } from "vue";
+
+// Deterministic jitter in [-0.5, 0.5): Math.random() would redraw the
+// demos on every load and mismatch the server-rendered page.
+function jitter(i, t) {
+  const v = Math.sin(i * 127.1 + t * 311.7) * 43758.5453;
+  return v - Math.floor(v) - 0.5;
+}
+const trajectories = Array.from({ length: 20 }, (_, i) => ({
+  data: Array.from({ length: 50 }, (_, t) =>
+    Math.max(0, 30 * Math.sin(t / 8) + jitter(i, t) * 15 + i * 0.5),
+  ),
+  color: "#0057b7",
+}));
+const calibrationRuns = Array.from({ length: 30 }, (_, i) => ({
+  data: Array.from({ length: 40 }, (_, t) =>
+    Math.max(
+      0,
+      40 * Math.exp(-((t - 18 - (i % 7)) ** 2) / 90) + jitter(i, t) * 6,
+    ),
+  ),
+  color: "#0057b7",
+}));
+
+const infections = Array.from({ length: 45 }, (_, t) =>
+  120 * Math.exp(-((t - 18) ** 2) / 160),
+);
+const hospitalizations = Array.from({ length: 45 }, (_, t) =>
+  38 * Math.exp(-((t - 24) ** 2) / 180),
+);
+const growthRange = ref([2, 7]);
+const mitigationRange = ref([3, 9]);
+const sectionDemoSeries = [
+  { data: [0, 2, 5, 12, 25, 45, 70, 100, 130, 155, 170], color: "#000", strokeWidth: 1, legend: "No interventions" },
+  { data: [0, 0, 0, 2, 8, 20, 40, 65, 90, 110, 120], color: "#999", strokeWidth: 1, dashed: true, legend: "Interventions" },
+];
+const sectionDemoSections = computed(() => [
+  {
+    startIndex: growthRange.value[0],
+    endIndex: growthRange.value[1],
+    color: "#6366f1",
+    strokeWidth: 0,
+    label: `Day ${growthRange.value[0]}–${growthRange.value[1]}`,
+    description: "Rapid growth phase",
+  },
+  {
+    seriesIndex: 0,
+    startIndex: mitigationRange.value[0],
+    endIndex: mitigationRange.value[1],
+    color: "#f43f5e",
+    label: `Day ${mitigationRange.value[0]}–${mitigationRange.value[1]}`,
+    description: "Mitigation period",
+  },
+]);
+const annotationOutlineOptions = [
+  { value: "both", label: "Text and line" },
+  { value: "text", label: "Text only" },
+  { value: "line", label: "Line only" },
+  { value: "none", label: "None" },
+];
+const annotationBlendOptions = [
+  { value: "normal", label: "Normal" },
+  { value: "multiply", label: "Multiply" },
+  { value: "screen", label: "Screen" },
+  { value: "difference", label: "Difference" },
+];
+function annotationOutline(kind) {
+  if (kind === "text") return { outlineWidth: 0, textOutlineWidth: 3 };
+  if (kind === "line") return { textOutlineWidth: 0 };
+  if (kind === "none") return { outlineWidth: 0 };
+  return {};
+}
+
+const pointerKind = ref("curved");
+const pointerPosition = ref("above-right");
+const pointerOutline = ref("both");
+const pointerBlend = ref("normal");
+const pointerArrow = ref(true);
+const pointerOffsets = {
+  above: { x: 0, y: -50 },
+  "above-right": { x: 50, y: -36 },
+  right: { x: 70, y: 0 },
+  "below-right": { x: 50, y: 50 },
+  below: { x: 0, y: 50 },
+  "below-left": { x: -50, y: 50 },
+  left: { x: -70, y: 0 },
+  "above-left": { x: -50, y: -36 },
+};
+const pointerAnnotation = computed(() => ({
+  x: 3,
+  y: 15,
+  offset: pointerOffsets[pointerPosition.value],
+  text: "**Cluster**\n_Day 3_",
+  pointer: pointerKind.value,
+  arrow: pointerArrow.value,
+  blendMode: pointerBlend.value,
+  color: pointerBlend.value === "normal" ? undefined : "#fb7e38",
+  ...annotationOutline(pointerOutline.value),
+}));
+
+const ruleKind = ref("ruleX");
+const ruleSide = ref("left");
+const ruleRotate = ref("-90");
+const ruleDash = ref("dashed");
+const ruleOutline = ref("text");
+const ruleBlend = ref("normal");
+const ruleAnnotation = computed(() => {
+  const rotate = Number(ruleRotate.value);
+  const side = ruleSide.value;
+  const offset =
+    side === "left"
+      ? { x: -6, y: rotate ? 0 : 4 }
+      : side === "right"
+        ? { x: 6, y: rotate ? 0 : 4 }
+        : side === "above"
+          ? { x: rotate ? 0 : 4, y: -8 }
+          : { x: rotate ? 0 : 4, y: rotate ? 8 : 18 };
+  return {
+    x: 5,
+    y: 14,
+    offset,
+    text: "Peak day",
+    pointer: ruleKind.value,
+    align: rotate ? "left" : undefined,
+    rotate: rotate || undefined,
+    lineDash:
+      ruleDash.value === "dashed"
+        ? "4 3"
+        : ruleDash.value === "dotted"
+          ? "1 3"
+          : undefined,
+    blendMode: ruleBlend.value,
+    color: ruleBlend.value === "normal" ? undefined : "#fb7e38",
+    ...annotationOutline(ruleOutline.value),
+  };
+});
+const fanDays = Array.from({ length: 40 }, (_, t) => t);
+const fanRuns = Array.from({ length: 30 }, (_, r) =>
+  fanDays.map((t) =>
+    Math.round(
+      (90 + 40 * Math.sin(r * 1.7)) *
+        Math.exp(-((t - 18 - (r % 7)) ** 2) / (90 + 6 * (r % 5))),
+    ),
+  ),
+);
+const fanQuantile = (q) =>
+  fanDays.map((t) => {
+    const v = fanRuns.map((run) => run[t]).sort((a, b) => a - b);
+    return v[Math.round(q * (v.length - 1))];
+  });
+const fanSeries = [
+  ...fanRuns.map((data) => ({ data, color: "#0057b7", opacity: 0.12 })),
+  {
+    data: fanQuantile(0.5),
+    legend: "Median",
+    color: "#0057b7",
+    strokeWidth: 2.5,
+  },
+];
+const fanAreas = [
+  {
+    lower: fanQuantile(0.05),
+    upper: fanQuantile(0.95),
+    legend: "90% interval",
+    color: "#0057b7",
+    opacity: 0.12,
+  },
+];
+const markerDates = Array.from(
+  { length: 45 },
+  (_, t) => new Date(Date.UTC(2026, 0, 1 + t)),
+);
+const dateMarkers = ref([
+  { x: "2026-01-13", label: "Isolation", snap: true },
+  { x: "2026-02-02", label: "Recovery", labelBackground: true, snap: true },
+]);
+const isolation = ref(12);
+const recovery = ref(32);
+const markers = computed({
+  get: () => [
+    { x: isolation.value, label: "Isolation" },
+    { x: recovery.value, label: "Recovery" },
+  ],
+  set: ([a, b]) => {
+    isolation.value = a.x;
+    recovery.value = b.x;
+  },
+});
+const styledMarkers = ref([
+  {
+    x: 10,
+    label: "Intervention",
+    color: "#ef4444",
+    strokeWidth: 2,
+    dashed: false,
+    outline: true,
+    labelStyle: { color: "#ef4444", fontSize: 13 },
+    labelOutlineWidth: 4,
+  },
+  {
+    x: 22,
+    label: "Peak",
+    color: "#0057b7",
+    dash: "2 6",
+    labelBackground: true,
+  },
+]);
+</script>
+
+## Data
 
 ### Single series
 
@@ -78,13 +288,52 @@ charts, set `x` and `y` (or `data`) on each `Series`.
 
 When `x` is omitted, `y`/`data` values are plotted at indices 0, 1, 2, etc.
 
+### Multiple series
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      { data: [0, 10, 25, 45, 60, 55, 40, 20, 8], color: '#fb7e38', strokeWidth: 3 },
+      { x: [0, 1, 3, 4, 6, 7, 8], y: [0, 5, 20, 28, 18, 10, 4], color: '#0057b7', strokeWidth: 3 },
+    ]"
+    :height="200"
+    x-label="Weeks"
+    y-label="Incidence"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    {
+      data: [0, 10, 25, 45, 60, 55, 40, 20, 8],
+      color: '#fb7e38',
+      strokeWidth: 3,
+    },
+    {
+      x: [0, 1, 3, 4, 6, 7, 8],
+      y: [0, 5, 20, 28, 18, 10, 4],
+      color: '#0057b7',
+      strokeWidth: 3,
+    },
+  ]"
+  :height="200"
+  x-label="Weeks"
+  y-label="Incidence"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Dates
 
 Pass ISO date strings (`YYYY-MM-DD`) or `Date` objects as `x` and the
 chart auto-detects a date axis: ticks anchor to year / month / week /
 day / hour boundaries depending on the visible range, and labels
 format themselves accordingly. Numeric `x` arrays keep their existing
-behavior — auto-detection is content-driven and never promotes plain
+behavior: auto-detection is content-driven and never promotes plain
 numbers.
 
 <ComponentDemo>
@@ -157,338 +406,41 @@ timezone instead. Strings that include an explicit offset (`Z` or
 `+05:00`) are always parsed exactly as written.
 
 > **Annotations on a date axis.** `ChartAnnotation.x` is always in the
-> chart's resolved coordinate space — that's **epoch-ms** when the axis
+> chart's resolved coordinate space, which is **epoch-ms** when the axis
 > is in date mode. Pass `Date.UTC(2026, 0, 15)`, `new Date("2026-01-15").getTime()`,
 > or `Date.parse("2026-01-15T00:00:00Z")`. Passing a small integer like
 > `0` will place the annotation at 1970-01-01 (off-screen).
 >
 > **`xLabels` on a date axis.** When both `x: [...date strings]` and
-> `xLabels` are supplied, the date axis wins — `xLabels` is ignored.
+> `xLabels` are supplied, the date axis wins and `xLabels` is ignored.
 > Date strings carry their own labeling.
 
-### Title
+### Typed arrays
 
-The `title` prop accepts `\n` to break across lines. Use `titleStyle`
-to override `fontSize`, `lineHeight`, `color`, `fontWeight`, and
-`align` (`"left" | "center" | "right"`, default `"left"`). Top padding
-grows automatically for additional lines.
-
-<ComponentDemo>
-  <LineChart
-    :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
-    :height="220"
-    :title="'Daily ED visits\nInfluenza-like illness, last 11 days'"
-    :title-style="{ fontSize: 16, lineHeight: 20, color: '#0057b7' }"
-    x-label="Days"
-    y-label="Cases"
-  />
-
-<template #code>
+`data`, `series[].data`, and `areas[].upper`/`lower` accept a plain
+`number[]` or any standard numeric typed array (`Float64Array`,
+`Int32Array`, etc.). This lets you pass the output of
+`ModelOutput.column()` directly, with no `Array.from(...)` copy:
 
 ```vue
-<LineChart
-  :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
-  :height="220"
-  :title="'Daily ED visits\nInfluenza-like illness, last 11 days'"
-  :title-style="{ fontSize: 16, lineHeight: 20, color: '#0057b7' }"
-  x-label="Days"
-  y-label="Cases"
-/>
+<LineChart :data="outputs.series.column('values')" />
 ```
 
-  </template>
-</ComponentDemo>
-
-### Font sizes
-
-Every text element on the chart has its own style prop and default size (in px). The text-styling props (`axisLabelStyle`, `tickLabelStyle`, `legendStyle`) take a `LabelStyle` — `{ fontSize?, color?, fontWeight? }` — and `titleStyle` adds `lineHeight` and `align`. Unset fields fall back to the defaults below.
-
-| Chart part                                  | Prop / field                         | Type         | Default size |
-| ------------------------------------------- | ------------------------------------ | ------------ | -----------: |
-| Title                                       | `titleStyle`                         | `TitleStyle` |           14 |
-| Axis labels (`xLabel` / `yLabel`)           | `axisLabelStyle`                     | `LabelStyle` |           13 |
-| Axis tick labels (the numbers on each axis) | `tickLabelStyle`                     | `LabelStyle` |           10 |
-| Inline legend                               | `legendStyle`                        | `LabelStyle` |           11 |
-| Area section label                          | `areaSection.inlineLabelStyle`       | `LabelStyle` |           11 |
-| Area section description                    | `areaSection.inlineDescriptionStyle` | `LabelStyle` |           11 |
-| Annotation text                             | `annotation.fontSize`                | `number`     |           13 |
-| Interval whiskers (stroke width)            | `intervalStyle.lineWidth`            | `number`     |          1.5 |
-
-`xLabelAlign` places the x-axis label centered under the plot (`"center"`) or at its left edge (`"left"`); when omitted it is centered, except while area-section labels are showing, where it joins their first row at the left. These are single styles applied to both axes: there's no separate x vs y font size. The same props (except the LineChart-only area-section fields) exist on `BarChart`, since both compose `ChartCommonProps`.
-
-<ComponentDemo>
-  <LineChart
-    :series="[
-      { data: [0, 12, 28, 45, 60, 55, 40, 25, 12], color: '#0057b7', legend: 'No interventions' },
-      { data: [0, 8, 18, 30, 40, 35, 25, 14, 6], color: '#ef4444', legend: 'Masking + distancing' },
-    ]"
-    :height="240"
-    title="Daily ED visits"
-    x-label="Days"
-    y-label="Cases"
-    :title-style="{ fontSize: 18 }"
-    :axis-label-style="{ fontSize: 15, fontWeight: 700 }"
-    :tick-label-style="{ fontSize: 13 }"
-    :legend-style="{ fontSize: 14 }"
-  />
-
-<template #code>
-
-```vue
-<LineChart
-  :series="[
-    {
-      data: [0, 12, 28, 45, 60, 55, 40, 25, 12],
-      color: '#0057b7',
-      legend: 'No interventions',
-    },
-    {
-      data: [0, 8, 18, 30, 40, 35, 25, 14, 6],
-      color: '#ef4444',
-      legend: 'Masking + distancing',
-    },
-  ]"
-  :height="240"
-  title="Daily ED visits"
-  x-label="Days"
-  y-label="Cases"
-  :title-style="{ fontSize: 18 }"
-  :axis-label-style="{ fontSize: 15, fontWeight: 700 }"
-  :tick-label-style="{ fontSize: 13 }"
-  :legend-style="{ fontSize: 14 }"
-/>
+```ts
+type LineChartData =
+  | readonly number[]
+  | Float64Array
+  | Float32Array
+  | Int32Array
+  | Uint32Array
+  | Int16Array
+  | Uint16Array
+  | Int8Array
+  | Uint8Array
+  | Uint8ClampedArray;
 ```
 
-  </template>
-</ComponentDemo>
-
-### Multiple series
-
-<ComponentDemo>
-  <LineChart
-    :series="[
-      { data: [0, 10, 25, 45, 60, 55, 40, 20, 8], color: '#fb7e38', strokeWidth: 3 },
-      { x: [0, 1, 3, 4, 6, 7, 8], y: [0, 5, 20, 28, 18, 10, 4], color: '#0057b7', strokeWidth: 3 },
-    ]"
-    :height="200"
-    x-label="Weeks"
-    y-label="Incidence"
-  />
-
-<template #code>
-
-```vue
-<LineChart
-  :series="[
-    {
-      data: [0, 10, 25, 45, 60, 55, 40, 20, 8],
-      color: '#fb7e38',
-      strokeWidth: 3,
-    },
-    {
-      x: [0, 1, 3, 4, 6, 7, 8],
-      y: [0, 5, 20, 28, 18, 10, 4],
-      color: '#0057b7',
-      strokeWidth: 3,
-    },
-  ]"
-  :height="200"
-  x-label="Weeks"
-  y-label="Incidence"
-/>
-```
-
-  </template>
-</ComponentDemo>
-
-### Legend
-
-Set `legend` on a series to add an entry to the inline legend strip above the plot. When the items don't all fit on one row at the chart's current width, the legend wraps to additional rows and the plot area shrinks to keep the legend clear of the data. Use `showInLegend: false` to keep a series off the legend (e.g. when its `legend` string is reused as a CSV column header) and `showInTooltip: false` to omit it from the hover tooltip.
-
-<ComponentDemo>
-  <LineChart
-    :series="[
-      { data: [0, 12, 28, 45, 60, 55, 40, 25, 12], color: '#0057b7', legend: 'No interventions' },
-      { data: [0, 10, 22, 38, 50, 45, 32, 18, 8], color: '#fb7e38', legend: 'School closures' },
-      { data: [0, 8, 18, 30, 40, 35, 25, 14, 6], color: '#ef4444', legend: 'Masking + distancing' },
-      { data: [0, 6, 14, 24, 32, 28, 20, 10, 4], color: '#10b981', legend: 'Vaccination only' },
-      { data: [0, 4, 10, 16, 22, 19, 13, 7, 3], color: '#6366f1', legend: 'Vaccination + masking' },
-      { data: [0, 3, 7, 11, 15, 13, 9, 5, 2], color: '#a855f7', legend: 'All interventions combined' },
-    ]"
-    :height="240"
-    x-label="Weeks"
-    y-label="Incidence"
-  />
-
-<template #code>
-
-```vue
-<LineChart
-  :series="[
-    { data: scenarioA, color: '#0057b7', legend: 'No interventions' },
-    { data: scenarioB, color: '#fb7e38', legend: 'School closures' },
-    { data: scenarioC, color: '#ef4444', legend: 'Masking + distancing' },
-    { data: scenarioD, color: '#10b981', legend: 'Vaccination only' },
-    { data: scenarioE, color: '#6366f1', legend: 'Vaccination + masking' },
-    { data: scenarioF, color: '#a855f7', legend: 'All interventions combined' },
-  ]"
-  :height="240"
-  x-label="Weeks"
-  y-label="Incidence"
-/>
-```
-
-  </template>
-</ComponentDemo>
-
-### Tooltip
-
-Hover over the chart to see a tooltip with values at each data point. Set `tooltip-trigger="hover"` to enable the built-in tooltip with crosshair and highlight dots. Use the `#tooltip` slot for custom content. Pass `tooltip-value-format` to control how numeric values render (e.g. percentages, currency); it falls back to `y-tick-format` when omitted.
-
-On touch devices, drag **horizontally** across the chart to scrub the tooltip between points; a **vertical** swipe scrolls the page instead of getting captured by the chart.
-
-The tooltip stops at every x value of every series shown in it, so series sampled on different dates (say, weekly data over daily data) need no shared x grid. Each row shows its series' nearest point to the hovered x. The `index` passed to the slot, used for `tooltip-data` and emitted by `hover`, counts positions in the sorted union of those x values, which is the plain point index whenever the series share one x set.
-
-<ComponentDemo>
-  <LineChart
-    :series="[
-      { legend: 'Daily', x: Array.from({ length: 29 }, (_, i) => `2025-01-${String(i + 1).padStart(2, '0')}`), data: Array.from({ length: 29 }, (_, i) => Math.round(20 + 15 * Math.sin(i / 4) + (i % 3) * 3)), color: '#0057b7' },
-      { legend: 'Weekly', x: ['2025-01-01', '2025-01-08', '2025-01-15', '2025-01-22', '2025-01-29'], data: [22, 38, 29, 14, 24], color: '#fb7e38', strokeWidth: 3, dots: true },
-    ]"
-    :height="200"
-    y-label="Cases"
-    tooltip-trigger="hover"
-  />
-
-<template #code>
-
-```vue
-<LineChart
-  :series="[
-    { legend: 'Daily', x: dailyDates, data: dailyCases, color: '#0057b7' },
-    {
-      legend: 'Weekly',
-      x: weeklyDates,
-      data: weeklyCases,
-      color: '#fb7e38',
-      strokeWidth: 3,
-      dots: true,
-    },
-  ]"
-  :height="200"
-  y-label="Cases"
-  tooltip-trigger="hover"
-/>
-```
-
-  </template>
-</ComponentDemo>
-
-<ComponentDemo>
-  <LineChart
-    :series="[
-      { data: [0, 10, 25, 45, 60, 55, 40, 20, 8], color: '#fb7e38', strokeWidth: 3 },
-      { data: [0, 5, 12, 20, 28, 25, 18, 10, 4], color: '#0057b7', strokeWidth: 3 },
-    ]"
-    :x-tick-format="(_, i) => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'][i]"
-    :height="200"
-    x-label="Month"
-    y-label="Incidence"
-    tooltip-trigger="hover"
-  />
-
-<template #code>
-
-```vue
-<LineChart
-  :series="[
-    {
-      data: [0, 10, 25, 45, 60, 55, 40, 20, 8],
-      color: '#fb7e38',
-      strokeWidth: 3,
-    },
-    {
-      data: [0, 5, 12, 20, 28, 25, 18, 10, 4],
-      color: '#0057b7',
-      strokeWidth: 3,
-    },
-  ]"
-  :x-tick-format="(_, i) => months[i]"
-  :height="200"
-  x-label="Month"
-  y-label="Incidence"
-  tooltip-trigger="hover"
-/>
-```
-
-  </template>
-</ComponentDemo>
-
-#### Named rows
-
-Rows are named by the series' `legend`, or `tooltipLabel` to name a row without a legend entry. Once any row is named, unnamed series are left out, so ensemble trajectories drop out and the median stays. Series with no value at the hovered x are left out too. Named areas (`legend` or `tooltipLabel`) show their range, and `intervals` use `label`. `tooltip-title` formats the heading.
-
-<ComponentDemo>
-  <LineChart
-    :series="fanSeries"
-    :areas="fanAreas"
-    :height="220"
-    x-label="Day"
-    y-label="Infections"
-    tooltip-trigger="hover"
-    :tooltip-title="(label) => `Day ${label}`"
-  />
-
-<template #code>
-
-```vue
-<script setup>
-const series = [
-  // One faint line per run: no legend, so no tooltip row.
-  ...runs.map((data) => ({ data, color: "#0057b7", opacity: 0.12 })),
-  { data: median, legend: "Median", color: "#0057b7", strokeWidth: 2.5 },
-];
-const areas = [
-  { lower: q05, upper: q95, legend: "90% interval", color: "#0057b7" },
-];
-</script>
-
-<LineChart
-  :series="series"
-  :areas="areas"
-  :height="220"
-  x-label="Day"
-  y-label="Infections"
-  tooltip-trigger="hover"
-  :tooltip-title="(label) => `Day ${label}`"
-/>
-```
-
-  </template>
-</ComponentDemo>
-
-#### Custom tooltip content
-
-The `#tooltip` slot gets `title`, `values`, `areas`, `intervals`, `index`, `xLabel`, `data` and `format`. To extend the default body, render `ChartTooltipContent`:
-
-```vue
-<script setup>
-import { LineChart, ChartTooltipContent } from "@cfasim-ui/charts";
-</script>
-
-<LineChart :series="series" :tooltip-data="notes" tooltip-trigger="hover">
-  <template #tooltip="tip">
-    <ChartTooltipContent
-      :title="tip.title"
-      :values="tip.values"
-      :areas="tip.areas"
-      :intervals="tip.intervals"
-      :format="tip.format"
-    />
-    <p v-if="tip.data">{{ tip.data }}</p>
-  </template>
-</LineChart>
-```
+## Axes
 
 ### Custom axis ticks
 
@@ -593,7 +545,149 @@ floor, and `yMin <= 0` is ignored.
   </template>
 </ComponentDemo>
 
+### Grid lines
+
+Set `x-grid` / `y-grid` to draw grid lines at each axis' ticks (the
+[custom ticks](#custom-axis-ticks) demo turns both on). Pass a `GridStyle` object instead of `true` to change an axis' line
+weight, color, opacity, or pattern (`lineStyle: "dashed" | "dotted"`, or a
+raw `lineDash`). The chart-level `grid-style` prop supplies defaults for
+every grid on the chart; a field on the axis prop wins.
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      { data: [0, 10, 25, 45, 60, 55, 40, 20, 8], color: '#fb7e38', strokeWidth: 3 },
+      { data: [0, 5, 12, 20, 28, 25, 18, 10, 4], color: '#0057b7', strokeWidth: 3 },
+    ]"
+    :height="200"
+    x-label="Weeks"
+    y-label="Incidence"
+    :grid-style="{ color: '#6b7280', opacity: 0.35 }"
+    :x-grid="{ lineStyle: 'dotted' }"
+    :y-grid="{ lineStyle: 'dashed', lineWidth: 1.5 }"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="series"
+  :height="200"
+  x-label="Weeks"
+  y-label="Incidence"
+  :grid-style="{ color: '#6b7280', opacity: 0.35 }"
+  :x-grid="{ lineStyle: 'dotted' }"
+  :y-grid="{ lineStyle: 'dashed', lineWidth: 1.5 }"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+## Titles and text
+
+### Title
+
+The `title` prop accepts `\n` to break across lines. Use `titleStyle`
+to override `fontSize`, `lineHeight`, `color`, `fontWeight`, and
+`align` (`"left" | "center" | "right"`, default `"left"`). Top padding
+grows automatically for additional lines.
+
+<ComponentDemo>
+  <LineChart
+    :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
+    :height="220"
+    :title="'Daily ED visits\nInfluenza-like illness, last 11 days'"
+    :title-style="{ fontSize: 16, lineHeight: 20, color: '#0057b7' }"
+    x-label="Days"
+    y-label="Cases"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
+  :height="220"
+  :title="'Daily ED visits\nInfluenza-like illness, last 11 days'"
+  :title-style="{ fontSize: 16, lineHeight: 20, color: '#0057b7' }"
+  x-label="Days"
+  y-label="Cases"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Font sizes
+
+Every text element on the chart has its own style prop and default size (in px). The text-styling props (`axisLabelStyle`, `tickLabelStyle`, `legendStyle`) take a `LabelStyle` (`{ fontSize?, color?, fontWeight? }`), and `titleStyle` adds `lineHeight` and `align`. Unset fields fall back to the defaults below.
+
+| Chart part                                  | Prop / field                         | Type         | Default size |
+| ------------------------------------------- | ------------------------------------ | ------------ | -----------: |
+| Title                                       | `titleStyle`                         | `TitleStyle` |           14 |
+| Axis labels (`xLabel` / `yLabel`)           | `axisLabelStyle`                     | `LabelStyle` |           13 |
+| Axis tick labels (the numbers on each axis) | `tickLabelStyle`                     | `LabelStyle` |           10 |
+| Inline legend                               | `legendStyle`                        | `LabelStyle` |           11 |
+| Area section label                          | `areaSection.inlineLabelStyle`       | `LabelStyle` |           11 |
+| Area section description                    | `areaSection.inlineDescriptionStyle` | `LabelStyle` |           11 |
+| Annotation text                             | `annotation.fontSize`                | `number`     |           13 |
+| Interval whiskers (stroke width)            | `intervalStyle.lineWidth`            | `number`     |          1.5 |
+
+`xLabelAlign` places the x-axis label centered under the plot (`"center"`) or at its left edge (`"left"`); when omitted it is centered, except while area-section labels are showing, where it joins their first row at the left. These are single styles applied to both axes: there's no separate x vs y font size. The same props (except the LineChart-only area-section fields) exist on `BarChart`, since both compose `ChartCommonProps`.
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      { data: [0, 12, 28, 45, 60, 55, 40, 25, 12], color: '#0057b7', legend: 'No interventions' },
+      { data: [0, 8, 18, 30, 40, 35, 25, 14, 6], color: '#ef4444', legend: 'Masking + distancing' },
+    ]"
+    :height="240"
+    title="Daily ED visits"
+    x-label="Days"
+    y-label="Cases"
+    :title-style="{ fontSize: 18 }"
+    :axis-label-style="{ fontSize: 15, fontWeight: 700 }"
+    :tick-label-style="{ fontSize: 13 }"
+    :legend-style="{ fontSize: 14 }"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    {
+      data: [0, 12, 28, 45, 60, 55, 40, 25, 12],
+      color: '#0057b7',
+      legend: 'No interventions',
+    },
+    {
+      data: [0, 8, 18, 30, 40, 35, 25, 14, 6],
+      color: '#ef4444',
+      legend: 'Masking + distancing',
+    },
+  ]"
+  :height="240"
+  title="Daily ED visits"
+  x-label="Days"
+  y-label="Cases"
+  :title-style="{ fontSize: 18 }"
+  :axis-label-style="{ fontSize: 15, fontWeight: 700 }"
+  :tick-label-style="{ fontSize: 13 }"
+  :legend-style="{ fontSize: 14 }"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+## Line styles
+
 ### Dashed baseline
+
+Set `dashed: true` on a series to draw it dashed, for example to set a
+baseline or counterfactual apart from the scenario it is compared to.
 
 <ComponentDemo>
   <LineChart
@@ -632,7 +726,7 @@ floor, and `yMin <= 0` is ignored.
 
 Set `outline: true` on a series to draw a page-colored stroke behind the
 line. This is useful when lines overlap, cross dense areas, or sit on a
-busy background — the outline keeps each series visually distinct.
+busy background: the outline keeps each series visually distinct.
 
 Override the outline's color with `outlineColor` (any CSS color; defaults
 to the page background `var(--color-bg-0, #fff)`) and its thickness with
@@ -673,14 +767,55 @@ per side; defaults to `4`).
   </template>
 </ComponentDemo>
 
-### Many trajectories with low opacity
+### Dots
+
+Set `dots: true` to draw a dot at every point. `dotRadius`, `dotFill` and
+`dotStroke` style them; `line: false` keeps the dots and drops the line.
 
 <ComponentDemo>
   <LineChart
-    :series="Array.from({ length: 20 }, (_, i) => ({
-      data: Array.from({ length: 50 }, (_, t) => Math.max(0, 30 * Math.sin(t / 8) + (Math.random() - 0.5) * 15 + i * 0.5)),
+    :series="[
+      { data: [0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2], color: '#0057b7', strokeWidth: 2, dots: true, dotRadius: 4, dotFill: '#fff', dotStroke: '#0057b7' },
+    ]"
+    :height="200"
+    x-label="Days"
+    y-label="Cases"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    {
+      data: [0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2],
       color: '#0057b7',
-    }))"
+      strokeWidth: 2,
+      dots: true,
+      dotRadius: 4,
+      dotFill: '#fff',
+      dotStroke: '#0057b7',
+    },
+  ]"
+  :height="200"
+  x-label="Days"
+  y-label="Cases"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Many trajectories with low opacity
+
+For an ensemble of model runs, draw every trajectory faintly with the
+chart-level `line-opacity` (or a per-series `opacity`) so the density of
+the bundle shows where runs agree. To add a median and an interval, see
+[named tooltip rows](#named-rows).
+
+<ComponentDemo>
+  <LineChart
+    :series="trajectories"
     :height="250"
     :line-opacity="0.15"
     x-label="Days"
@@ -706,7 +841,7 @@ per side; defaults to `4`).
 
 Set `blendMode` on a `Series` to apply a CSS `mix-blend-mode` to that
 series' line (and dots, if enabled). Useful when two thick or
-high-contrast lines overlap — `"multiply"` darkens the crossing point
+high-contrast lines overlap: `"multiply"` darkens the crossing point
 on light backgrounds, `"screen"` lightens on dark, `"difference"`
 inverts. The white `outline`, if any, is unaffected.
 
@@ -762,19 +897,25 @@ inverts. The white `outline`, if any, is unaffected.
   </template>
 </ComponentDemo>
 
-### Grid lines
+## Legend and tooltip
+
+### Legend
+
+Set `legend` on a series to add an entry to the inline legend strip above the plot. When the items don't all fit on one row at the chart's current width, the legend wraps to additional rows and the plot area shrinks to keep the legend clear of the data. Use `showInLegend: false` to keep a series off the legend (e.g. when its `legend` string is reused as a CSV column header) and `showInTooltip: false` to omit it from the hover tooltip.
 
 <ComponentDemo>
   <LineChart
     :series="[
-      { data: [0, 10, 25, 45, 60, 55, 40, 20, 8], color: '#fb7e38', strokeWidth: 3 },
-      { data: [0, 5, 12, 20, 28, 25, 18, 10, 4], color: '#0057b7', strokeWidth: 3 },
+      { data: [0, 12, 28, 45, 60, 55, 40, 25, 12], color: '#0057b7', legend: 'No interventions' },
+      { data: [0, 10, 22, 38, 50, 45, 32, 18, 8], color: '#fb7e38', legend: 'School closures' },
+      { data: [0, 8, 18, 30, 40, 35, 25, 14, 6], color: '#ef4444', legend: 'Masking + distancing' },
+      { data: [0, 6, 14, 24, 32, 28, 20, 10, 4], color: '#10b981', legend: 'Vaccination only' },
+      { data: [0, 4, 10, 16, 22, 19, 13, 7, 3], color: '#6366f1', legend: 'Vaccination + masking' },
+      { data: [0, 3, 7, 11, 15, 13, 9, 5, 2], color: '#a855f7', legend: 'All interventions combined' },
     ]"
-    :height="200"
+    :height="240"
     x-label="Weeks"
     y-label="Incidence"
-    x-grid
-    y-grid
   />
 
 <template #code>
@@ -782,74 +923,158 @@ inverts. The white `outline`, if any, is unaffected.
 ```vue
 <LineChart
   :series="[
+    { data: scenarioA, color: '#0057b7', legend: 'No interventions' },
+    { data: scenarioB, color: '#fb7e38', legend: 'School closures' },
+    { data: scenarioC, color: '#ef4444', legend: 'Masking + distancing' },
+    { data: scenarioD, color: '#10b981', legend: 'Vaccination only' },
+    { data: scenarioE, color: '#6366f1', legend: 'Vaccination + masking' },
+    { data: scenarioF, color: '#a855f7', legend: 'All interventions combined' },
+  ]"
+  :height="240"
+  x-label="Weeks"
+  y-label="Incidence"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Tooltip
+
+Hover over the chart to see a tooltip with values at each data point. Set `tooltip-trigger="hover"` to enable the built-in tooltip with crosshair and highlight dots. Use the `#tooltip` slot for custom content. Pass `tooltip-value-format` to control how numeric values render (e.g. percentages, currency); it falls back to `y-tick-format` when omitted.
+
+On touch devices, drag **horizontally** across the chart to scrub the tooltip between points; a **vertical** swipe scrolls the page instead of getting captured by the chart.
+
+The tooltip stops at every x value of every series shown in it, so series sampled on different dates (say, weekly data over daily data) need no shared x grid. Each row shows its series' nearest point to the hovered x. The `index` passed to the slot, used for `tooltip-data` and emitted by `hover`, counts positions in the sorted union of those x values, which is the plain point index whenever the series share one x set.
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      { legend: 'Daily', x: Array.from({ length: 29 }, (_, i) => `2025-01-${String(i + 1).padStart(2, '0')}`), data: Array.from({ length: 29 }, (_, i) => Math.round(20 + 15 * Math.sin(i / 4) + (i % 3) * 3)), color: '#0057b7' },
+      { legend: 'Weekly', x: ['2025-01-01', '2025-01-08', '2025-01-15', '2025-01-22', '2025-01-29'], data: [22, 38, 29, 14, 24], color: '#fb7e38', strokeWidth: 3, dots: true },
+    ]"
+    :height="200"
+    y-label="Cases"
+    tooltip-trigger="hover"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    { legend: 'Daily', x: dailyDates, data: dailyCases, color: '#0057b7' },
     {
-      data: [0, 10, 25, 45, 60, 55, 40, 20, 8],
+      legend: 'Weekly',
+      x: weeklyDates,
+      data: weeklyCases,
       color: '#fb7e38',
       strokeWidth: 3,
-    },
-    {
-      data: [0, 5, 12, 20, 28, 25, 18, 10, 4],
-      color: '#0057b7',
-      strokeWidth: 3,
+      dots: true,
     },
   ]"
   :height="200"
-  x-label="Weeks"
-  y-label="Incidence"
-  x-grid
-  y-grid
+  y-label="Cases"
+  tooltip-trigger="hover"
 />
 ```
 
   </template>
 </ComponentDemo>
 
-Pass a `GridStyle` object instead of `true` to change an axis' line
-weight, color, opacity, or pattern (`lineStyle: "dashed" | "dotted"`, or a
-raw `lineDash`). The chart-level `grid-style` prop supplies defaults for
-every grid on the chart; a field on the axis prop wins.
+#### Named rows
+
+Rows are named by the series' `legend`, or `tooltipLabel` to name a row without a legend entry. Once any row is named, unnamed series are left out, so ensemble trajectories drop out and the median stays. Series with no value at the hovered x are left out too. Named areas (`legend` or `tooltipLabel`) show their range, and `intervals` use `label`. `tooltip-title` formats the heading.
 
 <ComponentDemo>
   <LineChart
-    :series="[
-      { data: [0, 10, 25, 45, 60, 55, 40, 20, 8], color: '#fb7e38', strokeWidth: 3 },
-      { data: [0, 5, 12, 20, 28, 25, 18, 10, 4], color: '#0057b7', strokeWidth: 3 },
-    ]"
-    :height="200"
-    x-label="Weeks"
-    y-label="Incidence"
-    :grid-style="{ color: '#6b7280', opacity: 0.35 }"
-    :x-grid="{ lineStyle: 'dotted' }"
-    :y-grid="{ lineStyle: 'dashed', lineWidth: 1.5 }"
+    :series="fanSeries"
+    :areas="fanAreas"
+    :height="220"
+    x-label="Day"
+    y-label="Infections"
+    tooltip-trigger="hover"
+    :tooltip-title="(label) => `Day ${label}`"
   />
 
 <template #code>
 
 ```vue
+<script setup>
+const series = [
+  // One faint line per run: no legend, so no tooltip row.
+  ...runs.map((data) => ({ data, color: "#0057b7", opacity: 0.12 })),
+  { data: median, legend: "Median", color: "#0057b7", strokeWidth: 2.5 },
+];
+const areas = [
+  { lower: q05, upper: q95, legend: "90% interval", color: "#0057b7" },
+];
+</script>
+
 <LineChart
   :series="series"
-  :height="200"
-  x-label="Weeks"
-  y-label="Incidence"
-  :grid-style="{ color: '#6b7280', opacity: 0.35 }"
-  :x-grid="{ lineStyle: 'dotted' }"
-  :y-grid="{ lineStyle: 'dashed', lineWidth: 1.5 }"
+  :areas="areas"
+  :height="220"
+  x-label="Day"
+  y-label="Infections"
+  tooltip-trigger="hover"
+  :tooltip-title="(label) => `Day ${label}`"
 />
 ```
 
   </template>
 </ComponentDemo>
 
-### Dots
+#### Custom tooltip content
+
+The `#tooltip` slot gets `title`, `values`, `areas`, `intervals`, `index`, `xLabel`, `data` and `format`. To extend the default body, render `ChartTooltipContent`:
+
+```vue
+<script setup>
+import { LineChart, ChartTooltipContent } from "@cfasim-ui/charts";
+</script>
+
+<LineChart :series="series" :tooltip-data="notes" tooltip-trigger="hover">
+  <template #tooltip="tip">
+    <ChartTooltipContent
+      :title="tip.title"
+      :values="tip.values"
+      :areas="tip.areas"
+      :intervals="tip.intervals"
+      :format="tip.format"
+    />
+    <p v-if="tip.data">{{ tip.data }}</p>
+  </template>
+</LineChart>
+```
+
+### Toggle series from the legend
+
+Set `legend-toggle` to let readers show and hide marks by clicking their
+legend item. Every series and area with a `legend` label becomes
+toggleable; marks that share a label toggle together. A hidden mark leaves
+the plot and the tooltip, its legend item dims with a strikethrough, and
+the y axis rescales to what is still shown. CSV downloads always include
+every series.
+
+The chart tracks the hidden labels itself. Bind `v-model:hidden-series` (an
+array of legend labels) to read the state, set an initial selection, or
+drive it from your own controls; `hidden-series` works without
+`legend-toggle` too.
 
 <ComponentDemo>
   <LineChart
+    data-testid="legend-toggle-line-chart"
     :series="[
-      { data: [0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2], color: '#0057b7', strokeWidth: 2, dots: true, dotRadius: 4, dotFill: '#fff', dotStroke: '#0057b7' },
+      { data: Array.from({ length: 60 }, (_, i) => Math.round(900 * Math.exp(-((i - 25) ** 2) / 120))), legend: 'Baseline', color: '#0057b7' },
+      { data: Array.from({ length: 60 }, (_, i) => Math.round(400 * Math.exp(-((i - 32) ** 2) / 200))), legend: 'Vaccination', color: '#fb7e38' },
+      { data: Array.from({ length: 60 }, (_, i) => Math.round(60 * Math.exp(-((i - 40) ** 2) / 260))), legend: 'Vaccination + masks', color: '#2e8540' },
     ]"
-    :height="200"
+    :height="220"
     x-label="Days"
     y-label="Cases"
+    tooltip-trigger="hover"
+    legend-toggle
   />
 
 <template #code>
@@ -857,28 +1082,27 @@ every grid on the chart; a field on the axis prop wins.
 ```vue
 <LineChart
   :series="[
-    {
-      data: [0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2],
-      color: '#0057b7',
-      strokeWidth: 2,
-      dots: true,
-      dotRadius: 4,
-      dotFill: '#fff',
-      dotStroke: '#0057b7',
-    },
+    { data: baseline, legend: 'Baseline', color: '#0057b7' },
+    { data: vaccination, legend: 'Vaccination', color: '#fb7e38' },
+    { data: combined, legend: 'Vaccination + masks', color: '#2e8540' },
   ]"
-  :height="200"
+  :height="220"
   x-label="Days"
   y-label="Cases"
+  tooltip-trigger="hover"
+  legend-toggle
+  v-model:hidden-series="hidden"
 />
 ```
 
   </template>
 </ComponentDemo>
+
+## Uncertainty
 
 ### Confidence band
 
-Use the `areas` prop to fill a band between two y-series — useful for
+Use the `areas` prop to fill a band between two y-series, useful for
 confidence intervals or min/max envelopes around a mean line. Each `Area`
 takes parallel `upper` and `lower` arrays (and an optional `x` array, just
 like `Series`). Set `legend` on an `Area` to include the band in the inline
@@ -942,10 +1166,7 @@ every interval.
 <ComponentDemo>
   <LineChart
     data-testid="calibration-chart"
-    :series="Array.from({ length: 30 }, (_, i) => ({
-      data: Array.from({ length: 40 }, (_, t) => Math.max(0, 40 * Math.exp(-((t - 18 - (i % 7)) ** 2) / 90) + (Math.random() - 0.5) * 6)),
-      color: '#0057b7',
-    }))"
+    :series="calibrationRuns"
     :intervals="[
       { x: 5, lower: 1, upper: 6, value: 3 },
       { x: 12, lower: 14, upper: 26, value: 20 },
@@ -1048,6 +1269,8 @@ as extra `_lower` / `_upper` CSV columns. Style them with the series'
 > **Intervals vs. areas.** `areas` fills a continuous band between two
 > series and suits a model's own uncertainty envelope. `intervals` marks
 > discrete ranges at specific positions and suits observations.
+
+## Highlights and annotations
 
 ### Area sections
 
@@ -1289,12 +1512,12 @@ all sides) or an object with `top`, `right`, `bottom`, `left`.
 Set `pointer` to one of the rule values to replace the connector with a
 straight line through the anchor:
 
-- `"ruleX"` — vertical line spanning the plot height at the annotation's `x`.
-- `"ruleY"` — horizontal line spanning the plot width at the annotation's `y`.
-- `"ruleUp"` — vertical from the bottom edge up to the anchor.
-- `"ruleDown"` — vertical from the top edge down to the anchor.
-- `"ruleFromLeft"` — horizontal from the left edge in to the anchor.
-- `"ruleFromRight"` — horizontal from the right edge in to the anchor.
+- `"ruleX"`: vertical line spanning the plot height at the annotation's `x`.
+- `"ruleY"`: horizontal line spanning the plot width at the annotation's `y`.
+- `"ruleUp"`: vertical from the bottom edge up to the anchor.
+- `"ruleDown"`: vertical from the top edge down to the anchor.
+- `"ruleFromLeft"`: horizontal from the left edge in to the anchor.
+- `"ruleFromRight"`: horizontal from the right edge in to the anchor.
 
 `lineColor`, `lineWidth`, and `lineDash` style the line, and the label is
 positioned from the anchor as usual via `offset`. `rotate` turns the label
@@ -1397,25 +1620,11 @@ reading direction).
   </template>
 </ComponentDemo>
 
-<style>
-.annotation-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 16px;
-  align-items: end;
-  width: 100%;
-  margin-top: 12px;
-}
-.annotation-controls > * {
-  flex: 1 1 150px;
-}
-</style>
-
 ### Draggable markers
 
 Use `markers` to draw vertical lines spanning the full plot height, each
 with a label just above the top of the line. Markers are **draggable**
-along the x-axis by default — bind with `v-model:markers` to receive
+along the x-axis by default; bind with `v-model:markers` to receive
 position updates while dragging (plus `marker-drag` / `marker-drag-end`
 events). Labels are painted above all series lines with a background-colored
 stroke so they stay legible, and labels that would collide move down to the
@@ -1431,194 +1640,6 @@ marker is dragged it shows its current `x` just above the x axis,
 formatted like the x axis or through `valueFormat` and styled with
 `valueStyle`, `valueOutlineColor` / `valueOutlineWidth` and
 `valueBlendMode`; set `showValueOnDrag: false` to hide it:
-
-<script setup>
-import { ref, computed } from "vue";
-
-const infections = Array.from({ length: 45 }, (_, t) =>
-  120 * Math.exp(-((t - 18) ** 2) / 160),
-);
-const hospitalizations = Array.from({ length: 45 }, (_, t) =>
-  38 * Math.exp(-((t - 24) ** 2) / 180),
-);
-const growthRange = ref([2, 7]);
-const mitigationRange = ref([3, 9]);
-const sectionDemoSeries = [
-  { data: [0, 2, 5, 12, 25, 45, 70, 100, 130, 155, 170], color: "#000", strokeWidth: 1, legend: "No interventions" },
-  { data: [0, 0, 0, 2, 8, 20, 40, 65, 90, 110, 120], color: "#999", strokeWidth: 1, dashed: true, legend: "Interventions" },
-];
-const sectionDemoSections = computed(() => [
-  {
-    startIndex: growthRange.value[0],
-    endIndex: growthRange.value[1],
-    color: "#6366f1",
-    strokeWidth: 0,
-    label: `Day ${growthRange.value[0]}–${growthRange.value[1]}`,
-    description: "Rapid growth phase",
-  },
-  {
-    seriesIndex: 0,
-    startIndex: mitigationRange.value[0],
-    endIndex: mitigationRange.value[1],
-    color: "#f43f5e",
-    label: `Day ${mitigationRange.value[0]}–${mitigationRange.value[1]}`,
-    description: "Mitigation period",
-  },
-]);
-const annotationOutlineOptions = [
-  { value: "both", label: "Text and line" },
-  { value: "text", label: "Text only" },
-  { value: "line", label: "Line only" },
-  { value: "none", label: "None" },
-];
-const annotationBlendOptions = [
-  { value: "normal", label: "Normal" },
-  { value: "multiply", label: "Multiply" },
-  { value: "screen", label: "Screen" },
-  { value: "difference", label: "Difference" },
-];
-function annotationOutline(kind) {
-  if (kind === "text") return { outlineWidth: 0, textOutlineWidth: 3 };
-  if (kind === "line") return { textOutlineWidth: 0 };
-  if (kind === "none") return { outlineWidth: 0 };
-  return {};
-}
-
-const pointerKind = ref("curved");
-const pointerPosition = ref("above-right");
-const pointerOutline = ref("both");
-const pointerBlend = ref("normal");
-const pointerArrow = ref(true);
-const pointerOffsets = {
-  above: { x: 0, y: -50 },
-  "above-right": { x: 50, y: -36 },
-  right: { x: 70, y: 0 },
-  "below-right": { x: 50, y: 50 },
-  below: { x: 0, y: 50 },
-  "below-left": { x: -50, y: 50 },
-  left: { x: -70, y: 0 },
-  "above-left": { x: -50, y: -36 },
-};
-const pointerAnnotation = computed(() => ({
-  x: 3,
-  y: 15,
-  offset: pointerOffsets[pointerPosition.value],
-  text: "**Cluster**\n_Day 3_",
-  pointer: pointerKind.value,
-  arrow: pointerArrow.value,
-  blendMode: pointerBlend.value,
-  color: pointerBlend.value === "normal" ? undefined : "#fb7e38",
-  ...annotationOutline(pointerOutline.value),
-}));
-
-const ruleKind = ref("ruleX");
-const ruleSide = ref("left");
-const ruleRotate = ref("-90");
-const ruleDash = ref("dashed");
-const ruleOutline = ref("text");
-const ruleBlend = ref("normal");
-const ruleAnnotation = computed(() => {
-  const rotate = Number(ruleRotate.value);
-  const side = ruleSide.value;
-  const offset =
-    side === "left"
-      ? { x: -6, y: rotate ? 0 : 4 }
-      : side === "right"
-        ? { x: 6, y: rotate ? 0 : 4 }
-        : side === "above"
-          ? { x: rotate ? 0 : 4, y: -8 }
-          : { x: rotate ? 0 : 4, y: rotate ? 8 : 18 };
-  return {
-    x: 5,
-    y: 14,
-    offset,
-    text: "Peak day",
-    pointer: ruleKind.value,
-    align: rotate ? "left" : undefined,
-    rotate: rotate || undefined,
-    lineDash:
-      ruleDash.value === "dashed"
-        ? "4 3"
-        : ruleDash.value === "dotted"
-          ? "1 3"
-          : undefined,
-    blendMode: ruleBlend.value,
-    color: ruleBlend.value === "normal" ? undefined : "#fb7e38",
-    ...annotationOutline(ruleOutline.value),
-  };
-});
-const fanDays = Array.from({ length: 40 }, (_, t) => t);
-const fanRuns = Array.from({ length: 30 }, (_, r) =>
-  fanDays.map((t) =>
-    Math.round(
-      (90 + 40 * Math.sin(r * 1.7)) *
-        Math.exp(-((t - 18 - (r % 7)) ** 2) / (90 + 6 * (r % 5))),
-    ),
-  ),
-);
-const fanQuantile = (q) =>
-  fanDays.map((t) => {
-    const v = fanRuns.map((run) => run[t]).sort((a, b) => a - b);
-    return v[Math.round(q * (v.length - 1))];
-  });
-const fanSeries = [
-  ...fanRuns.map((data) => ({ data, color: "#0057b7", opacity: 0.12 })),
-  {
-    data: fanQuantile(0.5),
-    legend: "Median",
-    color: "#0057b7",
-    strokeWidth: 2.5,
-  },
-];
-const fanAreas = [
-  {
-    lower: fanQuantile(0.05),
-    upper: fanQuantile(0.95),
-    legend: "90% interval",
-    color: "#0057b7",
-    opacity: 0.12,
-  },
-];
-const markerDates = Array.from(
-  { length: 45 },
-  (_, t) => new Date(Date.UTC(2026, 0, 1 + t)),
-);
-const dateMarkers = ref([
-  { x: "2026-01-13", label: "Isolation", snap: true },
-  { x: "2026-02-02", label: "Recovery", labelBackground: true, snap: true },
-]);
-const isolation = ref(12);
-const recovery = ref(32);
-const markers = computed({
-  get: () => [
-    { x: isolation.value, label: "Isolation" },
-    { x: recovery.value, label: "Recovery" },
-  ],
-  set: ([a, b]) => {
-    isolation.value = a.x;
-    recovery.value = b.x;
-  },
-});
-const styledMarkers = ref([
-  {
-    x: 10,
-    label: "Intervention",
-    color: "#ef4444",
-    strokeWidth: 2,
-    dashed: false,
-    outline: true,
-    labelStyle: { color: "#ef4444", fontSize: 13 },
-    labelOutlineWidth: 4,
-  },
-  {
-    x: 22,
-    label: "Peak",
-    color: "#0057b7",
-    dash: "2 6",
-    labelBackground: true,
-  },
-]);
-</script>
 
 <ComponentDemo>
   <LineChart
@@ -1689,7 +1710,7 @@ const markers = computed({
   </template>
 </ComponentDemo>
 
-Drag positions are continuous floats — round in the setter
+Drag positions are continuous floats; round in the setter
 (`isolation.value = Math.round(a.x)`) if the variable should be whole
 days; the marker then snaps as you drag. If you don't need separate
 variables, a plain `ref` holding the array works too:
@@ -1697,7 +1718,7 @@ variables, a plain `ref` holding the array works too:
 `v-model:markers="markers"`.
 
 Labels sit `marker-label-gap` pixels above the top of the lines
-(default 7) — increase it for more clearance; the chart reserves the
+(default 7). Increase it for more clearance; the chart reserves the
 extra top padding automatically (the gap plus the tallest label font
 size), so nothing clips.
 
@@ -1813,7 +1834,7 @@ interface ChartMarker {
   outline?: boolean; // page-colored stroke behind the line
   outlineColor?: string; // default: var(--color-bg-0, #fff)
   outlineWidth?: number; // extra width added to strokeWidth (default: 4)
-  labelStyle?: LabelStyle; // { fontSize?, color?, fontWeight? } — defaults 12 / currentColor / 600
+  labelStyle?: LabelStyle; // { fontSize?, color?, fontWeight? }, defaults 12 / currentColor / 600
   labelOutlineColor?: string; // label legibility stroke (default: var(--color-bg-0, #fff))
   labelOutlineWidth?: number; // default: 3 (0 with labelBackground); 0 disables
   labelBackground?: boolean | string; // pill behind the label: true = marker color
@@ -1833,8 +1854,10 @@ Each draggable marker is exposed as a horizontal slider (`role="slider"`):
 it's keyboard-focusable, and <kbd>←</kbd>/<kbd>→</kbd> move it one step
 (hold <kbd>Shift</kbd> for ×10). Note that when the chart has a `title` or
 `ariaLabel`, the `<svg>` defaults to `role="img"`, which hides the sliders
-from assistive tech — pass `role="figure"` if screen-reader users should
+from assistive tech; pass `role="figure"` if screen-reader users should
 reach them.
+
+## Interaction and export
 
 ### Zoom
 
@@ -1887,62 +1910,12 @@ its full extent there.
   </template>
 </ComponentDemo>
 
-### Toggle series from the legend
-
-Set `legend-toggle` to let readers show and hide marks by clicking their
-legend item. Every series and area with a `legend` label becomes
-toggleable; marks that share a label toggle together. A hidden mark leaves
-the plot and the tooltip, its legend item dims with a strikethrough, and
-the y axis rescales to what is still shown. CSV downloads always include
-every series.
-
-The chart tracks the hidden labels itself. Bind `v-model:hidden-series` (an
-array of legend labels) to read the state, set an initial selection, or
-drive it from your own controls; `hidden-series` works without
-`legend-toggle` too.
-
-<ComponentDemo>
-  <LineChart
-    data-testid="legend-toggle-line-chart"
-    :series="[
-      { data: Array.from({ length: 60 }, (_, i) => Math.round(900 * Math.exp(-((i - 25) ** 2) / 120))), legend: 'Baseline', color: '#0057b7' },
-      { data: Array.from({ length: 60 }, (_, i) => Math.round(400 * Math.exp(-((i - 32) ** 2) / 200))), legend: 'Vaccination', color: '#fb7e38' },
-      { data: Array.from({ length: 60 }, (_, i) => Math.round(60 * Math.exp(-((i - 40) ** 2) / 260))), legend: 'Vaccination + masks', color: '#2e8540' },
-    ]"
-    :height="220"
-    x-label="Days"
-    y-label="Cases"
-    tooltip-trigger="hover"
-    legend-toggle
-  />
-
-<template #code>
-
-```vue
-<LineChart
-  :series="[
-    { data: baseline, legend: 'Baseline', color: '#0057b7' },
-    { data: vaccination, legend: 'Vaccination', color: '#fb7e38' },
-    { data: combined, legend: 'Vaccination + masks', color: '#2e8540' },
-  ]"
-  :height="220"
-  x-label="Days"
-  y-label="Cases"
-  tooltip-trigger="hover"
-  legend-toggle
-  v-model:hidden-series="hidden"
-/>
-```
-
-  </template>
-</ComponentDemo>
-
 ### Chart menu
 
 The chart menu (top-right) leads with Fullscreen and then Save as SVG,
 Save as PNG, and Download CSV. Fullscreen grows the chart to fill the browser
 window so the plot has more room; while expanded the menu trigger is replaced
-by a close (✕) button — click it or press <kbd>Esc</kbd> to return to the
+by a close (✕) button: click it or press <kbd>Esc</kbd> to return to the
 inline size. Set `menu="false"` to hide the trigger entirely.
 
 While expanded the chart is teleported to `<body>` so it reliably covers the
@@ -1958,7 +1931,7 @@ the `csv` prop to supply your own content (for example, to include original
 dates, categorical labels, or extra columns that aren't plotted). Use
 `filename` to control the download filename (shared by SVG, PNG and CSV).
 
-Pass `download-link` to also render a plain text link below the chart — set
+Pass `download-link` to also render a plain text link below the chart: set
 it to `true` for the default label, or pass a string to customize it. Use
 `download-button` instead to render a styled `<button>` (with the class
 `line-chart-download-button`, available for custom CSS) in place of the
@@ -2033,50 +2006,35 @@ through `aria-pressed`. They stay in place while the chart is expanded.
 
 <!--@include: ./_api/line-chart.md-->
 
-### Data
-
-`data`, `series[].data`, and `areas[].upper`/`lower` accept a plain
-`number[]` or any standard numeric typed array (`Float64Array`,
-`Int32Array`, etc.). This lets you pass the output of
-`ModelOutput.column()` directly — no `Array.from(...)` copy is needed:
-
-```vue
-<LineChart :data="outputs.series.column('values')" />
-```
-
-```ts
-type LineChartData =
-  | readonly number[]
-  | Float64Array
-  | Float32Array
-  | Int32Array
-  | Uint32Array
-  | Int16Array
-  | Uint16Array
-  | Int8Array
-  | Uint8Array
-  | Uint8ClampedArray;
-```
-
 ### Series
 
 ```ts
 interface Series {
-  y?: LineChartData; // y-values (preferred)
-  data?: LineChartData; // y-values (alternative name; one of y/data must be set)
-  x?: LineChartData; // optional parallel x-values
+  y?: LineChartData; // y-values (one of y / data must be set; y wins)
+  data?: LineChartData; // y-values (alternative name)
+  x?: LineChartXInput; // optional parallel x-values; dates switch on a date axis
   color?: string;
-  dashed?: boolean;
   strokeWidth?: number;
+  dashed?: boolean;
   opacity?: number;
-  line?: boolean;
+  lineOpacity?: number; // overrides opacity for the line only
+  dotOpacity?: number; // overrides opacity for the dots only
+  blendMode?: BlendMode; // CSS mix-blend-mode for the line and dots
+  line?: boolean; // default: true
   outline?: boolean; // page-colored stroke drawn behind the line
-  outlineColor?: string; // outline stroke color (default: var(--color-bg-0, #fff))
+  outlineColor?: string; // default: var(--color-bg-0, #fff)
   outlineWidth?: number; // extra width added to strokeWidth (default: 4)
   dots?: boolean;
   dotRadius?: number;
   dotFill?: string;
   dotStroke?: string;
+  legend?: string; // inline legend label, also names the tooltip row
+  showInLegend?: boolean; // default: true when legend is set
+  showInTooltip?: boolean; // default: true
+  tooltipLabel?: string; // names the tooltip row without a legend entry
+  lower?: LineChartData; // per-point whisker bounds, parallel to y
+  upper?: LineChartData;
+  intervalStyle?: IntervalStyle; // styles those whiskers
 }
 ```
 
@@ -2086,11 +2044,13 @@ interface Series {
 interface Area {
   upper: LineChartData;
   lower: LineChartData;
-  x?: LineChartData; // optional parallel x-values
+  x?: LineChartXInput; // optional parallel x-values
   color?: string;
   opacity?: number;
-  legend?: string; // inline legend label
-  showInLegend?: boolean; // default true when legend is set
+  legend?: string; // inline legend label, also names the tooltip row
+  showInLegend?: boolean; // default: true when legend is set
+  showInTooltip?: boolean; // default: true for a named area
+  tooltipLabel?: string; // names the tooltip row without a legend entry
   blendMode?: BlendMode; // CSS mix-blend-mode for the fill
 }
 ```
@@ -2178,3 +2138,17 @@ interface GridStyle {
   lineDash?: string | number | number[]; // raw stroke-dasharray; overrides lineStyle
 }
 ```
+
+<style>
+.annotation-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: end;
+  width: 100%;
+  margin-top: 12px;
+}
+.annotation-controls > * {
+  flex: 1 1 150px;
+}
+</style>
