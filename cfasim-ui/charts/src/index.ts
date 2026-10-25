@@ -73,3 +73,7 @@ export {
   type PngExportOptions,
   type SvgExportOptions,
 } from "./ChartMenu/download.js";
+export {
+  default as ChartTooltipContent,
+  type ChartTooltipContentProps,
+} from "./_shared/ChartTooltipContent.vue";

@@ -424,6 +424,72 @@ The tooltip stops at every x value of every series shown in it, so series sample
   </template>
 </ComponentDemo>
 
+#### Named rows
+
+Rows are named by the series' `legend`, or `tooltipLabel` to name a row without a legend entry. Once any row is named, unnamed series are left out, so ensemble trajectories drop out and the median stays. Series with no value at the hovered x are left out too. Named areas (`legend` or `tooltipLabel`) show their range, and `intervals` use `label`. `tooltip-title` formats the heading.
+
+<ComponentDemo>
+  <LineChart
+    :series="fanSeries"
+    :areas="fanAreas"
+    :height="220"
+    x-label="Day"
+    y-label="Infections"
+    tooltip-trigger="hover"
+    :tooltip-title="(label) => `Day ${label}`"
+  />
+
+<template #code>
+
+```vue
+<script setup>
+const series = [
+  // One faint line per run: no legend, so no tooltip row.
+  ...runs.map((data) => ({ data, color: "#0057b7", opacity: 0.12 })),
+  { data: median, legend: "Median", color: "#0057b7", strokeWidth: 2.5 },
+];
+const areas = [
+  { lower: q05, upper: q95, legend: "90% interval", color: "#0057b7" },
+];
+</script>
+
+<LineChart
+  :series="series"
+  :areas="areas"
+  :height="220"
+  x-label="Day"
+  y-label="Infections"
+  tooltip-trigger="hover"
+  :tooltip-title="(label) => `Day ${label}`"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+#### Custom tooltip content
+
+The `#tooltip` slot gets `title`, `values`, `areas`, `intervals`, `index`, `xLabel`, `data` and `format`. To extend the default body, render `ChartTooltipContent`:
+
+```vue
+<script setup>
+import { LineChart, ChartTooltipContent } from "@cfasim-ui/charts";
+</script>
+
+<LineChart :series="series" :tooltip-data="notes" tooltip-trigger="hover">
+  <template #tooltip="tip">
+    <ChartTooltipContent
+      :title="tip.title"
+      :values="tip.values"
+      :areas="tip.areas"
+      :intervals="tip.intervals"
+      :format="tip.format"
+    />
+    <p v-if="tip.data">{{ tip.data }}</p>
+  </template>
+</LineChart>
+```
+
 ### Custom axis ticks
 
 Control tick placement with `x-ticks` and `y-ticks`. Pass a **number** for a fixed interval (in data units, respecting `xMin`) or an **array** of explicit values. Use `x-tick-format` / `y-tick-format` to customize labels. On a date axis the units are milliseconds: an interval steps from the first date (`7 * 86400000` is a tick every week, on the weekday the data starts), an array holds epoch-ms values, and the default label format follows the interval (days, weeks or months).
@@ -1481,6 +1547,38 @@ const ruleAnnotation = computed(() => {
     ...annotationOutline(ruleOutline.value),
   };
 });
+const fanDays = Array.from({ length: 40 }, (_, t) => t);
+const fanRuns = Array.from({ length: 30 }, (_, r) =>
+  fanDays.map((t) =>
+    Math.round(
+      (90 + 40 * Math.sin(r * 1.7)) *
+        Math.exp(-((t - 18 - (r % 7)) ** 2) / (90 + 6 * (r % 5))),
+    ),
+  ),
+);
+const fanQuantile = (q) =>
+  fanDays.map((t) => {
+    const v = fanRuns.map((run) => run[t]).sort((a, b) => a - b);
+    return v[Math.round(q * (v.length - 1))];
+  });
+const fanSeries = [
+  ...fanRuns.map((data) => ({ data, color: "#0057b7", opacity: 0.12 })),
+  {
+    data: fanQuantile(0.5),
+    legend: "Median",
+    color: "#0057b7",
+    strokeWidth: 2.5,
+  },
+];
+const fanAreas = [
+  {
+    lower: fanQuantile(0.05),
+    upper: fanQuantile(0.95),
+    legend: "90% interval",
+    color: "#0057b7",
+    opacity: 0.12,
+  },
+];
 const markerDates = Array.from(
   { length: 45 },
   (_, t) => new Date(Date.UTC(2026, 0, 1 + t)),

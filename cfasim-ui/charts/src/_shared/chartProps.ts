@@ -169,6 +169,12 @@ export interface ChartCommonProps {
    */
   tooltipValueFormat?: NumberFormat;
   /**
+   * Heading of the default tooltip, from the hovered x (or category)
+   * label as the axis formats it and the hovered index, e.g.
+   * `(label) => \`Day ${label}\``.
+   */
+  tooltipTitle?: (label: string, index: number) => string;
+  /**
    * Custom CSV content (string or function) for the Download CSV menu
    * item. When omitted, CSV is generated from the chart's series.
    */
@@ -258,6 +264,8 @@ export interface ChartTooltipValue {
   value: number;
   color: string;
   seriesIndex: number;
+  /** The series' `tooltipLabel`, else its `legend`. */
+  label?: string;
   /** Low end of the series' interval at this point, when it has `lower` / `upper`. */
   lower?: number;
   /** High end of the series' interval at this point. */
@@ -270,6 +278,7 @@ export interface ChartTooltipInterval {
   upper: number;
   value?: number;
   color: string;
+  label?: string;
 }
 
 /** Properties common to every chart's tooltip slot. */
@@ -284,4 +293,8 @@ export interface ChartTooltipBaseProps {
   /** Top-level `intervals` whose `x` lands on the hovered position. */
   intervals: ChartTooltipInterval[];
   data: unknown;
+  /** Heading of the default tooltip: the x / category label after `tooltipTitle`. */
+  title?: string;
+  /** The chart's tooltip value formatter (`tooltipValueFormat`, then the axis format). */
+  format: (value: number) => string;
 }

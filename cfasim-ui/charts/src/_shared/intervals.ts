@@ -75,6 +75,8 @@ export interface ChartInterval extends IntervalStyle {
   upper: number;
   /** Optional point estimate, drawn as a dot on the whisker. */
   value?: number;
+  /** Names the interval's row in the default tooltip. */
+  label?: string;
   /**
    * Tie the whisker to a series: it hides with that series' legend
    * toggle on both charts. On `BarChart` it also centers on that series'

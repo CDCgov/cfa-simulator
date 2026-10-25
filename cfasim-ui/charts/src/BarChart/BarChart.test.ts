@@ -697,7 +697,7 @@ describe("BarChart", () => {
         .findAll("rect")
         .find((r) => r.attributes("fill") === "transparent")!;
       await overlay.trigger("mousemove", { clientX: 100, clientY: 100 });
-      const rows = wrapper.findAll(".bar-chart-tooltip-row");
+      const rows = wrapper.findAll(".chart-tooltip-row");
       expect(rows.length).toBe(1);
       wrapper.unmount();
     });
@@ -719,9 +719,60 @@ describe("BarChart", () => {
         .findAll("rect")
         .find((r) => r.attributes("fill") === "transparent")!;
       await overlay.trigger("mousemove", { clientX: 100, clientY: 100 });
-      const row = wrapper.find(".bar-chart-tooltip-row");
+      const row = wrapper.find(".chart-tooltip-row");
       expect(row.exists()).toBe(true);
       expect(row.text()).toMatch(/^\$[\d,]+$/);
+      wrapper.unmount();
+    });
+
+    it("names tooltip rows and formats the heading with tooltipTitle", async () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          series: [
+            { data: [10, 20], legend: "2024" },
+            { data: [15, 25], tooltipLabel: "2025" },
+            { data: [1, 2] },
+          ],
+          categories: ["A", "B"],
+          intervals: [{ x: 0, lower: 5, upper: 12, label: "Target" }],
+          tooltipTrigger: "hover" as const,
+          tooltipTitle: (label: string) => `Region ${label}`,
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+        attachTo: document.body,
+      });
+      const overlay = wrapper
+        .findAll("rect")
+        .find((r) => r.attributes("fill") === "transparent")!;
+      await overlay.trigger("mousemove", { clientX: 100, clientY: 100 });
+      expect(wrapper.find(".chart-tooltip-label").text()).toBe("Region A");
+      const rows = wrapper.findAll(".chart-tooltip-row").map((r) => r.text());
+      expect(rows).toEqual(["202410", "202515", "Target5–12"]);
+      wrapper.unmount();
+    });
+
+    it("keeps a row with no value when it has a range", async () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          series: [{ data: [NaN, 20], lower: [3, 15], upper: [9, 25] }],
+          categories: ["A", "B"],
+          tooltipTrigger: "hover" as const,
+          tooltipTitle: (label: string) => `Region ${label}`,
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+        attachTo: document.body,
+      });
+      const overlay = wrapper
+        .findAll("rect")
+        .find((r) => r.attributes("fill") === "transparent")!;
+      await overlay.trigger("mousemove", { clientX: 100, clientY: 100 });
+      expect(
+        wrapper.find(".chart-tooltip-row").text().replace(/\s+/g, " "),
+      ).toBe("— (3–9)");
       wrapper.unmount();
     });
 
@@ -742,7 +793,7 @@ describe("BarChart", () => {
         .findAll("rect")
         .find((r) => r.attributes("fill") === "transparent")!;
       await overlay.trigger("mousemove", { clientX: 100, clientY: 100 });
-      const row = wrapper.find(".bar-chart-tooltip-row");
+      const row = wrapper.find(".chart-tooltip-row");
       expect(row.text()).toMatch(/\d+%$/);
       wrapper.unmount();
     });
@@ -1389,7 +1440,7 @@ describe("BarChart", () => {
         .findAll("rect")
         .find((r) => r.attributes("fill") === "transparent")!;
       await overlay.trigger("mousemove", { clientX: 60, clientY: 100 });
-      const tip = wrapper.find(".bar-chart-tooltip-label");
+      const tip = wrapper.find(".chart-tooltip-label");
       expect(tip.exists()).toBe(true);
       // Should render via "month-year" preset, not the raw ISO string.
       expect(tip.text()).not.toBe("2026-01-01");

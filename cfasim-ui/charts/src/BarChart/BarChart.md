@@ -917,6 +917,42 @@ its full extent there.
   </template>
 </ComponentDemo>
 
+### Tooltip
+
+Rows are named by `legend` or `tooltipLabel`, and `tooltip-title` formats the heading. The slot works like [LineChart's](./line-chart#tooltip), plus `category`.
+
+<ComponentDemo>
+  <BarChart
+    :series="[
+      { data: [12, 19, 7, 24], legend: '2024', color: '#0057b7' },
+      { data: [15, 22, 9, 20], legend: '2025', color: '#fb7e38' },
+    ]"
+    :categories="['North', 'South', 'East', 'West']"
+    :height="220"
+    y-label="Cases"
+    tooltip-trigger="hover"
+    :tooltip-title="(label) => `${label} region`"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :series="[
+    { data: [12, 19, 7, 24], legend: '2024', color: '#0057b7' },
+    { data: [15, 22, 9, 20], legend: '2025', color: '#fb7e38' },
+  ]"
+  :categories="['North', 'South', 'East', 'West']"
+  :height="220"
+  y-label="Cases"
+  tooltip-trigger="hover"
+  :tooltip-title="(label) => `${label} region`"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Toggle series from the legend
 
 Set `legend-toggle` to let readers show and hide marks by clicking their

@@ -323,13 +323,42 @@ test("tooltip stops at every x of every series, not just the first", async ({
   const labels = new Set<string>();
   for (let i = 0; i <= 60; i++) {
     await page.mouse.move(box.x + (box.width * i) / 60, box.y + box.height / 2);
-    const label = chart.locator(".line-chart-tooltip-label");
+    const label = chart.locator(".chart-tooltip-label");
     await expect(label).toBeVisible();
     labels.add((await label.textContent())!.trim());
-    await expect(chart.locator(".line-chart-tooltip-row")).toHaveCount(2);
+    await expect(chart.locator(".chart-tooltip-row")).toHaveCount(2);
   }
   // Daily series has 29 points; the weekly one adds none outside that set.
   expect(labels.size).toBe(29);
+});
+
+test("default tooltip names rows and leaves unnamed fan lines out", async ({
+  page,
+}) => {
+  await page.goto("./cfasim-ui/charts/line-chart");
+  const chart = page
+    .locator(".line-chart-wrapper")
+    .filter({ hasText: "90% interval" })
+    .first();
+  await chart.scrollIntoViewIfNeeded();
+  const box = (await chart
+    .locator("rect[fill='transparent']")
+    .first()
+    .boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(chart.locator(".chart-tooltip-label")).toHaveText(/^Day \d+$/);
+  await expect(chart.locator(".chart-tooltip-name")).toHaveText([
+    "Median",
+    "90% interval",
+  ]);
+  // Values sit flush right, past their names.
+  const body = (await chart.locator(".chart-tooltip-body").boundingBox())!;
+  for (const row of await chart.locator(".chart-tooltip-row").all()) {
+    const name = (await row.locator(".chart-tooltip-name").boundingBox())!;
+    const value = (await row.locator(".chart-tooltip-value").boundingBox())!;
+    expect(value.x).toBeGreaterThan(name.x + name.width);
+    expect(body.x + body.width - (value.x + value.width)).toBeLessThan(1);
+  }
 });
 
 test("Save as SVG resolves theme colors to what the page shows", async ({

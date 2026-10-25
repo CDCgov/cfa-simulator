@@ -987,7 +987,7 @@ describe("LineChart", () => {
         .findAll("rect")
         .find((r) => r.attributes("fill") === "transparent")!;
       await overlay.trigger("mousemove", { clientX: 200, clientY: 50 });
-      const label = wrapper.find(".line-chart-tooltip-label");
+      const label = wrapper.find(".chart-tooltip-label");
       expect(label.exists()).toBe(true);
       expect(label.text()).toMatch(/^day-\d+$/);
       wrapper.unmount();
@@ -1009,7 +1009,7 @@ describe("LineChart", () => {
         .findAll("rect")
         .find((r) => r.attributes("fill") === "transparent")!;
       await overlay.trigger("mousemove", { clientX: 200, clientY: 50 });
-      const row = wrapper.find(".line-chart-tooltip-row");
+      const row = wrapper.find(".chart-tooltip-row");
       expect(row.exists()).toBe(true);
       expect(row.text()).toMatch(/^\$[\d,]+$/);
       wrapper.unmount();
@@ -1033,13 +1033,163 @@ describe("LineChart", () => {
         .findAll("rect")
         .find((r) => r.attributes("fill") === "transparent")!;
       await overlay.trigger("mousemove", { clientX: 200, clientY: 50 });
-      expect(wrapper.findAll(".line-chart-tooltip-row").length).toBe(1);
+      expect(wrapper.findAll(".chart-tooltip-row").length).toBe(1);
       // Hover dot is also suppressed for the hidden series. Hover dots have
       // a white stroke; other circles (e.g. series dots) do not.
       const hoverDots = wrapper
         .findAll("circle")
         .filter((c) => c.attributes("stroke-width") === "2");
       expect(hoverDots.length).toBe(1);
+      wrapper.unmount();
+    });
+
+    async function hoverMiddle(props: Record<string, unknown>) {
+      const wrapper = mount(LineChart, {
+        props: {
+          width: 400,
+          height: 200,
+          menu: false,
+          tooltipTrigger: "hover" as const,
+          ...props,
+        },
+        attachTo: document.body,
+      });
+      const overlay = wrapper
+        .findAll("rect")
+        .find((r) => r.attributes("fill") === "transparent")!;
+      await overlay.trigger("mousemove", { clientX: 200, clientY: 50 });
+      return wrapper;
+    }
+
+    it("names tooltip rows after the series legend or tooltipLabel", async () => {
+      const wrapper = await hoverMiddle({
+        series: [
+          { data: [1, 2, 3], legend: "Cases", color: "#0057b7" },
+          { data: [4, 5, 6], tooltipLabel: "Median", color: "#f4a261" },
+        ],
+      });
+      const names = wrapper.findAll(".chart-tooltip-name").map((n) => n.text());
+      expect(names).toEqual(["Cases", "Median"]);
+      wrapper.unmount();
+    });
+
+    it("drops unnamed series from the tooltip once any row is named", async () => {
+      const wrapper = await hoverMiddle({
+        series: [
+          { data: [1, 2, 3], color: "#ccc" },
+          { data: [2, 3, 4], color: "#ccc" },
+          { data: [1.5, 2.5, 3.5], legend: "Median", color: "#0057b7" },
+        ],
+      });
+      const rows = wrapper.findAll(".chart-tooltip-row");
+      expect(rows.length).toBe(1);
+      expect(rows[0].text()).toBe("Median2.5");
+      wrapper.unmount();
+    });
+
+    it("keeps unnamed rows when no series is named", async () => {
+      const wrapper = await hoverMiddle({
+        series: [{ data: [1, 2, 3] }, { data: [4, 5, 6] }],
+      });
+      expect(wrapper.findAll(".chart-tooltip-row").length).toBe(2);
+      expect(wrapper.find(".chart-tooltip-name").exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it("shows named areas as ranges at the hovered x", async () => {
+      const wrapper = await hoverMiddle({
+        series: [{ data: [1, 2, 3], legend: "Median" }],
+        areas: [
+          { lower: [0, 1, 2], upper: [2, 4, 6], legend: "95% CI" },
+          { lower: [0, 1, 2], upper: [3, 3, 3] },
+          {
+            lower: [0, 1, 2],
+            upper: [2, 4, 6],
+            legend: "Hidden",
+            showInTooltip: false,
+          },
+        ],
+      });
+      const rows = wrapper.findAll(".chart-tooltip-row").map((r) => r.text());
+      expect(rows).toEqual(["Median2", "95% CI1–4"]);
+      wrapper.unmount();
+    });
+
+    it("names an area row with tooltipLabel and no legend entry", async () => {
+      const wrapper = await hoverMiddle({
+        series: [{ data: [1, 2, 3], legend: "Median" }],
+        areas: [{ lower: [0, 1, 2], upper: [2, 4, 6], tooltipLabel: "95% CI" }],
+      });
+      const rows = wrapper.findAll(".chart-tooltip-row").map((r) => r.text());
+      expect(rows).toEqual(["Median2", "95% CI1–4"]);
+      const svgText = wrapper.findAll("text").map((t) => t.text());
+      expect(svgText).toContain("Median");
+      expect(svgText).not.toContain("95% CI");
+      wrapper.unmount();
+    });
+
+    it("leaves out rows with no value at the hovered x", async () => {
+      const wrapper = await hoverMiddle({
+        series: [
+          { data: [1, 2, 3], legend: "Model" },
+          { data: [1, NaN, 3], legend: "Observed" },
+        ],
+      });
+      const names = wrapper.findAll(".chart-tooltip-name").map((n) => n.text());
+      expect(names).toEqual(["Model"]);
+      wrapper.unmount();
+    });
+
+    it("leaves out an area that does not cover the hovered x", async () => {
+      const wrapper = await hoverMiddle({
+        series: [{ x: [0, 1, 2, 3, 4], data: [1, 2, 3, 4, 5], legend: "Obs" }],
+        areas: [
+          { x: [3, 4], lower: [3, 4], upper: [5, 6], legend: "Forecast" },
+        ],
+      });
+      const names = wrapper.findAll(".chart-tooltip-name").map((n) => n.text());
+      expect(names).toEqual(["Obs"]);
+      wrapper.unmount();
+    });
+
+    it("formats the heading with tooltipTitle", async () => {
+      const wrapper = await hoverMiddle({
+        data: [1, 2, 3],
+        tooltipTitle: (label: string, index: number) =>
+          `Day ${label} (#${index})`,
+      });
+      expect(wrapper.find(".chart-tooltip-label").text()).toBe("Day 1 (#1)");
+      wrapper.unmount();
+    });
+
+    it("passes title, format, labels and areas to the tooltip slot", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [1000, 2000, 3000], legend: "Cases" }],
+          areas: [{ lower: [0, 1500, 0], upper: [0, 2500, 0], legend: "CI" }],
+          tooltipValueFormat: (v: number) => `$${v}`,
+          tooltipTitle: (label: string) => `Day ${label}`,
+          width: 400,
+          height: 200,
+          menu: false,
+          tooltipTrigger: "hover" as const,
+        },
+        slots: {
+          tooltip: `
+            <template #default="p">
+              <div data-testid="slot">{{ p.title }}|{{ p.values[0].label }}|{{ p.format(p.values[0].value) }}|{{ p.areas[0].label }}</div>
+            </template>
+          `,
+        },
+        attachTo: document.body,
+      });
+      const overlay = wrapper
+        .findAll("rect")
+        .find((r) => r.attributes("fill") === "transparent")!;
+      await overlay.trigger("mousemove", { clientX: 200, clientY: 50 });
+      expect(wrapper.find('[data-testid="slot"]').text()).toBe(
+        "Day 1|Cases|$2000|CI",
+      );
       wrapper.unmount();
     });
 
@@ -1065,7 +1215,7 @@ describe("LineChart", () => {
       const indices = new Set<number>();
       for (let clientX = 0; clientX <= 400; clientX += 4) {
         await overlay.trigger("mousemove", { clientX, clientY: 50 });
-        labels.add(wrapper.find(".line-chart-tooltip-label").text());
+        labels.add(wrapper.find(".chart-tooltip-label").text());
         indices.add(
           (wrapper.emitted("hover")!.at(-1)![0] as { index: number }).index,
         );
@@ -1073,7 +1223,7 @@ describe("LineChart", () => {
       expect([...labels]).toEqual(["0", "5", "10", "15", "20", "25"]);
       expect([...indices].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5]);
       // Every series still reports its nearest point at a union position.
-      expect(wrapper.findAll(".line-chart-tooltip-row").length).toBe(2);
+      expect(wrapper.findAll(".chart-tooltip-row").length).toBe(2);
       wrapper.unmount();
     });
 
@@ -1180,7 +1330,7 @@ describe("LineChart", () => {
         .findAll("rect")
         .find((r) => r.attributes("fill") === "transparent")!;
       await overlay.trigger("mousemove", { clientX: 200, clientY: 50 });
-      const row = wrapper.find(".line-chart-tooltip-row");
+      const row = wrapper.find(".chart-tooltip-row");
       expect(row.text()).toMatch(/\d+%$/);
       wrapper.unmount();
     });
@@ -3025,7 +3175,7 @@ describe("LineChart", () => {
         .findAll("rect")
         .find((r) => r.attributes("fill") === "transparent")!;
       await overlay.trigger("mousemove", { clientX: 30, clientY: 100 });
-      const tip = wrapper.find(".line-chart-tooltip-label");
+      const tip = wrapper.find(".chart-tooltip-label");
       expect(tip.exists()).toBe(true);
       // Default ISO format ⇒ "2026-01-01".
       expect(tip.text()).toMatch(/^\d{4}-\d{2}-\d{2}$/);

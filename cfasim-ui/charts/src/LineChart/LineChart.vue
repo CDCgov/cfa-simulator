@@ -35,6 +35,7 @@ import {
   makeTooltipValueFormatter,
   ChartAnnotations,
   ChartIntervals,
+  ChartTooltipContent,
   ChartGridLines,
   resolveGridStyle,
   type GridStyle,
@@ -150,6 +151,13 @@ export interface Series extends LineMarkStyle {
    */
   showInTooltip?: boolean;
   /**
+   * Names this series' row in the default tooltip. Defaults to `legend`.
+   * Once any row is named, unnamed series drop out of the default
+   * tooltip (their hover dots stay), so fan trajectories without a
+   * legend leave only the named lines.
+   */
+  tooltipLabel?: string;
+  /**
    * Low bound of an interval at each point, parallel to `y`/`data`.
    * With `upper`, draws a whisker at every point where both bounds are
    * finite, in the series color. Bounds are absolute y values.
@@ -175,6 +183,16 @@ export interface Area {
    * Has no effect when `legend` is unset.
    */
   showInLegend?: boolean;
+  /**
+   * Whether a named area shows its range at the hovered x in the default
+   * tooltip. Defaults to true. Unnamed areas never do.
+   */
+  showInTooltip?: boolean;
+  /**
+   * Names this area's tooltip row without adding a legend entry.
+   * Defaults to `legend`.
+   */
+  tooltipLabel?: string;
   /**
    * CSS `mix-blend-mode` applied to the area fill. Lets overlapping
    * areas (e.g. confidence bands) combine their colors instead of one
@@ -388,7 +406,13 @@ const emit = defineEmits<{
 }>();
 
 defineSlots<{
-  tooltip?(props: ChartTooltipBaseProps & { xLabel?: string }): unknown;
+  tooltip?(
+    props: ChartTooltipBaseProps & {
+      xLabel?: string;
+      /** Named `areas` covering the hovered x. */
+      areas: ChartTooltipInterval[];
+    },
+  ): unknown;
 }>();
 
 /**
@@ -1472,31 +1496,50 @@ function sortedSeriesXs(series: readonly ResolvedSeries[]): number[] {
 /** Sorted x positions of every series point, for `snap: true` markers. */
 const allSeriesXs = computed(() => sortedSeriesXs(allSeries.value));
 
+/** Indices of the finite entries of `x[0..len)`, sorted by x, and those x values. */
+function xOrder(x: LineChartData, len: number) {
+  const order: number[] = [];
+  for (let i = 0; i < len; i++) {
+    if (isFinite(Number(x[i]))) order.push(i);
+  }
+  order.sort((a, b) => Number(x[a]) - Number(x[b]));
+  return { order, xs: order.map((i) => Number(x[i])) };
+}
+
 /**
  * Per series with explicit x values, its point indices ordered by x and
  * those x values, so the nearest point to an x is a binary search.
  * Index-x series need no table: the nearest point is the rounded x.
  */
 const seriesXOrder = computed(() =>
-  allSeries.value.map((s) => {
-    if (!s.x) return null;
-    const order: number[] = [];
-    for (let i = 0; i < s.data.length; i++) {
-      if (isFinite(seriesXAt(s, i))) order.push(i);
-    }
-    order.sort((a, b) => seriesXAt(s, a) - seriesXAt(s, b));
-    return { order, xs: order.map((i) => seriesXAt(s, i)) };
-  }),
+  allSeries.value.map((s) => (s.x ? xOrder(s.x, s.data.length) : null)),
 );
 
-/** Index of the point in series `si` closest to a data-space x. */
-function nearestSeriesIndex(si: number, targetX: number): number | null {
-  const len = allSeries.value[si].data.length;
+const areaXOrder = computed(() =>
+  allAreas.value.map((a) =>
+    a.x ? xOrder(a.x, Math.min(a.upper.length, a.lower.length)) : null,
+  ),
+);
+
+/** Nearest of `len` points to `targetX`: rounded x without an x table. */
+function nearestIndex(
+  sorted: { order: number[]; xs: number[] } | null,
+  len: number,
+  targetX: number,
+): number | null {
   if (len === 0) return null;
-  const sorted = seriesXOrder.value[si];
   if (!sorted) return Math.min(len - 1, Math.max(0, Math.round(targetX)));
   const k = nearestSortedIndex(sorted.xs, targetX);
   return k === null ? null : sorted.order[k];
+}
+
+/** Index of the point in series `si` closest to a data-space x. */
+function nearestSeriesIndex(si: number, targetX: number): number | null {
+  return nearestIndex(
+    seriesXOrder.value[si],
+    allSeries.value[si].data.length,
+    targetX,
+  );
 }
 
 /** Index of the grid position closest to a data-space x. */
@@ -1540,6 +1583,7 @@ const hoverPoints = computed(() => {
   const out: {
     seriesIndex: number;
     color: string;
+    label?: string;
     value: number;
     lower?: number;
     upper?: number;
@@ -1556,6 +1600,7 @@ const hoverPoints = computed(() => {
     out.push({
       seriesIndex: i,
       color: s.color ?? "currentColor",
+      label: s.tooltipLabel || s.legend || undefined,
       value,
       lower: hasBounds ? Math.min(lower, upper) : undefined,
       upper: hasBounds ? Math.max(lower, upper) : undefined,
@@ -1583,8 +1628,39 @@ const hoverIntervals = computed<ChartTooltipInterval[]>(() => {
       value: iv.value,
       color: resolveIntervalStyle(iv, props.intervalStyle, intervalColor(iv))
         .color,
+      label: iv.label,
     });
   }
+  return out;
+});
+
+/** Named areas covering the hovered x, as ranges for the default tooltip. */
+const hoverAreas = computed<ChartTooltipInterval[]>(() => {
+  const targetX = hoverDataX.value;
+  if (targetX === null) return [];
+  const out: ChartTooltipInterval[] = [];
+  allAreas.value.forEach((a, ai) => {
+    const label = a.tooltipLabel || a.legend;
+    if (!label || a.showInTooltip === false || isHidden(a.legend)) return;
+    const len = Math.min(a.upper.length, a.lower.length);
+    const sorted = areaXOrder.value[ai];
+    // Unlike series, an area shows nothing outside the x span it covers.
+    const [first, last] = sorted
+      ? [sorted.xs[0], sorted.xs[sorted.xs.length - 1]]
+      : [-0.5, len - 0.5];
+    if (!(targetX >= first && targetX <= last)) return;
+    const i = nearestIndex(sorted, len, targetX);
+    if (i === null) return;
+    const lower = Number(a.lower[i]);
+    const upper = Number(a.upper[i]);
+    if (!isFinite(lower) || !isFinite(upper)) return;
+    out.push({
+      lower: Math.min(lower, upper),
+      upper: Math.max(lower, upper),
+      color: a.color ?? "currentColor",
+      label,
+    });
+  });
   return out;
 });
 
@@ -1602,16 +1678,22 @@ const hoverSlotProps = computed(() => {
     value: p.value,
     color: p.color,
     seriesIndex: p.seriesIndex,
+    label: p.label,
     lower: p.lower,
     upper: p.upper,
   }));
+  // Single source of truth for label dispatch: same as the x-axis ticks.
+  const xLabel = formatXValue(targetX, idx);
   return {
     index: idx,
-    // Single source of truth for label dispatch — same as the x-axis ticks.
-    xLabel: formatXValue(targetX, idx),
+    xLabel,
+    title:
+      xLabel && props.tooltipTitle ? props.tooltipTitle(xLabel, idx) : xLabel,
     values,
+    areas: hoverAreas.value,
     intervals: hoverIntervals.value,
     data: props.tooltipData?.[idx] ?? null,
+    format: formatTooltipValue,
   };
 });
 
@@ -2619,53 +2701,13 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
         }"
       >
         <slot name="tooltip" v-bind="hoverSlotProps">
-          <div class="line-chart-tooltip">
-            <div v-if="hoverSlotProps.xLabel" class="line-chart-tooltip-label">
-              {{ hoverSlotProps.xLabel }}
-            </div>
-            <div
-              v-for="v in hoverSlotProps.values"
-              :key="v.seriesIndex"
-              class="line-chart-tooltip-row"
-            >
-              <span
-                class="line-chart-tooltip-swatch"
-                :style="{ background: v.color }"
-              />
-              {{ isFinite(v.value) ? formatTooltipValue(v.value) : "—" }}
-              <span
-                v-if="v.lower !== undefined && v.upper !== undefined"
-                class="line-chart-tooltip-range"
-              >
-                ({{ formatTooltipValue(v.lower) }}–{{
-                  formatTooltipValue(v.upper)
-                }})
-              </span>
-            </div>
-            <div
-              v-for="(iv, i) in hoverSlotProps.intervals"
-              :key="'iv' + i"
-              class="line-chart-tooltip-row"
-            >
-              <span
-                class="line-chart-tooltip-swatch"
-                :style="{ background: iv.color }"
-              />
-              <template v-if="iv.value !== undefined">
-                {{ formatTooltipValue(iv.value) }}
-                <span class="line-chart-tooltip-range">
-                  ({{ formatTooltipValue(iv.lower) }}–{{
-                    formatTooltipValue(iv.upper)
-                  }})
-                </span>
-              </template>
-              <template v-else>
-                {{ formatTooltipValue(iv.lower) }}–{{
-                  formatTooltipValue(iv.upper)
-                }}
-              </template>
-            </div>
-          </div>
+          <ChartTooltipContent
+            :title="hoverSlotProps.title"
+            :values="hoverSlotProps.values"
+            :areas="hoverSlotProps.areas"
+            :intervals="hoverSlotProps.intervals"
+            :format="hoverSlotProps.format"
+          />
         </slot>
       </div>
       <a
@@ -2694,34 +2736,11 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
   width: 100%;
 }
 
-.line-chart-tooltip-label {
-  font-weight: 600;
-  margin-bottom: 0.25em;
-}
-
-.line-chart-tooltip-row {
-  display: flex;
-  align-items: center;
-  gap: 0.375em;
-}
-
-.line-chart-tooltip-range {
-  opacity: 0.7;
-}
-
 .line-chart-download-link {
   display: block;
   text-align: right;
   font-size: var(--font-size-sm);
   margin-top: 0.25em;
-}
-
-.line-chart-tooltip-swatch {
-  display: inline-block;
-  width: 0.625em;
-  height: 0.625em;
-  border-radius: 50%;
-  flex-shrink: 0;
 }
 
 .line-chart-marker-pill {

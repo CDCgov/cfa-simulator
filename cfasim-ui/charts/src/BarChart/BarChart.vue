@@ -19,6 +19,7 @@ import {
   makeTooltipValueFormatter,
   ChartAnnotations,
   ChartIntervals,
+  ChartTooltipContent,
   ChartGridLines,
   resolveGridStyle,
   type GridStyle,
@@ -81,6 +82,12 @@ export interface BarSeries {
    * true. The bars are still drawn.
    */
   showInTooltip?: boolean;
+  /**
+   * Names this series' row in the default tooltip. Defaults to `legend`.
+   * Once any row is named, unnamed series drop out of the default
+   * tooltip.
+   */
+  tooltipLabel?: string;
   /**
    * Low bound of an interval per category, parallel to `y`/`data`. With
    * `upper`, draws a whisker on every bar where both bounds are finite,
@@ -357,6 +364,7 @@ type ResolvedSeries = {
   legend?: string;
   showInLegend?: boolean;
   showInTooltip?: boolean;
+  tooltipLabel?: string;
   lower?: BarChartData;
   upper?: BarChartData;
   intervalStyle?: IntervalStyle;
@@ -371,6 +379,7 @@ function resolveSeries(s: BarSeries): ResolvedSeries {
     legend: s.legend,
     showInLegend: s.showInLegend,
     showInTooltip: s.showInTooltip,
+    tooltipLabel: s.tooltipLabel,
     lower: s.lower,
     upper: s.upper,
     intervalStyle: s.intervalStyle,
@@ -1373,6 +1382,7 @@ const hoverSlotProps = computed(() => {
       value: Number(s.data[idx] ?? NaN),
       color: s.color ?? defaultColor(i),
       seriesIndex: i,
+      label: s.tooltipLabel || s.legend || undefined,
       lower: hasBounds ? Math.min(lower, upper) : undefined,
       upper: hasBounds ? Math.max(lower, upper) : undefined,
     });
@@ -1385,14 +1395,18 @@ const hoverSlotProps = computed(() => {
       upper: Math.max(iv.lower, iv.upper),
       value: iv.value,
       color: resolveIntervalStyle(iv, props.intervalStyle).color,
+      label: iv.label,
     });
   }
+  const label = hoveredCategoryLabel.value ?? "";
   return {
     index: idx,
     category: categoryLabels.value[idx] ?? String(idx),
+    title: label && props.tooltipTitle ? props.tooltipTitle(label, idx) : label,
     values,
     intervals,
     data: props.tooltipData?.[idx] ?? null,
+    format: formatTooltipValue,
   };
 });
 
@@ -2064,53 +2078,12 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
         }"
       >
         <slot name="tooltip" v-bind="hoverSlotProps">
-          <div class="bar-chart-tooltip">
-            <div v-if="hoveredCategoryLabel" class="bar-chart-tooltip-label">
-              {{ hoveredCategoryLabel }}
-            </div>
-            <div
-              v-for="v in hoverSlotProps.values"
-              :key="v.seriesIndex"
-              class="bar-chart-tooltip-row"
-            >
-              <span
-                class="bar-chart-tooltip-swatch"
-                :style="{ background: v.color }"
-              />
-              {{ isFinite(v.value) ? formatTooltipValue(v.value) : "—" }}
-              <span
-                v-if="v.lower !== undefined && v.upper !== undefined"
-                class="bar-chart-tooltip-range"
-              >
-                ({{ formatTooltipValue(v.lower) }}–{{
-                  formatTooltipValue(v.upper)
-                }})
-              </span>
-            </div>
-            <div
-              v-for="(iv, i) in hoverSlotProps.intervals"
-              :key="'iv' + i"
-              class="bar-chart-tooltip-row"
-            >
-              <span
-                class="bar-chart-tooltip-swatch"
-                :style="{ background: iv.color }"
-              />
-              <template v-if="iv.value !== undefined">
-                {{ formatTooltipValue(iv.value) }}
-                <span class="bar-chart-tooltip-range">
-                  ({{ formatTooltipValue(iv.lower) }}–{{
-                    formatTooltipValue(iv.upper)
-                  }})
-                </span>
-              </template>
-              <template v-else>
-                {{ formatTooltipValue(iv.lower) }}–{{
-                  formatTooltipValue(iv.upper)
-                }}
-              </template>
-            </div>
-          </div>
+          <ChartTooltipContent
+            :title="hoverSlotProps.title"
+            :values="hoverSlotProps.values"
+            :intervals="hoverSlotProps.intervals"
+            :format="hoverSlotProps.format"
+          />
         </slot>
       </div>
       <a
@@ -2139,34 +2112,11 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
   width: 100%;
 }
 
-.bar-chart-tooltip-label {
-  font-weight: 600;
-  margin-bottom: 0.25em;
-}
-
-.bar-chart-tooltip-row {
-  display: flex;
-  align-items: center;
-  gap: 0.375em;
-}
-
-.bar-chart-tooltip-range {
-  opacity: 0.7;
-}
-
 .bar-chart-download-link {
   display: block;
   text-align: right;
   font-size: var(--font-size-sm);
   margin-top: 0.25em;
-}
-
-.bar-chart-tooltip-swatch {
-  display: inline-block;
-  width: 0.625em;
-  height: 0.625em;
-  border-radius: 50%;
-  flex-shrink: 0;
 }
 </style>
 

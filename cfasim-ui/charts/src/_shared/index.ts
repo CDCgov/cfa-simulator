@@ -71,6 +71,10 @@ export { default as ChartTitle } from "./ChartTitle.vue";
 export { useChartCommon } from "./useChartCommon.js";
 export type { ChartAnnotation } from "./annotations.js";
 export { default as ChartIntervals } from "./ChartIntervals.vue";
+export {
+  default as ChartTooltipContent,
+  type ChartTooltipContentProps,
+} from "./ChartTooltipContent.vue";
 export { default as ChartGridLines } from "./ChartGridLines.vue";
 export {
   resolveGridStyle,
