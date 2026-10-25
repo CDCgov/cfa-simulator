@@ -49,6 +49,7 @@ const COMPONENT_NAMES = [
   "ButtonGroup",
   "Container",
   "DatePicker",
+  "DateRangePicker",
   "Expander",
   "Grid",
   "Hint",

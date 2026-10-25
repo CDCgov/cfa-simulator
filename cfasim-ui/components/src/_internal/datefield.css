@@ -1,0 +1,275 @@
+/* Shared skin for DatePicker/DateRangePicker: the text field and the
+ * calendar popover. Global because the popover is portaled out of the
+ * component; prefixed to avoid consumer collisions. */
+
+.cfasim-date-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.cfasim-date-label {
+  margin-bottom: 0.25em;
+  font-size: var(--font-size-sm);
+}
+
+/* Always rendered so the live region exists before a message arrives. */
+.cfasim-date-error {
+  margin: 0;
+  line-height: 1.4;
+  font-size: var(--font-size-xs);
+  color: var(--color-error);
+}
+
+.cfasim-date-error:not(:empty) {
+  margin-top: 0.25em;
+}
+
+.cfasim-date-anchor {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  height: 2.5em;
+  padding: 0 0.25em 0 0.75em;
+  font-size: var(--font-size-sm);
+  background: var(--color-bg-0);
+  border: 1px solid var(--color-border);
+  border-radius: 0.375em;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.cfasim-date-anchor:hover {
+  border-color: var(--color-border-hover);
+}
+
+.cfasim-date-anchor:focus-within {
+  border-color: var(--color-border-focus);
+  box-shadow: var(--shadow-focus);
+}
+
+.cfasim-date-anchor:has([aria-invalid="true"]) {
+  border-color: var(--color-error);
+}
+
+.cfasim-date-anchor:has([aria-invalid="true"]):focus-within {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error) 25%, transparent);
+}
+
+.cfasim-date-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+}
+
+.cfasim-date-input:focus {
+  outline: none;
+}
+
+.cfasim-date-input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.cfasim-date-anchor > .cfasim-date-trigger + .cfasim-date-trigger {
+  margin-left: -0.5em;
+}
+
+.cfasim-date-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0.375em;
+  border: none;
+  border-radius: 0.25em;
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.cfasim-date-trigger:hover {
+  color: var(--color-text);
+}
+
+.cfasim-date-trigger:focus-visible {
+  outline: 2px solid var(--color-primary);
+}
+
+.cfasim-date-picker-content {
+  z-index: 100;
+  padding: 0.5em;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  background: var(--color-bg-0);
+  border: 1px solid var(--color-border);
+  border-radius: 0.375em;
+  box-shadow: var(--shadow-md);
+}
+
+.cfasim-calendar-time {
+  display: flex;
+  flex-direction: column;
+  margin-top: 0.5em;
+  padding-top: 0.5em;
+  border-top: 1px solid var(--color-border);
+}
+
+.cfasim-calendar-time-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.cfasim-calendar-time .cfasim-input {
+  width: 5em;
+  height: 2em;
+}
+
+.cfasim-calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25em;
+}
+
+.cfasim-calendar-heading {
+  display: flex;
+  gap: 0.25em;
+}
+
+.cfasim-calendar-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.cfasim-date-picker-content .cfasim-calendar-select {
+  width: auto;
+  height: 2em;
+  padding: 0 1.75em 0 0.625em;
+  font-weight: 600;
+  appearance: none;
+  cursor: pointer;
+}
+
+.cfasim-calendar-select-wrap > .Icon {
+  position: absolute;
+  right: 0.375em;
+  pointer-events: none;
+  color: var(--color-text-secondary);
+}
+
+.cfasim-calendar-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2em;
+  height: 2em;
+  padding: 0;
+  border: none;
+  border-radius: 0.25em;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.cfasim-calendar-nav:hover {
+  background: var(--color-bg-1);
+}
+
+.cfasim-calendar-nav[data-disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.cfasim-calendar-grid {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cfasim-calendar-head-cell {
+  width: 2em;
+  padding-bottom: 0.125em;
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+.cfasim-calendar-cell {
+  padding: 1px;
+  text-align: center;
+}
+
+.cfasim-calendar-day {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Fill the column and stay square so row and column gaps match. */
+  width: 100%;
+  min-width: 2em;
+  aspect-ratio: 1;
+  border-radius: 0.25em;
+  cursor: pointer;
+  outline: none;
+}
+
+.cfasim-calendar-day:hover {
+  background: var(--color-bg-1);
+}
+
+.cfasim-calendar-day:focus-visible {
+  box-shadow: var(--shadow-focus);
+}
+
+/* A dot under the reference day (day 0), or today when there is none. */
+.cfasim-calendar-day[data-reference]::after,
+.cfasim-calendar-day[data-mark-today][data-today]::after {
+  content: "";
+  position: absolute;
+  bottom: 0.25em;
+  left: 50%;
+  width: 0.25em;
+  height: 0.25em;
+  border-radius: 50%;
+  background: currentColor;
+  transform: translateX(-50%);
+}
+
+.cfasim-calendar-day[data-outside-view] {
+  color: var(--color-text-secondary);
+}
+
+.cfasim-calendar-day[data-selected] {
+  background: var(--color-primary);
+  color: white;
+}
+
+.cfasim-calendar-day[data-disabled],
+.cfasim-calendar-day[data-unavailable] {
+  color: var(--color-text-tertiary);
+  text-decoration: line-through;
+  cursor: default;
+  background: none;
+}
+
+/* Range calendar: days inside the range (or the hover preview while the end
+ * is being picked) get a tint; the two ends stay solid. */
+.cfasim-calendar-day[data-range-day][data-selected],
+.cfasim-calendar-day[data-range-day][data-highlighted] {
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-text);
+}
+
+.cfasim-calendar-day[data-range-day][data-selection-start],
+.cfasim-calendar-day[data-range-day][data-selection-end],
+.cfasim-calendar-day[data-range-day][data-highlighted-start],
+.cfasim-calendar-day[data-range-day][data-highlighted-end] {
+  background: var(--color-primary);
+  color: white;
+}

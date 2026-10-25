@@ -5,6 +5,7 @@ export { default as ButtonGroup } from "./ButtonGroup/ButtonGroup.vue";
 export { default as Container } from "./Container/Container.vue";
 export type { ContainerGap } from "./Container/Container.vue";
 export { default as DatePicker } from "./DatePicker/DatePicker.vue";
+export { default as DateRangePicker } from "./DateRangePicker/DateRangePicker.vue";
 export { default as Expander } from "./Expander/Expander.vue";
 export { default as Grid } from "./Grid/Grid.vue";
 export type { GridCols, GridGap } from "./Grid/Grid.vue";

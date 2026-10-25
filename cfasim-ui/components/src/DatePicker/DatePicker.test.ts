@@ -104,7 +104,7 @@ describe("DatePicker", () => {
       expect(message(w)).toBe("Enter a date as mmm d, yyyy, like Jan 1, 2026");
       await enter(w, "May 14, 2026");
       expect(message(w)).toBeNull();
-      expect(w.find(".date-picker-error").text()).toBe("");
+      expect(w.find(".cfasim-date-error").text()).toBe("");
     });
 
     it("names the allowed range", async () => {
@@ -227,6 +227,17 @@ describe("DatePicker", () => {
     expect(clear.exists()).toBe(true);
     await clear.trigger("click");
     expect(w.props("modelValue")).toBe("");
+    expect(w.find('button[aria-label="Clear Start date"]').exists()).toBe(
+      false,
+    );
+  });
+
+  it("hides the clear button when required", () => {
+    const w = mountPicker({
+      modelValue: "2026-05-14",
+      clearable: true,
+      required: true,
+    });
     expect(w.find('button[aria-label="Clear Start date"]').exists()).toBe(
       false,
     );
