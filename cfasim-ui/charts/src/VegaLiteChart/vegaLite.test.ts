@@ -42,7 +42,7 @@ describe("vegaLiteToChart: LineChart", () => {
     // Vega-Lite sorts a nominal domain ascending: east before north.
     expect(props.series!.map((s) => [s.legend, s.color, s.y])).toEqual([
       ["east", "var(--color-primary, #3b82f6)", [21, 20, 22]],
-      ["north", "var(--color-accent, #f59e0b)", [11, 10, 12]],
+      ["north", "#f97316", [11, 10, 12]],
     ]);
     expect(props.series![0]).toMatchObject({
       x: ["2026-01-01", "2026-01-02", "2026-01-03"],
