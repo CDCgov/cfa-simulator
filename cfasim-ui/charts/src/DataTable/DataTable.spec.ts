@@ -61,3 +61,18 @@ test("DataTable renders several columns through one shared cell template", async
     "rgb(43, 140, 190)",
   );
 });
+
+test("DataTable striped shades every other row", async ({ page }) => {
+  await page.goto("./cfasim-ui/charts/data-table");
+  const rows = page.locator(".demo-preview .Table.striped tbody tr");
+  const bg = (i: number) =>
+    rows
+      .nth(i)
+      .locator("td")
+      .first()
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+  const transparent = "rgba(0, 0, 0, 0)";
+  expect(await bg(0)).toBe(transparent);
+  expect(await bg(1)).not.toBe(transparent);
+  expect(await bg(2)).toBe(transparent);
+});

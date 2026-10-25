@@ -247,6 +247,29 @@ describe("Table", () => {
     expect(th.attributes("style")).toBeUndefined();
   });
 
+  describe("striped", () => {
+    it("is off by default", () => {
+      const wrapper = mount(DataTable, { props: { data: { a: [1, 2] } } });
+      expect(wrapper.find("table").classes()).not.toContain("striped");
+    });
+
+    it("adds the striped class, and a custom color as a CSS variable", () => {
+      const plain = mount(DataTable, {
+        props: { data: { a: [1, 2] }, striped: true },
+      });
+      expect(plain.find("table").classes()).toContain("striped");
+      expect(plain.find("table").attributes("style")).toBeUndefined();
+
+      const colored = mount(DataTable, {
+        props: { data: { a: [1, 2] }, striped: "#eef" },
+      });
+      expect(colored.find("table").classes()).toContain("striped");
+      expect(colored.find("table").attributes("style")).toContain(
+        "--data-table-stripe-color: #eef",
+      );
+    });
+  });
+
   describe("cell slots", () => {
     it("renders columns through the template named in columnConfig", () => {
       const wrapper = mount(DataTable, {

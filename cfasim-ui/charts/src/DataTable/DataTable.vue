@@ -129,6 +129,11 @@ const props = withDefaults(
      * `sortable` in `columnConfig` to opt individual columns in or out.
      */
     sortable?: boolean;
+    /**
+     * Shade every other body row. Pass a CSS color to override the
+     * default `--color-bg-subtle`, or set `--data-table-stripe-color`.
+     */
+    striped?: boolean | string;
   }>(),
   {
     menu: true,
@@ -136,6 +141,7 @@ const props = withDefaults(
     downloadMenuLink: "Download",
     downloadButton: false,
     sortable: false,
+    striped: false,
   },
 );
 
@@ -363,6 +369,12 @@ const csvHref = computed<string | null>(() => {
   return `data:text/csv;charset=utf-8,${encodeURIComponent(toCsv())}`;
 });
 
+const stripeStyle = computed(() =>
+  typeof props.striped === "string" && props.striped
+    ? { "--data-table-stripe-color": props.striped }
+    : undefined,
+);
+
 const showMenu = computed(
   () => Boolean(props.menu) && menuItems.value.length > 0,
 );
@@ -375,7 +387,11 @@ const showMenu = computed(
   >
     <ChartMenu v-if="showMenu" :items="menuItems" force-dropdown />
     <div class="TableWrapper">
-      <table class="Table" :class="{ 'full-width': fullWidth }">
+      <table
+        class="Table"
+        :class="{ 'full-width': fullWidth, striped: !!striped }"
+        :style="stripeStyle"
+      >
         <colgroup>
           <col
             v-for="col in columns"
@@ -563,6 +579,10 @@ const showMenu = computed(
 .data-table-sort-button .data-table-sort-icon.asc .sort-up,
 .data-table-sort-button .data-table-sort-icon.desc .sort-down {
   opacity: 1;
+}
+
+.Table.striped tbody tr:nth-child(even) td {
+  background: var(--data-table-stripe-color, var(--color-bg-subtle));
 }
 
 .Table tbody td {

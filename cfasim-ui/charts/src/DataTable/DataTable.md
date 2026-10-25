@@ -174,6 +174,35 @@ cell in a column — handy when whole-column styling (background, border,
 font weight) should match across the header and data. `cellClass` keeps
 its meaning (body cells only).
 
+### Striped rows
+
+Pass `striped` to shade every other row, which helps the eye follow wide
+rows. Stripes follow the displayed order, so they stay alternating after
+sorting. The default shade is `--color-bg-subtle`; pass a CSS color
+(`striped="#eef4fb"`) or set `--data-table-stripe-color` to change it.
+
+<ComponentDemo>
+  <DataTable
+    :data="{ day: [0, 1, 2, 3, 4, 5], susceptible: [1000, 980, 945, 900, 860, 825], infected: [1, 21, 56, 101, 141, 170] }"
+    striped
+  />
+
+<template #code>
+
+```vue
+<DataTable
+  :data="{
+    day: [0, 1, 2, 3, 4, 5],
+    susceptible: [1000, 980, 945, 900, 860, 825],
+    infected: [1, 21, 56, 101, 141, 170],
+  }"
+  striped
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Sortable columns
 
 Pass `sortable` to make every column header a button that sorts the rows.
