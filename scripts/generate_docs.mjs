@@ -65,7 +65,16 @@ const COMPONENT_NAMES = [
   "Toggle",
   "ToggleGroup",
 ];
-const CHART_NAMES = ["BarChart", "ChoroplethMap", "DataTable", "LineChart"];
+const CHART_NAMES = [
+  "BarChart",
+  "ChoroplethMap",
+  "DataTable",
+  "LineChart",
+  "VegaLiteChart",
+];
+
+/** Components imported from a subpath of their package, not its barrel. */
+const SUBPATH_IMPORTS = { VegaLiteChart: "@cfasim-ui/charts/vega-lite" };
 
 function docEntry(name, outDir) {
   const slug = name.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
@@ -472,6 +481,7 @@ export function generateAll() {
         slug: result.slug,
         docs: `docs/${result.name}.md`,
         source: `src/${result.name}/${result.name}.vue`,
+        import: SUBPATH_IMPORTS[result.name] ?? `@cfasim-ui/${pkg}`,
         keywords: result.keywords,
       });
       console.log(

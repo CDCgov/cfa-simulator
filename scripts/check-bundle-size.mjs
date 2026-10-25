@@ -81,6 +81,14 @@ const SCENARIOS = [
     lazyLimit: 26 * KB,
   },
   {
+    // The translator renders both charts, so it carries both.
+    name: "charts: VegaLiteChart",
+    pkg: "@cfasim-ui/charts/vega-lite",
+    imports: ["VegaLiteChart"],
+    limit: 47 * KB,
+    lazyChunks: 0,
+  },
+  {
     name: "charts: everything",
     pkg: "@cfasim-ui/charts",
     imports: "*",

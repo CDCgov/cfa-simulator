@@ -19,6 +19,7 @@ export default defineConfig({
         "hsa-mapping": "src/hsa-mapping.ts",
         "us-cities": "src/us-cities.ts",
         "us-hsa-topology": "src/us-hsa-topology.ts",
+        "vega-lite": "src/vega-lite.ts",
       },
       formats: ["es"],
       cssFileName: "index",

@@ -7,6 +7,8 @@ import "@cfasim-ui/charts/style.css";
 import "./demo-theme.css";
 import * as uiComponents from "@cfasim-ui/components";
 import * as chartComponents from "@cfasim-ui/charts";
+// Subpath entry points with components, outside the barrels.
+import * as vegaLiteComponents from "@cfasim-ui/charts/vega-lite";
 import ComponentDemo from "./ComponentDemo.vue";
 import InstallBox from "./InstallBox.vue";
 
@@ -36,6 +38,7 @@ export default {
     for (const [name, component] of [
       ...componentEntries(uiComponents),
       ...componentEntries(chartComponents),
+      ...componentEntries(vegaLiteComponents),
     ]) {
       app.component(name, component);
     }

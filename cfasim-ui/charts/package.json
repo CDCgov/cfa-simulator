@@ -42,6 +42,11 @@
       "types": "./dist/us-hsa-topology.d.ts",
       "import": "./dist/us-hsa-topology.js"
     },
+    "./vega-lite": {
+      "@cfasim-ui/source": "./src/vega-lite.ts",
+      "types": "./dist/vega-lite.d.ts",
+      "import": "./dist/vega-lite.js"
+    },
     "./style.css": "./dist/index.css"
   },
   "sideEffects": [
