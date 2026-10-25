@@ -315,6 +315,244 @@ describe("vegaLiteToChart: BarChart", () => {
   });
 });
 
+describe("vegaLiteToChart: rules, error bars and text", () => {
+  const pts = [
+    { t: "2026-01-02", v: 2, lo: 1, hi: 3, label: "b" },
+    { t: "2026-01-01", v: 1, lo: 0, hi: 2, label: "a" },
+  ];
+
+  it("draws full-span rules as annotations, widening y to reach them", () => {
+    const { props } = line(
+      {
+        layer: [
+          {
+            mark: "line",
+            encoding: {
+              x: { field: "t", type: "temporal" },
+              y: { field: "v", type: "quantitative" },
+            },
+          },
+          {
+            mark: { type: "rule", color: "red", strokeDash: [4, 2] },
+            encoding: { y: { datum: 10 } },
+          },
+          { mark: "rule", encoding: { x: { datum: "2026-01-02" } } },
+        ],
+      },
+      pts,
+    );
+    expect(props.yMax).toBe(10);
+    // Each rule is anchored on the first point for the coordinate it ignores.
+    expect(props.annotations).toEqual([
+      expect.objectContaining({
+        pointer: "ruleY",
+        y: 10,
+        x: Date.UTC(2026, 0, 1),
+        lineColor: "red",
+        lineDash: [4, 2],
+      }),
+      expect.objectContaining({
+        pointer: "ruleX",
+        x: Date.UTC(2026, 0, 2),
+        y: 1,
+      }),
+    ]);
+    // An explicit domain wins over the rule.
+    const capped = line(
+      {
+        layer: [
+          {
+            mark: "line",
+            encoding: {
+              x: { field: "t", type: "temporal" },
+              y: {
+                field: "v",
+                type: "quantitative",
+                scale: { domain: [0, 5] },
+              },
+            },
+          },
+          { mark: "rule", encoding: { y: { datum: 10 } } },
+        ],
+      },
+      pts,
+    );
+    expect(capped.props.yMax).toBe(5);
+  });
+
+  it("turns error bars and y/y2 rules into intervals, text into labels, error bands into areas", () => {
+    const { props } = line(
+      {
+        encoding: { x: { field: "t", type: "temporal" } },
+        layer: [
+          {
+            mark: "errorbar",
+            encoding: {
+              y: { field: "hi", type: "quantitative" },
+              y2: { field: "lo" },
+            },
+          },
+          {
+            mark: "rule",
+            encoding: {
+              y: { field: "lo", type: "quantitative" },
+              y2: { field: "hi" },
+            },
+          },
+          {
+            mark: "text",
+            encoding: {
+              y: { field: "v", type: "quantitative" },
+              text: { field: "label" },
+            },
+          },
+          {
+            mark: "errorband",
+            encoding: {
+              y: { field: "lo", type: "quantitative" },
+              y2: { field: "hi" },
+            },
+          },
+        ],
+      },
+      pts,
+    );
+    const day = (d: number) => Date.UTC(2026, 0, d);
+    expect(props.intervals).toEqual([
+      { x: day(2), lower: 1, upper: 3 },
+      { x: day(1), lower: 0, upper: 2 },
+      { x: day(2), lower: 1, upper: 3, capWidth: 0 },
+      { x: day(1), lower: 0, upper: 2, capWidth: 0 },
+    ]);
+    expect(props.annotations!.map((a) => [a.text, a.x, a.y])).toEqual([
+      ["b", day(2), 2],
+      ["a", day(1), 1],
+    ]);
+    expect(props.areas![0]).toMatchObject({ upper: [2, 3], lower: [0, 1] });
+  });
+
+  it("puts error bars and value rules on a bar chart's categories", () => {
+    const bars = vegaLiteToChart(
+      {
+        // The rule inherits the shared x field but sets y itself: it is a
+        // threshold across the plot, drawn once for its repeated value.
+        encoding: { x: { field: "label", type: "nominal" } },
+        layer: [
+          {
+            mark: "bar",
+            encoding: { y: { field: "v", type: "quantitative" } },
+          },
+          {
+            mark: "errorbar",
+            encoding: {
+              y: { field: "lo", type: "quantitative" },
+              y2: { field: "hi" },
+            },
+          },
+          {
+            mark: "rule",
+            encoding: { y: { field: "cap", type: "quantitative" } },
+          },
+        ],
+      },
+      {
+        data: [
+          ...pts.map((r) => ({ ...r, cap: 8 })),
+          // Only in the error bars: still a category on the axis.
+          { label: "z", lo: 4, hi: 6, cap: 8 },
+        ],
+      },
+    );
+    expect(bars.warnings).toEqual([]);
+    expect(bars.props).toMatchObject({
+      categories: ["a", "b", "z"],
+      valueMax: 8,
+      intervals: [
+        { x: 1, lower: 1, upper: 3 },
+        { x: 0, lower: 0, upper: 2 },
+        { x: 2, lower: 4, upper: 6 },
+      ],
+    });
+    expect(bars.props.annotations).toEqual([
+      expect.objectContaining({ pointer: "ruleY", y: 8 }),
+    ]);
+  });
+});
+
+describe("vegaLiteToChart: point channels and bins", () => {
+  const rows = [
+    { x: 1, y: 1, s: 0, q: 0 },
+    { x: 2, y: 2, s: 10, q: null },
+    { x: 3, y: 3, s: 20, q: 4 },
+  ];
+
+  it("sizes, fades and shades points from fields", () => {
+    const { props } = line(
+      {
+        mark: "circle",
+        encoding: {
+          x: { field: "x", type: "quantitative" },
+          y: { field: "y", type: "quantitative" },
+          size: { field: "s", type: "quantitative" },
+          opacity: { field: "q", type: "quantitative" },
+          color: {
+            field: "q",
+            type: "quantitative",
+            scale: { range: ["#000000", "#ffffff"] },
+          },
+        },
+      },
+      rows,
+    );
+    const s = props.series![0];
+    // Size is an area from 9 to 361 px² over a domain from 0.
+    expect((s.dotRadius as number[]).map((r) => r.toFixed(2))).toEqual([
+      Math.sqrt(9 / Math.PI).toFixed(2),
+      Math.sqrt(185 / Math.PI).toFixed(2),
+      Math.sqrt(361 / Math.PI).toFixed(2),
+    ]);
+    // A missing value leaves its dot the default opacity.
+    expect(s.dotOpacity).toEqual([0.3, undefined, 0.8]);
+    // A missing color value falls back to the series default.
+    expect(s.dotFill).toEqual([
+      "rgb(0, 0, 0)",
+      undefined,
+      "rgb(255, 255, 255)",
+    ]);
+  });
+
+  it("draws `point` marks as outlines unless filled, at Vega-Lite's size", () => {
+    const spec = (filled?: boolean): VegaLiteSpec => ({
+      mark: { type: "point", color: "teal", ...(filled && { filled }) },
+      encoding: {
+        x: { field: "x", type: "quantitative" },
+        y: { field: "y", type: "quantitative" },
+        strokeDash: { value: [2, 2] },
+      },
+    });
+    expect(line(spec(), rows).props.series![0]).toMatchObject({
+      dotFill: "none",
+      dotStroke: "teal",
+      dotRadius: Math.sqrt(30 / Math.PI),
+      dashed: true,
+    });
+    expect(line(spec(true), rows).props.series![0].dotFill).toBeUndefined();
+  });
+
+  it("spans pre-binned bars from x to x2", () => {
+    const { props } = bars({
+      data: { values: [{ a: 0, b: 5, n: 3 }] },
+      mark: "bar",
+      encoding: {
+        x: { field: "a", type: "quantitative", bin: "binned" },
+        x2: { field: "b" },
+        y: { field: "n", type: "quantitative" },
+      },
+    });
+    expect(props.series![0]).toMatchObject({ x: [0], x2: [5], data: [3] });
+  });
+});
+
 describe("vegaLiteToChart: unsupported pieces", () => {
   it("warns about each skipped piece once and still renders", () => {
     const { component, props, warnings } = vegaLiteToChart(
@@ -338,6 +576,13 @@ describe("vegaLiteToChart: unsupported pieces", () => {
           },
           { mark: "geoshape" },
           {
+            mark: "errorband",
+            encoding: {
+              x: { field: "t", type: "quantitative" },
+              y: { field: "n", type: "quantitative" },
+            },
+          },
+          {
             mark: "line",
             encoding: {
               x: { field: "t", type: "quantitative" },
@@ -359,6 +604,7 @@ describe("vegaLiteToChart: unsupported pieces", () => {
       '`interpolate: "basis"` is not supported',
       "`color.scale.scheme` is not supported; use `scale.range`",
       "a `geoshape` layer needs `x` and `y` fields",
+      "an `errorband` needs `y` and `y2` fields (bounds, not raw values)",
     ]);
   });
 

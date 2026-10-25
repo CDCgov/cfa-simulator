@@ -9,6 +9,10 @@ import { stackAreas, type StackedAreaLayer } from "../LineChart/stackAreas.js";
 import {
   CATEGORICAL_COLORS,
   parseDate,
+  parseRgb,
+  type Rgb,
+  type ChartAnnotation,
+  type ChartInterval,
   type LineCurve,
 } from "../_shared/index.js";
 
@@ -155,7 +159,10 @@ type Warn = (msg: string) => void;
 
 interface Unit {
   mark: VegaLiteMarkDef;
+  /** Encodings with the ones inherited from enclosing layers. */
   encoding: VegaLiteEncoding;
+  /** The encodings this view sets itself. */
+  own: VegaLiteEncoding;
   data?: readonly Row[];
 }
 
@@ -181,7 +188,7 @@ function flatten(
   }
   if (spec.mark === undefined) return [];
   const mark = typeof spec.mark === "string" ? { type: spec.mark } : spec.mark;
-  return [{ mark, encoding, data }];
+  return [{ mark, encoding, own: spec.encoding ?? {}, data }];
 }
 
 function rowsOf(
@@ -408,9 +415,11 @@ function lineChart(
 ): LineChartProps {
   const series: Series[] = [];
   const areas: Area[] = [];
-  const first = units[0];
-  const xDef = first?.encoding.x;
-  const yDef = first?.encoding.y;
+  const marked = units.filter((u) => !DECORATIONS.has(u.mark.type));
+  const xUnit = marked.find((u) => u.encoding.x?.field) ?? units[0];
+  const xDef = xUnit?.encoding.x;
+  const yDef = (marked.find((u) => u.encoding.y?.field) ?? units[0])?.encoding
+    .y;
   const axis: XAxis = { temporal: xDef?.type === "temporal" };
   const xField = fieldOf(xDef, "x", warn);
   if (xField && isDiscrete(xDef)) {
@@ -419,19 +428,26 @@ function lineChart(
       xField,
       xDef!,
       warn,
-      first.encoding,
+      xUnit.encoding,
     );
   }
+  const deco = decorations();
+  const pos = (v: unknown) =>
+    axis.categories ? indexIn(axis.categories, v) : position(v, axis.temporal);
 
   for (const u of units) {
     const { mark, encoding } = u;
+    if (DECORATIONS.has(mark.type)) {
+      decorate(u, rowsFor(u), "x", "y", pos, deco, warn);
+      continue;
+    }
     const x = fieldOf(encoding.x, "x", warn);
     const y = fieldOf(encoding.y, "y", warn);
     if (!x || !y) {
       warn(`a \`${mark.type}\` layer needs \`x\` and \`y\` fields`);
       continue;
     }
-    const kind = mark.type;
+    const kind = mark.type === "errorband" ? "area" : mark.type;
     if (
       !["line", "point", "circle", "square", "area", "trail"].includes(kind)
     ) {
@@ -443,7 +459,9 @@ function lineChart(
     const usable = rowsFor(u).filter(
       (r) => get(r, x) != null && Number.isFinite(num(get(r, y))),
     );
-    const groups = groupsOf(usable, encoding.color, warn);
+    const pointMark = POINT_MARKS.has(kind);
+    const shaded = pointMark && encoding.color?.type === "quantitative";
+    const groups = groupsOf(usable, shaded ? undefined : encoding.color, warn);
     const sortX = (rows: Row[]) => sortBy(rows, (r) => xValue(r, x, axis));
     const style = (g: (typeof groups)[number]) => ({
       ...((mark.color ?? g.color) !== undefined && {
@@ -455,6 +473,12 @@ function lineChart(
 
     if (kind === "area") {
       const y2 = fieldOf(encoding.y2, "y2", warn);
+      if (mark.type === "errorband" && !y2) {
+        warn(
+          "an `errorband` needs `y` and `y2` fields (bounds, not raw values)",
+        );
+        continue;
+      }
       const stack = encoding.y?.stack;
       if (!y2 && encoding.color?.field && stack !== null && stack !== false) {
         if (stack === "center") warn('`stack: "center"` is not supported');
@@ -491,9 +515,16 @@ function lineChart(
     }
 
     const isLine = kind === "line" || kind === "trail";
+    const dashed =
+      !!mark.strokeDash?.length ||
+      (Array.isArray(encoding.strokeDash?.value) &&
+        encoding.strokeDash.value.length > 0);
+    if (encoding.strokeDash?.field) {
+      warn("a `strokeDash` field is not supported; split series by `color`");
+    }
     for (const g of groups) {
       const rows = sortX(g.rows);
-      series.push({
+      const s: Series = {
         ...style(g),
         ...(curve && { curve }),
         x: rows.map((r) => xValue(r, x, axis)) as number[],
@@ -503,12 +534,23 @@ function lineChart(
         ...(mark.strokeWidth !== undefined && {
           strokeWidth: mark.strokeWidth,
         }),
-        ...(mark.strokeDash?.length && { dashed: true }),
-      });
+        ...(dashed && { dashed: true }),
+      };
+      if (pointMark) pointStyle(s, rows, u, warn);
+      series.push(s);
     }
   }
 
+  // Horizontal rules must stay on the axis, which annotations do not widen.
   const props: LineChartProps = { series, ...(areas.length && { areas }) };
+  const firstX = series[0]?.x?.[0] ?? areas[0]?.x?.[0];
+  anchorRules(
+    deco,
+    position(firstX, axis.temporal && !axis.categories),
+    series[0]?.y?.[0] ?? areas[0]?.upper[0],
+  );
+  if (deco.annotations.length) props.annotations = deco.annotations;
+  if (deco.intervals.length) props.intervals = deco.intervals;
   const xLabel = labelOf(xDef);
   const yLabel = labelOf(yDef);
   if (xLabel !== undefined) props.xLabel = xLabel;
@@ -529,11 +571,260 @@ function lineChart(
   else if (yDef?.scale?.type && yDef.scale.type !== "linear") {
     warn(`\`y.scale.type: "${yDef.scale.type}"\` is not supported`);
   }
+  // An explicit domain wins; otherwise the axis reaches rules and labels.
   const [lo, hi] = numericDomain(yDef);
-  if (lo !== undefined) props.yMin = lo;
-  if (hi !== undefined) props.yMax = hi;
+  const yMin = lo ?? (deco.lo <= deco.hi ? deco.lo : undefined);
+  const yMax = hi ?? (deco.lo <= deco.hi ? deco.hi : undefined);
+  if (yMin !== undefined) props.yMin = yMin;
+  if (yMax !== undefined) props.yMax = yMax;
   if (xDef?.scale?.domain) warn("`x.scale.domain` is not supported");
   return props;
+}
+
+/** Marks drawn as annotations and intervals rather than series. */
+const DECORATIONS = new Set(["rule", "errorbar", "text"]);
+const POINT_MARKS = new Set(["point", "circle", "square"]);
+
+interface Decorations {
+  annotations: ChartAnnotation[];
+  intervals: ChartInterval[];
+  /** Value range of horizontal rules and labels, for the value axis. */
+  lo: number;
+  hi: number;
+}
+
+function decorations(): Decorations {
+  return { annotations: [], intervals: [], lo: Infinity, hi: -Infinity };
+}
+
+function include(out: Decorations, v: number) {
+  if (v < out.lo) out.lo = v;
+  if (v > out.hi) out.hi = v;
+}
+
+/** A value's index on a discrete axis; NaN when it is not on it. */
+function indexIn(categories: unknown[], v: unknown): number {
+  const i = categories.indexOf(v);
+  return i < 0 ? NaN : i;
+}
+
+/** A non-discrete position as a chart number: epoch ms for dates. */
+function position(v: unknown, temporal: boolean): number {
+  if (!temporal) return num(v);
+  return typeof v === "number" ? v : (parseDate(v, "utc") ?? NaN);
+}
+
+/**
+ * Rules, error bars and text along `cat` (the x or category axis) and
+ * `val` (the value axis): full-span rules and text become annotations,
+ * spans from `val` to `val2` become intervals.
+ */
+function decorate(
+  u: Unit,
+  rows: readonly Row[],
+  cat: "x" | "y",
+  val: "x" | "y",
+  pos: (v: unknown) => number,
+  out: Decorations,
+  warn: Warn,
+) {
+  const e = u.encoding;
+  const kind = u.mark.type;
+  const colorValue = e.color?.value;
+  const color =
+    u.mark.color ?? (typeof colorValue === "string" ? colorValue : undefined);
+  if (e.color?.field) {
+    warn(`a \`color\` field on \`${kind}\` marks is not supported`);
+  }
+  const cf = fieldOf(e[cat], cat, warn);
+  const vf = fieldOf(e[val], val, warn);
+  const v2f = fieldOf(e[`${val}2`], `${val}2`, warn);
+  const at = (r: Row, def: VegaLiteFieldDef | undefined, f?: string) =>
+    f ? get(r, f) : def?.datum;
+  const hasC = !!cf || e[cat]?.datum !== undefined;
+  const hasV = !!vf || e[val]?.datum !== undefined;
+  // A rule from constants alone is one rule, not one per row.
+  const list = cf || vf || v2f ? rows : [{}];
+  const style = color !== undefined ? { color } : {};
+
+  if (kind === "errorbar" || (kind === "rule" && v2f)) {
+    if (!cf || !vf || !v2f) {
+      warn(
+        `an \`${kind}\` needs \`${cat}\`, \`${val}\` and \`${val}2\` fields`,
+      );
+      return;
+    }
+    for (const r of list) {
+      const a = num(get(r, vf));
+      const b = num(get(r, v2f));
+      const x = pos(get(r, cf));
+      if (![a, b, x].every(Number.isFinite)) continue;
+      out.intervals.push({
+        x,
+        lower: Math.min(a, b),
+        upper: Math.max(a, b),
+        ...style,
+        // A rule is a plain segment; an error bar keeps its caps.
+        ...(kind === "rule" && { capWidth: 0 }),
+      });
+    }
+    return;
+  }
+  if (kind === "text") {
+    const t = e.text;
+    if (!hasC || !hasV || (!t?.field && t?.value === undefined)) {
+      warn(`a \`text\` mark needs \`${cat}\`, \`${val}\` and \`text\``);
+      return;
+    }
+    for (const r of list) {
+      const x = pos(at(r, e[cat], cf));
+      const y = num(at(r, e[val], vf));
+      const text = t.field ? get(r, t.field) : t.value;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || text == null) continue;
+      include(out, y);
+      out.annotations.push({
+        x,
+        y,
+        text: String(text),
+        offset: { x: 0, y: 0 },
+        pointer: "none",
+        align: "center",
+        ...style,
+      });
+    }
+    return;
+  }
+  // A rule across the plot at a value, or up the plot at a position. A
+  // channel the rule sets itself wins over one it inherits for the other
+  // axis (a threshold layer under a shared `x` field).
+  const ownC = u.own[cat] !== undefined;
+  const ownV = u.own[val] !== undefined;
+  const across = hasV && (!hasC || (ownV && !ownC));
+  const up = hasC && (!hasV || (ownC && !ownV));
+  if (across === up) {
+    warn(
+      `a \`rule\` needs exactly one of \`${cat}\` / \`${val}\`, or \`${val}2\``,
+    );
+    return;
+  }
+  const seen = new Set<number>();
+  for (const r of across && !vf ? [{}] : up && !cf ? [{}] : list) {
+    const v = across ? num(at(r, e[val], vf)) : pos(at(r, e[cat], cf));
+    // One rule per distinct position, however many rows repeat it.
+    if (!Number.isFinite(v) || seen.has(v)) continue;
+    seen.add(v);
+    if (across) include(out, v);
+    out.annotations.push({
+      x: across ? NaN : v,
+      y: across ? v : NaN,
+      text: "",
+      offset: { x: 0, y: 0 },
+      pointer: across ? "ruleY" : "ruleX",
+      lineColor: color ?? "currentColor",
+      lineWidth: u.mark.strokeWidth ?? 1,
+      ...(u.mark.strokeDash?.length && { lineDash: u.mark.strokeDash }),
+    });
+  }
+}
+
+/**
+ * Give full-span rules the other coordinate the chart needs to place them
+ * (any point on the plot will do): the first data point.
+ */
+function anchorRules(deco: Decorations, x: number, y: unknown) {
+  const ax = x;
+  const ay = Number(y);
+  for (const a of deco.annotations) {
+    if (Number.isNaN(a.x)) a.x = Number.isFinite(ax) ? ax : 0;
+    if (Number.isNaN(a.y)) a.y = Number.isFinite(ay) ? ay : 0;
+  }
+}
+
+/** Vega-Lite's default point size, an area in px². */
+const POINT_SIZE = 30;
+
+/** Point mark fill, size, opacity and color channels on a series' dots. */
+function pointStyle(s: Series, rows: Row[], u: Unit, warn: Warn) {
+  const { mark, encoding: e } = u;
+  const radius = (area: number) => Math.sqrt(area / Math.PI);
+  const size = e.size;
+  if (size?.field) {
+    const [lo, hi] = rangeOf(size, [9, 361]);
+    const scale = linear(rows, size.field, lo, hi, size.scale?.zero ?? true);
+    s.dotRadius = rows.map((r) => finiteOr(radius(scale(r)))) as number[];
+  } else {
+    const area = typeof size?.value === "number" ? size.value : mark.size;
+    s.dotRadius = radius(typeof area === "number" ? area : POINT_SIZE);
+  }
+  const opacity = e.opacity;
+  if (opacity?.field) {
+    const [lo, hi] = rangeOf(opacity, [0.3, 0.8]);
+    const scale = linear(rows, opacity.field, lo, hi, false);
+    s.dotOpacity = rows.map((r) => finiteOr(scale(r))) as number[];
+  } else if (typeof opacity?.value === "number") {
+    s.dotOpacity = opacity.value;
+  }
+  const color = e.color;
+  if (color?.field && color.type === "quantitative") {
+    const range = Array.isArray(color.scale?.range)
+      ? color.scale.range
+      : ["#deebf7", "#08519c"];
+    const [c0, c1] = range.map((c) => parseRgb(String(c)));
+    if (range.length !== 2 || !c0 || !c1) {
+      warn("a continuous `color` needs a two-color `scale.range`");
+    } else {
+      const t = linear(rows, color.field, 0, 1, false);
+      // A missing value leaves its dot the series' default fill.
+      s.dotFill = rows.map((r) => mixRgb(c0, c1, t(r))) as string[];
+      return;
+    }
+  }
+  // Vega-Lite draws `point` marks as outlines unless `filled`.
+  if (mark.type === "point" && mark.filled !== true) {
+    s.dotStroke = s.color ?? "currentColor";
+    s.dotFill = "none";
+  }
+}
+
+/** A per-point value, or undefined so the dot falls back to its default. */
+const finiteOr = (v: number) => (Number.isFinite(v) ? v : undefined);
+
+/** A channel's `[min, max]` output range, or the default. */
+function rangeOf(def: VegaLiteFieldDef, fallback: [number, number]) {
+  const r = def.scale?.range;
+  return Array.isArray(r) && r.length === 2 && r.every(Number.isFinite)
+    ? (r as [number, number])
+    : fallback;
+}
+
+/** A linear scale from a field's extent (from 0 with `zero`) to `[lo, hi]`. */
+function linear(
+  rows: Row[],
+  field: string,
+  lo: number,
+  hi: number,
+  zero: boolean,
+): (r: Row) => number {
+  let min = zero ? 0 : Infinity;
+  let max = zero ? 0 : -Infinity;
+  for (const r of rows) {
+    const v = num(get(r, field));
+    if (!Number.isFinite(v)) continue;
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  const span = max - min;
+  return (r) => {
+    const v = num(get(r, field));
+    if (!Number.isFinite(v)) return NaN;
+    return span > 0 ? lo + ((v - min) / span) * (hi - lo) : (lo + hi) / 2;
+  };
+}
+
+function mixRgb(a: Rgb, b: Rgb, t: number): string | undefined {
+  if (!Number.isFinite(t)) return undefined;
+  const c = a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  return `rgb(${c.join(", ")})`;
 }
 
 function numericDomain(
@@ -562,6 +853,11 @@ function barChart(
   const catDef = horizontal ? enc.y : enc.x;
   const valDef = horizontal ? enc.x : enc.y;
   const cat = fieldOf(catDef, horizontal ? "y" : "x", warn);
+  const cat2 = fieldOf(
+    horizontal ? enc.y2 : enc.x2,
+    horizontal ? "y2" : "x2",
+    warn,
+  );
   const val = fieldOf(valDef, horizontal ? "x" : "y", warn);
   const props: BarChartProps = {};
   if (!cat || !val || !catDef || !valDef) {
@@ -574,7 +870,12 @@ function barChart(
   const discrete = isDiscrete(catDef);
   const temporal = catDef.type === "temporal";
   const categories = discrete
-    ? domainOf(rows, cat, catDef, warn, enc)
+    ? withLayerValues(
+        domainOf(rows, cat, catDef, warn, enc),
+        units,
+        rowsFor,
+        horizontal ? "y" : "x",
+      )
     : undefined;
   const stack = valDef.stack;
   const offset = horizontal ? enc.yOffset : enc.xOffset;
@@ -601,6 +902,13 @@ function barChart(
     ...(!categories && {
       x: g.rows.map((r) => (temporal ? time(get(r, cat)) : num(get(r, cat)))),
     }),
+    // Pre-binned bars (`bin: "binned"`) span x to x2.
+    ...(!categories &&
+      cat2 && {
+        x2: g.rows.map((r) =>
+          temporal ? time(get(r, cat2)) : num(get(r, cat2)),
+        ),
+      }),
     ...((bar.mark.color ?? g.color) !== undefined && {
       color: bar.mark.color ?? g.color,
     }),
@@ -628,9 +936,24 @@ function barChart(
   }
 
   const summaryLines: BarSummaryLine[] = [];
+  const deco = decorations();
+  const pos = (v: unknown) =>
+    categories ? indexIn(categories, v) : position(v, temporal);
   for (const u of units) {
     if (u === bar) continue;
     const kind = u.mark.type;
+    if (DECORATIONS.has(kind)) {
+      // Annotations do not turn with a horizontal chart; intervals do.
+      if (horizontal && kind !== "errorbar" && !u.encoding.x2?.field) {
+        warn(`\`${kind}\` layers over horizontal bars are not supported`);
+      } else {
+        const [c, v] = horizontal
+          ? (["y", "x"] as const)
+          : (["x", "y"] as const);
+        decorate(u, rowsFor(u), c, v, pos, deco, warn);
+      }
+      continue;
+    }
     if (kind === "bar") {
       warn("only one `bar` layer is supported");
       continue;
@@ -643,26 +966,19 @@ function barChart(
     const v = fieldOf(horizontal ? u.encoding.x : u.encoding.y, "y", warn);
     if (!c || !v) continue;
     const curve = curveOf(u.mark, warn);
-    const position = (r: Row) => {
-      const p = get(r, c);
-      if (categories) return categories.indexOf(p);
-      return temporal ? time(p) : num(p);
-    };
+    const at = (r: Row) => pos(get(r, c));
     for (const g of groupsOf(rowsFor(u), u.encoding.color, warn)) {
       // On the bars' axis, in axis order; rows off it are dropped.
       const pts = sortBy(
         g.rows.filter(
-          (r) =>
-            Number.isFinite(num(get(r, v))) &&
-            get(r, c) != null &&
-            (!categories || categories.includes(get(r, c))),
+          (r) => Number.isFinite(num(get(r, v))) && Number.isFinite(at(r)),
         ),
-        position,
+        at,
       );
       const isLine = kind === "line";
       summaryLines.push({
         data: pts.map((r) => num(get(r, v))),
-        x: pts.map(position) as number[],
+        x: pts.map(at),
         scale: "shared",
         ...((u.mark.color ?? g.color) !== undefined && {
           color: u.mark.color ?? g.color,
@@ -694,10 +1010,47 @@ function barChart(
   else if (valDef.scale?.type && valDef.scale.type !== "linear") {
     warn(`\`scale.type: "${valDef.scale.type}"\` is not supported on bars`);
   }
+  anchorRules(
+    deco,
+    categories ? 0 : pos(get(rows[0] ?? {}, cat)),
+    series[0]?.data?.[0],
+  );
+  if (deco.annotations.length) props.annotations = deco.annotations;
+  if (deco.intervals.length) props.intervals = deco.intervals;
   const [lo, hi] = numericDomain(valDef);
   if (lo !== undefined) props.valueMin = lo;
-  if (hi !== undefined) props.valueMax = hi;
+  // An explicit domain wins; otherwise the axis reaches rules and labels
+  // above the bars (valueMin is also the bar baseline, so not below them).
+  const top = hi ?? (deco.lo <= deco.hi ? deco.hi : undefined);
+  if (top !== undefined) props.valueMax = top;
   return props;
+}
+
+/**
+ * A discrete bar axis: the bar layer's ordered values, then any other
+ * layer's values for the same channel, so every layer's rows land on it
+ * (Vega-Lite unions the domain across layers).
+ */
+function withLayerValues(
+  domain: unknown[],
+  units: Unit[],
+  rowsFor: (u: Unit) => readonly Row[],
+  channel: "x" | "y",
+): unknown[] {
+  const out = [...domain];
+  const seen = new Set(domain);
+  for (const u of units) {
+    const f = u.encoding[channel]?.field;
+    if (!f) continue;
+    for (const r of rowsFor(u)) {
+      const v = get(r, f);
+      if (v != null && !seen.has(v)) {
+        seen.add(v);
+        out.push(v);
+      }
+    }
+  }
+  return out;
 }
 
 /** Each category's segments as shares of its total, for `stack: "normalize"`. */
