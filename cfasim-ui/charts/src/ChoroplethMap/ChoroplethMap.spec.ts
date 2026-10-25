@@ -1,12 +1,24 @@
 import { test, expect, type Page } from "@playwright/test";
 
+// Demos mount lazily as they near the viewport, so start at the section
+// under test rather than scrolling past (and mounting) every map above it.
 test.beforeEach(async ({ page }) => {
-  await page.goto("./cfasim-ui/charts/choropleth-map");
+  await page.goto("./cfasim-ui/charts/choropleth-map#custom-geography-regions");
 });
 
-/** A demo map on the page, scrolled into view. */
+/** A demo map on the page, scrolled to until it mounts. */
 async function mapAt(page: Page, testId: string) {
-  const map = page.locator(`[data-testid="${testId}"]`);
+  const selector = `[data-testid="${testId}"]`;
+  await page.waitForFunction(
+    (sel) => {
+      if (document.querySelector(sel)) return true;
+      window.scrollBy(0, window.innerHeight);
+      return false;
+    },
+    selector,
+    { polling: 100 },
+  );
+  const map = page.locator(selector);
   await map.scrollIntoViewIfNeeded();
   return map;
 }

@@ -1,20 +1,44 @@
 <script setup>
-import { computed, ref } from "vue";
-import countiesTopoForPerf from "us-atlas/counties-10m.json";
-import { fipsToHsa } from "@cfasim-ui/charts/hsa-mapping";
-import { nationalCityMarkers, stateCityMarkers } from "@cfasim-ui/charts/us-cities";
+import { computed, onMounted, ref, shallowRef } from "vue";
 
-// Capital + 100 most-populous US cities for the national demo, and
-// California's capital + top cities for the single-state demo.
-const nationalCities = nationalCityMarkers();
-const californiaCities = stateCityMarkers("06");
+// Geography and lookup tables load after mount, and every demo waits for
+// them (`<ComponentDemo lazy :ready="geoReady">`), so the page chunk stays
+// small and maps mount only as they scroll into view.
+const statesTopo = shallowRef(null);
+const countiesTopo = shallowRef(null);
+const hsaTopo = shallowRef(null);
+const worldTopo = shallowRef(null);
+const fipsToHsa = shallowRef({});
+const nationalCities = shallowRef([]);
+const californiaCities = shallowRef([]);
+const geoReady = ref(false);
+
+onMounted(async () => {
+  const [states, counties, hsa, world, hsaMapping, cities] = await Promise.all([
+    import("us-atlas/states-10m.json"),
+    import("us-atlas/counties-10m.json"),
+    import("@cfasim-ui/charts/us-hsa-topology"),
+    import("world-atlas/countries-110m.json"),
+    import("@cfasim-ui/charts/hsa-mapping"),
+    import("@cfasim-ui/charts/us-cities"),
+  ]);
+  statesTopo.value = states.default;
+  countiesTopo.value = counties.default;
+  hsaTopo.value = hsa.usHsaTopology;
+  worldTopo.value = world.default;
+  fipsToHsa.value = hsaMapping.fipsToHsa;
+  // Capital + 100 most-populous US cities for the national demo, and
+  // California's capital + top cities for the single-state demo.
+  nationalCities.value = cities.nationalCityMarkers();
+  californiaCities.value = cities.stateCityMarkers("06");
+  geoReady.value = true;
+});
 
 // One row per state and territory, deterministic-ish values. The territory
 // rows only go to the albersUsaTerritories demo: under the default
 // projection they draw as nothing and the map warns.
-import statesTopoForLabels from "us-atlas/states-10m.json";
 const territoryData = computed(() =>
-  statesTopoForLabels.objects.states.geometries.map((g, i) => ({
+  (statesTopo.value?.objects.states.geometries ?? []).map((g, i) => ({
     id: String(g.id).padStart(2, "0"),
     value: (i * 41) % 100,
   })),
@@ -26,7 +50,7 @@ const stateLabelData = computed(() =>
 // Build one row per county (~3,143) with a deterministic-ish value so the
 // perf example can render every region with a custom tooltip.
 const denseCountyData = computed(() => {
-  const geoms = countiesTopoForPerf.objects.counties.geometries;
+  const geoms = countiesTopo.value?.objects.counties.geometries ?? [];
   return geoms
     .map((g, i) => ({
       id: String(g.id).padStart(5, "0"),
@@ -67,7 +91,7 @@ const splitStateData = computed(() => [
 
 // County-borders demo: one row per California HSA, deterministic-ish values.
 const caHsaData = computed(() =>
-  [...new Set(Object.values(fipsToHsa))]
+  [...new Set(Object.values(fipsToHsa.value))]
     .filter((code) => code.startsWith("06"))
     .map((code) => ({ id: code, value: parseInt(code.slice(-3), 10) % 100 })),
 );
@@ -75,15 +99,17 @@ const caHsaData = computed(() =>
 // Custom-geography demos. World countries from world-atlas (TopoJSON), one
 // row per country with an id; three disputed territories carry none and
 // are skipped by the map.
-import worldTopo from "world-atlas/countries-110m.json";
 const worldData = computed(() =>
-  worldTopo.objects.countries.geometries
+  (worldTopo.value?.objects.countries.geometries ?? [])
     .filter((g) => g.id != null)
     .map((g, i) => ({ id: String(g.id), value: (i * 53) % 100 })),
 );
 // Passed as stable objects: an inline `:regions="{ ... }"` literal is a new
 // object on every render of the page, which would rebuild the map.
-const worldRegions = { topology: worldTopo, object: "countries" };
+const worldRegions = computed(() => ({
+  topology: worldTopo.value,
+  object: "countries",
+}));
 const worldProjection = ref("equalEarth");
 const worldRenderer = ref("svg");
 const focusedCountry = ref(null);
@@ -147,7 +173,7 @@ const focusedCounty = ref(null);
 const parentFocus = computed(() => {
   const fips = focusedCounty.value;
   if (!fips) return null;
-  const hsa = fipsToHsa[fips];
+  const hsa = fipsToHsa.value[fips];
   return hsa
     ? [fips, { id: hsa, geoType: "hsas", style: "dashed", stroke: "#666" }]
     : fips;
@@ -201,7 +227,7 @@ import countiesTopo from "us-atlas/counties-10m.json";
 feature name (`"California"`). Rows that match no feature are ignored;
 features without a row take the theme's base fill.
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="statesTopo"
     :data="[
@@ -269,7 +295,7 @@ Pass `domain` to pin that range instead, so colors keep their meaning as
 />
 ```
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="statesTopo"
     :data="[
@@ -315,7 +341,7 @@ Values at or above a stop's `min` get its color; the highest matching stop
 wins. A stop may also override the feature `stroke` and hover/focus
 `highlight`.
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="statesTopo"
     :data="[
@@ -367,7 +393,7 @@ wins. A stop may also override the feature `stroke` and hover/focus
 String values match a stop's `value`; unmatched values get the base `fill`.
 Stops take the same optional `stroke` and `highlight` overrides.
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="statesTopo"
     :data="[
@@ -422,7 +448,7 @@ Any CSS color works (`var()`, `light-dark()`, `color-mix()`), resolved
 against the map's container and repainted when the page theme changes, in
 both renderers. The `outline` is off until a visible color resolves.
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="statesTopo"
     :data="[
@@ -545,7 +571,7 @@ object styles the outline (`style: "solid" | "dashed" | "dotted"`,
 moving the map, for click-to-select UIs. Taps select the same way on touch
 and double as hover (highlight, `stateHover`, tooltip).
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="countiesTopo"
     geo-type="counties"
@@ -619,7 +645,7 @@ the default text instead:
 />
 ```
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="statesTopo"
     :data="[
@@ -665,7 +691,7 @@ the default text instead:
 `geoType="counties"` renders counties keyed by 5-digit FIPS codes, with
 state borders drawn on top.
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="countiesTopo"
     geo-type="counties"
@@ -719,7 +745,7 @@ with the projection fitted to it. It needs a counties topology, or
 `usHsaTopology` for HSAs. `data` can stay national; only features inside
 the state draw. An unknown value logs a warning and shows the full map.
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="countiesTopo"
     geo-type="counties"
@@ -775,7 +801,7 @@ Pacific territories in a column west of the coast. The fit leaves room beside
 each inset for its `state-labels` callout. The Northern Marianas inset shows
 the southern islands (Rota, Tinian, Saipan).
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="statesTopo"
     projection="albersUsaTerritories"
@@ -826,7 +852,7 @@ import { usHsaTopology } from "@cfasim-ui/charts/us-hsa-topology";
 <ChoroplethMap :topology="usHsaTopology" geo-type="hsas" :data="hsaData" />
 ```
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="hsaTopo"
     geo-type="hsas"
@@ -897,7 +923,7 @@ user zooms in one level. The complementary `theme.hsaBorders` rules HSA
 separators over a county map, as in
 [the next example](#color-by-hsa-interact-by-county-datageotype).
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="countiesTopo"
     geo-type="hsas"
@@ -943,7 +969,7 @@ county, derive its HSA with `fipsToHsa` (from the
 `@cfasim-ui/charts/hsa-mapping` subpath) and pass both as a `FocusItem`
 array; the cross-geoType item renders as a dashed overlay.
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="countiesTopo"
     geo-type="counties"
@@ -1016,7 +1042,7 @@ on a county map merges that state into one shape; a county row on a state
 map splits that state into counties (its counties without rows render as
 no-data). The substituted features fill, hover, and focus like any other.
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="countiesTopo"
     geo-type="counties"
@@ -1045,7 +1071,7 @@ no-data). The substituted features fill, hover, and focus like any other.
   </template>
 </ComponentDemo>
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="countiesTopo"
     geo-type="states"
@@ -1085,7 +1111,7 @@ US in from the edges. `tight-fit` crops that overhang so the lower 48 fill
 the frame; a number in `0`–`1` crops partway. No effect in single-state
 mode.
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="statesTopo"
     tight-fit
@@ -1119,7 +1145,7 @@ size. County and HSA maps are opt-in. The enlargement is zoom-aware: DC
 holds its on-screen size until the real geography catches up, so zoomed-in
 views are never distorted.
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="statesTopo"
     :data="stateLabelData"
@@ -1161,7 +1187,7 @@ capitals, which are placed first. On a zoomable map a city shows once the
 zoom reaches its `minZoom` (default from `cities-min-zoom`, `2`), so the
 largest cities appear first and more reveal as the user zooms in.
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="statesTopo"
     :cities="nationalCities"
@@ -1190,7 +1216,7 @@ const cities = nationalCityMarkers();
   </template>
 </ComponentDemo>
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="countiesTopo"
     state="California"
@@ -1248,7 +1274,7 @@ shrink on small maps and re-fit as the map zooms, and they act as hover and
 click proxies for their state. They work on county and HSA maps too, where
 labels always mark states.
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="statesTopo"
     :data="stateLabelData"
@@ -1298,7 +1324,7 @@ constant): a new object rebuilds the map.
   `dataGeoType`, `state`, `tightFit`, `stateLabels`, `enlargeDc`, `cities`)
   and the `geoType` of data rows and focus items do nothing with `regions`.
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <div style="display: flex; gap: 16px; flex-wrap: wrap; width: 100%">
     <label>
       Projection
@@ -1377,7 +1403,7 @@ const focused = ref(null);
 A GeoJSON collection keyed by a `code` property, named by `label`, with a
 second collection of districts as the borders mesh:
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     data-testid="zones-map"
     :regions="gridRegions"
@@ -1439,7 +1465,7 @@ milliseconds regardless of feature count. Interactions are identical; the
 menu offers PNG export only, and there is no per-feature DOM for assistive
 tech. `renderer` can be switched on a mounted map and the zoom carries over.
 
-<ComponentDemo>
+<ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
     :topology="countiesTopo"
     geo-type="counties"
