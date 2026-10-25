@@ -6,6 +6,7 @@ export {
   type AreaSection,
   type AreaSectionLayout,
 } from "./LineChart/LineChart.vue";
+export { sharedExtent } from "./_shared/extent.js";
 export {
   stackAreas,
   type StackedAreaLayer,

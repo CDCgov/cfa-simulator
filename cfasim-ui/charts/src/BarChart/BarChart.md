@@ -587,6 +587,32 @@ Every bar still renders; only the tick labels are skipped.
   </template>
 </ComponentDemo>
 
+### Value range
+
+`value-max` sets the highest value the value axis must include: it only
+widens the axis, and data past it still extends it. Give several charts the same
+`value-max` to share one value axis, with
+[`sharedExtent`](./line-chart#shared-y-axis-across-charts) to compute it.
+Share only the max: `value-min` is also where bars start, so passing the
+data's smallest value would cut every bar short. For a stacked chart, pass
+the per-category sums of its positive segments (and, if any, of its
+negative ones) rather than the raw values.
+
+```vue
+<script setup>
+import { BarChart, sharedExtent } from "@cfasim-ui/charts";
+
+const casesA = [12, 30, 22];
+const casesB = [4, 9, 6];
+const shared = sharedExtent([casesA, casesB]);
+</script>
+
+<template>
+  <BarChart :data="casesA" :value-max="shared?.max" />
+  <BarChart :data="casesB" :value-max="shared?.max" />
+</template>
+```
+
 ### Logarithmic value axis
 
 Set `value-scale-type="log"` to switch the value axis to base-10 log

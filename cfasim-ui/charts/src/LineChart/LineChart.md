@@ -23,7 +23,11 @@ A responsive SVG line chart with support for multiple series, axis labels, and c
 
 <script setup>
 import { ref, computed } from "vue";
-import { stackAreas } from "@cfasim-ui/charts";
+import { stackAreas, sharedExtent } from "@cfasim-ui/charts";
+
+const regionA = [4, 9, 18, 31, 42, 38, 27, 15];
+const regionB = [1, 2, 4, 7, 11, 14, 12, 9];
+const sharedY = sharedExtent([regionA, regionB]);
 
 const compartments = stackAreas([
   { y: [990, 960, 880, 700, 480, 320, 240, 200], legend: "Susceptible", color: "#3b82f6", opacity: 0.7 },
@@ -569,6 +573,52 @@ Control tick placement with `x-ticks` and `y-ticks`. Pass a **number** for a fix
   y-label="Coverage"
   y-grid
 />
+```
+
+  </template>
+</ComponentDemo>
+
+### Shared y axis across charts
+
+For small multiples (one chart per region, scenario or age group, like
+Vega-Lite's `facet` with shared scales), give every chart the same `y-min`
+and `y-max`. `sharedExtent` (from `@cfasim-ui/charts`) finds them: pass it
+every array the charts plot on the y axis (series, area bounds, interval
+bounds) and it returns their `{ min, max }`, or `undefined` when there is
+no finite value yet (hence `sharedY?.min`). Pass `{ log: true }` for a log
+axis to skip values at or below 0.
+
+<ComponentDemo>
+  <div style="display: flex; gap: 16px; flex-wrap: wrap">
+    <LineChart style="flex: 1; min-width: 200px" title="Region A" :data="regionA" :y-min="sharedY?.min" :y-max="sharedY?.max" :height="180" :menu="false" />
+    <LineChart style="flex: 1; min-width: 200px" title="Region B" :data="regionB" :y-min="sharedY?.min" :y-max="sharedY?.max" :height="180" :menu="false" />
+  </div>
+
+<template #code>
+
+```vue
+<script setup>
+import { LineChart, sharedExtent } from "@cfasim-ui/charts";
+
+const regionA = [4, 9, 18, 31, 42, 38, 27, 15];
+const regionB = [1, 2, 4, 7, 11, 14, 12, 9];
+const sharedY = sharedExtent([regionA, regionB]);
+</script>
+
+<template>
+  <LineChart
+    title="Region A"
+    :data="regionA"
+    :y-min="sharedY?.min"
+    :y-max="sharedY?.max"
+  />
+  <LineChart
+    title="Region B"
+    :data="regionB"
+    :y-min="sharedY?.min"
+    :y-max="sharedY?.max"
+  />
+</template>
 ```
 
   </template>

@@ -544,6 +544,26 @@ describe("BarChart", () => {
     expect(heights[1] / heights[0]).toBeCloseTo(4, 1);
   });
 
+  it("extends the value axis to valueMax but never clips to it", () => {
+    const tallest = (valueMax?: number) => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20],
+          categories: ["A", "B"],
+          valueMax,
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const h = Number(bars(wrapper)[1].attributes("height"));
+      wrapper.unmount();
+      return h;
+    };
+    expect(tallest(40)).toBeCloseTo(tallest() / 2, 1);
+    expect(tallest(5)).toBeCloseTo(tallest(), 1);
+  });
+
   it("skips non-finite values without crashing", () => {
     const wrapper = mount(BarChart, {
       props: {

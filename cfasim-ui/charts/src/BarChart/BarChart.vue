@@ -330,6 +330,12 @@ interface BarChartProps extends ChartCommonProps {
   /** Force the value axis to start at this value or lower (default 0). */
   valueMin?: number;
   /**
+   * Highest value the value axis must include. The axis still extends
+   * past it when the data does; it never clips. Share it across charts
+   * for one value axis (see `sharedExtent`).
+   */
+  valueMax?: number;
+  /**
    * Scale type for the value axis. `"linear"` (default) maps values
    * directly to pixels; `"log"` uses a base-10 log mapping. On a log
    * axis, non-positive values collapse to the visible minimum, and
@@ -953,6 +959,7 @@ function dataValueExtent(
   } else if (floor < min) {
     min = floor;
   }
+  if (props.valueMax != null && props.valueMax > max) max = props.valueMax;
   const clamped = clampExtentForScale(
     min,
     max,
