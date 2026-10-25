@@ -887,7 +887,14 @@ function teardownInteraction() {
 // Scroll / resize don't reliably emit mouseout on the underlying path even
 // though the cursor's relationship to the map has changed — the tooltip
 // would otherwise get stuck at its old `position: fixed` coordinates.
-function dismissOnViewportChange() {
+// Only scrollers that contain the map move it: a side panel scrolling on its
+// own (VitePress 2 smooth-scrolls its outline) must not dismiss the tooltip.
+function dismissOnViewportChange(e: Event) {
+  const target = e.target;
+  const container = containerRef.value;
+  if (target instanceof Node && container && !target.contains(container)) {
+    return;
+  }
   clearHover();
 }
 

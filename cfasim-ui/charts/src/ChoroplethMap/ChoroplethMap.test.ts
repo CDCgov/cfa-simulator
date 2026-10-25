@@ -863,6 +863,38 @@ describe("ChoroplethMap", () => {
     }
   });
 
+  it("dismisses the tooltip only for scrolls that move the map", async () => {
+    const wrapper = mount(ChoroplethMap, {
+      attachTo: document.body,
+      props: {
+        topology: statesTopo,
+        width: 600,
+        height: 400,
+        tooltipTrigger: "hover",
+        data: [{ id: "06", value: 42 }],
+      },
+    });
+    const panel = document.createElement("div");
+    document.body.appendChild(panel);
+    await wrapper
+      .findAll(".state-path")
+      .find((p) => p.attributes("data-feat-id") === "06")!
+      .trigger("mouseover", { clientX: 100, clientY: 100 });
+    const tip = document.body.querySelector<HTMLElement>(
+      ".chart-tooltip-content",
+    )!;
+    expect(tip.style.visibility).toBe("visible");
+
+    panel.dispatchEvent(new Event("scroll"));
+    expect(tip.style.visibility).toBe("visible");
+
+    document.dispatchEvent(new Event("scroll"));
+    expect(tip.style.visibility).toBe("hidden");
+
+    panel.remove();
+    wrapper.unmount();
+  });
+
   it("emits update:focus with the clicked feature id", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: { topology: statesTopo, width: 600, height: 400 },
