@@ -140,6 +140,13 @@ const props = withDefaults(
      * default `--color-bg-subtle`, or set `--data-table-stripe-color`.
      */
     striped?: boolean | string;
+    /** Tighter cell padding and smaller text, for dense tables. */
+    compact?: boolean;
+    /**
+     * Round the table's corners. Pass a CSS length to pick the radius
+     * (default `--radius-md`), or set `--data-table-radius`.
+     */
+    rounded?: boolean | string;
   }>(),
   {
     menu: true,
@@ -148,6 +155,8 @@ const props = withDefaults(
     downloadButton: false,
     sortable: false,
     striped: false,
+    compact: false,
+    rounded: false,
   },
 );
 
@@ -382,6 +391,12 @@ const stripeStyle = computed(() =>
     : undefined,
 );
 
+const wrapperStyle = computed(() =>
+  typeof props.rounded === "string" && props.rounded
+    ? { "--data-table-radius": props.rounded }
+    : undefined,
+);
+
 const showMenu = computed(
   () => Boolean(props.menu) && menuItems.value.length > 0,
 );
@@ -393,10 +408,14 @@ const showMenu = computed(
     :class="{ 'full-width': fullWidth, 'has-menu': showMenu }"
   >
     <ChartMenu v-if="showMenu" :items="menuItems" force-dropdown />
-    <div class="TableWrapper">
+    <div
+      class="TableWrapper"
+      :class="{ rounded: !!rounded, compact }"
+      :style="wrapperStyle"
+    >
       <table
         class="Table"
-        :class="{ 'full-width': fullWidth, striped: !!striped }"
+        :class="{ 'full-width': fullWidth, striped: !!striped, compact }"
         :style="stripeStyle"
       >
         <colgroup>
@@ -494,6 +513,21 @@ const showMenu = computed(
   font-size: var(--font-size-sm);
 }
 
+.TableWrapper.compact {
+  font-size: var(--font-size-xs);
+}
+
+/* The scroll container clips to its radius, so the border moves out to it
+   and the table's own square border goes away. */
+.TableWrapper.rounded {
+  border: 1px solid var(--color-border);
+  border-radius: var(--data-table-radius, var(--radius-md));
+}
+
+.TableWrapper.rounded .Table {
+  border: none;
+}
+
 .Table {
   display: table;
   margin: 0;
@@ -521,6 +555,11 @@ const showMenu = computed(
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: left;
+}
+
+.Table.compact th,
+.Table.compact td {
+  padding: 0.375em 0.75em;
 }
 
 .Table th.cell-wrap,

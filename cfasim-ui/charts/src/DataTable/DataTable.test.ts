@@ -260,6 +260,43 @@ describe("Table", () => {
     expect(th.attributes("style")).toBeUndefined();
   });
 
+  describe("compact", () => {
+    it("is off by default and marks the wrapper and table when set", () => {
+      const plain = mount(DataTable, { props: { data: { a: [1, 2] } } });
+      expect(plain.find(".TableWrapper").classes()).not.toContain("compact");
+      expect(plain.find("table").classes()).not.toContain("compact");
+
+      const compact = mount(DataTable, {
+        props: { data: { a: [1, 2] }, compact: true },
+      });
+      expect(compact.find(".TableWrapper").classes()).toContain("compact");
+      expect(compact.find("table").classes()).toContain("compact");
+    });
+  });
+
+  describe("rounded", () => {
+    it("is off by default", () => {
+      const wrapper = mount(DataTable, { props: { data: { a: [1, 2] } } });
+      expect(wrapper.find(".TableWrapper").classes()).not.toContain("rounded");
+    });
+
+    it("adds the rounded class, and a custom radius as a CSS variable", () => {
+      const plain = mount(DataTable, {
+        props: { data: { a: [1, 2] }, rounded: true },
+      });
+      expect(plain.find(".TableWrapper").classes()).toContain("rounded");
+      expect(plain.find(".TableWrapper").attributes("style")).toBeUndefined();
+
+      const custom = mount(DataTable, {
+        props: { data: { a: [1, 2] }, rounded: "12px" },
+      });
+      expect(custom.find(".TableWrapper").classes()).toContain("rounded");
+      expect(custom.find(".TableWrapper").attributes("style")).toContain(
+        "--data-table-radius: 12px",
+      );
+    });
+  });
+
   describe("striped", () => {
     it("is off by default", () => {
       const wrapper = mount(DataTable, { props: { data: { a: [1, 2] } } });

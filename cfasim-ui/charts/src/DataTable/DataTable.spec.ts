@@ -62,6 +62,33 @@ test("DataTable renders several columns through one shared cell template", async
   );
 });
 
+test("DataTable compact and rounded tighten cells and round the frame", async ({
+  page,
+}) => {
+  await page.goto("./cfasim-ui/charts/data-table");
+  const wrapper = page.locator(".demo-preview .TableWrapper.rounded").first();
+  const style = (sel: string, prop: string) =>
+    wrapper
+      .locator(sel)
+      .first()
+      .evaluate((el, p) => getComputedStyle(el).getPropertyValue(p), prop);
+  expect(
+    await wrapper.evaluate((el) => getComputedStyle(el).borderRadius),
+  ).toBe("6px");
+  expect(
+    await wrapper.evaluate((el) => getComputedStyle(el).borderTopWidth),
+  ).toBe("1px");
+  // The table's own border moves out to the rounded frame.
+  expect(await style("table", "border-top-width")).toBe("0px");
+
+  const plainPad = await page
+    .locator(".demo-preview .Table:not(.compact) tbody td")
+    .first()
+    .evaluate((el) => parseFloat(getComputedStyle(el).paddingTop));
+  const compactPad = await style("tbody td", "padding-top");
+  expect(parseFloat(compactPad)).toBeLessThan(plainPad);
+});
+
 test("DataTable striped shades every other row", async ({ page }) => {
   await page.goto("./cfasim-ui/charts/data-table");
   const rows = page.locator(".demo-preview .Table.striped tbody tr");

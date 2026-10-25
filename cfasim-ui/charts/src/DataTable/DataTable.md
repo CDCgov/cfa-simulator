@@ -203,6 +203,39 @@ sorting. The default shade is `--color-bg-subtle`; pass a CSS color
   </template>
 </ComponentDemo>
 
+### Compact and rounded
+
+`compact` tightens the cell padding and drops the text one size, for dense
+tables. `rounded` rounds the table's corners: pass a CSS length
+(`rounded="12px"`) or set `--data-table-radius` to change the default
+`--radius-md`.
+
+<ComponentDemo>
+  <DataTable
+    :data="{ day: [0, 1, 2, 3, 4, 5], susceptible: [1000, 980, 945, 900, 860, 825], infected: [1, 21, 56, 101, 141, 170] }"
+    compact
+    rounded
+    striped
+  />
+
+<template #code>
+
+```vue
+<DataTable
+  :data="{
+    day: [0, 1, 2, 3, 4, 5],
+    susceptible: [1000, 980, 945, 900, 860, 825],
+    infected: [1, 21, 56, 101, 141, 170],
+  }"
+  compact
+  rounded
+  striped
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Sortable columns
 
 Pass `sortable` to make every column header a button that sorts the rows.

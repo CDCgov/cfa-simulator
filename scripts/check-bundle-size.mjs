@@ -99,7 +99,7 @@ const CSS_LIMITS = [
   {
     name: "@cfasim-ui/charts CSS",
     path: "cfasim-ui/charts/dist/index.css",
-    limit: 13 * KB,
+    limit: 14 * KB,
   },
   {
     name: "@cfasim-ui/theme (all CSS)",
