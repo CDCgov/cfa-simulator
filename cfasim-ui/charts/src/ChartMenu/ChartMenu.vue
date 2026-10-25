@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import {
-  DropdownMenuRoot,
-  DropdownMenuTrigger,
-  DropdownMenuPortal,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "reka-ui";
+  nextTick,
+  onBeforeUnmount,
+  ref,
+  useId,
+  watch,
+  type CSSProperties,
+} from "vue";
 
 export interface ChartMenuItem {
   label: string;
@@ -31,12 +32,175 @@ const props = withDefaults(
 const emit = defineEmits<{ (e: "close"): void }>();
 
 const useDropdown = () => props.forceDropdown || props.items.length > 1;
+
+// A hand-rolled menu button (WAI-ARIA menu pattern) rather than a popover
+// library, so chart consumers do not bundle one. The menu is teleported to
+// <body> and positioned from the trigger's bounding rect: one anchor, one
+// placement (below, right-aligned, flipped above when out of room).
+const open = ref(false);
+const rootRef = ref<HTMLElement | null>(null);
+const triggerRef = ref<HTMLButtonElement | null>(null);
+const menuRef = ref<HTMLElement | null>(null);
+const triggerId = useId();
+const menuId = useId();
+
+const MENU_OFFSET = 4;
+const VIEWPORT_MARGIN = 4;
+const menuStyle = ref<CSSProperties>({});
+
+function positionMenu() {
+  const trigger = triggerRef.value;
+  const menu = menuRef.value;
+  if (!trigger || !menu) return;
+  const anchor = trigger.getBoundingClientRect();
+  const { width, height } = menu.getBoundingClientRect();
+  let top = anchor.bottom + MENU_OFFSET;
+  if (
+    top + height > window.innerHeight - VIEWPORT_MARGIN &&
+    anchor.top - MENU_OFFSET - height >= VIEWPORT_MARGIN
+  ) {
+    top = anchor.top - MENU_OFFSET - height;
+  }
+  const left = Math.max(VIEWPORT_MARGIN, anchor.right - width);
+  menuStyle.value = { top: `${top}px`, left: `${left}px` };
+}
+
+function contains(target: EventTarget | null): boolean {
+  return (
+    target instanceof Node &&
+    (rootRef.value?.contains(target) === true ||
+      menuRef.value?.contains(target) === true)
+  );
+}
+
+function menuItems(): HTMLElement[] {
+  return menuRef.value
+    ? Array.from(
+        menuRef.value.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+      )
+    : [];
+}
+
+function focusItem(index: number) {
+  const els = menuItems();
+  if (els.length === 0) return;
+  els[((index % els.length) + els.length) % els.length].focus();
+}
+
+// `focus` is the item to focus once open; `null` focuses the menu itself
+// (pointer opens, so no item shows a focus ring until the keyboard is used).
+async function openMenu(focus: number | null) {
+  open.value = true;
+  await nextTick();
+  positionMenu();
+  if (focus === null) menuRef.value?.focus();
+  else focusItem(focus);
+}
+
+function closeMenu(restoreFocus = true) {
+  if (!open.value) return;
+  open.value = false;
+  if (restoreFocus) triggerRef.value?.focus();
+}
+
+function onTriggerClick() {
+  if (open.value) closeMenu();
+  else void openMenu(null);
+}
+
+function onTriggerKeydown(event: KeyboardEvent) {
+  if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    void openMenu(0);
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    void openMenu(-1);
+  }
+}
+
+function onMenuKeydown(event: KeyboardEvent) {
+  const current = menuItems().indexOf(document.activeElement as HTMLElement);
+  switch (event.key) {
+    case "ArrowDown":
+      event.preventDefault();
+      focusItem(current + 1);
+      break;
+    case "ArrowUp":
+      event.preventDefault();
+      focusItem(current < 0 ? -1 : current - 1);
+      break;
+    case "Home":
+      event.preventDefault();
+      focusItem(0);
+      break;
+    case "End":
+      event.preventDefault();
+      focusItem(-1);
+      break;
+    case "Escape":
+      event.preventDefault();
+      closeMenu();
+      break;
+    case "Tab":
+      // Put focus back on the trigger before the default Tab action runs,
+      // so it lands on the element after the chart rather than wherever the
+      // teleported menu sat in the document.
+      closeMenu();
+      break;
+  }
+}
+
+function onItemClick(item: ChartMenuItem) {
+  closeMenu();
+  item.action();
+}
+
+function onDocumentPointerDown(event: PointerEvent) {
+  if (!contains(event.target)) closeMenu(false);
+}
+
+function onFocusOut(event: FocusEvent) {
+  // A null relatedTarget is a blur with no new focus target: Safari and
+  // Firefox on macOS do not focus buttons on mousedown, so clicking the
+  // trigger to close the menu looks like this. The document pointerdown
+  // listener handles real outside clicks.
+  if (event.relatedTarget !== null && !contains(event.relatedTarget)) {
+    closeMenu(false);
+  }
+}
+
+// Scrolling any ancestor moves the trigger; capture on document sees them all.
+function listen() {
+  document.addEventListener("pointerdown", onDocumentPointerDown, true);
+  document.addEventListener("scroll", positionMenu, true);
+  window.addEventListener("resize", positionMenu);
+}
+
+function unlisten() {
+  document.removeEventListener("pointerdown", onDocumentPointerDown, true);
+  document.removeEventListener("scroll", positionMenu, true);
+  window.removeEventListener("resize", positionMenu);
+}
+
+watch(open, (isOpen) => (isOpen ? listen() : unlisten()));
+
+onBeforeUnmount(unlisten);
+
+// Dropping to a single item (or into fullscreen) unmounts the menu.
+watch(
+  () => [useDropdown(), props.isFullscreen],
+  ([dropdown, fullscreen]) => {
+    if (!dropdown || fullscreen) open.value = false;
+  },
+);
 </script>
 
 <template>
   <div
+    ref="rootRef"
     class="chart-menu-trigger-area"
     :class="{ 'chart-menu-trigger-area--expanded': isFullscreen }"
+    @focusout="onFocusOut"
   >
     <!-- Expanded: a close button replaces the menu trigger -->
     <button
@@ -80,8 +244,20 @@ const useDropdown = () => props.forceDropdown || props.items.length > 1;
       </svg>
     </button>
     <!-- Multiple items: dropdown menu -->
-    <DropdownMenuRoot v-else :modal="false">
-      <DropdownMenuTrigger class="chart-menu-button" aria-label="Chart options">
+    <template v-else>
+      <button
+        :id="triggerId"
+        ref="triggerRef"
+        type="button"
+        class="chart-menu-button"
+        aria-label="Chart options"
+        aria-haspopup="menu"
+        :aria-expanded="open"
+        :aria-controls="open ? menuId : undefined"
+        :data-state="open ? 'open' : 'closed'"
+        @click="onTriggerClick"
+        @keydown="onTriggerKeydown"
+      >
         <svg
           width="16"
           height="16"
@@ -93,25 +269,35 @@ const useDropdown = () => props.forceDropdown || props.items.length > 1;
           <circle cx="8" cy="8" r="1.5" />
           <circle cx="13" cy="8" r="1.5" />
         </svg>
-      </DropdownMenuTrigger>
-      <DropdownMenuPortal>
-        <DropdownMenuContent
+      </button>
+      <Teleport to="body">
+        <div
+          v-if="open"
+          :id="menuId"
+          ref="menuRef"
           class="chart-menu-content"
-          :side-offset="4"
-          align="end"
+          role="menu"
+          :aria-labelledby="triggerId"
+          tabindex="-1"
+          :style="menuStyle"
+          @keydown="onMenuKeydown"
+          @focusout="onFocusOut"
         >
-          <DropdownMenuItem
+          <button
             v-for="item in items"
             :key="item.label"
+            type="button"
             class="chart-menu-item"
+            role="menuitem"
+            tabindex="-1"
             :aria-pressed="item.ariaPressed"
-            @select="item.action"
+            @click="onItemClick(item)"
           >
             {{ item.label }}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenuPortal>
-    </DropdownMenuRoot>
+          </button>
+        </div>
+      </Teleport>
+    </template>
   </div>
 </template>
 
@@ -137,6 +323,7 @@ const useDropdown = () => props.forceDropdown || props.items.length > 1;
   justify-content: center;
   width: 28px;
   height: 28px;
+  padding: 0;
   border: 1px solid var(--color-border);
   border-radius: 0.25em;
   background: var(--color-bg-0, #fff);
@@ -158,6 +345,44 @@ const useDropdown = () => props.forceDropdown || props.items.length > 1;
 .chart-menu-button:hover {
   background: var(--color-bg-1, rgba(0, 0, 0, 0.05));
   color: var(--color-text);
+}
+
+.chart-menu-content {
+  position: fixed;
+  z-index: 100;
+  min-width: 140px;
+  padding: 0.25em;
+  background: var(--color-bg-0);
+  border: 1px solid var(--color-border);
+  border-radius: 0.25em;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  outline: none;
+}
+
+.chart-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0.375em 0.5em;
+  border: none;
+  border-radius: 0.25em;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  white-space: nowrap;
+}
+
+.chart-menu-item:hover,
+.chart-menu-item:focus {
+  background: var(--color-primary);
+  color: white;
 }
 </style>
 
@@ -187,34 +412,5 @@ const useDropdown = () => props.forceDropdown || props.items.length > 1;
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-.chart-menu-content {
-  z-index: 100;
-  background: var(--color-bg-0);
-  border: 1px solid var(--color-border);
-  border-radius: 0.25em;
-  padding: 0.25em;
-  box-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.1),
-    0 2px 4px -2px rgba(0, 0, 0, 0.1);
-  min-width: 140px;
-}
-
-.chart-menu-item {
-  display: flex;
-  align-items: center;
-  padding: 0.375em 0.5em;
-  border-radius: 0.25em;
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  user-select: none;
-  outline: none;
-  white-space: nowrap;
-}
-
-.chart-menu-item[data-highlighted] {
-  background: var(--color-primary);
-  color: white;
 }
 </style>
