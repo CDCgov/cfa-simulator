@@ -1,6 +1,54 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.13.0] - 2026-10-25
+
+### Bug Fixes
+
+- **ci:** Resolve workspace packages to source via a custom export condition
+- **charts:** Scroll DataTable horizontally instead of overflowing narrow containers
+- **charts:** Keep the default series colors distinct under the theme
+- **charts:** Keep the map tooltip open when unrelated elements scroll
+
+### Chores
+
+- Raise components JS and CSS bundle size limits
+- Tighten bundle-size limits and count eager chunks by reachability
+- **deps:** Bump vite, vitest, happy-dom, vue and others for security fixes
+
+### Documentation
+
+- **charts:** Group LineChart and BarChart examples and tidy their pages
+
+### Features
+
+- **ui:** Draw a dotted line through NumberInput's disabled slider ranges
+- **charts:** Name default tooltip rows and add ChartTooltipContent
+- **charts:** Add sortable columns and cell templates to DataTable
+- **charts:** Add striped rows option to DataTable
+- **charts:** Accept any CSS length for DataTable column widths
+- **ui:** Add month and year selects to the DatePicker calendar
+- **ui:** Add DateRangePicker component
+- **charts:** Add compact and rounded options to DataTable
+- **charts:** Add a continuous x axis to BarChart with period, x2 and binValues
+- **charts:** Add step and monotone line curves
+- **charts:** Add a shared value scale for BarChart summary lines
+- **shared:** Add d3Format and d3TimeFormat formatters
+- **charts:** Add stackAreas for stacked LineChart areas
+- **charts:** Add per-point dot radius, fill and opacity
+- **charts:** Add sharedExtent and BarChart valueMax for shared axes
+- **charts:** Add a Vega-Lite to LineChart/BarChart translator
+- **charts:** Translate Vega-Lite rules, error bars, text and point channels
+- **charts:** Add VegaLiteChart at the @cfasim-ui/charts/vega-lite entry
+
+### Performance
+
+- **charts:** Replace reka DropdownMenu in ChartMenu with a native menu button
+- **ui:** Lazy-load the Hint tooltip behind an eager trigger
+- **shared:** Replace sprintf-js with a built-in printf subset
+- **docs:** Lazy-load ChoroplethMap demos and drop global topologies from the theme
+- **charts:** Trim curve code and keep d3TimeFormat out of chart bundles
+
 ## [0.12.2] - 2026-10-23
 
 ### Bug Fixes
