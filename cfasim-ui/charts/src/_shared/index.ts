@@ -59,7 +59,6 @@ export {
   curveValueAt,
   visitCurveWindow,
   reverseCurvePath,
-  curveSegments,
   type LineCurve,
   type CurvePoint,
   type CurveOptions,

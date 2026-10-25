@@ -49,10 +49,14 @@ const PADS: Record<string, string> = { "-": "", _: " ", "0": "0" };
 /** Literal text, or a directive with its padding fill. */
 type Part = string | { c: string; pad: string };
 
-const LOCALE_FORMATS: Record<string, Part[]> = {};
-LOCALE_FORMATS.x = compile("%-m/%-d/%Y");
-LOCALE_FORMATS.X = compile("%-I:%M:%S %p");
-LOCALE_FORMATS.c = [...LOCALE_FORMATS.x, ", ", ...LOCALE_FORMATS.X];
+// Compiled on first use: top-level work would make the module a side
+// effect that keeps it in every bundle importing the shared barrel.
+const LOCALE_SPECS: Record<string, string> = {
+  c: "%-m/%-d/%Y, %-I:%M:%S %p",
+  x: "%-m/%-d/%Y",
+  X: "%-I:%M:%S %p",
+};
+const localeParts: Record<string, Part[]> = {};
 const MS_PER_DAY = 86_400_000;
 
 interface Fields {
@@ -151,7 +155,7 @@ function directive(c: string, f: Fields, p: string, utc: boolean): string {
     case "c":
     case "x":
     case "X":
-      return render(LOCALE_FORMATS[c], f, utc);
+      return render((localeParts[c] ??= compile(LOCALE_SPECS[c])), f, utc);
     case "d":
     case "e":
       return pad(f.d, p, 2);

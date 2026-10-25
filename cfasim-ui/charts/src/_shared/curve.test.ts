@@ -1,12 +1,18 @@
 import { describe, it, expect } from "vitest";
 import {
   curvePath,
-  curveSegments,
   curveValueAt,
   reverseCurvePath,
   type CurvePoint,
   type LineCurve,
 } from "./curve.js";
+
+/** Path commands as `[letter, ...numbers]`. */
+const parse = (d: string) =>
+  [...d.matchAll(/([MLC])([^MLC]*)/g)].map(([, k, n]) => [
+    k,
+    ...n.split(",").map(Number),
+  ]);
 
 const pts: CurvePoint[] = [
   { x: 0, y: 10 },
@@ -14,7 +20,7 @@ const pts: CurvePoint[] = [
   { x: 20, y: 20 },
 ];
 
-describe("curveSegments", () => {
+describe("curvePath", () => {
   it("draws straight segments for linear", () => {
     expect(curvePath(pts)).toBe("M0,10L10,30L20,20");
   });
@@ -32,14 +38,13 @@ describe("curveSegments", () => {
   });
 
   it("draws one cubic per gap for monotone, passing through each point", () => {
-    const segs = curveSegments(pts, "monotone");
-    expect(segs).toHaveLength(2);
-    expect(segs.every((s) => s.length === 6)).toBe(true);
-    expect(segs[0].slice(4)).toEqual([10, 30]);
-    expect(segs[1].slice(4)).toEqual([20, 20]);
+    const [, a, b] = parse(curvePath(pts, "monotone"));
+    expect([a[0], a.length, b[0], b.length]).toEqual(["C", 7, "C", 7]);
+    expect(a.slice(5)).toEqual([10, 30]);
+    expect(b.slice(5)).toEqual([20, 20]);
     // The local maximum gets a flat tangent, so the curve never rises above it.
-    expect(segs[0][3]).toBe(30);
-    expect(segs[1][1]).toBe(30);
+    expect(a[4]).toBe(30);
+    expect(b[2]).toBe(30);
   });
 
   it("falls back to a straight line for monotone with two points", () => {
@@ -60,18 +65,33 @@ describe("curveSegments", () => {
 });
 
 describe("reverseCurvePath", () => {
-  it("traces a step curve backwards", () => {
-    expect(reverseCurvePath(pts, "step-after")).toBe(
-      "L20,20L20,30L10,30L10,10L0,10",
-    );
-  });
-
-  it("swaps control points when reversing a cubic", () => {
-    const [a, b] = curveSegments(pts, "monotone");
-    expect(reverseCurvePath(pts, "monotone", {}, "M")).toBe(
-      `M20,20C${b[2]},${b[3]},${b[0]},${b[1]},10,30` +
-        `C${a[2]},${a[3]},${a[0]},${a[1]},0,10`,
-    );
+  it("traces every curve's own geometry backwards", () => {
+    // Irregular spacing and a flat run, so a direction-dependent tangent
+    // or step would show.
+    const xs = [0, 3, 4, 9, 10, 15, 22];
+    const ys = [5, 9, 9, 2, 6, 6, 1];
+    const p = xs.map((x, i) => ({ x, y: ys[i] }));
+    for (const curve of [
+      "step",
+      "step-before",
+      "step-after",
+      "monotone",
+    ] as const) {
+      const fwd = parse(curvePath(p, curve));
+      // Ends of each command: the start point, then each segment's endpoint.
+      const ends = fwd.map((c) => c.slice(-2));
+      const back = fwd
+        .slice(1)
+        .reverse()
+        .map((c, k) => {
+          const end = ends[fwd.length - 2 - k];
+          return c.length === 7
+            ? ["C", c[3], c[4], c[1], c[2], ...end]
+            : ["L", ...end];
+        });
+      const rev = parse(reverseCurvePath(p, curve, {}, "M"));
+      expect(rev, curve).toEqual([["M", ...ends[ends.length - 1]], ...back]);
+    }
   });
 });
 
@@ -90,9 +110,9 @@ describe("from / to", () => {
 
   it("draws the same geometry as the full curve, for every curve", () => {
     for (const curve of curves) {
-      const full = curveSegments(many, curve);
-      const part = curveSegments(many, curve, { from: 2, to: 5 });
-      // Segments per gap: 1 for linear / monotone, 2 for steps, plus the
+      const full = parse(curvePath(many, curve)).slice(1);
+      const part = parse(curvePath(many, curve, { from: 2, to: 5 })).slice(1);
+      // Commands per gap: 1 for linear / monotone, 2 for steps, plus the
       // closing half step of "step", which lands on the last point.
       const per = curve === "linear" || curve === "monotone" ? 1 : 2;
       expect(part.slice(0, 3 * per)).toEqual(full.slice(2 * per, 5 * per));

@@ -19,12 +19,6 @@ export interface CurvePoint {
 }
 
 /**
- * Path commands that follow a start point: `[x, y]` is a line to `(x, y)`,
- * `[x1, y1, x2, y2, x, y]` a cubic Bezier.
- */
-export type CurveSegment = number[];
-
-/**
  * Which part of a curve to draw: `axis` names the independent pixel axis
  * (`"y"` steps and smooths along y, for a horizontal BarChart's summary
  * lines), and `from` / `to` pick a stretch of the points while the curve
@@ -37,61 +31,10 @@ export interface CurveOptions {
   to?: number;
 }
 
-/** Segments from `points[from]` to `points[to]`. */
-export function curveSegments(
-  points: readonly CurvePoint[],
-  curve: LineCurve = "linear",
-  opts: CurveOptions = {},
-): CurveSegment[] {
-  const n = points.length;
-  const from = Math.max(0, opts.from ?? 0);
-  const to = Math.min(n - 1, opts.to ?? n - 1);
-  const out: CurveSegment[] = [];
-  if (to <= from) return out;
-  const swap = opts.axis === "y";
-  const t = (i: number) => (swap ? points[i].y : points[i].x);
-  const v = (i: number) => (swap ? points[i].x : points[i].y);
-  const line = (a: number, b: number) => out.push(swap ? [b, a] : [a, b]);
-  const m = curve === "monotone" && n > 2 ? monotoneTangent(t, v, n) : null;
-
-  for (let i = from; i < to; i++) {
-    const t0 = t(i);
-    const t1 = t(i + 1);
-    const v0 = v(i);
-    const v1 = v(i + 1);
-    if (m) {
-      const dt = (t1 - t0) / 3;
-      const c = [t0 + dt, v0 + dt * m(i), t1 - dt, v1 - dt * m(i + 1), t1, v1];
-      out.push(swap ? [c[1], c[0], c[3], c[2], c[5], c[4]] : c);
-      continue;
-    }
-    switch (curve) {
-      case "step-before":
-        line(t0, v1);
-        line(t1, v1);
-        break;
-      case "step-after":
-        line(t1, v0);
-        line(t1, v1);
-        break;
-      case "step": {
-        const mid = (t0 + t1) / 2;
-        line(mid, v0);
-        line(mid, v1);
-        // d3 only finishes the last half step once, at the line's end.
-        if (i + 1 === to) line(t1, v1);
-        break;
-      }
-      default:
-        line(t1, v1);
-    }
-  }
-  return out;
-}
-
 // Steffen's method, as in d3-shape's monotoneX: interior tangents from
 // both neighboring slopes, clamped so the curve stays monotone; the end
-// tangents from a one-sided three-point estimate.
+// tangents from a one-sided three-point estimate. Both are the same read
+// in either direction, which `reverseCurvePath` relies on.
 function monotoneTangent(
   t: (i: number) => number,
   v: (i: number) => number,
@@ -121,21 +64,6 @@ function monotoneTangent(
         : interior(i);
 }
 
-function segmentsPath(
-  start: CurvePoint,
-  segments: readonly CurveSegment[],
-  command: "M" | "L",
-): string {
-  let d = `${command}${start.x},${start.y}`;
-  for (const s of segments) {
-    d +=
-      s.length === 2
-        ? `L${s[0]},${s[1]}`
-        : `C${s[0]},${s[1]},${s[2]},${s[3]},${s[4]},${s[5]}`;
-  }
-  return d;
-}
-
 /**
  * Path data drawing `points[from..to]` with `curve`, starting with `M` (or
  * `L` to continue a path). Empty for no points.
@@ -146,24 +74,59 @@ export function curvePath(
   opts: CurveOptions = {},
   command: "M" | "L" = "M",
 ): string {
+  return draw(points, curve, opts, command, false);
+}
+
+/** `curvePath`, optionally walking `points` from the end (no copy). */
+function draw(
+  points: readonly CurvePoint[],
+  curve: LineCurve,
+  opts: CurveOptions,
+  command: "M" | "L",
+  reversed: boolean,
+): string {
+  const n = points.length;
   const from = Math.max(0, opts.from ?? 0);
-  const to = Math.min(points.length - 1, opts.to ?? points.length - 1);
+  const to = Math.min(n - 1, opts.to ?? n - 1);
   if (to < from) return "";
-  if (curve === "linear") {
-    let d = `${command}${points[from].x},${points[from].y}`;
-    for (let i = from + 1; i <= to; i++) d += `L${points[i].x},${points[i].y}`;
-    return d;
+  const swap = opts.axis === "y";
+  const at = (i: number) => points[reversed ? n - 1 - i : i];
+  const t = (i: number) => (swap ? at(i).y : at(i).x);
+  const v = (i: number) => (swap ? at(i).x : at(i).y);
+  const pt = (a: number, b: number) => (swap ? `${b},${a}` : `${a},${b}`);
+  const m = curve === "monotone" && n > 2 ? monotoneTangent(t, v, n) : null;
+  let m0 = m ? m(from) : 0;
+  let d = command + pt(t(from), v(from));
+  for (let i = from; i < to; i++) {
+    const t0 = t(i);
+    const t1 = t(i + 1);
+    const v0 = v(i);
+    const v1 = v(i + 1);
+    if (m) {
+      const m1 = m(i + 1);
+      const dt = (t1 - t0) / 3;
+      d += `C${pt(t0 + dt, v0 + dt * m0)},${pt(t1 - dt, v1 - dt * m1)},${pt(t1, v1)}`;
+      m0 = m1;
+      continue;
+    }
+    if (curve === "step-before") d += `L${pt(t0, v1)}`;
+    else if (curve === "step-after") d += `L${pt(t1, v0)}`;
+    else if (curve === "step") {
+      const mid = (t0 + t1) / 2;
+      d += `L${pt(mid, v0)}L${pt(mid, v1)}`;
+      // d3 only finishes the last half step once, at the line's end.
+      if (i + 1 < to) continue;
+    }
+    d += `L${pt(t1, v1)}`;
   }
-  return segmentsPath(
-    points[from],
-    curveSegments(points, curve, opts),
-    command,
-  );
+  return d;
 }
 
 /**
  * The same curve traced from `points[to]` back to `points[from]`, for the
- * return edge of a filled area. Starts with `L` unless told otherwise.
+ * return edge of a filled area: the curve over the reversed points, with
+ * step-before and step-after trading places. Starts with `L` unless told
+ * otherwise.
  */
 export function reverseCurvePath(
   points: readonly CurvePoint[],
@@ -171,28 +134,22 @@ export function reverseCurvePath(
   opts: CurveOptions = {},
   command: "M" | "L" = "L",
 ): string {
-  const from = Math.max(0, opts.from ?? 0);
-  const to = Math.min(points.length - 1, opts.to ?? points.length - 1);
-  if (to < from) return "";
-  if (curve === "linear") {
-    let d = `${command}${points[to].x},${points[to].y}`;
-    for (let i = to - 1; i >= from; i--) d += `L${points[i].x},${points[i].y}`;
-    return d;
-  }
-  const segs = curveSegments(points, curve, opts);
-  const ends: CurvePoint[] = [points[from]];
-  for (const s of segs) ends.push({ x: s[s.length - 2], y: s[s.length - 1] });
-  const reversed: CurveSegment[] = [];
-  for (let i = segs.length - 1; i >= 0; i--) {
-    const s = segs[i];
-    const back = ends[i];
-    reversed.push(
-      s.length === 2
-        ? [back.x, back.y]
-        : [s[2], s[3], s[0], s[1], back.x, back.y],
-    );
-  }
-  return segmentsPath(ends[ends.length - 1], reversed, command);
+  const last = points.length - 1;
+  return draw(
+    points,
+    curve === "step-before"
+      ? "step-after"
+      : curve === "step-after"
+        ? "step-before"
+        : curve,
+    {
+      axis: opts.axis,
+      from: last - Math.min(last, opts.to ?? last),
+      to: last - Math.max(0, opts.from ?? 0),
+    },
+    command,
+    true,
+  );
 }
 
 /**

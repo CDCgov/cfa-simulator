@@ -84,7 +84,7 @@ const SCENARIOS = [
     name: "charts: everything",
     pkg: "@cfasim-ui/charts",
     imports: "*",
-    limit: 112 * KB,
+    limit: 110 * KB,
     lazyChunks: 1,
   },
 ];
