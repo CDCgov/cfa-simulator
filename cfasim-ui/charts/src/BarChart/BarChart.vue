@@ -62,6 +62,9 @@ import {
   type ChartPadding,
   type BrushBox,
   type PlotClipEdges,
+  curvePath,
+  type CurvePoint,
+  type LineCurve,
 } from "../_shared/index.js";
 import {
   buildBarSlots,
@@ -1244,6 +1247,7 @@ type StyledSummaryLine = {
   dashed: boolean;
   opacity: number;
   blendMode?: BlendMode;
+  curve?: LineCurve;
   dots: boolean;
   dotRadius: number;
   extent: { min: number; max: number };
@@ -1323,6 +1327,7 @@ const summaryLinesStyled = computed<StyledSummaryLine[]>(() => {
       dashed: line.dashed ?? false,
       opacity: line.opacity ?? 1,
       blendMode: line.blendMode,
+      curve: line.curve,
       dots: line.dots ?? false,
       dotRadius: line.dotRadius ?? (line.strokeWidth ?? 2) + 1,
       extent: computeLineExtent(line),
@@ -1336,9 +1341,10 @@ const summaryLinesResolved = computed<ResolvedSummaryLine[]>(() => {
   if (!hasLayout.value) return [];
   const lines = summaryLinesStyled.value.filter((l) => !isHidden(l.legend));
   return lines.map((line): ResolvedSummaryLine => {
-    const points: { x: number; y: number }[] = [];
+    const points: CurvePoint[] = [];
     let d = "";
-    let inSeg = false;
+    let run: CurvePoint[] = [];
+    const axis = isVertical.value ? "x" : "y";
     const xs = toNumericX(line.x, xIsDate.value, tz.value);
     for (let j = 0; j < line.data.length; j++) {
       const yv = Number(line.data[j]);
@@ -1348,14 +1354,15 @@ const summaryLinesResolved = computed<ResolvedSummaryLine[]>(() => {
           ? slotCenter(j)
           : NaN;
       if (!isFinite(yv) || !isFinite(xv)) {
-        inSeg = false;
+        d += curvePath(run, line.curve, { axis });
+        run = [];
         continue;
       }
       const p = projectLinePoint(xv, yv, line.extent);
       points.push(p);
-      d += inSeg ? `L${p.x},${p.y}` : `M${p.x},${p.y}`;
-      inSeg = true;
+      run.push(p);
     }
+    d += curvePath(run, line.curve, { axis });
     return { ...line, pathD: d, points };
   });
 });

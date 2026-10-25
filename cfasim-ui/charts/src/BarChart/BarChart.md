@@ -854,7 +854,9 @@ independent of the bar axis, so a probability-density curve in
 </ComponentDemo>
 
 Each line accepts `color`, `strokeWidth`, `dashed`, `opacity`,
-`blendMode`, `dots`, and `dotRadius` for styling, the same vocabulary as
+`blendMode`, `curve` (`"step-after"`, `"monotone"`, ...; see
+LineChart's [Curves](./line-chart#curves)), `dots`, and `dotRadius` for
+styling, the same vocabulary as
 `LineChart` series (both extend `LineMarkStyle`). Override the line's
 extent with `valueMin` / `valueMax`. Pass `x: number[]` (in
 category-index space: `0` is the first category center, fractional

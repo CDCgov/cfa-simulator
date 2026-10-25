@@ -70,6 +70,11 @@ import {
   type ChartPadding,
   type BrushBox,
   type PlotClipEdges,
+  curvePath,
+  curveValueAt,
+  reverseCurvePath,
+  type CurvePoint,
+  type LineCurve,
 } from "../_shared/index.js";
 
 /**
@@ -162,6 +167,8 @@ export interface Area {
   lower: LineChartData;
   /** Optional x-values parallel to `upper`/`lower`. See `Series.x`. */
   x?: LineChartXInput;
+  /** How both edges connect their points. Defaults to the chart's `curve`. */
+  curve?: LineCurve;
   color?: string;
   opacity?: number;
   /** Label shown in the inline legend. */
@@ -279,6 +286,12 @@ export interface LineChartProps extends ChartCommonProps {
    */
   markerLabelGap?: number;
   lineOpacity?: number;
+  /**
+   * Default `curve` for every series and area; one set on a series or
+   * area wins. `"linear"` (default), `"step"`, `"step-before"`,
+   * `"step-after"` or `"monotone"`. See `LineCurve`.
+   */
+  curve?: LineCurve;
   /**
    * Lowest value the y axis must include. The axis still extends below
    * it when the data does; it never clips. Ignored on a log axis when
@@ -666,12 +679,14 @@ function xPixel(v: number): number {
 
 /**
  * Visit the y-values a line shows inside an x-window: every point in the
- * window, plus the interpolated value where a segment crosses either edge.
+ * window, plus the value its curve draws where a segment crosses either
+ * edge.
  */
 function visitWindow(
   data: LineChartData,
   xAt: (i: number) => number,
   win: { min: number; max: number },
+  curve: LineCurve | undefined,
   visit: (v: number) => void,
 ) {
   let px = NaN;
@@ -686,10 +701,10 @@ function visitWindow(
     if (x >= win.min && x <= win.max) visit(y);
     if (isFinite(px)) {
       if ((win.min - px) * (win.min - x) < 0) {
-        visit(py + ((win.min - px) / (x - px)) * (y - py));
+        visit(curveValueAt(curve, px, py, x, y, win.min));
       }
       if ((win.max - px) * (win.max - x) < 0) {
-        visit(py + ((win.max - px) / (x - px)) * (y - py));
+        visit(curveValueAt(curve, px, py, x, y, win.max));
       }
     }
     px = x;
@@ -698,29 +713,34 @@ function visitWindow(
 }
 
 /**
- * Whether point `i`, or a segment joining it to a neighbor, can reach the
- * x-window. Lets path building skip offscreen points while zoomed.
+ * Whether point `i`, or the line through its neighbors up to `reach`
+ * points away, can reach the x-window. Lets path building skip offscreen
+ * points while zoomed.
  */
 function nearWindow(
   xAt: (i: number) => number,
   i: number,
   n: number,
   win: { min: number; max: number },
+  reach = 1,
 ): boolean {
-  const x = xAt(i);
-  let lo = x;
-  let hi = x;
-  if (i > 0) {
-    const p = xAt(i - 1);
-    if (p < lo) lo = p;
-    else if (p > hi) hi = p;
-  }
-  if (i < n - 1) {
-    const q = xAt(i + 1);
-    if (q < lo) lo = q;
-    else if (q > hi) hi = q;
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let k = Math.max(0, i - reach); k <= Math.min(n - 1, i + reach); k++) {
+    const x = xAt(k);
+    if (x < lo) lo = x;
+    if (x > hi) hi = x;
   }
   return hi >= win.min && lo <= win.max;
+}
+
+/**
+ * Neighbors kept past the zoom window while culling: one for the segment
+ * crossing the edge, two for a monotone curve, whose tangent at that
+ * neighbor depends on the point beyond it.
+ */
+function curveReach(curve: LineCurve | undefined): number {
+  return curve === "monotone" ? 2 : 1;
 }
 
 /** Zoom window for culling path geometry; null when showing everything. */
@@ -739,14 +759,22 @@ function dataYExtent(win: { min: number; max: number } | null) {
   };
   for (const s of allSeries.value) {
     if (isHidden(s.legend)) continue;
-    if (win) visitWindow(s.data, (i) => seriesXAt(s, i), win, visit);
-    else for (const v of s.data) visit(v);
+    if (win) {
+      visitWindow(s.data, (i) => seriesXAt(s, i), win, seriesCurve(s), visit);
+    } else for (const v of s.data) visit(v);
   }
   for (const a of allAreas.value) {
     if (isHidden(a.legend)) continue;
     for (const band of [a.upper, a.lower]) {
-      if (win) visitWindow(band, (i) => areaXAt(a, i), win, visit);
-      else for (const v of band) visit(v);
+      if (win) {
+        visitWindow(
+          band,
+          (i) => areaXAt(a, i),
+          win,
+          a.curve ?? props.curve,
+          visit,
+        );
+      } else for (const v of band) visit(v);
     }
   }
   for (const list of [topIntervals.value, seriesIntervalList.value]) {
@@ -819,24 +847,41 @@ function toPath(s: ResolvedSeries): string {
   if (data.length === 0) return "";
   const win = cullWindow.value;
   const xAt = (i: number) => seriesXAt(s, i);
+  const curve = seriesCurve(s);
+  const reach = curveReach(curve);
   let d = "";
-  let inSegment = false;
+  // A run of finite, kept points; `from`..`to` is the part to draw, the
+  // rest is context that shapes the curve just past the window.
+  let run: CurvePoint[] = [];
+  let from = -1;
+  let to = -1;
+  const flush = () => {
+    if (from >= 0) d += curvePath(run, curve, { from, to });
+    run = [];
+    from = to = -1;
+  };
   for (let i = 0; i < data.length; i++) {
     const xv = seriesXAt(s, i);
     if (
       !isFinite(data[i]) ||
       !isFinite(xv) ||
-      (win && !nearWindow(xAt, i, data.length, win))
+      (win && !nearWindow(xAt, i, data.length, win, reach))
     ) {
-      inSegment = false;
+      flush();
       continue;
     }
-    const x = xPixel(xv);
-    const y = yPixel(data[i]);
-    d += inSegment ? `L${x},${y}` : `M${x},${y}`;
-    inSegment = true;
+    if (!win || reach === 1 || nearWindow(xAt, i, data.length, win)) {
+      if (from < 0) from = run.length;
+      to = run.length;
+    }
+    run.push({ x: xPixel(xv), y: yPixel(data[i]) });
   }
+  flush();
   return d;
+}
+
+function seriesCurve(s: ResolvedSeries): LineCurve | undefined {
+  return s.curve ?? props.curve;
 }
 
 function toPoints(s: ResolvedSeries): { x: number; y: number }[] {
@@ -856,32 +901,41 @@ function toPoints(s: ResolvedSeries): { x: number; y: number }[] {
 function toAreaPath(a: ResolvedArea): string {
   const len = Math.min(a.upper.length, a.lower.length);
   if (len === 0) return "";
-  // Collect contiguous segments where both upper/lower and x are finite
-  const segments: number[][] = [];
-  let seg: number[] = [];
+  const curve = a.curve ?? props.curve;
+  const reach = curveReach(curve);
   const win = cullWindow.value;
   const xAt = (i: number) => areaXAt(a, i);
+  // Contiguous runs where both bands and x are finite, each with the part
+  // to draw (`from`..`to`) as in `toPath`.
+  const runs: { idx: number[]; from: number; to: number }[] = [];
+  let run = { idx: [] as number[], from: -1, to: -1 };
+  const flush = () => {
+    if (run.from >= 0) runs.push(run);
+    run = { idx: [], from: -1, to: -1 };
+  };
   for (let i = 0; i < len; i++) {
     if (
-      isFinite(a.upper[i]) &&
-      isFinite(a.lower[i]) &&
-      isFinite(areaXAt(a, i)) &&
-      (!win || nearWindow(xAt, i, len, win))
+      !isFinite(a.upper[i]) ||
+      !isFinite(a.lower[i]) ||
+      !isFinite(areaXAt(a, i)) ||
+      (win && !nearWindow(xAt, i, len, win, reach))
     ) {
-      seg.push(i);
-    } else if (seg.length) {
-      segments.push(seg);
-      seg = [];
+      flush();
+      continue;
     }
+    if (!win || reach === 1 || nearWindow(xAt, i, len, win)) {
+      if (run.from < 0) run.from = run.idx.length;
+      run.to = run.idx.length;
+    }
+    run.idx.push(i);
   }
-  if (seg.length) segments.push(seg);
+  flush();
   let d = "";
-  for (const s of segments) {
-    d += `M${xPixel(areaXAt(a, s[0]))},${yPixel(a.upper[s[0]])}`;
-    for (let j = 1; j < s.length; j++)
-      d += `L${xPixel(areaXAt(a, s[j]))},${yPixel(a.upper[s[j]])}`;
-    for (let j = s.length - 1; j >= 0; j--)
-      d += `L${xPixel(areaXAt(a, s[j]))},${yPixel(a.lower[s[j]])}`;
+  for (const { idx, from, to } of runs) {
+    const edge = (band: LineChartData) =>
+      idx.map((i) => ({ x: xPixel(areaXAt(a, i)), y: yPixel(band[i]) }));
+    d += curvePath(edge(a.upper), curve, { from, to });
+    d += reverseCurvePath(edge(a.lower), curve, { from, to });
     d += "Z";
   }
   return d;
@@ -921,15 +975,31 @@ function toSectionPath(
   const end = Math.min(s.data.length - 1, section.endIndex);
   if (start > end) return "";
 
-  let d = `M${xPixel(seriesXAt(s, start))},${yPixel(s.data[start])}`;
-  for (let i = start + 1; i <= end; i++) {
-    if (!isFinite(s.data[i])) continue;
-    d += `L${xPixel(seriesXAt(s, i))},${yPixel(s.data[i])}`;
-  }
-  if (closed) {
-    d += `L${xPixel(seriesXAt(s, end))},${py}`;
-    d += `L${xPixel(seriesXAt(s, start))},${py}`;
-    d += "Z";
+  // Follow the series line exactly: break at its gaps, and give each run
+  // its neighbors just outside the section so a monotone curve keeps the
+  // series' tangents at the section edges.
+  const curve = seriesCurve(s);
+  const ok = (i: number) =>
+    i >= 0 &&
+    i < s.data.length &&
+    isFinite(s.data[i]) &&
+    isFinite(seriesXAt(s, i));
+  let d = "";
+  for (let i = start; i <= end; i++) {
+    if (!ok(i)) continue;
+    let j = i;
+    while (j < end && ok(j + 1)) j++;
+    const lo = ok(i - 1) ? i - 1 : i;
+    const hi = ok(j + 1) ? j + 1 : j;
+    const pts: CurvePoint[] = [];
+    for (let k = lo; k <= hi; k++) {
+      pts.push({ x: xPixel(seriesXAt(s, k)), y: yPixel(s.data[k]) });
+    }
+    d += curvePath(pts, curve, { from: i - lo, to: j - lo });
+    if (closed) {
+      d += `L${pts[j - lo].x},${py}L${pts[i - lo].x},${py}Z`;
+    }
+    i = j;
   }
   return d;
 }

@@ -722,6 +722,55 @@ baseline or counterfactual apart from the scenario it is compared to.
   </template>
 </ComponentDemo>
 
+### Curves
+
+`curve` sets how a series connects its points: `"linear"` (default),
+`"step"`, `"step-before"`, `"step-after"` or `"monotone"`. Steps suit
+values that hold between observations, such as cumulative counts or a
+piecewise-constant parameter: `"step-after"` holds each value until the
+next x, `"step-before"` takes the next value early, and `"step"` switches
+halfway. `"monotone"` is a smooth curve that never overshoots the data, so
+a peak stays at its data point. Set `curve` on the chart to apply it to
+every series and area, or on a single series or area. The geometry
+matches d3-shape and Vega-Lite's `interpolate`.
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      { data: [2, 5, 9, 14, 22, 30, 33, 35, 36], curve: 'step-after', color: '#2563eb', strokeWidth: 2, legend: 'Cumulative (step-after)' },
+      { data: [2, 3, 4, 5, 8, 8, 3, 2, 1], curve: 'monotone', color: '#fb7e38', strokeWidth: 2, dots: true, legend: 'Daily (monotone)' },
+    ]"
+    :height="220"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    {
+      data: [2, 5, 9, 14, 22, 30, 33, 35, 36],
+      curve: 'step-after',
+      color: '#2563eb',
+      strokeWidth: 2,
+      legend: 'Cumulative (step-after)',
+    },
+    {
+      data: [2, 3, 4, 5, 8, 8, 3, 2, 1],
+      curve: 'monotone',
+      color: '#fb7e38',
+      strokeWidth: 2,
+      dots: true,
+      legend: 'Daily (monotone)',
+    },
+  ]"
+  :height="220"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Outline
 
 Set `outline: true` on a series to draw a page-colored stroke behind the
@@ -2016,6 +2065,7 @@ interface Series {
   color?: string;
   strokeWidth?: number;
   dashed?: boolean;
+  curve?: LineCurve; // "linear" | "step" | "step-before" | "step-after" | "monotone"
   opacity?: number;
   lineOpacity?: number; // overrides opacity for the line only
   dotOpacity?: number; // overrides opacity for the dots only
@@ -2045,6 +2095,7 @@ interface Area {
   upper: LineChartData;
   lower: LineChartData;
   x?: LineChartXInput; // optional parallel x-values
+  curve?: LineCurve; // both edges; defaults to the chart's curve
   color?: string;
   opacity?: number;
   legend?: string; // inline legend label, also names the tooltip row

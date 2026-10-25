@@ -1515,6 +1515,29 @@ describe("BarChart", () => {
       expect(pts.slice(1).every((p) => p.cmd === "L")).toBe(true);
     });
 
+    it("steps along the category axis with curve step-after", () => {
+      for (const orientation of ["vertical", "horizontal"] as const) {
+        const wrapper = mount(BarChart, {
+          props: {
+            data: [10, 20, 30],
+            categories: ["A", "B", "C"],
+            summaryLines: [{ data: [1, 3, 2], curve: "step-after" }],
+            orientation,
+            width: 400,
+            height: 200,
+            menu: false,
+          },
+        });
+        const pts = parsePathPoints(lineEl(wrapper).attributes("d") ?? "");
+        expect(pts).toHaveLength(5);
+        // The first step holds the first value across to the next category.
+        const valueAxis = orientation === "vertical" ? "y" : "x";
+        expect(pts[1][valueAxis]).toBe(pts[0][valueAxis]);
+        expect(pts[2][valueAxis]).not.toBe(pts[0][valueAxis]);
+        wrapper.unmount();
+      }
+    });
+
     it("scales to its own extent independent of the bars", () => {
       // Bars in 0..500, line in 0..0.02. Line max should pin to top of plot.
       const wrapper = mount(BarChart, {

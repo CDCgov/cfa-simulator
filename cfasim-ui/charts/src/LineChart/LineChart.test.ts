@@ -3982,6 +3982,47 @@ describe("LineChart", () => {
       expect(pathPoints()).toBe(7);
     });
 
+    it("rescales y to the value a step curve holds across the window", async () => {
+      // step-after holds 100 from x=0 to x=10; no point falls in 2..6.
+      const wrapper = mount(LineChart, {
+        props: {
+          ...zoomProps,
+          data: undefined,
+          series: [{ x: [0, 10], data: [100, 0], curve: "step-after" }],
+        },
+      });
+      await brush(wrapper, 158, 374);
+      await release(wrapper, 374);
+      expect(
+        Math.max(...tickNumbers(wrapper, "y-tick")),
+      ).toBeGreaterThanOrEqual(100);
+    });
+
+    it("keeps monotone tangents at the culled edges of the zoom window", async () => {
+      // Every point is a local extreme, so every tangent is flat: each
+      // control point shares the y of the point it leaves or enters.
+      const wrapper = mount(LineChart, {
+        props: {
+          ...zoomProps,
+          data: [0, 10, 0, 10, 0, 10, 0, 10, 0, 10, 0],
+          curve: "monotone",
+        },
+      });
+      await brush(wrapper, 158, 374);
+      await release(wrapper, 374);
+      const d = wrapper.find('path[stroke="currentColor"]').attributes("d")!;
+      const nums = (t: string) => t.split(",").map(Number);
+      let prevY = nums(d.match(/^M([^C]+)/)![1])[1];
+      const curves = [...d.matchAll(/C([^C]+)/g)].map((m) => nums(m[1]));
+      // x = 2 -> 6 draws points 1..7.
+      expect(curves).toHaveLength(6);
+      for (const [, y1, , y2, , y] of curves) {
+        expect(y1).toBeCloseTo(prevY);
+        expect(y2).toBeCloseTo(y);
+        prevY = y;
+      }
+    });
+
     async function boxBrush(
       w: ReturnType<typeof mount>,
       from: { clientX: number; clientY: number },
@@ -4537,5 +4578,76 @@ describe("LineChart intervals", () => {
       });
       expect(grid(wrapper, "y")[0].attributes("stroke-dasharray")).toBe("2 6");
     });
+  });
+});
+
+describe("LineChart curve", () => {
+  const areaPath = (w: ReturnType<typeof mount>) =>
+    w.find('path[stroke="none"]').attributes("d")!;
+  const commands = (d: string) => d.replace(/[^MLCZ]/g, "");
+
+  it("applies the chart-level curve to series and areas, and a series curve wins", () => {
+    const w = mount(LineChart, {
+      props: {
+        curve: "monotone",
+        series: [
+          { data: [0, 10, 5] },
+          { data: [1, 2, 3], curve: "step-after" },
+        ],
+        areas: [{ upper: [2, 12, 7], lower: [0, 8, 3] }],
+        width: 300,
+        height: 100,
+        menu: false,
+      },
+    });
+    const lines = w
+      .findAll('path[fill="none"]:not([data-testid])')
+      .map((p) => commands(p.attributes("d")!));
+    expect(lines).toEqual(["MCC", "MLLLL"]);
+    expect(commands(areaPath(w))).toBe("MCCLCCZ");
+  });
+
+  it("curves an area's own edges", () => {
+    const w = mount(LineChart, {
+      props: {
+        areas: [{ upper: [2, 12], lower: [0, 8], curve: "step" }],
+        width: 300,
+        height: 100,
+        menu: false,
+      },
+    });
+    expect(commands(areaPath(w))).toBe("MLLLLLLLZ");
+  });
+
+  it("draws a section's line on the series' monotone curve", () => {
+    const w = mount(LineChart, {
+      props: {
+        series: [{ data: [0, 4, 1, 6, 3, 8, 2, 5], curve: "monotone" }],
+        areaSections: [{ seriesIndex: 0, startIndex: 2, endIndex: 5 }],
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    const paths = w.findAll('path[fill="none"]').map((p) => p.attributes("d")!);
+    const line = paths.find((d) => (d.match(/C/g) ?? []).length === 7)!;
+    const section = paths.find((d) => (d.match(/C/g) ?? []).length === 3)!;
+    const segs = line.split("C").slice(1);
+    expect(section.split("C").slice(1)).toEqual(segs.slice(2, 5));
+  });
+
+  it("breaks a section at missing values instead of drawing NaN", () => {
+    const w = mount(LineChart, {
+      props: {
+        series: [{ data: [1, NaN, 3, 4, NaN, 6, 7] }],
+        areaSections: [{ seriesIndex: 0, startIndex: 1, endIndex: 6 }],
+        width: 400,
+        height: 200,
+        menu: false,
+      },
+    });
+    const fill = w.find('[data-testid="section-fill"]').attributes("d")!;
+    expect(fill).not.toContain("NaN");
+    expect(fill.match(/Z/g)).toHaveLength(2);
   });
 });

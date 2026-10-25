@@ -54,6 +54,15 @@ export {
   resolveCsvOverride,
   type CsvSeries,
 } from "./seriesCsv.js";
+export {
+  curvePath,
+  curveValueAt,
+  reverseCurvePath,
+  curveSegments,
+  type LineCurve,
+  type CurvePoint,
+  type CurveOptions,
+} from "./curve.js";
 export { default as ChartAnnotations } from "./ChartAnnotations.vue";
 export {
   layoutMarkerLabels,

@@ -70,6 +70,7 @@ export type {
 } from "./_shared/chartProps.js";
 export type { ChartMarker, ChartMarkerDragPayload } from "./_shared/markers.js";
 export type { BlendMode, LineMarkStyle } from "./_shared/chartProps.js";
+export type { LineCurve } from "./_shared/curve.js";
 export {
   downloadBlob,
   downloadCsv,

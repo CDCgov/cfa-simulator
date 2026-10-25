@@ -6,6 +6,7 @@
 
 import type { NumberFormat } from "@cfasim-ui/shared";
 import type { ChartAnnotation } from "./annotations.js";
+import type { LineCurve } from "./curve.js";
 import type { GridStyle } from "./grid.js";
 import type { ChartInterval, IntervalStyle } from "./intervals.js";
 import type { ChartPadding } from "./useChartPadding.js";
@@ -77,6 +78,11 @@ export interface LineMarkStyle {
    * marks combine their colors instead of one obscuring the other.
    */
   blendMode?: BlendMode;
+  /**
+   * How the line connects its points: `"linear"` (default), `"step"`,
+   * `"step-before"`, `"step-after"` or `"monotone"`. See `LineCurve`.
+   */
+  curve?: LineCurve;
   /** Draw a dot at each sample point. Default false. */
   dots?: boolean;
   /** Radius of each dot in pixels. */
