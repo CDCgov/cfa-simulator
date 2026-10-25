@@ -69,7 +69,7 @@ const SCENARIOS = [
     name: "charts: BarChart only",
     pkg: "@cfasim-ui/charts",
     imports: ["BarChart"],
-    limit: 25 * KB,
+    limit: 27 * KB,
     lazyChunks: 0,
   },
   {
@@ -84,7 +84,7 @@ const SCENARIOS = [
     name: "charts: everything",
     pkg: "@cfasim-ui/charts",
     imports: "*",
-    limit: 106 * KB,
+    limit: 108 * KB,
     lazyChunks: 1,
   },
 ];

@@ -27,6 +27,8 @@ export {
   MESSAGEERROR_TEXT,
 } from "./workerError.js";
 export { formatNumber, isNumberFormat } from "./formatNumber.js";
+export { binValues } from "./binValues.js";
+export type { BinOptions, Bins } from "./binValues.js";
 export type { NumberFormat, NumberFormatPreset } from "./formatNumber.js";
 export {
   useUrlParams,

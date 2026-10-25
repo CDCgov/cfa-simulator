@@ -9,9 +9,13 @@ export {
 export {
   default as BarChart,
   type BarChartData,
+  type BarChartXInput,
+  type BarPeriod,
   type BarSeries,
   type BarSummaryLine,
 } from "./BarChart/BarChart.vue";
+// Re-exported so a histogram needs no direct @cfasim-ui/shared dependency.
+export { binValues, type BinOptions, type Bins } from "@cfasim-ui/shared";
 export {
   default as ChoroplethMap,
   type GeoType,

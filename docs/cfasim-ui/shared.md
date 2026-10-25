@@ -144,3 +144,29 @@ Pass `{ clearUrl: false }` to reset params in place without touching the URL (e.
 - Arrays are serialized as comma-separated strings; values containing commas will be split incorrectly.
 - Async-initialized params (e.g. values derived from a fetch) need care: check whether the param was already hydrated from the URL before overwriting it.
 - Assumes history-mode routing. In hash mode (`createWebHashHistory`), the query lives inside `location.hash`, which the History-API path does not read. Pass vue-router in to handle that case.
+
+## binValues
+
+Counts raw values into histogram bins shaped for `BarChart`'s continuous
+`x` / `x2` props (it is also exported from `@cfasim-ui/charts`). Bin `i`
+spans `[x[i], x2[i])`; the last bin also holds the upper bound, and
+non-finite values are skipped.
+
+```ts
+import { binValues } from "@cfasim-ui/shared";
+
+binValues([0.2, 0.4, 1.1, 1.3, 1.9], { step: 0.5 });
+// { x: [0, 0.5, 1, 1.5], x2: [0.5, 1, 1.5, 2], count: [2, 0, 2, 1] }
+```
+
+| Option       | Type                          | Default             |
+| ------------ | ----------------------------- | ------------------- |
+| `step`       | `number`                      | none                |
+| `thresholds` | `number \| readonly number[]` | Sturges' rule count |
+| `domain`     | `readonly [number, number]`   | the values' extent  |
+
+`step` sets the bin width, with edges on its multiples, and wins over a
+`thresholds` count. `thresholds` is a bin count, or explicit ascending
+edges (values outside them are dropped). `domain` fixes the range for
+equal-width or stepped bins. See the
+[BarChart histogram demo](./charts/bar-chart#histograms-x2).

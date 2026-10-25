@@ -72,7 +72,8 @@ export function seriesToCsv(series: CsvSeries[]): string {
 
 /**
  * Build a CSV for a categorical chart (BarChart vertical / horizontal):
- * one row per category, one column per series.
+ * one row per category, one column per series. `extraColumns` go right
+ * after the category column (BarChart's `x_end` on a continuous axis).
  */
 export function categoricalToCsv(
   categories: readonly string[],
@@ -83,10 +84,12 @@ export function categoricalToCsv(
     upper?: ChartData;
   }[],
   categoryHeader = "category",
+  extraColumns: readonly { header: string; values: readonly string[] }[] = [],
 ): string {
   if (series.length === 0 || categories.length === 0) return "";
   const headers = [
     categoryHeader,
+    ...extraColumns.map((c) => c.header),
     ...series.flatMap((s, i) =>
       boundHeaders(
         s.label || (series.length === 1 ? "value" : `series_${i}`),
@@ -96,7 +99,10 @@ export function categoricalToCsv(
   ];
   const rows = [headers.join(",")];
   for (let r = 0; r < categories.length; r++) {
-    const cells = [escapeCsvField(categories[r])];
+    const cells = [
+      escapeCsvField(categories[r]),
+      ...extraColumns.map((c) => escapeCsvField(c.values[r] ?? "")),
+    ];
     for (const s of series) {
       cells.push(cellAt(s.data, r));
       if (hasBounds(s)) cells.push(cellAt(s.lower, r), cellAt(s.upper, r));

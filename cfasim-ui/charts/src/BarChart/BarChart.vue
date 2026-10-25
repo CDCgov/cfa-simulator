@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, useId } from "vue";
+import { computed, ref, useId, watch } from "vue";
 import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import {
@@ -41,9 +41,17 @@ import {
   parseDate,
   isAllDates,
   pickDateTicks,
+  placedDateTicks,
   formatDate,
+  isDateXAxis,
+  toNumericX,
+  tickLabelsFit,
+  useChartFontFamily,
   type ChartData,
+  type ChartXInput,
   type DateFormat,
+  type DateTickUnit,
+  type DateTimezone,
   type ChartCommonProps,
   type ChartHoverPayload,
   type ChartTooltipBaseProps,
@@ -55,13 +63,36 @@ import {
   type BrushBox,
   type PlotClipEdges,
 } from "../_shared/index.js";
+import {
+  buildBarSlots,
+  reindexToSlots,
+  slotIndexAt,
+  slotIndexMap,
+  type BarPeriod,
+  type BarSlots,
+} from "./barSlots.js";
+
+export type { BarPeriod } from "./barSlots.js";
 
 export type BarChartData = ChartData;
+
+/**
+ * Accepted shapes for an `x` array: numbers, or ISO date strings / `Date`
+ * objects for a date axis. See `BarChartProps.x`.
+ */
+export type BarChartXInput = ChartXInput;
 
 export interface BarSeries {
   /** Bar values; one entry per category. `y` is accepted as an alias. */
   y?: BarChartData;
   data?: BarChartData;
+  /**
+   * Positions on a continuous x axis, parallel to `y`/`data`. Overrides
+   * the chart-level `x` for this series. See `BarChartProps.x`.
+   */
+  x?: BarChartXInput;
+  /** Bar end positions, parallel to `x`. Overrides the chart-level `x2`. */
+  x2?: BarChartXInput;
   color?: string;
   opacity?: number;
   /**
@@ -123,9 +154,11 @@ export interface BarSummaryLine extends LineMarkStyle {
    * X positions in category-index space (0 = first category center,
    * `categories.length - 1` = last). Fractional values land between
    * category centers. When omitted, points plot at successive category
-   * centers — one point per `data` entry.
+   * centers — one point per `data` entry. On a continuous x axis (`x`
+   * set on the chart) positions are in that axis' units instead, and
+   * may be dates on a date axis.
    */
-  x?: BarChartData;
+  x?: BarChartXInput;
   /**
    * Override the line's value-axis floor. When unset, defaults to the
    * line's own min (clamped to 0 when all data is non-negative).
@@ -216,6 +249,53 @@ interface BarChartProps extends ChartCommonProps {
    * stay ordinal — they are not time-proportional).
    */
   categories?: readonly (string | Date)[];
+  /**
+   * Positions on a continuous x axis, parallel to `y`/`data` (and to each
+   * series' values unless it sets its own `x`). Numbers give a numeric
+   * axis; ISO date strings or `Date` objects give a date axis, as on
+   * `LineChart`. Bars sit at their x instead of in evenly spaced
+   * category slots, so gaps in the data show as gaps. Series share a
+   * slot where their x values are equal (grouped bars split it, stacked
+   * bars stack in it). A series with no `x` of its own uses this one, or
+   * its indices on a numeric axis (on a date axis it is not drawn).
+   * Replaces `categories` when set. In this mode
+   * `intervals[].x`, `annotations[].x` and `summaryLines[].x` are in x
+   * axis units (epoch ms on a date axis).
+   */
+  x?: BarChartXInput;
+  /**
+   * Bar end positions, parallel to `x`: each bar spans `[x, x2)`, for
+   * bins of uneven width. Wins over `period`.
+   */
+  x2?: BarChartXInput;
+  /**
+   * How far each bar extends from its `x` on a continuous axis: a number
+   * in axis units (ms on a date axis), or on a date axis a calendar unit
+   * (`"day"`, `"week"`, `"month"`, `"quarter"`, `"year"`), so monthly
+   * bars follow month lengths. When unset, bars are centered on their x
+   * and as wide as the smallest gap between x values. `barPadding` still
+   * applies; set it to 0 for bars that touch.
+   */
+  period?: BarPeriod;
+  /**
+   * Tick placement on a continuous x axis. Number = interval in axis
+   * units (ms on a date axis, stepping from the first bar's start),
+   * array = explicit values. When omitted, ticks are chosen
+   * automatically.
+   */
+  xTicks?: number | number[];
+  /**
+   * Formatter for continuous x-axis tick labels: a `NumberFormat` on a
+   * numeric axis, a `DateFormat` on a date axis (where it wins over
+   * `dateFormat`), or a `(value, index) => string` function.
+   */
+  xTickFormat?:
+    NumberFormat | ((value: number, index: number) => string) | DateFormat;
+  /**
+   * Timezone for parsing offset-less ISO strings in `x` / `x2` and for
+   * date tick labels and calendar `period`s. Default `"utc"`.
+   */
+  timezone?: DateTimezone;
   /** "vertical" (default, aka column) draws upright bars; "horizontal" draws sideways. */
   orientation?: "vertical" | "horizontal";
   /**
@@ -386,13 +466,104 @@ function resolveSeries(s: BarSeries): ResolvedSeries {
   };
 }
 
-const allSeries = computed<ResolvedSeries[]>(() => {
+const tz = computed<DateTimezone>(() => props.timezone ?? "utc");
+
+/** Each series as given, with the x / x2 it uses on a continuous axis. */
+const inputSeries = computed<
+  { series: ResolvedSeries; x?: BarChartXInput; x2?: BarChartXInput }[]
+>(() => {
   if (props.series && props.series.length > 0)
-    return props.series.map(resolveSeries);
+    return props.series.map((s) => ({
+      series: resolveSeries(s),
+      x: s.x ?? props.x,
+      x2: s.x2 ?? props.x2,
+    }));
   const topY = props.y ?? props.data;
-  if (topY) return [{ data: topY }];
+  if (topY) return [{ series: { data: topY }, x: props.x, x2: props.x2 }];
   return [];
 });
+
+/** Continuous x axis: any series positioned by `x`. */
+const isContinuous = computed(() =>
+  inputSeries.value.some(({ x }) => x !== undefined && x.length > 0),
+);
+
+const xIsDate = computed(
+  () =>
+    isContinuous.value &&
+    isDateXAxis(
+      inputSeries.value.flatMap(({ x, x2 }) => [x, x2]),
+      tz.value,
+    ),
+);
+
+/**
+ * Continuous-axis layout: the slots every series' bars share, and each
+ * series' values re-laid onto them, so everything downstream indexes
+ * slots the way category mode indexes categories.
+ */
+const continuous = computed<{
+  slots: BarSlots;
+  series: ResolvedSeries[];
+} | null>(() => {
+  if (!isContinuous.value) return null;
+  const isDate = xIsDate.value;
+  const inputs = inputSeries.value.map(({ series, x, x2 }) => {
+    // A series without x falls back to its indices, which only mean
+    // something on a numeric axis; on a date axis it draws nothing.
+    const xs =
+      toNumericX(x, isDate, tz.value) ??
+      (isDate
+        ? new Float64Array(0)
+        : Float64Array.from(series.data, (_, i) => i));
+    return { series, x: xs, x2: toNumericX(x2, isDate, tz.value) };
+  });
+  const slots = buildBarSlots(inputs, {
+    period: props.period,
+    isDate,
+    tz: tz.value,
+  });
+  const index = slotIndexMap(slots);
+  const n = slots.x.length;
+  const series = inputs.map(({ series: s, x }) => ({
+    ...s,
+    data: reindexToSlots(s.data, x, index, n),
+    lower: s.lower && reindexToSlots(s.lower, x, index, n),
+    upper: s.upper && reindexToSlots(s.upper, x, index, n),
+  }));
+  return { slots, series };
+});
+
+const allSeries = computed<ResolvedSeries[]>(
+  () =>
+    continuous.value?.series ?? inputSeries.value.map(({ series }) => series),
+);
+
+let warnedMissingX = false;
+watch(
+  () =>
+    xIsDate.value &&
+    inputSeries.value.some(({ x }) => x === undefined || x.length === 0),
+  (missing) => {
+    if (!missing || warnedMissingX) return;
+    warnedMissingX = true;
+    console.warn(
+      "[BarChart] A series has no `x` on a date axis and is not drawn; set `x` on it or on the chart.",
+    );
+  },
+  { immediate: true },
+);
+
+let warnedCategories = false;
+watch(
+  () => isContinuous.value && (props.categories?.length ?? 0) > 0,
+  (both) => {
+    if (!both || warnedCategories) return;
+    warnedCategories = true;
+    console.warn("[BarChart] `x` is set, so `categories` is ignored.");
+  },
+  { immediate: true },
+);
 
 const { isHidden, toggle: toggleLegend } = useLegendToggle({
   hidden: () => props.hiddenSeries,
@@ -407,6 +578,7 @@ const visibleSeries = computed(() =>
 );
 
 const categoryCount = computed(() => {
+  if (continuous.value) return continuous.value.slots.x.length;
   let n = props.categories?.length ?? 0;
   for (const s of allSeries.value) {
     if (s.data.length > n) n = s.data.length;
@@ -414,7 +586,15 @@ const categoryCount = computed(() => {
   return n;
 });
 
+/** A continuous-axis position as CSV / slot text: ISO on a date axis. */
+function xText(v: number): string {
+  if (!xIsDate.value) return String(Number(v.toPrecision(12)));
+  const iso = new Date(v).toISOString();
+  return iso.endsWith("T00:00:00.000Z") ? iso.slice(0, 10) : iso;
+}
+
 const categoryLabels = computed<string[]>(() => {
+  if (continuous.value) return continuous.value.slots.x.map(xText);
   const n = categoryCount.value;
   const labels = new Array<string>(n);
   for (let i = 0; i < n; i++) {
@@ -436,6 +616,7 @@ const categoryLabels = computed<string[]>(() => {
  * the default tick label formatter.
  */
 const categoryDatesMs = computed<number[] | null>(() => {
+  if (isContinuous.value) return null;
   const cats = props.categories;
   if (!cats || cats.length === 0) return null;
   if (!isAllDates(cats, "utc")) return null;
@@ -453,9 +634,50 @@ const zoomRange = ref<{ start: number; end: number } | null>(null);
 /** Brushed value window from a box zoom; null rescales to the visible bars. */
 const zoomValue = ref<{ min: number; max: number } | null>(null);
 
+/** Brushed x window on a continuous axis; null shows the full extent. */
+const zoomX = ref<{ min: number; max: number } | null>(null);
+
+/** Full continuous x extent: every bar's span and standalone interval. */
+const xFullDomain = computed(() => {
+  const c = continuous.value;
+  let min = Infinity;
+  let max = -Infinity;
+  if (c) {
+    for (const v of c.slots.start) if (v < min) min = v;
+    for (const v of c.slots.end) if (v > max) max = v;
+    for (const iv of props.intervals ?? []) {
+      if (!isFinite(iv.x)) continue;
+      if (iv.x < min) min = iv.x;
+      if (iv.x > max) max = iv.x;
+    }
+  }
+  if (!isFinite(min)) return { min: 0, max: 1 };
+  return max > min ? { min, max } : { min: min - 0.5, max: max + 0.5 };
+});
+
+/** Visible continuous x range: the zoom window clamped to the full extent. */
+const xDomain = computed(() => {
+  const full = xFullDomain.value;
+  const z = props.zoom ? zoomX.value : null;
+  if (!z) return full;
+  const min = Math.max(full.min, z.min);
+  const max = Math.min(full.max, z.max);
+  return max > min ? { min, max } : full;
+});
+
 /** Visible categories: the zoom window clamped to the data, else all of them. */
 const visibleRange = computed(() => {
   const full = { start: 0, end: categoryCount.value - 1 };
+  const c = continuous.value;
+  if (c) {
+    // Slots whose span reaches into the visible x range.
+    const { min, max } = xDomain.value;
+    let start = 0;
+    while (start < full.end && c.slots.end[start] <= min) start++;
+    let end = full.end;
+    while (end > start && c.slots.start[end] >= max) end--;
+    return { start, end };
+  }
   const z = props.zoom ? zoomRange.value : null;
   if (!z) return full;
   const start = Math.max(full.start, z.start);
@@ -472,8 +694,17 @@ const valueWindow = computed(() =>
   props.zoom === true ? zoomValue.value : null,
 );
 
+const xZoomed = computed(
+  () =>
+    xDomain.value.min !== xFullDomain.value.min ||
+    xDomain.value.max !== xFullDomain.value.max,
+);
+
 const isZoomed = computed(
-  () => visibleCount.value < categoryCount.value || valueWindow.value !== null,
+  () =>
+    (continuous.value
+      ? xZoomed.value
+      : visibleCount.value < categoryCount.value) || valueWindow.value !== null,
 );
 
 /**
@@ -496,7 +727,7 @@ const clipId = useId();
 
 function onZoomSelect(box: BrushBox) {
   const slot = slotSize.value;
-  if (slot <= 0 || valueSize.value <= 0) return;
+  if (!hasLayout.value || valueSize.value <= 0) return;
   const { start, end } = visibleRange.value;
   const vertical = isVertical.value;
   const base = vertical ? padding.value.left : padding.value.top;
@@ -520,6 +751,17 @@ function onZoomSelect(box: BrushBox) {
       MAX_VALUE_ZOOM,
     );
   }
+  if (continuous.value) {
+    zoomX.value = zoomExtent(
+      (loPx - base) / categoricalSize.value,
+      (hiPx - base) / categoricalSize.value,
+      xDomain.value,
+      xFullDomain.value,
+      "linear",
+      MAX_VALUE_ZOOM,
+    );
+    return;
+  }
   const clamp = (i: number) => Math.max(start, Math.min(end, i));
   // Every slot the brush touches; ceil - 1 keeps a brush that ends exactly
   // on a slot boundary from pulling in the next category.
@@ -531,6 +773,7 @@ function onZoomSelect(box: BrushBox) {
 
 function resetZoom() {
   zoomRange.value = null;
+  zoomX.value = null;
   zoomValue.value = null;
 }
 
@@ -553,7 +796,7 @@ const seriesIntervalList = computed<ChartInterval[]>(() => {
         data: s.data,
         lower: s.lower,
         upper: s.upper,
-        xAt: (i) => i,
+        xAt: slotCenter,
         seriesIndex: index,
         // Not the series color: a whisker in the bar's own color vanishes
         // where it overlaps the bar, so it falls back to currentColor.
@@ -574,23 +817,25 @@ function projectInterval(
   iv: ChartInterval,
   value: number,
 ): { x: number; y: number } | null {
-  if (!isFinite(iv.x) || !isFinite(value) || slotSize.value === 0) {
+  if (!isFinite(iv.x) || !isFinite(value) || !hasLayout.value) {
     return null;
   }
   // Off the category axis entirely: the plot clip only applies while
   // zoomed, so this would otherwise paint over the padding.
-  if (iv.x < -0.5 || iv.x > categoryCount.value - 0.5) return null;
-  let categoricalPx = slotStart(iv.x + 0.5);
+  if (!onCategoricalAxis(iv.x)) return null;
+  let categoricalPx = positionPixel(iv.x);
   const k = visibleSeries.value.length;
   if (iv.seriesIndex !== undefined && props.layout === "grouped" && k > 1) {
     const pos = visibleSeries.value.findIndex(
       ({ index }) => index === iv.seriesIndex,
     );
     if (pos < 0) return null;
-    const innerOffset = (slotSize.value - groupWidth.value) / 2;
-    const bw = barWidth.value;
-    categoricalPx =
-      slotStart(iv.x) + innerOffset + pos * (bw + props.groupGap) + bw / 2;
+    const slot = continuous.value
+      ? slotIndexAt(continuous.value.slots, iv.x)
+      : iv.x;
+    if (slot === null) return null;
+    const g = slotGroup(slot);
+    categoricalPx = g.start + pos * (g.bar + props.groupGap) + g.bar / 2;
   }
   const valuePx = valuePixel(value);
   return isVertical.value
@@ -638,7 +883,7 @@ function dataValueExtent(start: number, end: number) {
   }
   for (const list of [topIntervals.value, seriesIntervalList.value]) {
     for (const iv of list) {
-      if (iv.x < start - 0.5 || iv.x > end + 0.5) continue;
+      if (!inSlotRange(iv.x, start, end)) continue;
       for (const v of [iv.lower, iv.upper, iv.value]) {
         if (v === undefined || !isFinite(v)) continue;
         visitPositive(v);
@@ -699,8 +944,12 @@ const valueExtent = computed(() => {
  */
 const clipOpen = computed<PlotClipEdges>(() => {
   const { start, end } = visibleRange.value;
-  const catLo = start <= 0;
-  const catHi = end >= categoryCount.value - 1;
+  const catLo = continuous.value
+    ? xDomain.value.min <= xFullDomain.value.min
+    : start <= 0;
+  const catHi = continuous.value
+    ? xDomain.value.max >= xFullDomain.value.max
+    : end >= categoryCount.value - 1;
   const v = valueExtent.value;
   const dv = visibleValueExtent.value;
   const valLo = v.min <= dv.min;
@@ -740,6 +989,80 @@ const barWidth = computed(() => {
 function slotStart(i: number): number {
   const base = isVertical.value ? padding.value.left : padding.value.top;
   return base + (i - visibleRange.value.start) * slotSize.value;
+}
+
+/** Whether the chart has room and slots to lay bars out in. */
+const hasLayout = computed(
+  () =>
+    categoryCount.value > 0 &&
+    categoricalSize.value > 0 &&
+    (continuous.value !== null || slotSize.value > 0),
+);
+
+/** Pixel position of a continuous-axis value along the categorical axis. */
+function xPixel(v: number): number {
+  const { min, max } = xDomain.value;
+  const base = isVertical.value ? padding.value.left : padding.value.top;
+  return base + ((v - min) / (max - min || 1)) * categoricalSize.value;
+}
+
+/**
+ * Pixel position of a point on the categorical axis: a category index
+ * (fractions land between categories) or a continuous-axis value.
+ */
+function positionPixel(v: number): number {
+  return continuous.value ? xPixel(v) : slotStart(v + 0.5);
+}
+
+/** Center of slot `i`, in the units `positionPixel` takes. */
+function slotCenter(i: number): number {
+  const c = continuous.value;
+  return c ? (c.slots.start[i] + c.slots.end[i]) / 2 : i;
+}
+
+/** Whether a categorical-axis position falls on the chart's slots at all. */
+function onCategoricalAxis(v: number): boolean {
+  if (!continuous.value) return v >= -0.5 && v <= categoryCount.value - 0.5;
+  const { min, max } = xFullDomain.value;
+  return v >= min && v <= max;
+}
+
+/** Whether a categorical-axis position falls within slots `start..end`. */
+function inSlotRange(v: number, start: number, end: number): boolean {
+  const c = continuous.value;
+  if (!c) return v >= start - 0.5 && v <= end + 0.5;
+  if (end < start) return false;
+  return v >= c.slots.start[start] && v <= c.slots.end[end];
+}
+
+/** Pixel extent of slot `i` along the categorical axis. */
+function slotSpan(i: number): { start: number; size: number } {
+  const c = continuous.value;
+  if (!c) return { start: slotStart(i), size: slotSize.value };
+  const a = xPixel(c.slots.start[i]);
+  return { start: a, size: xPixel(c.slots.end[i]) - a };
+}
+
+/**
+ * Where slot `i`'s bar group starts, how wide the group is, and the width
+ * of one bar in it (the whole group when stacked or single-series).
+ */
+function slotGroup(i: number): { start: number; width: number; bar: number } {
+  if (!continuous.value) {
+    return {
+      start: slotStart(i) + (slotSize.value - groupWidth.value) / 2,
+      width: groupWidth.value,
+      bar: barWidth.value,
+    };
+  }
+  const span = slotSpan(i);
+  const width = span.size * (1 - props.barPadding);
+  const k = visibleSeries.value.length;
+  const bar =
+    props.layout === "stacked" || k <= 1
+      ? width
+      : Math.max(1, (width - props.groupGap * (k - 1)) / k);
+  return { start: span.start + (span.size - width) / 2, width, bar };
 }
 
 /**
@@ -829,15 +1152,12 @@ const bars = computed<BarRect[]>(() => {
   const seriesList = visibleSeries.value;
   const k = seriesList.length;
   if (k === 0) return out;
+  if (!hasLayout.value) return out;
   const { start, end } = visibleRange.value;
-  const slot = slotSize.value;
-  const group = groupWidth.value;
-  const bw = barWidth.value;
-  const innerOffset = (slot - group) / 2;
   const baseline = groupedBaselinePixel.value;
 
   for (let i = start; i <= end; i++) {
-    const groupStart = slotStart(i) + innerOffset;
+    const { start: groupStart, width: group, bar: bw } = slotGroup(i);
     if (props.layout === "stacked") {
       let posCursor = 0;
       let negCursor = 0;
@@ -918,7 +1238,7 @@ const bars = computed<BarRect[]>(() => {
  */
 type StyledSummaryLine = {
   data: BarChartData;
-  x?: BarChartData;
+  x?: BarChartXInput;
   color: string;
   strokeWidth: number;
   dashed: boolean;
@@ -972,7 +1292,7 @@ function projectLinePoint(
   y: number,
   extent: { min: number; max: number },
 ): { x: number; y: number } {
-  const categoricalPx = slotStart(x + 0.5);
+  const categoricalPx = positionPixel(x);
   const span = extent.max - extent.min || 1;
   let frac = (y - extent.min) / span;
   // A line has its own scale spanning the full plot; under a box zoom it
@@ -1013,15 +1333,20 @@ const summaryLinesStyled = computed<StyledSummaryLine[]>(() => {
 });
 
 const summaryLinesResolved = computed<ResolvedSummaryLine[]>(() => {
-  if (slotSize.value === 0) return [];
+  if (!hasLayout.value) return [];
   const lines = summaryLinesStyled.value.filter((l) => !isHidden(l.legend));
   return lines.map((line): ResolvedSummaryLine => {
     const points: { x: number; y: number }[] = [];
     let d = "";
     let inSeg = false;
+    const xs = toNumericX(line.x, xIsDate.value, tz.value);
     for (let j = 0; j < line.data.length; j++) {
       const yv = Number(line.data[j]);
-      const xv = line.x ? Number(line.x[j]) : j;
+      const xv = xs
+        ? Number(xs[j])
+        : j < categoryCount.value
+          ? slotCenter(j)
+          : NaN;
       if (!isFinite(yv) || !isFinite(xv)) {
         inSeg = false;
         continue;
@@ -1102,7 +1427,91 @@ interface CategoryTickItem {
   anchor: "start" | "middle" | "end";
 }
 
+const chartFontFamily = useChartFontFamily(() => svgRef.value);
+
+/** Smallest gap kept between neighboring x tick labels. */
+const X_TICK_LABEL_GAP = 8;
+
+/** A continuous x tick label. */
+function formatXTick(
+  v: number,
+  i: number,
+  unit?: DateTickUnit,
+  decimals = 0,
+): string {
+  const f = props.xTickFormat;
+  if (typeof f === "function") {
+    return (f as (value: number, index: number) => string)(v, i);
+  }
+  if (xIsDate.value) {
+    return formatDate(
+      v,
+      (f as DateFormat | undefined) ?? props.dateFormat,
+      tz.value,
+      unit,
+    );
+  }
+  return f !== undefined
+    ? formatNumber(v, f as NumberFormat)
+    : formatTick(v, decimals);
+}
+
+/** Tick values on a continuous x axis, and the date unit they count in. */
+const xTickValues = computed<{ values: number[]; unit?: DateTickUnit }>(() => {
+  const { min, max } = xDomain.value;
+  const size = categoricalSize.value;
+  if (!(max > min) || size <= 0) return { values: [] };
+  const vertical = isVertical.value;
+  if (xIsDate.value) {
+    const picked =
+      props.xTicks != null
+        ? placedDateTicks(min, max, props.xTicks)
+        : pickDateTicks(
+            min,
+            max,
+            size / (vertical ? 60 : 40),
+            tz.value,
+            vertical
+              ? (values, unit) => {
+                  const { fontSize, fontWeight } = tickLabelResolved.value;
+                  return tickLabelsFit(values, {
+                    min,
+                    max,
+                    size,
+                    font: `${fontWeight ?? 400} ${fontSize}px ${chartFontFamily.value}`,
+                    gap: X_TICK_LABEL_GAP,
+                    label: (v, i) => formatXTick(v, i, unit),
+                  });
+                }
+              : undefined,
+          );
+    return {
+      values: computeTickValues({ min, max, ticks: picked.values }),
+      unit: picked.unit,
+    };
+  }
+  return {
+    values: computeTickValues({
+      min,
+      max,
+      ticks: props.xTicks,
+      targetTickCount: size / (vertical ? 80 : 40),
+    }),
+  };
+});
+
 const categoryTickItems = computed<CategoryTickItem[]>(() => {
+  if (continuous.value) {
+    const { values, unit } = xTickValues.value;
+    const decimals = xIsDate.value ? 0 : tickDecimals(values);
+    const lo = isVertical.value ? padding.value.left : padding.value.top;
+    const hi = lo + categoricalSize.value;
+    return values.map((v, i) => {
+      const pos = snap(xPixel(v));
+      const anchor = pos - lo <= 1 ? "start" : hi - pos <= 1 ? "end" : "middle";
+      return { label: formatXTick(v, i, unit, decimals), pos, anchor };
+    });
+  }
   const n = categoryCount.value;
   const { start, end } = visibleRange.value;
   const dateMs = categoryDatesMs.value;
@@ -1223,7 +1632,12 @@ function toCsv(): string {
     lower: s.lower,
     upper: s.upper,
   }));
-  return categoricalToCsv(categoryLabels.value, namedSeries);
+  const c = continuous.value;
+  if (!c) return categoricalToCsv(categoryLabels.value, namedSeries);
+  const ends = c.slots.explicit.some(Boolean)
+    ? [{ header: "x_end", values: c.slots.end.map(xText) }]
+    : [];
+  return categoricalToCsv(categoryLabels.value, namedSeries, "x", ends);
 }
 
 function projectAnnotation(
@@ -1231,13 +1645,17 @@ function projectAnnotation(
   y: number,
 ): { x: number; y: number } | null {
   if (!isFinite(x) || !isFinite(y)) return null;
-  if (slotSize.value === 0) return null;
+  if (!hasLayout.value) return null;
   if (isZoomed.value) {
-    const { start, end } = visibleRange.value;
-    if (x < start - 0.5 || x > end + 0.5) return null;
+    if (continuous.value) {
+      if (x < xDomain.value.min || x > xDomain.value.max) return null;
+    } else {
+      const { start, end } = visibleRange.value;
+      if (x < start - 0.5 || x > end + 0.5) return null;
+    }
     if (y < valueExtent.value.min || y > valueExtent.value.max) return null;
   }
-  const categoricalPx = slotStart(x + 0.5);
+  const categoricalPx = positionPixel(x);
   const valuePx = valuePixel(y);
   return isVertical.value
     ? { x: categoricalPx, y: valuePx }
@@ -1247,11 +1665,18 @@ function projectAnnotation(
 function pointerToIndex(clientX: number, clientY: number): number | null {
   const rect = containerRef.value?.getBoundingClientRect();
   if (!rect) return null;
-  if (categoryCount.value === 0 || slotSize.value === 0) return null;
+  if (!hasLayout.value) return null;
   const { start, end } = visibleRange.value;
   const local = isVertical.value
     ? clientX - rect.left - padding.value.left
     : clientY - rect.top - padding.value.top;
+  const c = continuous.value;
+  if (c) {
+    const { min, max } = xDomain.value;
+    const v = min + (local / categoricalSize.value) * (max - min);
+    const i = slotIndexAt(c.slots, v);
+    return i === null ? null : Math.max(start, Math.min(end, i));
+  }
   return Math.max(
     start,
     Math.min(end, start + Math.floor(local / slotSize.value)),
@@ -1354,9 +1779,39 @@ const headerLeftX = computed(() =>
     : padding.value.left,
 );
 
+/** A continuous-axis position as tooltip text. */
+function formatXTooltip(v: number): string {
+  if (xIsDate.value) return formatDate(v, props.dateFormat, tz.value);
+  const f = props.xTickFormat;
+  if (f !== undefined && typeof f !== "object") {
+    return typeof f === "function"
+      ? (f as (value: number, index: number) => string)(v, 0)
+      : formatNumber(v, f as NumberFormat);
+  }
+  return String(Number(v.toPrecision(6)));
+}
+
+const MS_PER_DAY = 86_400_000;
+
+/**
+ * Tooltip heading for a continuous slot: its x, or its span for bars
+ * with an `x2` or `period`. Day-aligned date spans show their last day,
+ * so a week reads "2026-01-05 – 2026-01-11".
+ */
+function continuousSlotLabel(slots: BarSlots, i: number): string {
+  if (!slots.explicit[i]) return formatXTooltip(slots.x[i]);
+  const a = slots.start[i];
+  let b = slots.end[i];
+  if (xIsDate.value && (b - a) % MS_PER_DAY === 0) b -= MS_PER_DAY;
+  if (b === a) return formatXTooltip(a);
+  return `${formatXTooltip(a)} – ${formatXTooltip(b)}`;
+}
+
 const hoveredCategoryLabel = computed(() => {
   const i = hoverIndex.value;
   if (i === null) return undefined;
+  const c = continuous.value;
+  if (c) return continuousSlotLabel(c.slots, i);
   // In date mode, format the tooltip label so it honors `dateFormat`
   // (otherwise the user would see the raw ISO string while the ticks
   // render with a nicer preset).
@@ -1389,7 +1844,10 @@ const hoverSlotProps = computed(() => {
   }
   const intervals: ChartTooltipInterval[] = [];
   for (const iv of topIntervals.value) {
-    if (Math.round(iv.x) !== idx) continue;
+    const at = continuous.value
+      ? slotIndexAt(continuous.value.slots, iv.x)
+      : Math.round(iv.x);
+    if (at !== idx) continue;
     intervals.push({
       lower: Math.min(iv.lower, iv.upper),
       upper: Math.max(iv.lower, iv.upper),
@@ -1414,12 +1872,12 @@ const hoverSlotProps = computed(() => {
 const hoverBand = computed(() => {
   const i = hoverIndex.value;
   if (i === null) return null;
-  const start = slotStart(i);
+  const { start, size } = slotSpan(i);
   if (isVertical.value) {
     return {
       x: start,
       y: padding.value.top,
-      w: slotSize.value,
+      w: size,
       h: innerH.value,
     };
   }
@@ -1427,7 +1885,7 @@ const hoverBand = computed(() => {
     x: padding.value.left,
     y: start,
     w: innerW.value,
-    h: slotSize.value,
+    h: size,
   };
 });
 

@@ -80,3 +80,27 @@ test("BarChart centers series whiskers on their bars", async ({ page }) => {
   expect(Math.abs(x1 - barCenter)).toBeLessThan(1);
   await expect(line).toHaveAttribute("stroke", "currentColor");
 });
+
+test("weekly bars on a date axis leave a gap for the missing week", async ({
+  page,
+}) => {
+  await page.goto("./cfasim-ui/charts/bar-chart");
+  const chart = page.locator('[data-testid="weekly-bar-chart"]');
+  await chart.scrollIntoViewIfNeeded();
+  const bars = chart.locator('[data-testid="bar"]');
+  await expect(bars).toHaveCount(6);
+  const boxes = await Promise.all(
+    [0, 1, 2].map(async (i) => (await bars.nth(i).boundingBox())!),
+  );
+  const step = boxes[1].x - boxes[0].x;
+  // Jan 12 → Jan 26 skips the empty week of Jan 19: twice the step.
+  expect(boxes[2].x - boxes[1].x).toBeCloseTo(2 * step, 0);
+
+  await page.mouse.move(
+    boxes[2].x + boxes[2].width / 2,
+    boxes[2].y + boxes[2].height / 2,
+  );
+  await expect(chart.locator(".chart-tooltip-label")).toHaveText(
+    "2026-01-26 – 2026-02-01",
+  );
+});

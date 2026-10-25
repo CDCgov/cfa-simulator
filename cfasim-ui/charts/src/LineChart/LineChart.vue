@@ -1,22 +1,5 @@
-<script lang="ts">
-// One measuring canvas for every chart on the page.
-let measureCtx: CanvasRenderingContext2D | null | undefined;
-
-function measureText(text: string, font: string): number | null {
-  if (measureCtx === undefined) {
-    measureCtx =
-      typeof document === "undefined"
-        ? null
-        : document.createElement("canvas").getContext("2d");
-  }
-  if (!measureCtx) return null;
-  measureCtx.font = font;
-  return measureCtx.measureText(text).width;
-}
-</script>
-
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useId } from "vue";
+import { computed, onBeforeUnmount, ref, useId } from "vue";
 import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import {
@@ -62,7 +45,12 @@ import {
   blendStyle,
   resolveLabelStyle,
   parseDate,
-  isAllDates,
+  isDateXAxis,
+  toNumericX,
+  measureText,
+  tickLabelsFit,
+  useChartFontFamily,
+  type ChartXInput,
   pickDateTicks,
   placedDateTicks,
   formatDate,
@@ -97,7 +85,7 @@ export type LineChartData = ChartData;
  * as numbers; string-or-`Date` arrays trigger date-axis mode when every
  * element parses. See the `timezone` prop and `dateAxis` module.
  */
-export type LineChartXInput = LineChartData | readonly (string | Date)[];
+export type LineChartXInput = ChartXInput;
 
 /**
  * A single line/dot series. Inherits visual styling
@@ -445,22 +433,6 @@ function* xInputs(p: LineChartProps): Iterable<LineChartXInput> {
   }
 }
 
-/** Convert an x input to numeric. Pre-parsed when `isDate` is true. */
-function toNumericX(
-  x: LineChartXInput | undefined,
-  isDate: boolean,
-  tz: DateTimezone,
-): LineChartData | undefined {
-  if (!x) return undefined;
-  if (!isDate) return x as LineChartData;
-  const out = new Float64Array(x.length);
-  for (let i = 0; i < x.length; i++) {
-    const v = parseDate(x[i], tz);
-    out[i] = v ?? NaN;
-  }
-  return out;
-}
-
 const formatTooltipValue = makeTooltipValueFormatter(
   () => props.tooltipValueFormat,
   () => props.yTickFormat,
@@ -481,17 +453,7 @@ const resolvedXAxis = computed<{
   areas: ResolvedArea[];
 }>(() => {
   const z = tz.value;
-  let isDate = false;
-  let any = false;
-  for (const x of xInputs(props)) {
-    any = true;
-    if (!isAllDates(x, z)) {
-      isDate = false;
-      break;
-    }
-    isDate = true;
-  }
-  if (!any) isDate = false;
+  const isDate = isDateXAxis(xInputs(props), z);
 
   const series: ResolvedSeries[] =
     props.series && props.series.length > 0
@@ -1324,22 +1286,7 @@ function formatXValue(
   return formatTick(display, decimals);
 }
 
-/**
- * Font the chart's text renders in, read from the svg once mounted and
- * again when web fonts finish loading, so measured label widths match
- * the painted glyphs rather than a fallback face.
- */
-const chartFontFamily = ref("sans-serif");
-onMounted(() => {
-  const read = () => {
-    if (svgRef.value) {
-      chartFontFamily.value =
-        getComputedStyle(svgRef.value).fontFamily || "sans-serif";
-    }
-  };
-  read();
-  document.fonts?.ready.then(read);
-});
+const chartFontFamily = useChartFontFamily(() => svgRef.value);
 
 /** Smallest gap kept between neighboring x tick labels. */
 const X_TICK_LABEL_GAP = 8;
@@ -1349,22 +1296,14 @@ const X_TICK_LABEL_GAP = 8;
  * tick font. Trusts the density budget where text cannot be measured.
  */
 function dateTicksFit(values: number[], unit: DateTickUnit): boolean {
-  if (values.length < 2) return true;
-  const { min, max } = xDomain.value;
-  let step = Infinity;
-  for (let i = 1; i < values.length; i++) {
-    step = Math.min(step, values[i] - values[i - 1]);
-  }
-  const spacing = (step / (max - min)) * innerW.value;
   const { fontSize, fontWeight } = tickLabelResolved.value;
-  const font = `${fontWeight ?? 400} ${fontSize}px ${chartFontFamily.value}`;
-  let widest = 0;
-  for (let i = 0; i < values.length; i++) {
-    const w = measureText(formatXValue(values[i], i, unit), font);
-    if (w === null) return true;
-    widest = Math.max(widest, w);
-  }
-  return spacing >= widest + X_TICK_LABEL_GAP;
+  return tickLabelsFit(values, {
+    ...xDomain.value,
+    size: innerW.value,
+    font: `${fontWeight ?? 400} ${fontSize}px ${chartFontFamily.value}`,
+    gap: X_TICK_LABEL_GAP,
+    label: (v, i) => formatXValue(v, i, unit),
+  });
 }
 
 /**

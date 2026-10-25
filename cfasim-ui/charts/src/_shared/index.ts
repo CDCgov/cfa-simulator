@@ -137,3 +137,11 @@ export {
   type DateTickUnit,
   type DateTimezone,
 } from "./dateAxis.js";
+export {
+  isDateXAxis,
+  toNumericX,
+  measureText,
+  tickLabelsFit,
+  useChartFontFamily,
+  type ChartXInput,
+} from "./xAxis.js";

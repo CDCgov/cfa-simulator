@@ -13,15 +13,28 @@ keywords:
     interval,
     error bars,
     whiskers,
+    histogram,
+    time series,
+    continuous,
     svg,
   ]
 ---
 
+<script setup>
+import { binValues } from "@cfasim-ui/charts";
+
+// R0 estimates from 60 calibration runs, for the histogram demo.
+const r0Estimates = [2.78, 3.13, 2.8, 2.76, 2.48, 2.8, 3.4, 3.09, 3.37, 3.01, 3.08, 2.98, 2.15, 3.28, 3.13, 3.12, 2.14, 2.12, 2.5, 2.69, 3.04, 2.88, 3.13, 2.61, 3.04, 3.08, 2.6, 3.67, 3.15, 3.44, 2.62, 2.57, 2.75, 2.85, 3.18, 3.01, 2.7, 2.47, 2.67, 3.45, 2.54, 3.01, 3.09, 2.23, 2.92, 3.49, 1.99, 2.76, 2.85, 2.53, 3.12, 2.87, 2.24, 3.27, 3.2, 3.33, 3.55, 3.06, 2.95, 2.32];
+const r0Bins = binValues(r0Estimates, { step: 0.25 });
+</script>
+
 # BarChart
 
 A responsive SVG bar chart supporting single, grouped, stacked, and overlay
-series in either vertical (column) or horizontal orientation. Shares axis,
-tooltip, menu, and CSV export wiring with [`LineChart`](./line-chart).
+series in either vertical (column) or horizontal orientation, on a
+categorical axis or a [continuous one](#continuous-x-axis) (numbers or
+dates, with histogram bins). Shares axis, tooltip, menu, and CSV export
+wiring with [`LineChart`](./line-chart).
 
 ## Layouts
 
@@ -246,6 +259,202 @@ layout works in either orientation; `x-label` then titles the value axis.
   </template>
 </ComponentDemo>
 
+## Continuous x axis
+
+Pass `x` (on the chart, or per series) to place bars at positions on a
+continuous axis instead of in evenly spaced category slots, the way
+[`LineChart`](./line-chart#x-y) takes `x`. Numbers give a numeric axis;
+ISO date strings or `Date` objects give a date axis. A missing position
+shows as a gap, and uneven spacing is drawn to scale. `categories` is
+ignored when `x` is set.
+
+Series share a slot where their x values are equal: grouped bars split
+it, stacked bars stack in it. A series without its own `x` uses the
+chart-level one. `x-ticks` and `x-tick-format` control the axis ticks,
+as on `LineChart`, and `zoom` brushes a continuous x range. Intervals,
+annotations and summary lines take x in axis units (epoch ms on a date
+axis).
+
+### Numeric x
+
+By default each bar is centered on its x and as wide as the smallest
+gap between x values, less `bar-padding`.
+
+<ComponentDemo>
+  <BarChart
+    :data="[4, 9, 14, 11, 6, 3, 1]"
+    :x="[0, 1, 2, 3, 6, 7, 8]"
+    :height="220"
+    x-label="Days since exposure"
+    y-label="Cases"
+    tooltip-trigger="hover"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :data="[4, 9, 14, 11, 6, 3, 1]"
+  :x="[0, 1, 2, 3, 6, 7, 8]"
+  :height="220"
+  x-label="Days since exposure"
+  y-label="Cases"
+  tooltip-trigger="hover"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Dates and periods
+
+`period` makes each bar span `[x, x + period)`: a number in axis units
+(milliseconds on a date axis) or a calendar unit, `"day"`, `"week"`,
+`"month"`, `"quarter"` or `"year"`. Calendar periods follow month and
+year lengths, so February's bar is narrower than March's. The tooltip
+heading shows the span, and the CSV gains an `x_end` column. Dates are
+parsed in UTC unless `timezone="local"`.
+
+The week of January 19 below has no row, so its slot stays empty.
+
+<ComponentDemo>
+  <BarChart
+    data-testid="weekly-bar-chart"
+    :data="[42, 55, 61, 38, 30, 22]"
+    :x="['2026-01-05', '2026-01-12', '2026-01-26', '2026-02-02', '2026-02-09', '2026-02-16']"
+    period="week"
+    :height="220"
+    y-label="ED visits"
+    tooltip-trigger="hover"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :data="[42, 55, 61, 38, 30, 22]"
+  :x="[
+    '2026-01-05',
+    '2026-01-12',
+    '2026-01-26',
+    '2026-02-02',
+    '2026-02-09',
+    '2026-02-16',
+  ]"
+  period="week"
+  :height="220"
+  y-label="ED visits"
+  tooltip-trigger="hover"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+<ComponentDemo>
+  <BarChart
+    :series="[
+      { data: [120, 95, 140, 88, 60, 45], legend: 'Influenza', color: '#0057b7' },
+      { data: [40, 52, 61, 70, 66, 50], legend: 'RSV', color: '#fb7e38' },
+    ]"
+    :x="['2025-10-01', '2025-11-01', '2025-12-01', '2026-01-01', '2026-02-01', '2026-03-01']"
+    period="month"
+    layout="stacked"
+    :height="220"
+    y-label="Admissions"
+    tooltip-trigger="hover"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :series="[
+    { data: flu, legend: 'Influenza', color: '#0057b7' },
+    { data: rsv, legend: 'RSV', color: '#fb7e38' },
+  ]"
+  :x="[
+    '2025-10-01',
+    '2025-11-01',
+    '2025-12-01',
+    '2026-01-01',
+    '2026-02-01',
+    '2026-03-01',
+  ]"
+  period="month"
+  layout="stacked"
+  :height="220"
+  y-label="Admissions"
+  tooltip-trigger="hover"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Histograms (`x2`)
+
+A histogram bar covers a bin, not a point: bar `i` spans from `x[i]` to
+`x2[i]`. `x2` gives every bar an explicit end like this, for bins of any
+width (it wins over `period`). A small `bar-padding` such as `0.04`
+leaves a hairline between bins; `0` makes them touch.
+
+To build the arrays from raw values, `binValues` (exported from
+`@cfasim-ui/charts` and `@cfasim-ui/shared`) counts them into bins and
+returns `{ x, x2, count }`, ready to pass straight in. `step` sets the
+bin width, with edges on its multiples; `thresholds` takes a bin count
+or explicit edges instead, and `domain` fixes the range. Without either,
+the bin count follows Sturges' rule. Below, 60 R₀ estimates go into
+bins 0.25 wide.
+
+<ComponentDemo>
+  <BarChart
+    :x="r0Bins.x"
+    :x2="r0Bins.x2"
+    :data="r0Bins.count"
+    :bar-padding="0.04"
+    :x-ticks="0.5"
+    :height="220"
+    x-label="R₀"
+    y-label="Runs"
+    tooltip-trigger="hover"
+  />
+
+<template #code>
+
+```vue
+<script setup>
+import { BarChart, binValues } from "@cfasim-ui/charts";
+
+// One R₀ estimate per calibration run (60 in all).
+const r0Estimates = [2.78, 3.13, 2.8, 2.76, 2.48, 2.8, 3.4, 3.09 /* ... */];
+
+const bins = binValues(r0Estimates, { step: 0.25 });
+// bins.x     = [1.75, 2,    2.25, 2.5,  2.75, 3,    3.25, 3.5 ]
+// bins.x2    = [2,    2.25, 2.5,  2.75, 3,    3.25, 3.5,  3.75]
+// bins.count = [1,    5,    3,    10,   13,   18,   8,    2   ]
+</script>
+
+<BarChart
+  :x="bins.x"
+  :x2="bins.x2"
+  :data="bins.count"
+  :bar-padding="0.04"
+  :x-ticks="0.5"
+  :height="220"
+  x-label="R₀"
+  y-label="Runs"
+  tooltip-trigger="hover"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+Bins computed elsewhere work the same way. From NumPy,
+`counts, edges = np.histogram(values, bins=...)` gives `n + 1` edges for
+`n` bins: pass `x = edges[:-1]`, `x2 = edges[1:]` and `data = counts`.
+
 ## Axes and labels
 
 ### Custom value tick format
@@ -286,7 +495,9 @@ When every entry of `categories` parses as a date (`YYYY-MM-DD` string
 or `Date` instance), labels switch to date-aware formatting and the
 chart thins them to clean date boundaries (week / month / year
 depending on range). Bar positions stay ordinal: every category gets
-a bar, and only the labels are thinned.
+a bar, and only the labels are thinned. For bars placed to scale in
+time, with gaps where dates are missing, use a
+[continuous x axis](#dates-and-periods) instead.
 
 <ComponentDemo>
   <BarChart
