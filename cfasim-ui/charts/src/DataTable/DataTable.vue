@@ -42,7 +42,13 @@ export interface TableSort {
 
 export interface ColumnConfig {
   label?: string;
-  width?: ColumnWidth | number;
+  /**
+   * A preset, pixels, or any CSS length (`"12rem"`, `"20%"`). Percentages
+   * are of the table's width and need `fullWidth`; without it the column
+   * collapses to its padding.
+   */
+  // `string & {}` keeps editor completion for the presets.
+  width?: ColumnWidth | number | (string & {});
   align?: ColumnAlign;
   /** Class applied to every body `<td>` in this column. */
   cellClass?: string;
@@ -182,7 +188,8 @@ function columnStyle(name: string): Record<string, string> | undefined {
     if (props.fullWidth) return undefined;
     return { width: COLUMN_WIDTHS.medium, minWidth: COLUMN_WIDTHS.medium };
   }
-  const value = typeof w === "number" ? `${w}px` : COLUMN_WIDTHS[w];
+  const value =
+    typeof w === "number" ? `${w}px` : (COLUMN_WIDTHS[w as ColumnWidth] ?? w);
   return { width: value, minWidth: value };
 }
 

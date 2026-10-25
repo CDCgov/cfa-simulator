@@ -141,6 +141,19 @@ describe("Table", () => {
     expect(col.attributes("style")).toContain("min-width: 120px");
   });
 
+  it("passes other CSS lengths through", () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        data: { day: [0], value: [1] },
+        columnConfig: { day: { width: "12rem" }, value: { width: "30%" } },
+      },
+    });
+    const cols = wrapper.findAll("col");
+    expect(cols[0].attributes("style")).toContain("width: 12rem");
+    expect(cols[0].attributes("style")).toContain("min-width: 12rem");
+    expect(cols[1].attributes("style")).toContain("width: 30%");
+  });
+
   it("applies a default medium width to columns without explicit width", () => {
     const wrapper = mount(DataTable, {
       props: { data: { day: [0], infected: [10] } },

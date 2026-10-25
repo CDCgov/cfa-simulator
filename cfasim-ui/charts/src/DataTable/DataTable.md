@@ -323,9 +323,16 @@ medium width, so they're evenly spaced). Pass `full-width` to stretch the
 table to fill its container; columns without an explicit width will share
 the available space equally.
 
+Besides the presets (`small` 80px, `medium` 150px, `large` 250px) and pixel
+numbers, `width` takes any CSS length, such as `"12rem"` or `"20%"`.
+Percentages are of the table's width, so they need `full-width`: a table
+that sizes to its content has no width for them to resolve against, and
+the column collapses to its padding.
+
 <ComponentDemo>
   <DataTable
     :data="{ day: [0, 1, 2, 3, 4], susceptible: [1000, 980, 945, 900, 860], infected: [1, 21, 56, 101, 141] }"
+    :column-config="{ day: { width: '20%' } }"
     full-width
   />
 
@@ -338,6 +345,7 @@ the available space equally.
     susceptible: [1000, 980, 945, 900, 860],
     infected: [1, 21, 56, 101, 141],
   }"
+  :column-config="{ day: { width: '20%' } }"
   full-width
 />
 ```
@@ -491,7 +499,8 @@ suppressed when this is set. If both `download-link` and
 ```ts
 interface ColumnConfig {
   label?: string;
-  width?: "small" | "medium" | "large" | number;
+  /** Preset, pixels, or any CSS length such as "12rem" or "20%". */
+  width?: "small" | "medium" | "large" | number | string;
   align?: "left" | "center" | "right";
   /** Class applied to body `<td>` cells only. */
   cellClass?: string;
