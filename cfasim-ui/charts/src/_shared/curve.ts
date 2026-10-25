@@ -196,6 +196,41 @@ export function reverseCurvePath(
 }
 
 /**
+ * Visit the values a line shows inside an x-window: every point in the
+ * window, plus the value its curve draws where a segment crosses either
+ * edge. Non-finite points break the line.
+ */
+export function visitCurveWindow(
+  n: number,
+  xAt: (i: number) => number,
+  yAt: (i: number) => number,
+  win: { min: number; max: number },
+  curve: LineCurve | undefined,
+  visit: (v: number) => void,
+): void {
+  let px = NaN;
+  let py = NaN;
+  for (let i = 0; i < n; i++) {
+    const x = xAt(i);
+    const y = yAt(i);
+    if (!isFinite(x) || !isFinite(y)) {
+      px = NaN;
+      continue;
+    }
+    if (x >= win.min && x <= win.max) visit(y);
+    if (isFinite(px)) {
+      for (const edge of [win.min, win.max]) {
+        if ((edge - px) * (edge - x) < 0) {
+          visit(curveValueAt(curve, px, py, x, y, edge));
+        }
+      }
+    }
+    px = x;
+    py = y;
+  }
+}
+
+/**
  * The value a curve draws at `x` between neighboring points `(x0, y0)` and
  * `(x1, y1)`: the held value for steps, else linear interpolation (a
  * monotone curve stays between `y0` and `y1`, so this is close).

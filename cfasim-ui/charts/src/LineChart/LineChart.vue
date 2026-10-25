@@ -71,7 +71,7 @@ import {
   type BrushBox,
   type PlotClipEdges,
   curvePath,
-  curveValueAt,
+  visitCurveWindow,
   reverseCurvePath,
   type CurvePoint,
   type LineCurve,
@@ -678,41 +678,6 @@ function xPixel(v: number): number {
 }
 
 /**
- * Visit the y-values a line shows inside an x-window: every point in the
- * window, plus the value its curve draws where a segment crosses either
- * edge.
- */
-function visitWindow(
-  data: LineChartData,
-  xAt: (i: number) => number,
-  win: { min: number; max: number },
-  curve: LineCurve | undefined,
-  visit: (v: number) => void,
-) {
-  let px = NaN;
-  let py = NaN;
-  for (let i = 0; i < data.length; i++) {
-    const x = xAt(i);
-    const y = Number(data[i]);
-    if (!isFinite(x) || !isFinite(y)) {
-      px = NaN;
-      continue;
-    }
-    if (x >= win.min && x <= win.max) visit(y);
-    if (isFinite(px)) {
-      if ((win.min - px) * (win.min - x) < 0) {
-        visit(curveValueAt(curve, px, py, x, y, win.min));
-      }
-      if ((win.max - px) * (win.max - x) < 0) {
-        visit(curveValueAt(curve, px, py, x, y, win.max));
-      }
-    }
-    px = x;
-    py = y;
-  }
-}
-
-/**
  * Whether point `i`, or the line through its neighbors up to `reach`
  * points away, can reach the x-window. Lets path building skip offscreen
  * points while zoomed.
@@ -760,16 +725,24 @@ function dataYExtent(win: { min: number; max: number } | null) {
   for (const s of allSeries.value) {
     if (isHidden(s.legend)) continue;
     if (win) {
-      visitWindow(s.data, (i) => seriesXAt(s, i), win, seriesCurve(s), visit);
+      visitCurveWindow(
+        s.data.length,
+        (i) => seriesXAt(s, i),
+        (i) => Number(s.data[i]),
+        win,
+        seriesCurve(s),
+        visit,
+      );
     } else for (const v of s.data) visit(v);
   }
   for (const a of allAreas.value) {
     if (isHidden(a.legend)) continue;
     for (const band of [a.upper, a.lower]) {
       if (win) {
-        visitWindow(
-          band,
+        visitCurveWindow(
+          band.length,
           (i) => areaXAt(a, i),
+          (i) => Number(band[i]),
           win,
           a.curve ?? props.curve,
           visit,

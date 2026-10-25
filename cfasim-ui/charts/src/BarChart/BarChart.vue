@@ -63,6 +63,7 @@ import {
   type BrushBox,
   type PlotClipEdges,
   curvePath,
+  visitCurveWindow,
   type CurvePoint,
   type LineCurve,
 } from "../_shared/index.js";
@@ -139,12 +140,15 @@ export interface BarSeries {
 
 /**
  * A line overlay drawn on top of the bars — e.g. a KDE over a histogram,
- * a rolling mean, or any other summary curve. Each line scales to its
- * own value extent (independent of the bars), so a probability-density
- * curve in `[0, 0.02]` and a count histogram in `[0, 500]` can coexist.
+ * a rolling mean, or any other summary curve. By default each line scales
+ * to its own value extent (independent of the bars), so a
+ * probability-density curve in `[0, 0.02]` and a count histogram in
+ * `[0, 500]` can coexist; `scale: "shared"` plots it on the bars' value
+ * axis instead.
  *
- * Sample the curve densely on the input side — `summaryLines` connects
- * points with straight segments (matching matplotlib / seaborn `kde=True`).
+ * Sample the curve densely on the input side: `summaryLines` connects
+ * points with straight segments (matching matplotlib / seaborn `kde=True`)
+ * unless `curve` says otherwise.
  *
  * Shares visual styling (`color`, `strokeWidth`, `dashed`, `opacity`,
  * `blendMode`, `dots`, `dotRadius`, `legend`, `showInLegend`) with
@@ -163,11 +167,22 @@ export interface BarSummaryLine extends LineMarkStyle {
    */
   x?: BarChartXInput;
   /**
+   * Which value scale the line uses. `"independent"` (default) spans the
+   * plot with the line's own extent; `"shared"` plots it on the bars'
+   * value axis, which then grows to fit the line, for a line in the same
+   * units as the bars (a rolling mean of daily counts, a target).
+   */
+  scale?: "independent" | "shared";
+  /**
    * Override the line's value-axis floor. When unset, defaults to the
-   * line's own min (clamped to 0 when all data is non-negative).
+   * line's own min (clamped to 0 when all data is non-negative). Ignored
+   * with `scale: "shared"`.
    */
   valueMin?: number;
-  /** Override the line's value-axis ceiling. Defaults to the line's own max. */
+  /**
+   * Override the line's value-axis ceiling. Defaults to the line's own
+   * max. Ignored with `scale: "shared"`.
+   */
   valueMax?: number;
 }
 
@@ -240,8 +255,8 @@ interface BarChartProps extends ChartCommonProps {
   series?: BarSeries[];
   /**
    * Line overlays drawn on top of the bars (e.g. a KDE, a rolling mean,
-   * or any summary curve). Each line scales to its own value extent —
-   * unrelated to the bar value axis. See `BarSummaryLine`.
+   * or any summary curve). Each line scales to its own value extent
+   * unless it sets `scale: "shared"`. See `BarSummaryLine`.
    */
   summaryLines?: BarSummaryLine[];
   /**
@@ -840,7 +855,14 @@ function projectInterval(
     const g = slotGroup(slot);
     categoricalPx = g.start + pos * (g.bar + props.groupGap) + g.bar / 2;
   }
-  const valuePx = valuePixel(value);
+  return placePoint(categoricalPx, valuePixel(value));
+}
+
+/** A point from its categorical- and value-axis pixels, per orientation. */
+function placePoint(
+  categoricalPx: number,
+  valuePx: number,
+): { x: number; y: number } {
   return isVertical.value
     ? { x: categoricalPx, y: valuePx }
     : { x: valuePx, y: categoricalPx };
@@ -848,9 +870,15 @@ function projectInterval(
 
 /**
  * Value extent across all series (accounting for stacking) for the
- * categories `start..end`.
+ * categories `start..end`. `win` is that stretch of the categorical axis,
+ * in `positionPixel` units, for shared-scale summary lines, whose points
+ * need not sit on a slot.
  */
-function dataValueExtent(start: number, end: number) {
+function dataValueExtent(
+  start: number,
+  end: number,
+  win: { min: number; max: number },
+) {
   let min = Infinity;
   let max = -Infinity;
   let smallestPositive = Infinity;
@@ -884,6 +912,22 @@ function dataValueExtent(start: number, end: number) {
       }
     }
   }
+  summaryLinesStyled.value.forEach((line, i) => {
+    if (line.extent || isHidden(line.legend)) return;
+    const xs = summaryLinePositions.value[i];
+    visitCurveWindow(
+      line.data.length,
+      (j) => xs[j],
+      (j) => Number(line.data[j]),
+      win,
+      line.curve,
+      (v) => {
+        visitPositive(v);
+        if (v < min) min = v;
+        if (v > max) max = v;
+      },
+    );
+  });
   for (const list of [topIntervals.value, seriesIntervalList.value]) {
     for (const iv of list) {
       if (!inSlotRange(iv.x, start, end)) continue;
@@ -920,7 +964,13 @@ function dataValueExtent(start: number, end: number) {
 }
 
 const fullValueExtent = computed(() =>
-  dataValueExtent(0, categoryCount.value - 1),
+  dataValueExtent(
+    0,
+    categoryCount.value - 1,
+    continuous.value
+      ? xFullDomain.value
+      : { min: -0.5, max: categoryCount.value - 0.5 },
+  ),
 );
 
 /**
@@ -930,7 +980,11 @@ const fullValueExtent = computed(() =>
 /** Value extent of the visible categories' data. */
 const visibleValueExtent = computed(() => {
   const { start, end } = visibleRange.value;
-  return dataValueExtent(start, end);
+  return dataValueExtent(
+    start,
+    end,
+    continuous.value ? xDomain.value : { min: start - 0.5, max: end + 0.5 },
+  );
 });
 
 const valueExtent = computed(() => {
@@ -1250,7 +1304,8 @@ type StyledSummaryLine = {
   curve?: LineCurve;
   dots: boolean;
   dotRadius: number;
-  extent: { min: number; max: number };
+  /** Null on the bars' shared value axis. */
+  extent: { min: number; max: number } | null;
   legend?: string;
   showInLegend: boolean;
 };
@@ -1303,16 +1358,10 @@ function projectLinePoint(
   // follows the same slice of the plot the bars' value axis shows.
   const slice = valueZoomSlice.value;
   if (slice) frac = (frac - slice.lo) / (slice.hi - slice.lo);
-  if (isVertical.value) {
-    return {
-      x: categoricalPx,
-      y: padding.value.top + innerH.value - frac * innerH.value,
-    };
-  }
-  return {
-    x: padding.value.left + frac * innerW.value,
-    y: categoricalPx,
-  };
+  const valuePx = isVertical.value
+    ? padding.value.top + innerH.value - frac * innerH.value
+    : padding.value.left + frac * innerW.value;
+  return placePoint(categoricalPx, valuePx);
 }
 
 const summaryLinesStyled = computed<StyledSummaryLine[]>(() => {
@@ -1330,40 +1379,58 @@ const summaryLinesStyled = computed<StyledSummaryLine[]>(() => {
       curve: line.curve,
       dots: line.dots ?? false,
       dotRadius: line.dotRadius ?? (line.strokeWidth ?? 2) + 1,
-      extent: computeLineExtent(line),
+      extent: line.scale === "shared" ? null : computeLineExtent(line),
       legend: line.legend,
       showInLegend: line.showInLegend !== false,
     };
   });
 });
 
-const summaryLinesResolved = computed<ResolvedSummaryLine[]>(() => {
-  if (!hasLayout.value) return [];
-  const lines = summaryLinesStyled.value.filter((l) => !isHidden(l.legend));
-  return lines.map((line): ResolvedSummaryLine => {
-    const points: CurvePoint[] = [];
-    let d = "";
-    let run: CurvePoint[] = [];
-    const axis = isVertical.value ? "x" : "y";
+/**
+ * Each summary line's point positions on the categorical axis, in
+ * `positionPixel` units, parallel to `summaryLinesStyled`. Kept out of the
+ * styled lines, which must not depend on layout.
+ */
+const summaryLinePositions = computed(() =>
+  summaryLinesStyled.value.map((line) => {
     const xs = toNumericX(line.x, xIsDate.value, tz.value);
-    for (let j = 0; j < line.data.length; j++) {
-      const yv = Number(line.data[j]);
-      const xv = xs
+    const out = new Float64Array(line.data.length);
+    for (let j = 0; j < out.length; j++) {
+      out[j] = xs
         ? Number(xs[j])
         : j < categoryCount.value
           ? slotCenter(j)
           : NaN;
+    }
+    return out;
+  }),
+);
+
+const summaryLinesResolved = computed<ResolvedSummaryLine[]>(() => {
+  if (!hasLayout.value) return [];
+  const positions = summaryLinePositions.value;
+  return summaryLinesStyled.value.flatMap((line, i): ResolvedSummaryLine[] => {
+    if (isHidden(line.legend)) return [];
+    const points: CurvePoint[] = [];
+    let d = "";
+    let run: CurvePoint[] = [];
+    const axis = isVertical.value ? "x" : "y";
+    for (let j = 0; j < line.data.length; j++) {
+      const yv = Number(line.data[j]);
+      const xv = positions[i][j];
       if (!isFinite(yv) || !isFinite(xv)) {
         d += curvePath(run, line.curve, { axis });
         run = [];
         continue;
       }
-      const p = projectLinePoint(xv, yv, line.extent);
+      const p = line.extent
+        ? projectLinePoint(xv, yv, line.extent)
+        : placePoint(positionPixel(xv), valuePixel(yv));
       points.push(p);
       run.push(p);
     }
     d += curvePath(run, line.curve, { axis });
-    return { ...line, pathD: d, points };
+    return [{ ...line, pathD: d, points }];
   });
 });
 

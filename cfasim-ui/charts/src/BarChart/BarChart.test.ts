@@ -1562,6 +1562,50 @@ describe("BarChart", () => {
       expect(ys[0]).toBeGreaterThan(ys[2]);
     });
 
+    it("plots a shared-scale line on the bars' value axis", async () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20, 30],
+          categories: ["a", "b", "c"],
+          summaryLines: [
+            // valueMax is ignored on the shared scale.
+            { data: [20, 50, 20], scale: "shared", valueMax: 1, legend: "T" },
+          ],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const barTop = (i: number) => Number(bars(wrapper)[i].attributes("y"));
+      const pts = parsePathPoints(lineEl(wrapper).attributes("d") ?? "");
+      // A line value of 20 sits level with the top of the bar of 20, and
+      // the axis grows so the line's 50 clears the tallest bar.
+      expect(pts[0].y).toBeCloseTo(barTop(1));
+      expect(pts[1].y).toBeLessThan(barTop(2));
+      const withLine = barTop(2);
+      // A hidden line no longer stretches the axis.
+      await wrapper.setProps({ hiddenSeries: ["T"] });
+      expect(barTop(2)).toBeLessThan(withLine);
+    });
+
+    it("fits the value axis to where a shared line leaves the categories", () => {
+      // The line runs past the last category (index 5) and is drawn up to
+      // where it crosses the axis end, at 31.
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 10, 10, 10, 10],
+          summaryLines: [{ x: [3, 4, 5], data: [10, 12, 50], scale: "shared" }],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const ticks = wrapper
+        .findAll('[data-testid="value-tick"]')
+        .map((t) => Number(t.text()));
+      expect(Math.max(...ticks)).toBeGreaterThanOrEqual(30);
+    });
+
     it("respects valueMin/valueMax overrides", () => {
       const wrapper = mount(BarChart, {
         props: {
@@ -2164,6 +2208,27 @@ describe("BarChart", () => {
       window.dispatchEvent(new MouseEvent("pointerup", to));
       await w.vm.$nextTick();
     }
+
+    it("rescales to a shared line where it crosses the zoom window edge", async () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          ...zoomProps,
+          data: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+          summaryLines: [{ x: [3, 4], data: [5, 100], scale: "shared" }],
+        },
+      });
+      // Categories 0..3: the line climbs toward 100 across slot 3's right
+      // half and leaves the window at 52.5.
+      await brush(
+        wrapper,
+        { clientX: 50 + 54 * 0.5 },
+        { clientX: 50 + 54 * 3.5 },
+      );
+      const ticks = wrapper
+        .findAll('[data-testid="value-tick"]')
+        .map((t) => Number(t.text()));
+      expect(Math.max(...ticks)).toBeGreaterThanOrEqual(50);
+    });
 
     it("zooms to the brushed categories and rescales the value axis", async () => {
       const wrapper = mount(BarChart, { props: zoomProps });

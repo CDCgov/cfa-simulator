@@ -790,7 +790,7 @@ of letting them pile up.
 ### Summary line overlay
 
 Layer a curve (KDE, rolling mean, target) on top of the bars with
-`summary-lines`. Each line scales to **its own value extent**,
+`summary-lines`. By default each line scales to **its own value extent**,
 independent of the bar axis, so a probability-density curve in
 `[0, 0.02]` and a histogram in `[0, 500]` can share the same chart.
 
@@ -847,6 +847,55 @@ independent of the bar axis, so a probability-density curve in
   :height="240"
   x-label="R₀"
   y-label="Frequency"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+Set `scale: "shared"` to plot a line on the bars' own value axis instead,
+for a line in the same units as the bars: a rolling mean over daily
+counts, or a target. The axis grows to fit the line, and the line's
+`valueMin` / `valueMax` are ignored.
+
+<ComponentDemo>
+  <BarChart
+    :data="[4, 7, 5, 9, 12, 10, 15, 18, 14, 20, 23, 19, 26, 24]"
+    :summary-lines="[
+      {
+        x: [6, 7, 8, 9, 10, 11, 12, 13],
+        data: [9, 10.9, 11.9, 14, 15.9, 17, 19.3, 20.6],
+        scale: 'shared',
+        curve: 'monotone',
+        color: '#ef4444',
+        strokeWidth: 2,
+        legend: '7-day mean',
+      },
+    ]"
+    :height="240"
+    x-label="Day"
+    y-label="Cases"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :data="[4, 7, 5, 9, 12, 10, 15, 18, 14, 20, 23, 19, 26, 24]"
+  :summary-lines="[
+    {
+      x: [6, 7, 8, 9, 10, 11, 12, 13],
+      data: [9, 10.9, 11.9, 14, 15.9, 17, 19.3, 20.6],
+      scale: 'shared',
+      curve: 'monotone',
+      color: '#ef4444',
+      strokeWidth: 2,
+      legend: '7-day mean',
+    },
+  ]"
+  :height="240"
+  x-label="Day"
+  y-label="Cases"
 />
 ```
 
