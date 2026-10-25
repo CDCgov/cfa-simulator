@@ -41,6 +41,19 @@ test("picking a day in the calendar sets the value and closes it", async ({
   await expect(demo.getByLabel("Start date")).toHaveValue("2026-05-15");
 });
 
+test("the month and year selects jump the calendar", async ({ page }) => {
+  const demo = firstDemo(page);
+  await demo.getByRole("button", { name: "Open calendar" }).click();
+  const calendar = page.getByRole("application");
+  await page.getByRole("combobox", { name: "Year" }).selectOption("1999");
+  await page.getByRole("combobox", { name: "Month" }).selectOption("2");
+  await expect(calendar).toBeVisible();
+
+  await page.locator('[data-value="1999-02-28"]').click();
+  await expect(calendar).toBeHidden();
+  await expect(demo.getByLabel("Start date")).toHaveValue("1999-02-28");
+});
+
 test("custom formats round-trip through the calendar", async ({ page }) => {
   const input = page.getByLabel("US format");
   await expect(input).toHaveAttribute("placeholder", "mm/dd/yyyy");
@@ -56,6 +69,24 @@ test("custom formats round-trip through the calendar", async ({ page }) => {
   await named.fill("sep 3, 2026");
   await named.press("Enter");
   await expect(named).toHaveValue("Sep 3, 2026");
+});
+
+test("the month and year selects stay within min/max", async ({ page }) => {
+  const demo = page.locator(".demo-preview", {
+    has: page.getByLabel("Campaign start"),
+  });
+  await demo.getByRole("button", { name: "Open calendar" }).click();
+  const year = page.getByRole("combobox", { name: "Year" });
+  const month = page.getByRole("combobox", { name: "Month" });
+  await expect(year.locator("option")).toHaveText(["2026"]);
+  await expect(month.locator("option:not([disabled])")).toHaveText([
+    "May",
+    "June",
+    "July",
+    "August",
+  ]);
+  await month.selectOption("8");
+  await expect(page.getByRole("button", { name: "Next page" })).toBeDisabled();
 });
 
 test("days outside min/max are disabled", async ({ page }) => {

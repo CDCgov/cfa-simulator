@@ -251,6 +251,140 @@ describe("DatePicker", () => {
     expect(w.props("modelValue")).toBe("2026-05-20");
   });
 
+  describe("month and year selects", () => {
+    async function openCalendar(w: VueWrapper) {
+      await w.find('button[aria-label="Open calendar"]').trigger("click");
+      await nextTick();
+    }
+    const select = (name: "Month" | "Year") =>
+      document.querySelector<HTMLSelectElement>(
+        `select[aria-label="${name}"]`,
+      )!;
+    async function choose(name: "Month" | "Year", value: number) {
+      const el = select(name);
+      el.value = String(value);
+      el.dispatchEvent(new Event("change"));
+      await nextTick();
+    }
+    const shown = (value: string) =>
+      document.querySelector(
+        `[data-reka-calendar-cell-trigger][data-value="${value}"]:not([data-outside-view])`,
+      );
+    const options = (name: "Month" | "Year") =>
+      [...select(name).options].map((o) => ({
+        value: Number(o.value),
+        disabled: o.disabled,
+      }));
+
+    it("shows the open month and year, with localized month names", async () => {
+      const w = mountPicker({ modelValue: "2026-05-14", locale: "fr" });
+      await openCalendar(w);
+      expect(select("Month").value).toBe("5");
+      expect(select("Year").value).toBe("2026");
+      expect(select("Month").options[0].text).toBe("janvier");
+    });
+
+    it("moves the calendar without changing the value", async () => {
+      const w = mountPicker({ modelValue: "2026-05-14" });
+      await openCalendar(w);
+      await choose("Month", 9);
+      expect(shown("2026-09-14")).not.toBeNull();
+      await choose("Year", 1990);
+      expect(shown("1990-09-14")).not.toBeNull();
+      expect(w.props("modelValue")).toBe("2026-05-14");
+    });
+
+    it("follows the prev/next arrows", async () => {
+      const w = mountPicker({ modelValue: "2026-01-14" });
+      await openCalendar(w);
+      document
+        .querySelector<HTMLElement>(`[aria-label="Previous page"]`)!
+        .click();
+      await nextTick();
+      expect(select("Month").value).toBe("12");
+      expect(select("Year").value).toBe("2025");
+    });
+
+    it("lists 50 years either side when unbounded", async () => {
+      const w = mountPicker({ modelValue: "2026-05-14" });
+      await openCalendar(w);
+      const years = options("Year").map((o) => o.value);
+      expect(years[0]).toBe(1976);
+      expect(years.at(-1)).toBe(2076);
+    });
+
+    it("limits years and months to min/max and clamps a year change", async () => {
+      const w = mountPicker({
+        modelValue: "2025-06-10",
+        min: "2024-03-15",
+        max: "2026-08-01",
+      });
+      await openCalendar(w);
+      expect(options("Year").map((o) => o.value)).toEqual([2024, 2025, 2026]);
+
+      await choose("Year", 2024);
+      expect(select("Month").value).toBe("6");
+      const months = options("Month");
+      expect(months.filter((m) => m.disabled).map((m) => m.value)).toEqual([
+        1, 2,
+      ]);
+
+      await choose("Month", 11);
+      await choose("Year", 2026);
+      // November 2026 is past max, so the calendar stops at August.
+      expect(select("Month").value).toBe("8");
+      expect(shown("2026-08-01")).not.toBeNull();
+    });
+
+    it("opens inside min/max when the value is empty", async () => {
+      const w = mountPicker({ modelValue: "", min: "2999-03-10" });
+      await openCalendar(w);
+      expect(select("Year").value).toBe("2999");
+      expect(select("Month").value).toBe("3");
+      const years = options("Year").map((o) => o.value);
+      expect(years[0]).toBe(2999);
+      expect(years.at(-1)).toBe(3049);
+    });
+
+    it("lists years up to max and disables later months", async () => {
+      const w = mountPicker({ modelValue: "", max: "1901-04-02" });
+      await openCalendar(w);
+      expect(select("Year").value).toBe("1901");
+      expect(select("Month").value).toBe("4");
+      expect(options("Year").at(-1)!.value).toBe(1901);
+      expect(
+        options("Month")
+          .filter((m) => m.disabled)
+          .map((m) => m.value),
+      ).toEqual([5, 6, 7, 8, 9, 10, 11, 12]);
+    });
+
+    it("disables the arrows at the min and max months", async () => {
+      const w = mountPicker({
+        modelValue: "2026-05-14",
+        min: "2026-05-01",
+        max: "2026-05-31",
+      });
+      await openCalendar(w);
+      for (const label of ["Previous page", "Next page"])
+        expect(
+          document
+            .querySelector(`[aria-label="${label}"]`)!
+            .hasAttribute("data-disabled"),
+        ).toBe(true);
+    });
+
+    it("resets to the value's month when reopened", async () => {
+      const w = mountPicker({ modelValue: "2026-05-14" });
+      await openCalendar(w);
+      await choose("Year", 2000);
+      await w.find('button[aria-label="Open calendar"]').trigger("click");
+      await nextTick();
+      await openCalendar(w);
+      expect(select("Year").value).toBe("2026");
+    });
+  });
+
   describe("referenceDate", () => {
     async function openCalendar(w: VueWrapper) {
       await w.find('button[aria-label="Open calendar"]').trigger("click");

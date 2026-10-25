@@ -10,6 +10,11 @@ model inputs. Typed input commits on blur or Enter and is normalized to the
 format (`2026-5-4` becomes `2026-05-04`). Text that doesn't parse, or falls
 outside `min`/`max`, is marked `aria-invalid` and not emitted.
 
+The calendar header has month and year dropdowns for jumping to a distant
+date, next to the previous/next month arrows. The year list runs from
+`min` to `max`, or 50 years either side of the opened date when unbounded,
+and months outside `min`/`max` are disabled.
+
 ## Examples
 
 <script setup>

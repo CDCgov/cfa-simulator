@@ -1,6 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { CalendarDate, type DateValue } from "@internationalized/date";
+import { computed, ref, shallowRef, watch } from "vue";
+import {
+  CalendarDate,
+  getLocalTimeZone,
+  today,
+  type DateValue,
+} from "@internationalized/date";
 import {
   CalendarCell,
   CalendarCellTrigger,
@@ -10,7 +15,6 @@ import {
   CalendarGridRow,
   CalendarHeadCell,
   CalendarHeader,
-  CalendarHeading,
   CalendarNext,
   CalendarPrev,
   CalendarRoot,
@@ -144,6 +148,78 @@ function commit() {
 const open = ref(false);
 const calendarValue = computed(() => toCalendar(parse(model.value)));
 
+const monthIndex = (year: number, month: number) => year * 12 + month;
+function monthOutOfRange(year: number, month: number) {
+  const m = monthIndex(year, month);
+  const min = minParts.value;
+  const max = maxParts.value;
+  return (
+    (!!min && m < monthIndex(min.year, min.month)) ||
+    (!!max && m > monthIndex(max.year, max.month))
+  );
+}
+
+/** The first day of `year`/`month`, moved into the months min/max allow. */
+function clampMonth(year: number, month: number): CalendarDate {
+  const min = minParts.value;
+  const max = maxParts.value;
+  if (min && monthIndex(year, month) < monthIndex(min.year, min.month))
+    ({ year, month } = min);
+  if (max && monthIndex(year, month) > monthIndex(max.year, max.month))
+    ({ year, month } = max);
+  return new CalendarDate(year, month, 1);
+}
+
+// The month the calendar shows, controlled so the month/year selects can
+// move it. Reset on open to the value, the reference date, or today,
+// clamped to min/max.
+function initialView(): DateValue {
+  const start =
+    calendarValue.value ??
+    toCalendar(referenceParts.value) ??
+    today(getLocalTimeZone());
+  const clamped = clampMonth(start.year, start.month);
+  return clamped.year === start.year && clamped.month === start.month
+    ? start
+    : clamped;
+}
+const view = shallowRef<DateValue>(initialView());
+// Unbounded year lists are centered on the year shown at open.
+const anchorYear = ref(view.value.year);
+watch(open, (isOpen) => {
+  if (!isOpen) return;
+  view.value = initialView();
+  anchorYear.value = view.value.year;
+});
+
+const YEAR_SPAN = 50;
+const years = computed(() => {
+  const y = view.value.year;
+  const lo = minParts.value?.year ?? Math.min(anchorYear.value - YEAR_SPAN, y);
+  const hi = maxParts.value?.year ?? Math.max(anchorYear.value + YEAR_SPAN, y);
+  return Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
+});
+
+function showMonth(year: number, month: number) {
+  view.value = clampMonth(year, month);
+}
+
+const monthNameCache = new Map<string, string[]>();
+function monthNames(locale: string): string[] {
+  let names = monthNameCache.get(locale);
+  if (!names) {
+    const fmt = new Intl.DateTimeFormat(locale, {
+      month: "long",
+      timeZone: "UTC",
+    });
+    names = Array.from({ length: 12 }, (_, i) =>
+      fmt.format(new Date(Date.UTC(2000, i, 1))),
+    );
+    monthNameCache.set(locale, names);
+  }
+  return names;
+}
+
 function clear() {
   local.value = "";
   error.value = "";
@@ -239,9 +315,9 @@ function onSelect(date: DateValue | undefined) {
           @open-auto-focus.prevent
         >
           <CalendarRoot
-            v-slot="{ weekDays, grid }"
+            v-slot="{ weekDays, grid, locale: calendarLocale }"
+            v-model:placeholder="view"
             :model-value="calendarValue"
-            :default-placeholder="calendarValue ?? toCalendar(referenceParts)"
             :min-value="toCalendar(minParts)"
             :max-value="toCalendar(maxParts)"
             :locale="locale"
@@ -255,7 +331,49 @@ function onSelect(date: DateValue | undefined) {
               <CalendarPrev class="cfasim-calendar-nav">
                 <Icon icon="chevron_left" :size="18" />
               </CalendarPrev>
-              <CalendarHeading class="cfasim-calendar-heading" />
+              <div class="cfasim-calendar-heading">
+                <span class="cfasim-calendar-select-wrap">
+                  <select
+                    class="cfasim-input cfasim-calendar-select"
+                    aria-label="Month"
+                    :value="view.month"
+                    @change="
+                      showMonth(
+                        view.year,
+                        Number(($event.target as HTMLSelectElement).value),
+                      )
+                    "
+                  >
+                    <option
+                      v-for="(name, i) in monthNames(calendarLocale)"
+                      :key="i"
+                      :value="i + 1"
+                      :disabled="monthOutOfRange(view.year, i + 1)"
+                    >
+                      {{ name }}
+                    </option>
+                  </select>
+                  <Icon icon="keyboard_arrow_down" :size="16" />
+                </span>
+                <span class="cfasim-calendar-select-wrap">
+                  <select
+                    class="cfasim-input cfasim-calendar-select"
+                    aria-label="Year"
+                    :value="view.year"
+                    @change="
+                      showMonth(
+                        Number(($event.target as HTMLSelectElement).value),
+                        view.month,
+                      )
+                    "
+                  >
+                    <option v-for="y in years" :key="y" :value="y">
+                      {{ y }}
+                    </option>
+                  </select>
+                  <Icon icon="keyboard_arrow_down" :size="16" />
+                </span>
+              </div>
               <CalendarNext class="cfasim-calendar-nav">
                 <Icon icon="chevron_right" :size="18" />
               </CalendarNext>
@@ -478,7 +596,30 @@ function onSelect(date: DateValue | undefined) {
 }
 
 .cfasim-calendar-heading {
+  display: flex;
+  gap: 0.25em;
+}
+
+.cfasim-calendar-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.cfasim-date-picker-content .cfasim-calendar-select {
+  width: auto;
+  height: 2em;
+  padding: 0 1.75em 0 0.625em;
   font-weight: 600;
+  appearance: none;
+  cursor: pointer;
+}
+
+.cfasim-calendar-select-wrap > .Icon {
+  position: absolute;
+  right: 0.375em;
+  pointer-events: none;
+  color: var(--color-text-secondary);
 }
 
 .cfasim-calendar-nav {
@@ -505,6 +646,7 @@ function onSelect(date: DateValue | undefined) {
 }
 
 .cfasim-calendar-grid {
+  width: 100%;
   border-collapse: collapse;
 }
 
@@ -524,6 +666,7 @@ function onSelect(date: DateValue | undefined) {
 .cfasim-calendar-day {
   position: relative;
   display: flex;
+  margin: 0 auto;
   align-items: center;
   justify-content: center;
   width: 2em;
