@@ -77,10 +77,10 @@
     "@types/topojson-specification": "1.0.5",
     "@vitejs/plugin-vue": "6.0.8",
     "@vue/test-utils": "2.4.11",
-    "happy-dom": "20.10.6",
+    "happy-dom": "21.0.4",
     "us-atlas": "3.0.1",
     "vite-plugin-dts": "5.0.3",
-    "vitest": "4.1.10",
+    "vitest": "4.1.12",
     "world-atlas": "2.0.2"
   }
 }

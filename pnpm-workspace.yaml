@@ -7,7 +7,10 @@ packages:
 # (>=3.2.13) otherwise resolves a second copy, which breaks reka-ui at runtime
 # (duplicate @vue/runtime-core).
 overrides:
-  vue: "3.5.40"
+  vue: "3.5.44"
+  # vitepress 1.6.4 asks for vite ^5.4.14, and no 5.x release carries the
+  # dev-server fixes in 6.4.4+. Drop this once vitepress ships on vite >= 6.
+  "vitepress>vite": "6.4.5"
 
 # Supply-chain policy: refuse versions published less than 24h ago, so a
 # compromised release has time to be pulled from the registry. This matches

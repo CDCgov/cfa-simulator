@@ -58,9 +58,9 @@
     "@material-symbols/svg-400": "0.45.8",
     "@vitejs/plugin-vue": "6.0.8",
     "@vue/test-utils": "2.4.11",
-    "happy-dom": "20.10.6",
+    "happy-dom": "21.0.4",
     "vite-plugin-dts": "5.0.3",
     "vite-svg-loader": "5.1.1",
-    "vitest": "4.1.10"
+    "vitest": "4.1.12"
   }
 }

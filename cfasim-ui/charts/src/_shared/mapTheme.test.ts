@@ -43,12 +43,16 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
   overrides = new Map();
-  gcs = vi.spyOn(window, "getComputedStyle").mockImplementation(
-    (el) =>
-      ({
-        color: overrides.get(el as Element) ?? (el as HTMLElement).style.color,
-      }) as CSSStyleDeclaration,
-  );
+  // happy-dom keeps var()/light-dark() text in style.color, which a browser's
+  // computed color never returns, so those read as unresolved
+  gcs = vi.spyOn(window, "getComputedStyle").mockImplementation((el) => {
+    const inline = (el as HTMLElement).style.color;
+    return {
+      color:
+        overrides.get(el as Element) ??
+        (/var\(|light-dark\(/.test(inline) ? "" : inline),
+    } as CSSStyleDeclaration;
+  });
 });
 
 afterEach(() => {
@@ -301,7 +305,7 @@ describe("createMapThemeResolver", () => {
 
   it("substitutes constants while computed styles are unreadable", () => {
     const r = createMapThemeResolver(container, () => {});
-    // happy-dom rejects the var() defaults, so the fill canary reads empty
+    // the var() defaults are unresolved, so the fill canary reads empty
     const t = r.resolve(undefined);
     expect(t.fill).toBe(LIGHT_FILL);
     expect(t.stroke).toBe(LIGHT_STROKE);
