@@ -303,6 +303,7 @@ const showMenu = computed(
 .TableOuter {
   position: relative;
   display: inline-block;
+  max-width: 100%;
 }
 
 .TableOuter.full-width {
