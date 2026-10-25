@@ -170,3 +170,35 @@ binValues([0.2, 0.4, 1.1, 1.3, 1.9], { step: 0.5 });
 edges (values outside them are dropped). `domain` fixes the range for
 equal-width or stepped bins. See the
 [BarChart histogram demo](./charts/bar-chart#histograms-x2).
+
+## d3Format / d3TimeFormat
+
+Formatters from [d3-format](https://d3js.org/d3-format) and
+[d3-time-format](https://d3js.org/d3-time-format) specifiers, the format
+strings Vega-Lite, Altair and Observable use. Both return a function, so
+they drop into any chart prop that takes a `NumberFormat` (`y-tick-format`,
+`value-tick-format`, `tooltip-value-format`) or a `DateFormat`
+(`x-tick-format` on a date axis). They are not re-exported from
+`@cfasim-ui/charts`, so import them from `@cfasim-ui/shared`.
+
+```ts
+import { d3Format, d3TimeFormat } from "@cfasim-ui/shared";
+
+d3Format(",.0f")(1234.5); // "1,235"
+d3Format(".1%")(0.1234); // "12.3%"
+d3Format("~s")(1500); // "1.5k"
+d3Format("+.2f")(-1.5); // "−1.50"
+
+d3TimeFormat("%b %d, %Y")(Date.UTC(2026, 0, 4)); // "Jan 04, 2026"
+d3TimeFormat("%-m/%-d %H:%M", { timezone: "local" })(new Date());
+```
+
+Output matches d3's default en-US locale, including its typographic minus
+sign (`−`, U+2212) for negative numbers. `d3Format` supports the full
+`[[fill]align][sign][symbol][0][width][,][.precision][~][type]` grammar and
+throws on a malformed specifier. `d3TimeFormat` supports every d3 directive
+and the `-` / `_` / `0` padding modifiers, and formats in UTC unless
+`timezone: "local"` is passed. UTC matches the charts' default date axis;
+a chart does not pass its own `timezone` to the formatter, so on a
+`timezone="local"` chart pass `{ timezone: "local" }` as well, or the
+labels follow a different clock than the ticks.

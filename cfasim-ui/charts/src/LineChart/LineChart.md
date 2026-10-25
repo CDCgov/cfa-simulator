@@ -444,7 +444,7 @@ type LineChartData =
 
 ### Custom axis ticks
 
-Control tick placement with `x-ticks` and `y-ticks`. Pass a **number** for a fixed interval (in data units, respecting `xMin`) or an **array** of explicit values. Use `x-tick-format` / `y-tick-format` to customize labels. On a date axis the units are milliseconds: an interval steps from the first date (`7 * 86400000` is a tick every week, on the weekday the data starts), an array holds epoch-ms values, and the default label format follows the interval (days, weeks or months).
+Control tick placement with `x-ticks` and `y-ticks`. Pass a **number** for a fixed interval (in data units, respecting `xMin`) or an **array** of explicit values. Use `x-tick-format` / `y-tick-format` to customize labels; to reuse a d3 or Vega-Lite format string, wrap it with [`d3Format` / `d3TimeFormat`](../shared#d3format-d3timeformat) (e.g. `:y-tick-format="d3Format('.0%')"`). On a date axis the units are milliseconds: an interval steps from the first date (`7 * 86400000` is a tick every week, on the weekday the data starts), an array holds epoch-ms values, and the default label format follows the interval (days, weeks or months).
 
 <ComponentDemo>
   <LineChart
