@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { nextTick } from "vue";
 import { mount } from "@vue/test-utils";
 import LineChart from "./LineChart.vue";
+import { stackAreas } from "./stackAreas.js";
 import type { ChartAnnotation } from "../_shared/annotations.js";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import * as download from "../ChartMenu/download.js";
@@ -1112,6 +1113,18 @@ describe("LineChart", () => {
       });
       const rows = wrapper.findAll(".chart-tooltip-row").map((r) => r.text());
       expect(rows).toEqual(["Median2", "95% CI1–4"]);
+      wrapper.unmount();
+    });
+
+    it("shows a stacked layer's own value rather than its band", async () => {
+      const wrapper = await hoverMiddle({
+        areas: stackAreas([
+          { y: [1, 2, 3], legend: "A" },
+          { y: [4, 5, 6], legend: "B" },
+        ]),
+      });
+      const rows = wrapper.findAll(".chart-tooltip-row").map((r) => r.text());
+      expect(rows).toEqual(["A2", "B5"]);
       wrapper.unmount();
     });
 

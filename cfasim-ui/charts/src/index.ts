@@ -7,6 +7,11 @@ export {
   type AreaSectionLayout,
 } from "./LineChart/LineChart.vue";
 export {
+  stackAreas,
+  type StackedAreaLayer,
+  type StackAreasOptions,
+} from "./LineChart/stackAreas.js";
+export {
   default as BarChart,
   type BarChartData,
   type BarChartXInput,

@@ -23,6 +23,13 @@ A responsive SVG line chart with support for multiple series, axis labels, and c
 
 <script setup>
 import { ref, computed } from "vue";
+import { stackAreas } from "@cfasim-ui/charts";
+
+const compartments = stackAreas([
+  { y: [990, 960, 880, 700, 480, 320, 240, 200], legend: "Susceptible", color: "#3b82f6", opacity: 0.7 },
+  { y: [10, 30, 90, 180, 220, 160, 80, 30], legend: "Infected", color: "#ef4444", opacity: 0.7 },
+  { y: [0, 10, 30, 120, 300, 520, 680, 770], legend: "Recovered", color: "#10b981", opacity: 0.7 },
+]);
 
 // Deterministic jitter in [-0.5, 0.5): Math.random() would redraw the
 // demos on every load and mismatch the server-rendered page.
@@ -322,6 +329,61 @@ When `x` is omitted, `y`/`data` values are plotted at indices 0, 1, 2, etc.
   x-label="Weeks"
   y-label="Incidence"
 />
+```
+
+  </template>
+</ComponentDemo>
+
+### Stacked areas
+
+`stackAreas` (exported from `@cfasim-ui/charts`) turns layers of values
+into `areas` that stack on each other in array order, like Vega-Lite's
+stacked `area` mark: compartments of a model, cases by age group. Each
+layer takes `y` (its own values), optional `x` and any `Area` styling
+(`color`, `legend`, `opacity`, `curve`, ...). Layers stack where their x
+values match (give every layer `x`, or none), and a layer missing a point
+counts as 0 there. Positive values
+stack upward and negative values downward from 0; pass
+`{ offset: "normalize" }` to stack shares of each x's total instead (the
+top edge is always 1). The tooltip shows each layer's own value rather than
+its band, also when normalized, and a chart with only areas puts the
+tooltip on their x values. Hiding a layer from the legend leaves its gap in
+the stack.
+
+<ComponentDemo>
+  <LineChart :areas="compartments" :height="220" legend-toggle />
+
+<template #code>
+
+```vue
+<script setup>
+import { LineChart, stackAreas } from "@cfasim-ui/charts";
+
+const compartments = stackAreas([
+  {
+    y: [990, 960, 880, 700, 480, 320, 240, 200],
+    legend: "Susceptible",
+    color: "#3b82f6",
+    opacity: 0.7,
+  },
+  {
+    y: [10, 30, 90, 180, 220, 160, 80, 30],
+    legend: "Infected",
+    color: "#ef4444",
+    opacity: 0.7,
+  },
+  {
+    y: [0, 10, 30, 120, 300, 520, 680, 770],
+    legend: "Recovered",
+    color: "#10b981",
+    opacity: 0.7,
+  },
+]);
+</script>
+
+<template>
+  <LineChart :areas="compartments" :height="220" legend-toggle />
+</template>
 ```
 
   </template>
@@ -2096,6 +2158,7 @@ interface Area {
   lower: LineChartData;
   x?: LineChartXInput; // optional parallel x-values
   curve?: LineCurve; // both edges; defaults to the chart's curve
+  value?: LineChartData; // shown in the tooltip instead of the range (stackAreas sets it)
   color?: string;
   opacity?: number;
   legend?: string; // inline legend label, also names the tooltip row

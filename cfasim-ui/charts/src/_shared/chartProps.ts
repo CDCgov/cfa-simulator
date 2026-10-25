@@ -292,7 +292,8 @@ export interface ChartTooltipBaseProps {
   /**
    * Hovered position. BarChart: the category index. LineChart: the
    * index into the sorted union of x values of tooltip-visible series,
-   * which is the point index when every series shares one x set.
+   * which is the point index when every series shares one x set. On a
+   * LineChart with no series, the union of the named areas' x values.
    */
   index: number;
   values: ChartTooltipValue[];

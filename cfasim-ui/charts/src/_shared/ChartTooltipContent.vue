@@ -60,7 +60,8 @@ const rows = computed(() => {
       />
       <span v-if="a.label" class="chart-tooltip-name">{{ a.label }}</span>
       <span class="chart-tooltip-value">
-        {{ fmt(a.lower) }}–{{ fmt(a.upper) }}
+        <template v-if="a.value !== undefined">{{ fmt(a.value) }}</template>
+        <template v-else>{{ fmt(a.lower) }}–{{ fmt(a.upper) }}</template>
       </span>
     </div>
     <div

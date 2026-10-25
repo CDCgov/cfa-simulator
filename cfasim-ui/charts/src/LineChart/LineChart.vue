@@ -169,6 +169,12 @@ export interface Area {
   x?: LineChartXInput;
   /** How both edges connect their points. Defaults to the chart's `curve`. */
   curve?: LineCurve;
+  /**
+   * The area's own value at each point, parallel to `upper`/`lower`. When
+   * set, the tooltip shows it instead of the band's range, as for a layer
+   * of a stacked area chart (see `stackAreas`).
+   */
+  value?: LineChartData;
   color?: string;
   opacity?: number;
   /** Label shown in the inline legend. */
@@ -1444,14 +1450,38 @@ function toCsv(): string {
  * series on different x sets each contribute their points instead of
  * the first series deciding where the tooltip may stop. When every
  * series shares one x set this is that set, and the index matches the
- * point index.
+ * point index. A chart with no series at all (a stacked area chart)
+ * rests on the x values of its tooltip areas instead.
  */
 const hoverGrid = computed<number[]>(() => {
   const visible = tooltipSeries.value;
+  if (allSeries.value.length === 0) return tooltipAreaXs.value;
   return visible.length === allSeries.value.length
     ? allSeriesXs.value
     : sortedSeriesXs(visible.map((t) => t.series));
 });
+
+/** Sorted union of the x values of the areas that show in the tooltip. */
+const tooltipAreaXs = computed(() => {
+  const xs = new Set<number>();
+  for (const a of allAreas.value) {
+    if (!isTooltipArea(a)) continue;
+    const len = Math.min(a.upper.length, a.lower.length);
+    for (let i = 0; i < len; i++) {
+      const x = areaXAt(a, i);
+      if (isFinite(x)) xs.add(x);
+    }
+  }
+  return Array.from(xs).sort((a, b) => a - b);
+});
+
+function isTooltipArea(a: ResolvedArea): boolean {
+  return (
+    !!(a.tooltipLabel || a.legend) &&
+    a.showInTooltip !== false &&
+    !isHidden(a.legend)
+  );
+}
 
 /** Series that take part in the tooltip, with their `allSeries` index. */
 const tooltipSeries = computed(() => {
@@ -1622,8 +1652,8 @@ const hoverAreas = computed<ChartTooltipInterval[]>(() => {
   if (targetX === null) return [];
   const out: ChartTooltipInterval[] = [];
   allAreas.value.forEach((a, ai) => {
+    if (!isTooltipArea(a)) return;
     const label = a.tooltipLabel || a.legend;
-    if (!label || a.showInTooltip === false || isHidden(a.legend)) return;
     const len = Math.min(a.upper.length, a.lower.length);
     const sorted = areaXOrder.value[ai];
     // Unlike series, an area shows nothing outside the x span it covers.
@@ -1636,9 +1666,12 @@ const hoverAreas = computed<ChartTooltipInterval[]>(() => {
     const lower = Number(a.lower[i]);
     const upper = Number(a.upper[i]);
     if (!isFinite(lower) || !isFinite(upper)) return;
+    const value = a.value ? Number(a.value[i]) : undefined;
+    if (value !== undefined && !isFinite(value)) return;
     out.push({
       lower: Math.min(lower, upper),
       upper: Math.max(lower, upper),
+      value,
       color: a.color ?? "currentColor",
       label,
     });
