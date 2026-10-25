@@ -1,5 +1,3 @@
-import { sprintf } from "sprintf-js";
-
 /**
  * Named number-format presets, modelled on Streamlit's number column formats.
  * - `plain` — `String(value)` (no grouping)
@@ -20,8 +18,8 @@ export type NumberFormatPreset =
  * A number format specifier:
  * - A {@link NumberFormatPreset} name, optionally with `:N` digits suffix
  *   (e.g. `"percent:1"`, `"compact:2"`)
- * - A printf-style format string (must contain a `%` placeholder, parsed
- *   by sprintf-js — e.g. `"%.2f"`, `"%05d"`)
+ * - A printf-style format string (must contain a `%` placeholder, see
+ *   {@link formatPrintf}: e.g. `"%.2f"`, `"%05d"`)
  * - A function `(value) => string` for full control
  *
  * Strings that contain no `%` and don't match a preset throw at format
@@ -106,6 +104,102 @@ function formatPreset(
   }
 }
 
+const PRINTF_SPEC = /^%([-+ 0]*)(\d+)?(?:\.(\d+))?([a-zA-Z%])/;
+
+/**
+ * Substitute `value` into every placeholder of a printf-style string.
+ *
+ * Supported: `%[flags][width][.precision]type` with flags `-` (left-align),
+ * `+` (always sign), ` ` (space for positive), `0` (zero-pad); types `d`/`i`
+ * (truncate to integer), `f` (fixed; raw value without a precision), `e`/`E`
+ * (exponential), `g` (`toPrecision`), `s` (`String`, precision truncates),
+ * and `%%` for a literal percent sign. A `%` that does not start one of
+ * these, or any other conversion letter, throws, as sprintf-js did; this
+ * replaced sprintf-js and prints the same as it did for every supported
+ * conversion, except that `%d` of a negative fraction is `0` rather than
+ * sprintf-js's `-0`.
+ */
+export function formatPrintf(format: string, value: number): string {
+  let out = "";
+  let i = 0;
+  while (i < format.length) {
+    const at = format.indexOf("%", i);
+    if (at === -1) {
+      out += format.slice(i);
+      break;
+    }
+    out += format.slice(i, at);
+    const match = PRINTF_SPEC.exec(format.slice(at));
+    if (!match) {
+      throw new Error(
+        `formatNumber: malformed printf placeholder at index ${at} in ${JSON.stringify(format)}`,
+      );
+    }
+    const [spec, flags, width, precision, type] = match;
+    out += formatPlaceholder(format, value, flags, width, precision, type);
+    i = at + spec.length;
+  }
+  return out;
+}
+
+function formatPlaceholder(
+  format: string,
+  value: number,
+  flags: string,
+  width: string | undefined,
+  precision: string | undefined,
+  type: string,
+): string {
+  if (type === "%") return "%";
+  const p = precision === undefined ? undefined : Number(precision);
+  let abs = Math.abs(value);
+  let body: string;
+  switch (type) {
+    case "d":
+    case "i":
+      abs = Math.trunc(abs);
+      body = String(abs);
+      break;
+    case "f":
+      body = p === undefined ? String(abs) : abs.toFixed(p);
+      break;
+    case "e":
+    case "E":
+      body = p === undefined ? abs.toExponential() : abs.toExponential(p);
+      if (type === "E") body = body.toUpperCase();
+      break;
+    case "g":
+      body = p === undefined ? String(abs) : String(Number(abs.toPrecision(p)));
+      break;
+    case "s":
+      body = String(value);
+      if (p !== undefined) body = body.slice(0, p);
+      break;
+    default:
+      throw new Error(
+        `formatNumber: unsupported printf conversion "%${type}" in ${JSON.stringify(format)}`,
+      );
+  }
+  const numeric = type !== "s";
+  // `%d` of -0.4 is 0, not -0: the sign follows the truncated value.
+  const negative = numeric && value < 0 && abs !== 0;
+  const sign = !numeric
+    ? ""
+    : negative
+      ? "-"
+      : flags.includes("+")
+        ? "+"
+        : flags.includes(" ")
+          ? " "
+          : "";
+  const w = width === undefined ? 0 : Number(width);
+  const pad = w - sign.length - body.length;
+  if (pad <= 0) return sign + body;
+  if (flags.includes("-")) return sign + body + " ".repeat(pad);
+  if (flags.includes("0")) return sign + "0".repeat(pad) + body;
+  return " ".repeat(pad) + sign + body;
+}
+
 /**
  * Format a number using a preset name, a printf-style format string, or a
  * custom function. Non-finite values (NaN, ±Infinity) are returned as
@@ -120,7 +214,7 @@ export function formatNumber(value: number, format?: NumberFormat): string {
   if (typeof format === "function") return format(value);
   // printf strings always contain a `%` placeholder; everything else must
   // be a recognized preset (with an optional `:N` digits suffix).
-  if (format.includes("%")) return sprintf(format, value);
+  if (format.includes("%")) return formatPrintf(format, value);
   const parsed = parsePreset(format);
   if (!parsed) {
     const names = [...PRESET_NAMES].join(", ");
