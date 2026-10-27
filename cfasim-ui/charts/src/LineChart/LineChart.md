@@ -13,6 +13,11 @@ keywords:
     whiskers,
     calibration,
     marker,
+    rule,
+    reference line,
+    threshold,
+    horizontal line,
+    vertical line,
     svg,
   ]
 ---
@@ -1656,7 +1661,8 @@ anchor to the label: `pointer` picks `"curved"` (default), `"straight"`
 or `"none"`, and `arrow` caps the anchor end. Text supports `\n` for line
 breaks, `**bold**` and `_italic_` runs (they compose: `**_both_**`).
 Multi-line callouts attach to whichever edge of the text faces the anchor,
-so the pointer never cuts through the lines.
+so the pointer never cuts through the lines. For a horizontal or vertical
+reference line, see [Reference lines](#reference-lines).
 
 The label and line each get a legibility outline in the page background
 color: `outlineColor` / `outlineWidth` style the line's halo and are the
@@ -1744,10 +1750,75 @@ Use `chart-padding` to reserve room outside the plot so annotations (or
 any other overlay) don't clip the data area. It accepts a number (same on
 all sides) or an object with `top`, `right`, `bottom`, `left`.
 
-### Rules
+### Reference lines
 
-Set `pointer` to one of the rule values to replace the connector with a
-straight line through the anchor:
+Draw a reference line (a horizontal or vertical rule), such as a threshold
+or an event date, with an annotation whose `pointer` is `"ruleY"`
+(horizontal, at `y`) or `"ruleX"` (vertical, at `x`). The line spans the
+whole plot; the other coordinate only places the label. Pass `text: ""`
+for a line without a label.
+
+<ComponentDemo>
+  <LineChart
+    :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
+    :annotations="[
+      {
+        x: 0,
+        y: 20,
+        offset: { x: 4, y: -6 },
+        text: 'Capacity',
+        pointer: 'ruleY',
+        lineDash: '4 3',
+      },
+      {
+        x: 4,
+        y: 2,
+        offset: { x: 6, y: 0 },
+        text: 'Intervention',
+        pointer: 'ruleX',
+      },
+    ]"
+    :chart-padding="{ top: 24, right: 24 }"
+    :height="240"
+    x-label="Days"
+    y-label="Cases"
+    :menu="false"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :data="[0, 4, 8, 15, 22, 30, 28, 20, 12, 5, 2]"
+  :annotations="[
+    {
+      x: 0,
+      y: 20,
+      offset: { x: 4, y: -6 },
+      text: 'Capacity',
+      pointer: 'ruleY',
+      lineDash: '4 3',
+    },
+    {
+      x: 4,
+      y: 2,
+      offset: { x: 6, y: 0 },
+      text: 'Intervention',
+      pointer: 'ruleX',
+    },
+  ]"
+  :chart-padding="{ top: 24, right: 24 }"
+  :height="240"
+  x-label="Days"
+  y-label="Cases"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+All the rule values replace the connector with a straight line through
+the anchor:
 
 - `"ruleX"`: vertical line spanning the plot height at the annotation's `x`.
 - `"ruleY"`: horizontal line spanning the plot width at the annotation's `y`.
