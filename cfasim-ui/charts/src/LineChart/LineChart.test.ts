@@ -3578,6 +3578,70 @@ describe("LineChart", () => {
       expect(wrapper.find('[data-testid="marker-line"]').exists()).toBe(true);
     });
 
+    it("keeps the tooltip up while the pointer is over a marker's hit line", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          ...baseProps,
+          markers: [{ x: 5, label: "Isolation" }],
+          tooltipTrigger: "hover" as const,
+        },
+        attachTo: document.body,
+      });
+      const overlay = wrapper.find('[data-testid="chart-overlay"]');
+      const hit = wrapper.find('[data-testid="marker-hit"]');
+      const lastHover = () => {
+        const events = wrapper.emitted("hover") ?? [];
+        return events.length ? events[events.length - 1][0] : undefined;
+      };
+      const hovering = { index: expect.any(Number) };
+
+      await overlay.trigger("mousemove", { clientX: 300, clientY: 50 });
+      expect(lastHover()).toEqual(hovering);
+      // Crossing from the overlay onto the hit line is not a leave...
+      await overlay.trigger("mouseleave", { relatedTarget: hit.element });
+      expect(lastHover()).toEqual(hovering);
+      // ...the hit line hovers like the overlay, and crossing back is no
+      // leave either.
+      await hit.trigger("mousemove", { clientX: 320, clientY: 50 });
+      expect(lastHover()).toEqual(hovering);
+      await hit.trigger("mouseleave", { relatedTarget: overlay.element });
+      expect(lastHover()).toEqual(hovering);
+      // Leaving the hit line for anything else hides the tooltip.
+      await hit.trigger("mouseleave");
+      expect(lastHover()).toBeNull();
+      wrapper.unmount();
+    });
+
+    it("hides the tooltip for the length of a marker drag", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          ...baseProps,
+          markers: [{ x: 5, label: "Isolation" }],
+          tooltipTrigger: "hover" as const,
+        },
+        attachTo: document.body,
+      });
+      const hit = wrapper.find('[data-testid="marker-hit"]');
+      const hovers = () => wrapper.emitted("hover") ?? [];
+      const last = () => hovers()[hovers().length - 1][0];
+
+      await hit.trigger("mousemove", { clientX: 320, clientY: 50 });
+      expect(last()).toEqual({ index: expect.any(Number) });
+
+      await hit.trigger("pointerdown", { clientX: 320, button: 0 });
+      expect(last()).toBeNull();
+      // The captured pointer's moves reach the hit line, and say nothing.
+      const before = hovers().length;
+      await hit.trigger("mousemove", { clientX: 340, clientY: 50 });
+      expect(hovers().length).toBe(before);
+
+      window.dispatchEvent(new MouseEvent("pointerup", { clientX: 340 }));
+      await wrapper.vm.$nextTick();
+      await hit.trigger("mousemove", { clientX: 340, clientY: 50 });
+      expect(last()).toEqual({ index: expect.any(Number) });
+      wrapper.unmount();
+    });
+
     it("emits update:markers and markerDrag while dragging, markerDragEnd on release", async () => {
       const wrapper = mount(LineChart, {
         props: { ...baseProps, markers: [{ x: 5, label: "Isolation" }] },

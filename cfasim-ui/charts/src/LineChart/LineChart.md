@@ -1947,7 +1947,8 @@ Drag the lines below (or focus one and use the arrow keys). While a
 marker is dragged it shows its current `x` just above the x axis,
 formatted like the x axis or through `valueFormat` and styled with
 `valueStyle`, `valueOutlineColor` / `valueOutlineWidth` and
-`valueBlendMode`; set `showValueOnDrag: false` to hide it:
+`valueBlendMode`; set `showValueOnDrag: false` to hide it. The tooltip
+stays up over a marker's line and hides while one is dragged:
 
 <ComponentDemo>
   <LineChart
@@ -1959,6 +1960,7 @@ formatted like the x axis or through `valueFormat` and styled with
     :height="260"
     x-label="Days"
     y-label="Count"
+    tooltip-trigger="hover"
   />
   <p class="marker-demo-readout">
     Isolation: day {{ isolation.toFixed(1) }} · Recovery: day
@@ -2008,6 +2010,7 @@ const markers = computed({
   :height="260"
   x-label="Days"
   y-label="Count"
+  tooltip-trigger="hover"
 />
 <p>
   Isolation: day {{ isolation.toFixed(1) }} · Recovery: day

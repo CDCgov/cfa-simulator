@@ -2189,12 +2189,31 @@ function emitMarkerUpdate(index: number, internalX: number, final: boolean) {
   else emit("markerDrag", payload);
 }
 
+// The marker hit lines sit over the overlay, so hovering a marker's x used
+// to leave the overlay and hide the tooltip. Both surfaces share the hover
+// handlers, crossing between them is not a leave, and a drag hides the
+// tooltip until the pointer moves again after the drop.
+const isHoverSurface = (target: EventTarget | null) =>
+  target instanceof Element &&
+  target.classList.contains("line-chart-hover-surface");
+const hoverHandlers = {
+  mousemove: (e: MouseEvent) => {
+    if (!markerDragState.value) overlayHandlers.mousemove(e);
+  },
+  mouseleave: (e: MouseEvent) => {
+    if (!isHoverSurface(e.relatedTarget)) overlayHandlers.mouseleave();
+  },
+  click: overlayHandlers.click,
+};
+const plotHandlers = { ...overlayHandlers, ...hoverHandlers };
+
 function onMarkerPointerDown(index: number, e: PointerEvent) {
   if (e.pointerType === "mouse" && e.button !== 0) return;
   const m = (props.markers ?? [])[index];
   if (!m || m.draggable === false) return;
   e.preventDefault();
   e.stopPropagation();
+  if (hoverIndex.value !== null) overlayHandlers.mouseleave();
   try {
     (e.currentTarget as Element | null)?.setPointerCapture?.(e.pointerId);
   } catch {
@@ -2583,13 +2602,14 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
         <rect
           v-if="hasTooltipSlot || zoom"
           data-testid="chart-overlay"
+          class="line-chart-hover-surface"
           :x="padding.left"
           :y="padding.top"
           :width="innerW"
           :height="innerH"
           fill="transparent"
           style="cursor: crosshair; touch-action: pan-y"
-          v-on="overlayHandlers"
+          v-on="plotHandlers"
         />
         <!-- annotations (top layer) -->
         <ChartAnnotations
@@ -2672,7 +2692,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           <line
             v-if="m.draggable"
             data-testid="marker-hit"
-            class="line-chart-marker-hit"
+            class="line-chart-marker-hit line-chart-hover-surface"
             :x1="m.px"
             :y1="m.hitTop"
             :x2="m.px"
@@ -2688,6 +2708,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             :aria-valuenow="m.ariaNow"
             :aria-valuetext="m.ariaText"
             style="cursor: ew-resize; touch-action: none"
+            v-on="hoverHandlers"
             @pointerdown="onMarkerPointerDown(m.index, $event)"
             @keydown="onMarkerKeydown(m.index, $event)"
           />

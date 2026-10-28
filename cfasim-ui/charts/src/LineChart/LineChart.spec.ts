@@ -50,6 +50,40 @@ test("Expand fills the viewport even under a transformed ancestor", async ({
   );
 });
 
+test("the tooltip stays up over a marker's line", async ({ page }) => {
+  await page.goto("./cfasim-ui/charts/line-chart");
+  const hit = page.locator('[data-testid="marker-hit"]').first();
+  await expect(hit).toBeAttached();
+  await hit.scrollIntoViewIfNeeded();
+  const box = (await hit.boundingBox())!;
+  const chart = page
+    .locator(".line-chart-wrapper")
+    .filter({ has: page.locator('[data-testid="marker-hit"]') })
+    .first();
+  const tooltip = chart.locator(".chart-tooltip-content");
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height * 0.75;
+
+  await page.mouse.move(x - 40, y);
+  await page.mouse.move(x - 30, y);
+  await expect(tooltip).toBeVisible();
+
+  // Onto the marker's hit line, which sits over the overlay.
+  await page.mouse.move(x, y);
+  expect(
+    await page.evaluate(
+      ([px, py]) =>
+        document.elementFromPoint(px, py)?.getAttribute("data-testid"),
+      [x, y],
+    ),
+  ).toBe("marker-hit");
+  await expect(tooltip).toBeVisible();
+
+  // Off the plot, below the axis, hides it as before.
+  await page.mouse.move(x, box.y + box.height + 60);
+  await expect(tooltip).toBeHidden();
+});
+
 test("markers drag along the x-axis and update the bound model", async ({
   page,
 }) => {
