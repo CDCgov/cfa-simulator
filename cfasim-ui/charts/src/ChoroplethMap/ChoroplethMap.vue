@@ -8,6 +8,7 @@ import {
   onUnmounted,
   toRaw,
   useSlots,
+  onBeforeUpdate,
 } from "vue";
 import {
   geoPath,
@@ -655,12 +656,18 @@ const tooltipChildRef = ref<InstanceType<typeof ChoroplethTooltip> | null>(
   null,
 );
 const slots = useSlots();
-// Slot/prop presence doesn't change at runtime, so this is effectively
-// computed once. Used to gate the teleported tooltip and the SVG <title>
-// (the native-tooltip half of the per-feature name; the aria-label half is
+// Slots are not reactive, but a parent that adds or drops its #tooltip slot
+// (a narrow layout trading the float for a panel, say) re-renders this
+// component with the new slots in place before `beforeUpdate`, so presence
+// is re-read there. Gates the teleported tooltip and the SVG <title> (the
+// native-tooltip half of the per-feature name; the aria-label half is
 // unconditional).
+const hasTooltipSlot = ref(!!slots.tooltip);
+onBeforeUpdate(() => {
+  hasTooltipSlot.value = !!slots.tooltip;
+});
 const hasInteractiveTooltip = computed(
-  () => !!props.tooltipTrigger || !!props.tooltipFormat || !!slots.tooltip,
+  () => !!props.tooltipTrigger || !!props.tooltipFormat || hasTooltipSlot.value,
 );
 
 /**

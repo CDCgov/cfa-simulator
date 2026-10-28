@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
+import { defineComponent, h, nextTick, ref } from "vue";
 import ChoroplethMap from "./ChoroplethMap.vue";
 import {
   autoUnmount,
@@ -729,6 +730,63 @@ describe("ChoroplethMap", () => {
     await firstPath.trigger("mouseout");
     expect(wrapper.emitted("stateHover")).toHaveLength(2);
     expect(wrapper.emitted("stateHover")![1][0]).toBeNull();
+  });
+
+  it("turns the tooltip on and off as the parent adds or drops its #tooltip slot", async () => {
+    const show = ref(true);
+    const Parent = defineComponent({
+      setup() {
+        return () =>
+          h(
+            ChoroplethMap,
+            {
+              topology: statesTopo,
+              width: 600,
+              height: 400,
+              data: [{ id: "06", value: 42 }],
+            },
+            show.value
+              ? {
+                  tooltip: ({ name }: { name: string }) =>
+                    h("div", { class: "custom-tip" }, name),
+                }
+              : {},
+          );
+      },
+    });
+    const wrapper = mount(Parent, { attachTo: document.body });
+    const svg = wrapper.find("svg").element;
+    const california = () =>
+      wrapper
+        .findAll(".state-path")
+        .find((p) => p.attributes("data-feat-id") === "06")!;
+    expect(wrapper.findAll(".state-path").length).toBeGreaterThan(0);
+    expect(wrapper.find(".state-path title").exists()).toBe(false);
+    expect(
+      document.body.querySelector(".chart-tooltip-content"),
+    ).not.toBeNull();
+
+    // Dropping the slot: no remount, the <title> fallback comes back and
+    // the teleported tooltip goes.
+    show.value = false;
+    await nextTick();
+    await flushPromises();
+    expect(wrapper.find("svg").element).toBe(svg);
+    expect(wrapper.find(".state-path title").exists()).toBe(true);
+    expect(document.body.querySelector(".chart-tooltip-content")).toBeNull();
+
+    // Adding it back turns the tooltip on again.
+    show.value = true;
+    await nextTick();
+    await flushPromises();
+    expect(wrapper.find("svg").element).toBe(svg);
+    expect(wrapper.find(".state-path title").exists()).toBe(false);
+    await california().trigger("mouseover");
+    await flushPromises();
+    expect(document.body.querySelector(".custom-tip")?.textContent).toBe(
+      "California",
+    );
+    wrapper.unmount();
   });
 
   it("renders #tooltip slot content on hover and stays mounted on mouseout", async () => {
