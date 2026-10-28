@@ -395,6 +395,34 @@ test("default tooltip names rows and leaves unnamed fan lines out", async ({
   }
 });
 
+test("the tooltip keeps dark text on a light fallback without the theme", async ({
+  page,
+}) => {
+  await page.goto("./cfasim-ui/charts/line-chart");
+  // An unthemed host page with light text: the tokens are unset and the
+  // body's color would otherwise reach the tooltip by inheritance.
+  await page.evaluate(() => {
+    for (const token of ["--color-text", "--color-bg-0"]) {
+      document.documentElement.style.setProperty(token, "initial");
+    }
+    document.body.style.color = "rgb(255, 255, 255)";
+  });
+  const chart = page
+    .locator(".line-chart-wrapper")
+    .filter({ hasText: "90% interval" })
+    .first();
+  await chart.scrollIntoViewIfNeeded();
+  const box = (await chart
+    .locator("rect[fill='transparent']")
+    .first()
+    .boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const tooltip = chart.locator(".chart-tooltip-content");
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect(tooltip).toHaveCSS("color", "rgb(33, 37, 41)");
+});
+
 test("Save as SVG resolves theme colors to what the page shows", async ({
   page,
 }) => {

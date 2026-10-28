@@ -85,6 +85,9 @@ defineEmits<{
 .chart-tooltip-content {
   z-index: 100;
   background: var(--color-bg-0, #fff);
+  /* Set with the background, so an unthemed host page's own text color
+     (white on a dark band, say) cannot land on the white fallback. */
+  color: var(--color-text, #212529);
   border: 1px solid var(--color-border, #e5e7eb);
   border-radius: 0.375em;
   padding: 0.5em 0.75em;

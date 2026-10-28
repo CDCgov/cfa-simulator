@@ -86,7 +86,7 @@ defineExpose({
   bottom: 0;
   z-index: 2;
   background: var(--color-bg-0, #fff);
-  color: var(--color-text, inherit);
+  color: var(--color-text, #212529);
   border-top: 1px solid var(--color-border, #e5e7eb);
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.12);
   padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
