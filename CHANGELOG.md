@@ -1,6 +1,18 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.13.1] - 2026-10-28
+
+### Bug Fixes
+
+- **charts:** Keep the tooltip up over a marker's line
+- **charts:** Let ChoroplethMap's tooltip follow a slot added or dropped at runtime
+- **charts:** Give the tooltip a text color beside its background
+
+### Documentation
+
+- **charts:** Add a reference lines example to the LineChart docs
+
 ## [0.13.0] - 2026-10-25
 
 ### Bug Fixes

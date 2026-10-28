@@ -1,6 +1,6 @@
 {
   "name": "@cfasim-ui/server",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "type": "module",
   "description": "Local task-server integration for cfasim-ui: run long jobs with streamed progress and saved runs",
   "license": "Apache-2.0",
