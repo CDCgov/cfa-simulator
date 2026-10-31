@@ -99,6 +99,15 @@ if (globals) {
       <aside class="Sidebar" :inert="collapsed">
         <div class="SidebarScroll">
           <div class="SidebarHeader">
+            <div
+              v-if="$slots['sidebar-header-start']"
+              class="SidebarHeaderStart"
+            >
+              <slot name="sidebar-header-start" />
+            </div>
+            <div v-if="$slots['sidebar-header-end']" class="SidebarHeaderEnd">
+              <slot name="sidebar-header-end" />
+            </div>
             <button
               type="button"
               class="Toggle"
@@ -141,6 +150,9 @@ if (globals) {
           >
             <Icon icon="keyboard_double_arrow_right" size="sm" />
           </button>
+          <div v-if="$slots['topbar-start']" class="TopbarStart">
+            <slot name="topbar-start" />
+          </div>
           <TabsList class="TabsList" aria-label="Tabs">
             <TabsTrigger
               v-for="t in tabs"
@@ -159,6 +171,8 @@ if (globals) {
             />
           </TabsList>
           <div class="TabsBarEnd">
+            <slot name="topbar-end" />
+            <!-- `topbar` is the pre-slot-split name of topbar-end. -->
             <slot name="topbar" />
             <LightDarkToggle v-if="!hideTopbar" />
           </div>
@@ -181,7 +195,12 @@ if (globals) {
           >
             <Icon icon="keyboard_double_arrow_right" size="sm" />
           </button>
+          <div v-if="$slots['topbar-start']" class="TopbarStart">
+            <slot name="topbar-start" />
+          </div>
           <div class="TopbarEnd">
+            <slot name="topbar-end" />
+            <!-- `topbar` is the pre-slot-split name of topbar-end. -->
             <slot name="topbar" />
             <LightDarkToggle v-if="!hideTopbar" />
           </div>
@@ -275,6 +294,10 @@ if (globals) {
   margin-top: 0;
 }
 
+.SidebarHeader :deep(h2) {
+  margin: 0;
+}
+
 .Toggle {
   flex-shrink: 0;
   display: flex;
@@ -310,9 +333,40 @@ if (globals) {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: var(--space-2);
   flex-shrink: 0;
   height: var(--bar-height);
   margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-2)) 0 0;
+}
+
+/* Controls slotted into any header band size to the toggles. */
+.SidebarHeader,
+.Topbar,
+.TabsBar {
+  --input-height: var(--bar-control-size);
+  --button-height: var(--bar-control-size);
+  --button-padding-x: 0.75em;
+}
+
+.SidebarHeaderStart,
+.SidebarHeaderEnd,
+.TopbarStart,
+.TopbarEnd,
+.TabsBarEnd {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.SidebarHeaderStart {
+  flex: 1;
+}
+
+.SidebarHeaderEnd,
+.TopbarEnd,
+.TabsBarEnd {
+  margin-left: auto;
 }
 
 .Toggle--expand {
@@ -344,20 +398,10 @@ if (globals) {
 .Topbar {
   display: flex;
   align-items: center;
+  gap: var(--space-2);
   min-height: var(--bar-height);
   padding: 0 var(--space-4);
   flex-shrink: 0;
-}
-
-/* Controls in either bar's end slot size to the toggles. */
-.TopbarEnd,
-.TabsBarEnd {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  --input-height: var(--bar-control-size);
-  --button-height: var(--bar-control-size);
 }
 
 @container (min-width: 768px) {
@@ -431,6 +475,7 @@ if (globals) {
   flex-shrink: 0;
   display: flex;
   align-items: center;
+  gap: var(--space-2);
   min-height: var(--bar-height);
   border-bottom: 1px solid var(--color-border);
   padding: 0 var(--space-4);

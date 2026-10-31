@@ -118,6 +118,7 @@
   /* Component sizes (em — scales with font-size context) */
   --input-height: 2.5em;
   --button-height: 2.5em;
+  --button-padding-x: 1em;
   --sidebar-width: 400px;
   --toggle-size: 2.5rem;
 }

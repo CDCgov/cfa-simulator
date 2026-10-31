@@ -35,10 +35,31 @@ When the sidebar is collapsed it is marked [`inert`](https://developer.mozilla.o
 
 ## Slots
 
-| Slot      | Description                                |
-| --------- | ------------------------------------------ |
-| `sidebar` | Content rendered in the left sidebar panel |
-| `default` | Main content area                          |
+| Slot                   | Description                                                                                        |
+| ---------------------- | -------------------------------------------------------------------------------------------------- |
+| `sidebar`              | Content rendered in the left sidebar panel                                                         |
+| `sidebar-header-start` | Left side of the sidebar's header band, e.g. a pane title                                          |
+| `sidebar-header-end`   | Right side of the sidebar's header band, beside the collapse button                                |
+| `topbar-start`         | Left side of the main header: before the tabs, or alone without them                               |
+| `topbar-end`           | Right side of the main header, beside the light/dark toggle (`topbar` still works as the old name) |
+| `default`              | Main content area                                                                                  |
+
+Buttons, selects and text fields placed in the three header slots take the header's control height (28px), so they line up with the collapse and light/dark toggles:
+
+```vue
+<SidebarLayout :tabs="tabs">
+  <template #sidebar-header-start>
+    <h2>Parameters</h2>
+  </template>
+  <template #sidebar-header-end>
+    <Button variant="neutral" @click="reset">Reset</Button>
+  </template>
+  <template #topbar-end>
+    <Button variant="neutral" @click="exportCsv"><Icon icon="download" :size="16" /> Export</Button>
+  </template>
+  ...
+</SidebarLayout>
+```
 
 ## Props
 

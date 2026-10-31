@@ -26,6 +26,13 @@ describe("Button", () => {
     expect(wrapper.emitted("click")).toHaveLength(1);
   });
 
+  it("exposes the variant for styling, defaulting to primary", async () => {
+    const wrapper = mount(Button, { slots: { default: "Go" } });
+    expect(wrapper.attributes("data-variant")).toBe("primary");
+    await wrapper.setProps({ variant: "neutral" });
+    expect(wrapper.attributes("data-variant")).toBe("neutral");
+  });
+
   it("renders as different element via as prop", () => {
     const wrapper = mount(Button, {
       props: { as: "a" },

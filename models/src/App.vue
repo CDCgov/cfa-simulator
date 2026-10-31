@@ -31,7 +31,7 @@ watchEffect(() => {
     <template #sidebar>
       <div id="model-sidebar" class="model-sidebar"></div>
     </template>
-    <template #topbar>
+    <template #topbar-end>
       <label class="theme-label">
         Theme:
         <SelectBox

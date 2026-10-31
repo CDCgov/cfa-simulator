@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import {
   SidebarLayout,
+  Button,
   NumberInput,
   SelectBox,
   TextInput,
@@ -15,6 +16,15 @@ const vaccination = ref(false);
 const scenario = ref("baseline");
 const notes = ref("");
 const metric = ref("cases");
+
+function reset() {
+  population.value = 500;
+  duration.value = 30;
+  rate.value = 0.15;
+  vaccination.value = false;
+  scenario.value = "baseline";
+  notes.value = "";
+}
 
 const scenarios = [
   { value: "baseline", label: "Baseline" },
@@ -32,8 +42,13 @@ const sections = Array.from({ length: 8 }, (_, i) => i + 1);
 
 <template>
   <SidebarLayout>
-    <template #sidebar>
+    <template #sidebar-header-start>
       <h2>Parameters</h2>
+    </template>
+    <template #sidebar-header-end>
+      <Button variant="neutral" @click="reset">Reset</Button>
+    </template>
+    <template #sidebar>
       <NumberInput
         v-model="population"
         label="Population"

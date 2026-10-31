@@ -85,6 +85,59 @@ describe("SidebarLayout tabs", () => {
   });
 });
 
+describe("SidebarLayout header slots", () => {
+  const slots = {
+    "sidebar-header-start": '<h2 class="title">Parameters</h2>',
+    "sidebar-header-end": '<button class="reset">Reset</button>',
+    "topbar-start": '<span class="start">Start</span>',
+    "topbar-end": '<button class="export">Export</button>',
+  };
+
+  it("renders nothing for the header slots when they are not given", () => {
+    const wrapper = mount(SidebarLayout, { props: { tabs } });
+    expect(wrapper.find(".SidebarHeaderStart").exists()).toBe(false);
+    expect(wrapper.find(".SidebarHeaderEnd").exists()).toBe(false);
+    expect(wrapper.find(".TopbarStart").exists()).toBe(false);
+  });
+
+  it("lays the sidebar header out as start, end, collapse button", () => {
+    const wrapper = mount(SidebarLayout, { slots });
+    const header = wrapper.find(".SidebarHeader");
+    const order = Array.from(header.element.children).map(
+      (el) => el.className.split(" ")[0],
+    );
+    expect(order).toEqual(["SidebarHeaderStart", "SidebarHeaderEnd", "Toggle"]);
+    expect(header.find(".SidebarHeaderStart .title").exists()).toBe(true);
+    expect(header.find(".SidebarHeaderEnd .reset").exists()).toBe(true);
+  });
+
+  it("still renders the legacy topbar slot at the end", () => {
+    const wrapper = mount(SidebarLayout, {
+      slots: { topbar: '<button class="legacy">Legacy</button>' },
+    });
+    expect(wrapper.find(".TopbarEnd .legacy").exists()).toBe(true);
+  });
+
+  it("places topbar-start and topbar-end at either end of the plain topbar", () => {
+    const wrapper = mount(SidebarLayout, { slots });
+    const bar = wrapper.find(".Topbar");
+    expect(bar.find(".TopbarStart .start").exists()).toBe(true);
+    expect(bar.find(".TopbarEnd .export").exists()).toBe(true);
+    expect(wrapper.find(".TabsBar").exists()).toBe(false);
+  });
+
+  it("places topbar-start before the tabs and topbar-end after them", () => {
+    const wrapper = mount(SidebarLayout, { props: { tabs }, slots });
+    const bar = wrapper.find(".TabsBar");
+    const order = Array.from(bar.element.children).map((el) => el.className);
+    expect(order.indexOf("TopbarStart")).toBeLessThan(
+      order.findIndex((c) => c.includes("TabsList")),
+    );
+    expect(bar.find(".TopbarStart .start").exists()).toBe(true);
+    expect(bar.find(".TabsBarEnd .export").exists()).toBe(true);
+  });
+});
+
 describe("SidebarLayout collapse accessibility", () => {
   it("keeps the sidebar interactive and hides the expand button when expanded", () => {
     const wrapper = mount(SidebarLayout);
