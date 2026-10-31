@@ -25,6 +25,19 @@ const dayMs = 24 * 60 * 60 * 1000
 const dateStart = Date.UTC(2024, 0, 1)
 const dateEnd = Date.UTC(2024, 11, 31)
 const dateRange = ref([Date.UTC(2024, 2, 1), Date.UTC(2024, 8, 30)])
+const periods = ref([
+  Date.UTC(2026, 4, 13),
+  Date.UTC(2026, 5, 8),
+  Date.UTC(2026, 8, 22),
+  Date.UTC(2026, 10, 5),
+])
+const formatLongDate = (ms) =>
+  new Date(ms).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  })
 const formatDate = (ms) =>
   new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" })
 </script>
@@ -279,6 +292,61 @@ Handles stay sorted, and each one is labeled by position for screen readers
 (`Age cutpoints (handle 2 of 3)`); validation errors name the failing handle
 the same way. `v-model:values` takes precedence over the range bindings if
 both are present.
+
+### Crowded labels
+
+Handle labels never leave the field and never overlap. Labels that would
+collide spread apart until each one is edge-aligned with its handle, and any
+that still do not fit stack into a row above (while dragging, the field keeps
+the extra row until the pointer is released, so it does not jump under the
+pointer). Drag the handles together to see it.
+
+<ComponentDemo>
+  <div style="width: 340px">
+    <NumberInput
+      v-model:values="periods"
+      label="Calibration / forecast period"
+      :min="Date.UTC(2026, 4, 13)"
+      :max="Date.UTC(2027, 0, 11)"
+      :step="24 * 60 * 60 * 1000"
+      :format="formatLongDate"
+      bar="segments"
+    />
+  </div>
+
+<template #code>
+
+```vue
+<script setup>
+import { ref } from "vue";
+const periods = ref([
+  Date.UTC(2026, 4, 13),
+  Date.UTC(2026, 5, 8),
+  Date.UTC(2026, 8, 22),
+  Date.UTC(2026, 10, 5),
+]);
+const formatLongDate = (ms) =>
+  new Date(ms).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+</script>
+
+<NumberInput
+  v-model:values="periods"
+  label="Calibration / forecast period"
+  :min="Date.UTC(2026, 4, 13)"
+  :max="Date.UTC(2027, 0, 11)"
+  :step="24 * 60 * 60 * 1000"
+  :format="formatLongDate"
+  bar="segments"
+/>
+```
+
+  </template>
+</ComponentDemo>
 
 ### Bar styles
 

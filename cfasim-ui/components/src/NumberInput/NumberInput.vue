@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, getCurrentInstance } from "vue";
+import {
+  ref,
+  watch,
+  computed,
+  onMounted,
+  onBeforeUnmount,
+  getCurrentInstance,
+} from "vue";
 import {
   SliderRoot,
   SliderTrack,
@@ -9,6 +16,7 @@ import {
 } from "reka-ui";
 import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import Hint from "../Hint/Hint.vue";
+import { layoutSliderLabels } from "./sliderLabels";
 import type { FieldProps } from "../_internal/field";
 import "../_internal/input.css";
 
@@ -505,10 +513,6 @@ function onSliderKeydown() {
   keyOrigin = [...sliderArrayLocal.value];
 }
 
-function onSliderPointerdown() {
-  keyOrigin = null;
-}
-
 function snapSliderArray(v: number[]): number[] {
   if (blockedRanges.value.length === 0) return v;
   const origin = keyOrigin;
@@ -658,6 +662,113 @@ onMounted(applyAriaBounds);
 watch([ariaBounds, () => sliderArrayLocal.value.length], applyAriaBounds, {
   flush: "post",
 });
+
+// Value labels are laid out from measured sizes (kept inside the container,
+// spread apart or stacked into rows when they collide) and written as CSS
+// variables, so a drag never re-renders for them. During a pointer drag the
+// row count is frozen, so the track never moves under the pointer; a label
+// that needs a new row overlaps until the release.
+let labelRows = 0;
+let pointerDragging = false;
+const LABEL_ROW_GAP_PX = 2;
+
+function layoutLabels() {
+  const container = sliderContainer.value;
+  if (!container) return;
+  // All reads before any writes, so a drag costs one layout.
+  const box = container.getBoundingClientRect();
+  const items: { el: HTMLElement; center: number; width: number }[] = [];
+  container.querySelectorAll<HTMLElement>(".slider-thumb").forEach((thumb) => {
+    const el = thumb.querySelector<HTMLElement>(".slider-current");
+    if (!el) return;
+    observeLabelSize(thumb);
+    const r = thumb.getBoundingClientRect();
+    items.push({
+      el,
+      center: r.left + r.width / 2 - box.left,
+      width: el.getBoundingClientRect().width,
+    });
+  });
+  const rowHeight = items[0]?.el.offsetHeight ?? 0;
+  const placements = layoutSliderLabels(items, box.width, {
+    maxRows: pointerDragging ? labelRows + 1 : undefined,
+  });
+  let rows = 0;
+  items.forEach(({ el, center, width }, i) => {
+    const { left, row } = placements[i];
+    el.style.setProperty("--label-dx", `${left - (center - width / 2)}px`);
+    el.style.setProperty("--label-row", String(row));
+    rows = Math.max(rows, row);
+  });
+  if (!pointerDragging) labelRows = rows;
+  container.style.setProperty(
+    "--label-extra",
+    `${labelRows * (rowHeight + LABEL_ROW_GAP_PX)}px`,
+  );
+}
+
+function onSliderPointerdown(e: PointerEvent) {
+  keyOrigin = null;
+  if (e.button !== 0) return;
+  pointerDragging = true;
+  window.addEventListener("pointerup", onLabelDragEnd);
+  window.addEventListener("pointercancel", onLabelDragEnd);
+}
+
+function stopLabelDrag() {
+  pointerDragging = false;
+  window.removeEventListener("pointerup", onLabelDragEnd);
+  window.removeEventListener("pointercancel", onLabelDragEnd);
+}
+
+function onLabelDragEnd() {
+  stopLabelDrag();
+  layoutLabels();
+}
+
+// Observes the container and every thumb: reka sizes thumbs after mount and
+// offsets them by that size, which moves them without a value change.
+let labelResize: ResizeObserver | undefined;
+const observedThumbs = new WeakSet<Element>();
+function observeLabelSize(el: Element) {
+  if (!labelResize || observedThumbs.has(el)) return;
+  observedThumbs.add(el);
+  labelResize.observe(el);
+}
+
+watch(
+  sliderContainer,
+  (el) => {
+    labelResize?.disconnect();
+    labelResize = undefined;
+    if (!el) return;
+    if (typeof ResizeObserver !== "undefined") {
+      labelResize = new ResizeObserver(() => layoutLabels());
+      labelResize.observe(el);
+    }
+    layoutLabels();
+  },
+  { flush: "post" },
+);
+onMounted(() => {
+  document.fonts?.ready.then(() => layoutLabels());
+});
+onBeforeUnmount(() => {
+  labelResize?.disconnect();
+  stopLabelDrag();
+});
+// Raw values and bounds as well as the text: a format coarser than the step,
+// or a new min/max, moves thumbs without changing any label.
+watch(
+  () => [
+    ...sliderArrayLocal.value,
+    sliderMin.value,
+    sliderMax.value,
+    ...sliderArrayLocal.value.map((v) => formatSliderValue(v)),
+  ],
+  layoutLabels,
+  { flush: "post" },
+);
 
 function onSliderUpdate(v: number[] | undefined) {
   if (!v) return;
@@ -819,14 +930,19 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
   display: flex;
   flex-direction: column;
   gap: 0.25em;
-  padding-top: 0.875em;
+  padding-top: calc(0.875em + var(--label-extra, 0px));
 }
 
 .slider-current {
   position: absolute;
   bottom: 100%;
   left: 50%;
-  transform: translateX(-50%);
+  /* --label-dx / --label-row come from layoutLabels(); a row is the label's
+     own height (line-height 1) plus the 2px gap. */
+  transform: translate(
+    calc(-50% + var(--label-dx, 0px)),
+    calc(var(--label-row, 0) * (-1em - 2px))
+  );
   margin-bottom: 2px;
   font-size: var(--font-size-xs);
   line-height: 1;

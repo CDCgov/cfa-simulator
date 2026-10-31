@@ -146,3 +146,66 @@ test("disabled ranges block drags and keyboard steps", async ({ page }) => {
   await page.mouse.up();
   await expect(thumbs.nth(1)).toHaveAttribute("aria-valuenow", "40");
 });
+
+test("crowded handle labels stay inside the field without overlapping", async ({
+  page,
+}) => {
+  await page.goto("./cfasim-ui/components/number-input#crowded-labels");
+  const slider = field(page, "Calibration / forecast period");
+  const thumbs = slider.getByRole("slider");
+  await expect(thumbs).toHaveCount(4);
+
+  const check = async () => {
+    const { box, labels, centers } = await slider
+      .locator(".slider-container")
+      .evaluate((el) => ({
+        box: el.getBoundingClientRect().toJSON(),
+        labels: [...el.querySelectorAll(".slider-current")].map((l) =>
+          l.getBoundingClientRect().toJSON(),
+        ),
+        centers: [...el.querySelectorAll(".slider-thumb")].map((t) => {
+          const r = t.getBoundingClientRect();
+          return r.left + r.width / 2;
+        }),
+      }));
+    for (const [i, a] of labels.entries()) {
+      // Each label still spans its own handle.
+      expect(a.left).toBeLessThanOrEqual(centers[i] + 0.5);
+      expect(a.right).toBeGreaterThanOrEqual(centers[i] - 0.5);
+      expect(a.left).toBeGreaterThanOrEqual(box.left - 0.5);
+      expect(a.right).toBeLessThanOrEqual(box.right + 0.5);
+      expect(a.top).toBeGreaterThanOrEqual(box.top - 0.5);
+      for (const b of labels.slice(i + 1)) {
+        const apart =
+          a.right <= b.left + 0.5 ||
+          b.right <= a.left + 0.5 ||
+          a.bottom <= b.top + 0.5 ||
+          b.bottom <= a.top + 0.5;
+        expect(apart).toBe(true);
+      }
+    }
+  };
+
+  // The first two handles start close enough to stack.
+  await check();
+  // Push the third handle onto the fourth at the track's max.
+  await thumbs.nth(2).focus();
+  await page.keyboard.press("End");
+  await check();
+
+  // A drag that crowds labels into a new row must not move the track under
+  // the pointer; the row appears on release.
+  await page.keyboard.press("Home");
+  await check();
+  const track = slider.locator(".slider-track");
+  const trackY = (await track.boundingBox())!.y;
+  const from = (await thumbs.nth(1).boundingBox())!;
+  const to = (await thumbs.nth(2).boundingBox())!;
+  const y = from.y + from.height / 2;
+  await page.mouse.move(from.x + from.width / 2, y);
+  await page.mouse.down();
+  await page.mouse.move(to.x + to.width + 2, y, { steps: 10 });
+  expect((await track.boundingBox())!.y).toBe(trackY);
+  await page.mouse.up();
+  await check();
+});
