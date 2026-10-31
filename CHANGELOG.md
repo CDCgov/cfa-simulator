@@ -1,6 +1,24 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.14.0] - 2026-10-31
+
+### Bug Fixes
+
+- **theme:** Wrap only shadow colors in light-dark() so shadows render
+
+### Features
+
+- **components:** Size SidebarLayout header controls to its toggles
+- **components:** Add header slots to SidebarLayout and a neutral Button
+- **components:** Add List and Menu components
+- **components:** Add restart_alt to the default icon set
+- **components:** Add handleColors to NumberInput slider
+
+### Refactor
+
+- **components:** Share field box and collapsible styles
+
 ## [0.13.1] - 2026-10-28
 
 ### Bug Fixes
