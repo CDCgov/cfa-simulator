@@ -42,6 +42,9 @@ interface Props extends FieldProps {
   // Per-segment colors for `bar="segments"`, cycled if shorter than the
   // segment count. Defaults to a ramp of --color-primary.
   segmentColors?: string[];
+  // Per-handle colors, cycled like `segmentColors`. Defaults to
+  // --color-primary. Works with any `bar` mode.
+  handleColors?: string[];
   // Intervals of the track the handles can't land in, left out of the drawn
   // track. Edges stay selectable unless they are the track's own min/max, so
   // [[0, 20]] on a 0 to 100 track allows 20 to 100. Drags snap to the nearest
@@ -586,6 +589,12 @@ function segmentColor(i: number, count: number): string {
   return `color-mix(in srgb, var(--color-primary) ${weight}%, var(--color-bg-3))`;
 }
 
+function handleStyle(i: number) {
+  const custom = props.handleColors;
+  if (!custom || custom.length === 0) return undefined;
+  return { "--handle-color": custom[i % custom.length] };
+}
+
 function trackPercent(v: number): number {
   const span = sliderMax.value - sliderMin.value;
   return Math.min(100, Math.max(0, ((v - sliderMin.value) / span) * 100));
@@ -763,6 +772,8 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
           v-for="(v, i) in sliderArrayLocal"
           :key="i"
           class="slider-thumb"
+          :class="{ 'slider-thumb-custom': handleColors?.length }"
+          :style="handleStyle(i)"
           :aria-label="thumbAriaLabel(i)"
           :aria-valuetext="thumbValueText(v)"
           :aria-invalid="handleIsInvalid(i)"
@@ -897,11 +908,12 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
 }
 
 .slider-thumb {
+  --handle-fill: var(--handle-color, var(--color-primary));
   position: relative;
   display: block;
   width: 1em;
   height: 1em;
-  background-color: var(--color-primary);
+  background-color: var(--handle-fill);
   border-radius: var(--radius-full);
   cursor: pointer;
 }
@@ -910,11 +922,20 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
   background-color: var(--color-primary-hover);
 }
 
+/* Mixed toward the text color so custom handles darken in light mode and
+   lighten in dark mode, like --color-primary-hover. */
+.slider-thumb-custom:hover {
+  background-color: color-mix(
+    in srgb,
+    var(--handle-color) 85%,
+    var(--color-text)
+  );
+}
+
 .slider-thumb:active,
 .slider-thumb:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 4px
-    color-mix(in srgb, var(--color-primary) 25%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--handle-fill) 25%, transparent);
 }
 
 .slider-labels {

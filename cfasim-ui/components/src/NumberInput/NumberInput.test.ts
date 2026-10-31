@@ -1408,6 +1408,34 @@ describe("NumberInput", () => {
       expect(segments[2].attributes("style")).toContain("width: 35%");
     });
 
+    it("colors handles from handleColors, cycling the list", () => {
+      const wrapper = mount(NumberInput, {
+        props: {
+          values: [10, 40, 75],
+          handleColors: ["red", "blue"],
+          min: 0,
+          max: 100,
+        },
+      });
+      const thumbs = wrapper.findAll(".slider-thumb");
+      const colors = thumbs.map((t) =>
+        (t.element as HTMLElement).style.getPropertyValue("--handle-color"),
+      );
+      expect(colors).toEqual(["red", "blue", "red"]);
+      expect(thumbs[0].classes()).toContain("slider-thumb-custom");
+    });
+
+    it("leaves handles on the default color without handleColors", () => {
+      const wrapper = mount(NumberInput, {
+        props: { values: [10, 40], min: 0, max: 100 },
+      });
+      const thumb = wrapper.find(".slider-thumb");
+      expect(
+        (thumb.element as HTMLElement).style.getPropertyValue("--handle-color"),
+      ).toBe("");
+      expect(thumb.classes()).not.toContain("slider-thumb-custom");
+    });
+
     it("positions segments relative to a non-zero min", () => {
       const wrapper = mount(NumberInput, {
         props: {

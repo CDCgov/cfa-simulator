@@ -341,7 +341,8 @@ const barNone = ref(60);
 Segments default to a ramp of `--color-primary`, from full strength for the
 first band down to 45% for the last. Pass `segment-colors` to paint them
 yourself — any CSS colors, cycled if the array is shorter than the number of
-segments.
+segments. `handle-colors` does the same for the handles, in any `bar` mode;
+here each handle matches the band it closes.
 
 <ComponentDemo>
   <div style="width: 300px">
@@ -350,6 +351,11 @@ segments.
       label="Risk tiers"
       bar="segments"
       :segment-colors="[
+        'var(--color-success)',
+        'var(--color-warning)',
+        'var(--color-error)',
+      ]"
+      :handle-colors="[
         'var(--color-success)',
         'var(--color-warning)',
         'var(--color-error)',
@@ -373,6 +379,11 @@ const tiers = ref([25, 50, 80]);
   label="Risk tiers"
   bar="segments"
   :segment-colors="[
+    'var(--color-success)',
+    'var(--color-warning)',
+    'var(--color-error)',
+  ]"
+  :handle-colors="[
     'var(--color-success)',
     'var(--color-warning)',
     'var(--color-error)',

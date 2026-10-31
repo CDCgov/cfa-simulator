@@ -40,6 +40,17 @@ test("segmented bar paints one band per handle", async ({ page }) => {
   expect(bg).not.toBe("rgba(0, 0, 0, 0)");
 });
 
+test("handle-colors paints each handle", async ({ page }) => {
+  await page.goto("./cfasim-ui/components/number-input");
+  const thumbs = field(page, "Risk tiers").locator(".slider-thumb");
+  await expect(thumbs).toHaveCount(3);
+  const colors = await thumbs.evaluateAll((els) =>
+    els.map((el) => getComputedStyle(el).backgroundColor),
+  );
+  expect(new Set(colors).size).toBe(3);
+  for (const c of colors) expect(c).not.toBe("rgba(0, 0, 0, 0)");
+});
+
 test("keyboard moves a middle handle and repaints its segments", async ({
   page,
 }) => {
