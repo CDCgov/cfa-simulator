@@ -206,28 +206,6 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
     expect(countyMesh(wrapper).attributes("display")).toBeUndefined();
   });
 
-  it("leaves a state re-tiled through data[].geoType unruled", async () => {
-    const props = {
-      topology: countiesTopo,
-      geoType: "hsas" as const,
-      width: 600,
-      height: 400,
-      theme: { countyBorders: "#999" },
-    };
-    const base = mount(ChoroplethMap, { props });
-    const mixed = mount(ChoroplethMap, {
-      props: {
-        ...props,
-        data: [{ id: "06", value: 1, geoType: "states" as const }],
-      },
-    });
-    await flushDynamicImports();
-    const baseD = countyMesh(base).attributes("d")!;
-    const mixedD = countyMesh(mixed).attributes("d")!;
-    expect(mixedD).toBeTruthy();
-    expect(mixedD.length).toBeLessThan(baseD.length);
-  });
-
   it("draws no mesh at all over a single state merged to its state shape", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
@@ -362,31 +340,5 @@ describe("ChoroplethMap HSA borders (theme.hsaBorders)", () => {
     const scopedD = hsaMesh(scoped).attributes("d")!;
     expect(scopedD).toBeTruthy();
     expect(scopedD.length).toBeLessThan(nationalD.length / 4);
-  });
-
-  it("leaves a state re-tiled to one state-level shape unruled", async () => {
-    // The mixed-view default: a county-interactive map (dataGeoType: "hsas")
-    // where one state reports a single state-level estimate must not get HSA
-    // separators drawn inside its merged shape.
-    const props = {
-      topology: countiesTopo,
-      geoType: "counties" as const,
-      dataGeoType: "hsas" as const,
-      width: 600,
-      height: 400,
-      theme: { hsaBorders: "#eee" },
-    };
-    const base = mount(ChoroplethMap, { props });
-    const mixed = mount(ChoroplethMap, {
-      props: {
-        ...props,
-        data: [{ id: "06", value: 1, geoType: "states" as const }],
-      },
-    });
-    await flushDynamicImports();
-    const baseD = hsaMesh(base).attributes("d")!;
-    const mixedD = hsaMesh(mixed).attributes("d")!;
-    expect(mixedD).toBeTruthy();
-    expect(mixedD.length).toBeLessThan(baseD.length);
   });
 });

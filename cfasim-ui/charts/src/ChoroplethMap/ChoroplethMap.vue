@@ -33,6 +33,12 @@ import { select } from "d3-selection";
 // `applyFocus` can animate the zoom transform.
 import "d3-transition";
 import { feature, mesh, merge } from "topojson-client";
+import {
+  meshCounties,
+  countyBordersPredicate,
+  hsaBordersPredicate,
+  pad5,
+} from "./bordersMesh.js";
 import type {
   Topology,
   GeometryCollection,
@@ -2131,41 +2137,16 @@ const outlineMesh = computed<GeoJSON.MultiLineString | null>(() => {
   );
 });
 
-// Shared scaffolding for the two decor meshes (theme.countyBorders /
-// theme.hsaBorders): both mesh the topology's county geometries, scoped to
-// the selected state in single-state mode, differing only in which shared
-// arcs the predicate keeps. Null without a `counties` object — a
-// states-only or pre-merged HSA topology never draws either. States
-// re-tiled through `data[].geoType` are dropped before meshing: they are
-// not tiled at the base level, so the base-derived ruling would contradict
-// their own feature strokes — a state reported as one merged state-level
-// shape stays unruled inside.
-const pad5 = (id: unknown) => String(id).padStart(5, "0");
-function meshCounties(
-  predicate: (aId: unknown, bId: unknown) => boolean,
-): GeoJSON.MultiLineString | null {
-  const topo = usTopology.value as unknown as
-    { objects?: { counties?: NamedGeometry } } | undefined;
-  const counties = topo?.objects?.counties;
-  if (!counties) return null;
-  const scope = stateFips.value;
-  const overridden = geoOverrides.value;
-  const geometries = counties.geometries.filter((g) => {
-    const state = pad5(g.id).slice(0, 2);
-    return (!scope || state === scope) && !overridden.has(state);
-  });
-  return mesh(
-    topo as unknown as Topology,
-    { type: "GeometryCollection", geometries } as NamedGeometry,
-    (a, b) => a !== b && predicate(a.id, b.id),
-  );
-}
+// Decor meshes (theme.countyBorders / theme.hsaBorders): the filtering
+// lives in bordersMesh.ts; these computeds only gather the reactive inputs.
+const meshOptions = () => ({
+  scope: stateFips.value,
+  overridden: geoOverrides.value,
+});
 
-// County-boundary mesh (theme.countyBorders) over HSA and state-level
-// maps. Only arcs interior to a base feature are meshed (same HSA / same
-// state on both sides), so the base separators keep their own stroke.
-// Lazy: runs once a visible color resolves (HSA maps also wait for the
-// FIPS→HSA table). Skipped on county maps.
+// County-boundary mesh over HSA and state-level maps. Lazy: runs once a
+// visible color resolves (HSA maps also wait for the FIPS→HSA table).
+// Skipped on county maps.
 const countyBordersMesh = computed<GeoJSON.MultiLineString | null>(() => {
   if (!resolvedTheme.value.countyBorders) return null;
   if (props.geoType !== "hsas" && props.geoType !== "states") return null;
@@ -2177,31 +2158,26 @@ const countyBordersMesh = computed<GeoJSON.MultiLineString | null>(() => {
   } else {
     groupOf = (id) => pad5(id).slice(0, 2);
   }
-  return meshCounties((aId, bId) => {
-    // An undefined group (a county with no HSA mapping) is a hole in the
-    // base map — leave it unruled rather than drawing lines over the
-    // background wash.
-    const group = groupOf(aId);
-    return group !== undefined && group === groupOf(bId);
-  });
+  return meshCounties(
+    usTopology.value,
+    countyBordersPredicate(groupOf),
+    meshOptions(),
+  );
 });
 
-// HSA-boundary mesh (theme.hsaBorders) over county and state-level maps —
-// the county mesh's complement, giving a county-interactive map
-// (dataGeoType: "hsas") crisp HSA separators. State-crossing arcs are
-// excluded (they belong to the state layers); a mapped↔unmapped county
-// edge IS an HSA exterior, so it draws. Skipped on HSA maps.
+// HSA-boundary mesh over county and state-level maps, giving a
+// county-interactive map (dataGeoType: "hsas") crisp HSA separators.
+// Skipped on HSA maps.
 const hsaBordersMesh = computed<GeoJSON.MultiLineString | null>(() => {
   if (!resolvedTheme.value.hsaBorders) return null;
   if (props.geoType !== "counties" && props.geoType !== "states") return null;
   const table = hsaModule.value?.fipsToHsa;
   if (!table) return null;
-  return meshCounties((aId, bId) => {
-    const a = pad5(aId);
-    const b = pad5(bId);
-    if (a.slice(0, 2) !== b.slice(0, 2)) return false;
-    return table[a] !== table[b];
-  });
+  return meshCounties(
+    usTopology.value,
+    hsaBordersPredicate(table),
+    meshOptions(),
+  );
 });
 
 // County-borders LOD (countyBordersMinZoom): with zoom enabled the mesh
