@@ -1,6 +1,25 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.14.1] - 2026-10-31
+
+### Bug Fixes
+
+- **cli:** Run e2e wasm-pack builds sequentially to avoid install race
+- **components:** Drop hardcoded icon count from Icon e2e
+- **components:** Re-hover in List e2e until the actions show
+- **components:** Stop slider clicks opening the hint tooltip
+- **components:** Render FieldLabel as a span without a for target
+
+### Features
+
+- **components:** Avoid NumberInput slider label collisions
+- **components:** Add a compact PriorInput layout
+
+### Refactor
+
+- **charts:** Extract ChoroplethMap decor mesh filtering to bordersMesh
+
 ## [0.14.0] - 2026-10-31
 
 ### Bug Fixes
