@@ -54,6 +54,8 @@ const COMPONENT_NAMES = [
   "Grid",
   "Hint",
   "Icon",
+  "List",
+  "Menu",
   "MultiSelect",
   "NumberInput",
   "ParamEditor",

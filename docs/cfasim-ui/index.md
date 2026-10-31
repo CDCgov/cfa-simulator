@@ -26,6 +26,8 @@ cfasim-ui is the shared component and theming library you use to make simulators
 - [Grid](./components/grid) — responsive multi-column layout
 - [Hint](./components/hint) — inline tooltip for help text
 - [Icon](./components/icon) — inline-SVG Material Symbols icon (tree-shakeable, no webfont)
+- [List](./components/list) — item list with icons or color swatches, a collapsible header and action buttons
+- [Menu](./components/menu) — dropdown menu of actions or links, opened from an icon button or any trigger
 - [MultiSelect](./components/multi-select) — multi-select combobox with autocomplete
 - [NumberInput](./components/number-input) — number field with optional single, range, or multi-handle slider
 - [ParamEditor](./components/param-editor) — lazy-loaded JSON/TOML/YAML editor for parameter sets

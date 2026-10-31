@@ -1,0 +1,94 @@
+/* Shared row content for List and Menu. Global because Menu's content is
+ * portaled and both components must render identical rows. Rows set
+ * --option-line-height (the label line, matching the sm icon) so icons,
+ * swatches and buttons center on the first line. */
+
+.OptionSwatch {
+  flex: none;
+  width: 0.75em;
+  height: 0.75em;
+  margin-block: calc((var(--option-line-height, 1.25rem) - 0.75em) / 2);
+  border-radius: var(--radius-sm);
+}
+
+.OptionIcon {
+  color: var(--color-text-secondary);
+}
+
+/* Same box as an icon button, so end swatches line up with actions. */
+.OptionSwatchEnd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-block: calc((var(--option-line-height, 1.25rem) - 1.5rem) / 2);
+}
+
+.OptionText {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.OptionLabel,
+.OptionDescription {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.OptionDescription {
+  font-size: var(--font-size-xs);
+  line-height: 1rem;
+  color: var(--color-text-secondary);
+}
+
+.OptionDescriptionEnd {
+  flex: 0 1 auto;
+  line-height: var(--option-line-height, 1.25rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.OptionEnd {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+  flex: none;
+  max-width: 50%;
+  min-width: 0;
+}
+
+/* The 24px icon button used for List actions and the default Menu trigger. */
+.cfasim-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  min-height: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.cfasim-icon-button:hover,
+.cfasim-icon-button[data-state="open"] {
+  color: var(--color-text);
+  background-color: color-mix(in srgb, var(--color-text) 10%, transparent);
+}
+
+.cfasim-icon-button:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.cfasim-icon-button:disabled {
+  cursor: not-allowed;
+}

@@ -15,6 +15,16 @@ export type { IconSize } from "./Icon/Icon.vue";
 export { registerIcons, hasIcon } from "./Icon/registry";
 export type { IconRegistration, IconVariants } from "./Icon/registry";
 export { default as LightDarkToggle } from "./LightDarkToggle/LightDarkToggle.vue";
+export { default as List } from "./List/List.vue";
+export type {
+  ListActionVisibility,
+  ListDescriptionPosition,
+  ListOption,
+  ListProps,
+  ListSwatchPosition,
+} from "./List/List.vue";
+export { default as Menu } from "./Menu/Menu.vue";
+export type { MenuOption, MenuProps } from "./Menu/Menu.vue";
 export { default as MultiSelect } from "./MultiSelect/MultiSelect.vue";
 export type { MultiSelectOption } from "./MultiSelect/MultiSelect.vue";
 export { default as NumberInput } from "./NumberInput/NumberInput.vue";

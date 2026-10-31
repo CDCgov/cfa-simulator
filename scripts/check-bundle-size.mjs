@@ -45,11 +45,29 @@ const SCENARIOS = [
     lazyLimit: 200 * KB,
   },
   {
+    // List renders row/header menus through Menu, whose dropdown (reka
+    // DropdownMenu + popper) is a lazy chunk loaded when a Menu mounts.
+    name: "components: List only",
+    pkg: "@cfasim-ui/components",
+    imports: ["List"],
+    limit: 13 * KB,
+    lazyChunks: 1,
+    lazyLimit: 22 * KB,
+  },
+  {
+    name: "components: Menu only",
+    pkg: "@cfasim-ui/components",
+    imports: ["Menu"],
+    limit: 7 * KB,
+    lazyChunks: 1,
+    lazyLimit: 25 * KB,
+  },
+  {
     name: "components: everything",
     pkg: "@cfasim-ui/components",
     imports: "*",
     limit: 80 * KB,
-    lazyChunks: 3,
+    lazyChunks: 4,
   },
   {
     name: "charts: DataTable only",
