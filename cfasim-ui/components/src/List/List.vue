@@ -11,6 +11,7 @@ import Menu from "../Menu/Menu.vue";
 import type { MenuOption } from "../Menu/Menu.vue";
 import OptionContent from "../_internal/OptionContent.vue";
 import { useOptionLink } from "../_internal/optionLink";
+import "../_internal/collapsible.css";
 import "../_internal/option.css";
 
 export interface ListOption {
@@ -203,7 +204,7 @@ function rowMenu(item: ListOption, index: number) {
   >
     <div v-if="hasHeader" class="ListHeader ListRow">
       <CollapsibleTrigger v-if="collapsible" class="ListHeaderTrigger">
-        <span class="ListCaret" :data-open="isOpen || undefined" />
+        <span class="cfasim-caret" :data-open="isOpen || undefined" />
         <span :id="labelId" class="ListHeaderLabel">
           <slot name="header">{{ label }}</slot>
         </span>
@@ -246,7 +247,7 @@ function rowMenu(item: ListOption, index: number) {
         </slot>
       </span>
     </div>
-    <CollapsibleContent class="ListContent">
+    <CollapsibleContent class="cfasim-collapsible">
       <ul
         class="ListItems"
         :aria-labelledby="
@@ -380,50 +381,6 @@ function rowMenu(item: ListOption, index: number) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.ListCaret {
-  flex: none;
-  width: 0;
-  height: 0;
-  border-left: 0.35em solid currentColor;
-  border-top: 0.3em solid transparent;
-  border-bottom: 0.3em solid transparent;
-  transition: transform 0.15s;
-}
-
-.ListCaret[data-open] {
-  transform: rotate(90deg);
-}
-
-.ListContent {
-  overflow: hidden;
-}
-
-.ListContent[data-state="open"] {
-  animation: ListSlideDown 200ms ease-out;
-}
-
-.ListContent[data-state="closed"] {
-  animation: ListSlideUp 200ms ease-out;
-}
-
-@keyframes ListSlideDown {
-  from {
-    height: 0;
-  }
-  to {
-    height: var(--reka-collapsible-content-height);
-  }
-}
-
-@keyframes ListSlideUp {
-  from {
-    height: var(--reka-collapsible-content-height);
-  }
-  to {
-    height: 0;
-  }
 }
 
 .ListItems {

@@ -242,7 +242,11 @@ function clear() {
       :html-for="`${id}-start`"
     />
     <PopoverRoot v-model:open="open">
-      <div class="cfasim-date-anchor" role="group" v-bind="ariaProps">
+      <div
+        class="cfasim-date-anchor cfasim-input-box"
+        role="group"
+        v-bind="ariaProps"
+      >
         <input
           :id="`${id}-start`"
           v-model="startSide.text.value"

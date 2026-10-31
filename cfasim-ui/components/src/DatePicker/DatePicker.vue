@@ -195,7 +195,7 @@ function onSelect(date: DateValue | undefined) {
       :html-for="`${id}-input`"
     />
     <PopoverRoot v-model:open="open">
-      <div class="cfasim-date-anchor">
+      <div class="cfasim-date-anchor cfasim-input-box">
         <input
           :id="`${id}-input`"
           v-model="local"

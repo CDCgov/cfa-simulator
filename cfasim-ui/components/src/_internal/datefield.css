@@ -24,36 +24,10 @@
   margin-top: 0.25em;
 }
 
+/* Border, hover, focus and invalid states come from `.cfasim-input-box`. */
 .cfasim-date-anchor {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
   height: var(--input-height, 2.5em);
   padding: 0 0.25em 0 0.75em;
-  font-size: var(--font-size-sm);
-  background: var(--color-bg-0);
-  border: 1px solid var(--color-border);
-  border-radius: 0.375em;
-  transition:
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast);
-}
-
-.cfasim-date-anchor:hover {
-  border-color: var(--color-border-hover);
-}
-
-.cfasim-date-anchor:focus-within {
-  border-color: var(--color-border-focus);
-  box-shadow: var(--shadow-focus);
-}
-
-.cfasim-date-anchor:has([aria-invalid="true"]) {
-  border-color: var(--color-error);
-}
-
-.cfasim-date-anchor:has([aria-invalid="true"]):focus-within {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error) 25%, transparent);
 }
 
 .cfasim-date-input {

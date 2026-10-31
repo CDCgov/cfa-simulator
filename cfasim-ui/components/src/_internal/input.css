@@ -1,5 +1,8 @@
-/* Shared text-field skin for TextInput/NumberInput. Global (not scoped)
- * so both components can use one copy; prefixed to avoid consumer
+/* Shared text-field skin. `.cfasim-input` is a bare text input
+ * (TextInput/NumberInput); `.cfasim-input-box` is a box holding an input
+ * plus other controls (SelectBox autocomplete, MultiSelect, the date
+ * pickers), so it reacts to focus and invalid state within. Global (not
+ * scoped) so every field uses one copy; prefixed to avoid consumer
  * collisions. */
 
 .cfasim-input-label {
@@ -15,14 +18,9 @@
   justify-content: space-between;
 }
 
-.cfasim-input {
-  display: block;
-  width: 100%;
-  height: var(--input-height, 2.5em);
-  padding: 0 0.75em;
-  font-size: inherit;
+.cfasim-input,
+.cfasim-input-box {
   background-color: var(--color-bg-0);
-  color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: 0.375em;
   transition:
@@ -30,21 +28,41 @@
     box-shadow var(--transition-fast);
 }
 
-.cfasim-input:hover {
+.cfasim-input {
+  display: block;
+  width: 100%;
+  height: var(--input-height, 2.5em);
+  padding: 0 0.75em;
+  font-size: inherit;
+  color: var(--color-text);
+}
+
+.cfasim-input-box {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-size: var(--font-size-sm);
+}
+
+.cfasim-input:hover,
+.cfasim-input-box:hover {
   border-color: var(--color-border-hover);
 }
 
-.cfasim-input:focus {
+.cfasim-input:focus,
+.cfasim-input-box:focus-within {
   outline: none;
   border-color: var(--color-border-focus);
   box-shadow: var(--shadow-focus);
 }
 
-.cfasim-input[aria-invalid="true"] {
+.cfasim-input[aria-invalid="true"],
+.cfasim-input-box:has([aria-invalid="true"]) {
   border-color: var(--color-error);
 }
 
-.cfasim-input[aria-invalid="true"]:focus {
+.cfasim-input[aria-invalid="true"]:focus,
+.cfasim-input-box:has([aria-invalid="true"]):focus-within {
   border-color: var(--color-error);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error) 25%, transparent);
 }

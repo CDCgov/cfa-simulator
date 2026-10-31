@@ -15,6 +15,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import Icon from "../Icon/Icon.vue";
 import FieldLabel from "../_internal/FieldLabel.vue";
 import { useField, type FieldProps } from "../_internal/field";
+import "../_internal/input.css";
 import "../_internal/listbox.css";
 
 export interface MultiSelectOption {
@@ -82,7 +83,7 @@ function onInputKeydown(event: KeyboardEvent) {
       open-on-click
       class="multi-select-root"
     >
-      <ComboboxAnchor class="multi-select-anchor">
+      <ComboboxAnchor class="multi-select-anchor cfasim-input-box">
         <div ref="fieldRef" class="multi-select-field">
           <ul v-if="selectedOptions.length" class="multi-select-chips">
             <li
@@ -161,28 +162,9 @@ function onInputKeydown(event: KeyboardEvent) {
 }
 
 .multi-select-anchor {
-  display: flex;
-  align-items: center;
   gap: 0.25em;
   min-height: var(--input-height, 2.5em);
   padding: 0.25em 0.5em;
-  font-size: var(--font-size-sm);
-  background: var(--color-bg-0);
-  border: 1px solid var(--color-border);
-  border-radius: 0.375em;
-  transition:
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast);
-}
-
-.multi-select-anchor:hover {
-  border-color: var(--color-border-hover);
-}
-
-.multi-select-anchor:focus-within {
-  outline: none;
-  border-color: var(--color-border-focus);
-  box-shadow: var(--shadow-focus);
 }
 
 .multi-select-field {
