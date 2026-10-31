@@ -1,4 +1,15 @@
 import { test, expect } from "@playwright/test";
+import type { Locator } from "@playwright/test";
+
+// A hover can be lost between the pointer move and the style check when the
+// page re-lays out under load (seen in the pre-push run, 2026-10-31), so
+// re-hover until the actions show.
+async function hoverShows(row: Locator, actions: Locator) {
+  await expect(async () => {
+    await row.hover();
+    await expect(actions).toHaveCSS("opacity", "1", { timeout: 1000 });
+  }).toPass();
+}
 
 test.beforeEach(async ({ page }) => {
   await page.goto("./cfasim-ui/components/list");
@@ -29,8 +40,7 @@ test("hover actions appear on hover and focus", async ({ page }) => {
   const action = row.getByRole("button", { name: "More actions: Counties" });
   const actions = row.locator(".ListActions");
   await expect(actions).toHaveCSS("opacity", "0");
-  await row.hover();
-  await expect(actions).toHaveCSS("opacity", "1");
+  await hoverShows(row, actions);
 
   await page.mouse.move(0, 0);
   await expect(actions).toHaveCSS("opacity", "0");
@@ -45,11 +55,10 @@ test("custom action slot content hides with hover visibility", async ({
   const row = demo.getByRole("listitem").first();
   const actions = row.locator(".ListActions");
   await expect(actions).toHaveCSS("opacity", "0");
-  await row.hover();
+  await hoverShows(row, actions);
   await expect(
     row.getByRole("button", { name: "Edit Counties" }),
   ).toBeVisible();
-  await expect(actions).toHaveCSS("opacity", "1");
 });
 
 test("selects rows without the item action selecting", async ({ page }) => {
