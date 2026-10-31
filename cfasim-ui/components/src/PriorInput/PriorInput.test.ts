@@ -91,6 +91,10 @@ describe("PriorInput", () => {
     ]);
     expect(inputs[1].props("min")).toBe(0);
     expect(inputs[0].props("min")).toBeUndefined();
+    // One grid column per parameter.
+    expect(wrapper.find(".prior-group").attributes("style")).toContain(
+      "--prior-columns: 4",
+    );
   });
 
   it("restricts the family options with `families`", () => {
@@ -248,6 +252,41 @@ describe("PriorInput", () => {
     expect(wrapper.findAll("input")[0].attributes("inputmode")).toBe("numeric");
     expect(p.props("numberType")).toBe("float");
     expect(p.props("step")).toBe(0.05);
+  });
+
+  it("lays the dropdown and params out as grid columns when compact", () => {
+    const stacked = mount(PriorInput, { props: { modelValue: normal } });
+    expect(stacked.find(".prior-input").attributes("data-layout")).toBe(
+      "stacked",
+    );
+    const compact = mount(PriorInput, {
+      props: { label: "R0 prior", modelValue: normal, layout: "compact" },
+    });
+    expect(compact.find(".prior-input").attributes("data-layout")).toBe(
+      "compact",
+    );
+    // One column for the family, one per parameter.
+    expect(compact.find(".prior-group").attributes("style")).toContain(
+      "--prior-columns: 3",
+    );
+    expect(compact.find(".prior-group").classes()).not.toContain(
+      "prior-group-split",
+    );
+  });
+
+  it("moves more than three params to their own compact row", () => {
+    const wrapper = mount(PriorInput, {
+      props: {
+        layout: "compact",
+        modelValue: {
+          family: "TruncatedNormal",
+          params: { loc: 0, scale: 1, low: -2, high: 2 },
+        },
+      },
+    });
+    const group = wrapper.find(".prior-group");
+    expect(group.classes()).toContain("prior-group-split");
+    expect(group.attributes("style")).toContain("--prior-columns: 4");
   });
 
   it("shows every decimal of the current value, at least two", () => {

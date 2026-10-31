@@ -28,10 +28,20 @@ interface Props extends FieldProps {
   preview?: boolean;
   /** Show the prior as text, e.g. "Normal(loc = 0, scale = 1)". */
   summary?: boolean;
+  /**
+   * `"stacked"` (default) puts the family dropdown above the parameter
+   * fields. `"compact"` lays the dropdown and the parameter fields out in
+   * one row of equal-width columns under the field's label, each parameter
+   * named by description text beneath its field, and keeps the preview and
+   * summary below. Past three parameters the dropdown takes its own row and
+   * the parameters share the next one.
+   */
+  layout?: "stacked" | "compact";
 }
 
 const props = withDefaults(defineProps<Props>(), {
   distributions: () => NUMPYRO_DISTRIBUTIONS,
+  layout: "stacked",
 });
 
 const { labelId, ariaProps } = useField(props);
@@ -56,6 +66,17 @@ const options = computed(() =>
 // Looked up across every descriptor so a model whose family was filtered out
 // by `families` still shows its parameters.
 const current = computed(() => descriptorFor(props.distributions, model.value));
+
+// Grid columns: one per parameter, plus one for the family when the compact
+// layout keeps it on the same row (up to three parameters).
+const MAX_ROW_PARAMS = 3;
+const paramCount = computed(() => current.value?.params.length ?? 0);
+const splitRows = computed(() => paramCount.value > MAX_ROW_PARAMS);
+const columns = computed(() =>
+  props.layout === "compact" && !splitRows.value
+    ? paramCount.value + 1
+    : paramCount.value,
+);
 
 if (model.value === undefined && available.value.length > 0) {
   model.value = defaultPrior(available.value[0]);
@@ -94,7 +115,7 @@ function setParam(name: string, value: number | undefined) {
 </script>
 
 <template>
-  <div class="prior-input">
+  <div class="prior-input" :data-layout="layout">
     <FieldLabel
       class="prior-label"
       :label="label"
@@ -102,7 +123,13 @@ function setParam(name: string, value: number | undefined) {
       :hide-label="hideLabel"
       :hint="hint"
     />
-    <div role="group" class="prior-group" v-bind="ariaProps">
+    <div
+      role="group"
+      class="prior-group"
+      :class="{ 'prior-group-split': splitRows }"
+      :style="{ '--prior-columns': columns }"
+      v-bind="ariaProps"
+    >
       <SelectBox
         class="prior-family"
         :model-value="current ? keyOf(current) : model?.family"
@@ -155,20 +182,59 @@ function setParam(name: string, value: number | undefined) {
   gap: 0.5em;
 }
 
+/* One equal column per parameter. */
 .prior-params {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(var(--prior-columns), minmax(0, 1fr));
   gap: 0.5em;
 }
 
 .prior-params > * {
-  flex: 1 1 6em;
-  min-width: 5em;
+  min-width: 0;
 }
 
 .prior-summary {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   font-family: var(--font-family-mono);
+}
+
+[data-layout="compact"] .prior-group {
+  display: grid;
+  grid-template-columns: repeat(var(--prior-columns), minmax(0, 1fr));
+  align-items: start;
+}
+
+[data-layout="compact"] .prior-params {
+  display: contents;
+}
+
+[data-layout="compact"] .prior-group-split .prior-family,
+[data-layout="compact"] :deep(.prior-preview),
+[data-layout="compact"] .prior-summary {
+  grid-column: 1 / -1;
+}
+
+/* The trigger hugs its text by default; fill the column and clip instead. */
+[data-layout="compact"] .prior-family :deep(.select-trigger) {
+  width: 100%;
+  min-width: 0;
+}
+
+[data-layout="compact"]
+  .prior-family
+  :deep(.select-trigger > span:first-child) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Parameter names read as description text tucked under their fields. */
+[data-layout="compact"] .prior-params :deep(.cfasim-input-label-row) {
+  order: 1;
+  margin-top: -0.125em;
+  font-size: var(--font-size-xs);
+  line-height: 1.25;
+  color: var(--color-text-secondary);
 }
 </style>

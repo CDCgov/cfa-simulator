@@ -20,9 +20,9 @@ keywords:
 # PriorInput
 
 A field for choosing a prior distribution: a family dropdown plus one number
-input per parameter of the chosen family. The model is a `PriorSpec` whose
-`family` and `params` use numpyro's class and keyword names, so it can be
-handed straight to a Python model.
+input per parameter of the chosen family, in a row of equal-width columns.
+The model is a `PriorSpec` whose `family` and `params` use numpyro's class
+and keyword names, so it can be handed straight to a Python model.
 
 Switching family keeps any same-named parameters (`loc`, `scale`, …) and fills
 the rest from the family's defaults.
@@ -34,6 +34,8 @@ import { ref } from 'vue'
 const prior = ref({ family: "Normal", params: { loc: 0, scale: 1 } })
 const subset = ref({ family: "LogNormal", params: { loc: 0, scale: 0.5 } })
 const previewed = ref({ family: "Gamma", params: { concentration: 2, rate: 1 } })
+const compact = ref({ family: "LogNormal", params: { loc: 0.3, scale: 0.2 } })
+const truncated = ref({ family: "TruncatedNormal", params: { loc: 0, scale: 1, low: -2, high: 2 } })
 const custom = ref()
 const tagged = ref({ family: "Exponential", params: { scale: 2 } })
 const taggedDistributions = [
@@ -146,6 +148,38 @@ for instance).
 
 ```vue
 <PriorInput v-model="previewed" label="Infectious period" preview summary />
+```
+
+  </template>
+</ComponentDemo>
+
+### Compact layout
+
+`layout="compact"` puts the family dropdown and the parameter fields in one
+row of equal-width columns under the field's label, for a dense parameter
+panel. Each parameter's name reads as description text beneath its field, and
+the preview and summary stay below the row. With more than three parameters
+(`TruncatedNormal`) the dropdown takes its own row and the parameters share
+the next one. The demo is as wide as the content of a
+[SidebarLayout](./sidebar-layout) sidebar.
+
+<ComponentDemo>
+  <div style="width: calc(var(--sidebar-width) - 2 * var(--space-4))">
+    <PriorInput v-model="compact" label="R0 prior" layout="compact" preview summary />
+    <PriorInput v-model="truncated" label="Reporting delay" layout="compact" class="mt-4" />
+  </div>
+
+<template #code>
+
+```vue
+<PriorInput
+  v-model="compact"
+  label="R0 prior"
+  layout="compact"
+  preview
+  summary
+/>
+<PriorInput v-model="truncated" label="Reporting delay" layout="compact" />
 ```
 
   </template>
@@ -292,7 +326,8 @@ blank as a hint.
 
 - The field is a `role="group"` named by `label` (or `aria-label`); inside it,
   the family [SelectBox](./select-box) has a visually hidden "Family" label and
-  every parameter [NumberInput](./number-input) a visible one.
+  every parameter [NumberInput](./number-input) a visible one (shown beneath
+  the field in the compact layout).
 - The preview is an `<svg role="img">` labelled with the `summary` text.
 
 <!--@include: ./_api/prior-input.md-->
