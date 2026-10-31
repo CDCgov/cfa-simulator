@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { useId } from "reka-ui";
-import Hint from "../Hint/Hint.vue";
+import FieldLabel from "../_internal/FieldLabel.vue";
 import type { FieldProps } from "../_internal/field";
 import "../_internal/input.css";
 
@@ -26,17 +26,13 @@ const id = useId();
 
 <template>
   <div :class="props.label ? 'cfasim-input-label' : undefined">
-    <!-- `for`, not a wrapping <label>: wrapped, the Hint's button would be
-         the first labelable descendant and so the labeled control. -->
-    <label
-      v-if="props.label"
-      :for="id"
+    <FieldLabel
       class="cfasim-input-label-row"
-      :class="{ 'visually-hidden': props.hideLabel }"
-    >
-      {{ props.label }}
-      <Hint v-if="props.hint && !props.hideLabel" :text="props.hint" />
-    </label>
+      :label="props.label"
+      :hide-label="props.hideLabel"
+      :hint="props.hint"
+      :html-for="id"
+    />
     <input
       :id="id"
       type="text"

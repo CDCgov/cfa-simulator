@@ -70,7 +70,14 @@ describe("ToggleGroup", () => {
         ],
       },
     });
-    expect(wrapper.find(".toggle-group-label").text()).toContain("Alignment");
+    const label = wrapper.find(".toggle-group-label");
+    expect(label.text()).toContain("Alignment");
+    // No labelable control, so a span named by aria-labelledby, not a
+    // <label> that would adopt the Hint button as its control.
+    expect(label.element.tagName).toBe("SPAN");
+    expect(wrapper.find(".toggle-group").attributes("aria-labelledby")).toBe(
+      label.attributes("id"),
+    );
     const right = wrapper.findAll(".toggle-group-item")[1];
     expect(right.attributes("data-disabled")).toBeDefined();
   });

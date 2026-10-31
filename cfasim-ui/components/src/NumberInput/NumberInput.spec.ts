@@ -25,6 +25,7 @@ test("using the slider leaves the hint closed", async ({ page }) => {
   const hint = r0.locator(".HintTrigger");
   await expect(hint).toHaveAttribute("data-state", "closed");
   const thumb = r0.locator(".slider-thumb");
+  await expect(thumb).toHaveAttribute("aria-valuenow", /\d/);
   const before = await thumb.getAttribute("aria-valuenow");
   const track = r0.locator(".slider-track");
   await track.scrollIntoViewIfNeeded();
@@ -35,6 +36,13 @@ test("using the slider leaves the hint closed", async ({ page }) => {
   await expect(thumb).toBeFocused();
   await expect(hint).toHaveAttribute("data-state", "closed");
   await expect(page.locator(".HintContent")).toHaveCount(0);
+});
+
+test("clicking the % suffix focuses the input", async ({ page }) => {
+  await page.goto("./cfasim-ui/components/number-input");
+  const coverage = field(page, "Vaccination coverage");
+  await coverage.locator(".input-suffix").click();
+  await expect(coverage.locator("input")).toBeFocused();
 });
 
 test("segmented bar paints one band per handle", async ({ page }) => {

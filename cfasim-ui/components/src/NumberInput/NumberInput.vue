@@ -15,7 +15,7 @@ import {
   useId,
 } from "reka-ui";
 import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
-import Hint from "../Hint/Hint.vue";
+import FieldLabel from "../_internal/FieldLabel.vue";
 import { layoutSliderLabels } from "./sliderLabels";
 import type { FieldProps } from "../_internal/field";
 import "../_internal/input.css";
@@ -80,6 +80,7 @@ const props = defineProps<Props>();
 const id = useId();
 const inputId = `${id}-input`;
 const errorId = `${id}-error`;
+const inputRef = ref<HTMLInputElement | null>(null);
 
 function isRangeValue(v: unknown): v is NumberRange {
   return Array.isArray(v) && v.length === 2;
@@ -800,23 +801,19 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
 
 <template>
   <div :class="props.label ? 'cfasim-input-label' : undefined">
-    <!-- `for`, not a wrapping <label>: wrapped, the Hint button is the first
-         labelable descendant and so the labeled control, and a track or
-         label click focused it and opened the tooltip (Chrome, Firefox).
-         Slider thumbs carry their own aria-label. -->
-    <component
-      :is="isSlider ? 'span' : 'label'"
-      v-if="props.label"
-      :for="isSlider ? undefined : inputId"
+    <!-- Not a wrapping <label>: see FieldLabel. Slider thumbs carry their
+         own aria-label. -->
+    <FieldLabel
       class="cfasim-input-label-row"
-      :class="{ 'visually-hidden': props.hideLabel }"
-    >
-      {{ props.label }}
-      <Hint v-if="props.hint && !props.hideLabel" :text="props.hint" />
-    </component>
-    <span v-if="!isSlider" class="input-wrapper">
+      :label="props.label"
+      :hide-label="props.hideLabel"
+      :hint="props.hint"
+      :html-for="isSlider ? undefined : inputId"
+    />
+    <span v-if="!isSlider" class="input-wrapper" @click="inputRef?.focus()">
       <input
         :id="inputId"
+        ref="inputRef"
         type="text"
         class="cfasim-input"
         :inputmode="props.numberType === 'integer' ? 'numeric' : 'decimal'"

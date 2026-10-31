@@ -35,6 +35,7 @@ const days = ref(['mon', 'wed'])
   <ToggleGroup
     v-model="interval"
     label="Interval"
+    hint="How often the model reports"
     :options="[
       { value: 'daily', label: 'Daily' },
       { value: 'weekly', label: 'Weekly' },
@@ -54,6 +55,7 @@ const interval = ref("weekly");
 <ToggleGroup
   v-model="interval"
   label="Interval"
+  hint="How often the model reports"
   :options="[
     { value: 'daily', label: 'Daily' },
     { value: 'weekly', label: 'Weekly' },
