@@ -193,21 +193,20 @@ test.describe("cfasim init", () => {
 
     // Pre-build wasm so `waitForServer` doesn't time out waiting on the
     // `cfasimWasm` plugin's cold cargo build during vite startup. Mirrors
-    // the plugin's invocation in cfasim-ui/wasm/src/vitePlugin.js.
-    await Promise.all(
-      projects
-        .filter((p) => p.template === "rust" || p.template === "ixa") // wasm templates only
-        .map((p) => {
-          const moduleName = p.name.replace(/-/g, "_");
-          return execAsync(
-            `wasm-pack build .. --target web --out-dir public/wasm/${moduleName}`,
-            {
-              cwd: resolve(TMP_DIR, p.name, "interactive"),
-              env: wasmEnv(p.template),
-            },
-          );
-        }),
-    );
+    // the plugin's invocation in cfasim-ui/wasm/src/vitePlugin.js. Run
+    // sequentially: when a new wasm-bindgen release is not yet in wasm-pack's
+    // cache, concurrent builds race installing it into the same staging dir.
+    for (const p of projects) {
+      if (p.template !== "rust" && p.template !== "ixa") continue;
+      const moduleName = p.name.replace(/-/g, "_");
+      await execAsync(
+        `wasm-pack build .. --target web --out-dir public/wasm/${moduleName}`,
+        {
+          cwd: resolve(TMP_DIR, p.name, "interactive"),
+          env: wasmEnv(p.template),
+        },
+      );
+    }
 
     // Start vite dev servers
     const servers = projects.map((p) => startVite(p.name, p.template, p.port));
