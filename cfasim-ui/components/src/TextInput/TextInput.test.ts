@@ -7,9 +7,12 @@ describe("TextInput", () => {
     const wrapper = mount(TextInput, {
       props: { modelValue: "hello", label: "Name" },
     });
-    const label = wrapper.find("label.cfasim-input-label");
+    const label = wrapper.find("label.cfasim-input-label-row");
     expect(label.exists()).toBe(true);
     expect(label.text()).toContain("Name");
+    const input = wrapper.find("input");
+    expect(input.attributes("id")).toBeTruthy();
+    expect(label.attributes("for")).toBe(input.attributes("id"));
   });
 
   it("renders without label", () => {
@@ -60,12 +63,10 @@ describe("TextInput", () => {
     const wrapper = mount(TextInput, {
       props: { modelValue: "hello", label: "Name", hideLabel: true },
     });
-    const label = wrapper.find("label.cfasim-input-label");
+    const label = wrapper.find("label.cfasim-input-label-row");
     expect(label.exists()).toBe(true);
     expect(label.text()).toContain("Name");
-    expect(wrapper.find(".cfasim-input-label-row").classes()).toContain(
-      "visually-hidden",
-    );
+    expect(label.classes()).toContain("visually-hidden");
   });
 
   it("syncs local value when model changes externally", async () => {

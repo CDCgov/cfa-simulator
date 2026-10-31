@@ -77,7 +77,9 @@ interface Props extends FieldProps {
 
 const props = defineProps<Props>();
 
-const errorId = `${useId()}-error`;
+const id = useId();
+const inputId = `${id}-input`;
+const errorId = `${id}-error`;
 
 function isRangeValue(v: unknown): v is NumberRange {
   return Array.isArray(v) && v.length === 2;
@@ -797,20 +799,24 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
 </script>
 
 <template>
-  <component
-    :is="props.label ? 'label' : 'div'"
-    :class="props.label ? 'cfasim-input-label' : undefined"
-  >
-    <span
+  <div :class="props.label ? 'cfasim-input-label' : undefined">
+    <!-- `for`, not a wrapping <label>: wrapped, the Hint button is the first
+         labelable descendant and so the labeled control, and a track or
+         label click focused it and opened the tooltip (Chrome, Firefox).
+         Slider thumbs carry their own aria-label. -->
+    <component
+      :is="isSlider ? 'span' : 'label'"
       v-if="props.label"
+      :for="isSlider ? undefined : inputId"
       class="cfasim-input-label-row"
       :class="{ 'visually-hidden': props.hideLabel }"
     >
       {{ props.label }}
       <Hint v-if="props.hint && !props.hideLabel" :text="props.hint" />
-    </span>
+    </component>
     <span v-if="!isSlider" class="input-wrapper">
       <input
+        :id="inputId"
         type="text"
         class="cfasim-input"
         :inputmode="props.numberType === 'integer' ? 'numeric' : 'decimal'"
@@ -900,7 +906,7 @@ function onArrowStep(event: KeyboardEvent, direction: 1 | -1) {
         <span>{{ formatSliderValue(sliderMax) }}</span>
       </div>
     </div>
-  </component>
+  </div>
 </template>
 
 <style scoped>

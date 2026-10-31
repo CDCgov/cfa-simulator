@@ -9,13 +9,33 @@ test("NumberInput page renders demos", async ({ page }) => {
   await expect(demos.first().locator('input[type="text"]')).toBeVisible();
 });
 
-// Each field's root is the <label>, so scope to it — one .demo-preview can
-// hold several sliders.
+// Scope to the field's root: one .demo-preview can hold several sliders.
 function field(page: import("@playwright/test").Page, label: string) {
-  return page.locator(".demo-preview label.cfasim-input-label", {
+  return page.locator(".demo-preview .cfasim-input-label", {
     hasText: label,
   });
 }
+
+// A <label> wrapping the slider made the Hint button its labeled control,
+// so a track click focused the button and opened the tooltip (Chrome,
+// Firefox).
+test("using the slider leaves the hint closed", async ({ page }) => {
+  await page.goto("./cfasim-ui/components/number-input");
+  const r0 = field(page, "R0");
+  const hint = r0.locator(".HintTrigger");
+  await expect(hint).toHaveAttribute("data-state", "closed");
+  const thumb = r0.locator(".slider-thumb");
+  const before = await thumb.getAttribute("aria-valuenow");
+  const track = r0.locator(".slider-track");
+  await track.scrollIntoViewIfNeeded();
+  const box = await track.boundingBox();
+  if (!box) throw new Error("no track");
+  await page.mouse.click(box.x + box.width * 0.8, box.y + box.height / 2);
+  await expect(thumb).not.toHaveAttribute("aria-valuenow", before ?? "");
+  await expect(thumb).toBeFocused();
+  await expect(hint).toHaveAttribute("data-state", "closed");
+  await expect(page.locator(".HintContent")).toHaveCount(0);
+});
 
 test("segmented bar paints one band per handle", async ({ page }) => {
   await page.goto("./cfasim-ui/components/number-input");

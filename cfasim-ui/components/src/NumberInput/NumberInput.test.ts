@@ -25,10 +25,23 @@ describe("NumberInput", () => {
       },
     });
 
-    const label = wrapper.find("label.cfasim-input-label");
+    const label = wrapper.find("label.cfasim-input-label-row");
     expect(label.exists()).toBe(true);
     expect(label.text()).toContain("Population");
-    expect(label.find("input").exists()).toBe(true);
+    const input = wrapper.find("input");
+    expect(input.attributes("id")).toBeTruthy();
+    expect(label.attributes("for")).toBe(input.attributes("id"));
+  });
+
+  it("renders no label element in slider mode", () => {
+    const wrapper = mount(NumberInput, {
+      props: { modelValue: 5, label: "R0", hint: "Help", slider: true },
+    });
+    expect(wrapper.find("label").exists()).toBe(false);
+    const row = wrapper.find("span.cfasim-input-label-row");
+    expect(row.text()).toContain("R0");
+    expect(row.find(".HintTrigger").exists()).toBe(true);
+    expect(wrapper.find(".slider-thumb").attributes("aria-label")).toBe("R0");
   });
 
   it("visually hides the label when hideLabel is set", () => {
@@ -39,12 +52,10 @@ describe("NumberInput", () => {
         hideLabel: true,
       },
     });
-    const label = wrapper.find("label.cfasim-input-label");
+    const label = wrapper.find("label.cfasim-input-label-row");
     expect(label.exists()).toBe(true);
     expect(label.text()).toContain("Population");
-    expect(wrapper.find(".cfasim-input-label-row").classes()).toContain(
-      "visually-hidden",
-    );
+    expect(label.classes()).toContain("visually-hidden");
   });
 
   it("does not render a label element when label is not provided", () => {
