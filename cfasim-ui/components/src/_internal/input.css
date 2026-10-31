@@ -18,7 +18,7 @@
 .cfasim-input {
   display: block;
   width: 100%;
-  height: 2.5em;
+  height: var(--input-height, 2.5em);
   padding: 0 0.75em;
   font-size: inherit;
   background-color: var(--color-bg-0);

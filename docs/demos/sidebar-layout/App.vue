@@ -33,7 +33,7 @@ const sections = Array.from({ length: 8 }, (_, i) => i + 1);
 <template>
   <SidebarLayout>
     <template #sidebar>
-      <h2 class="mt-0">Parameters</h2>
+      <h2>Parameters</h2>
       <NumberInput
         v-model="population"
         label="Population"

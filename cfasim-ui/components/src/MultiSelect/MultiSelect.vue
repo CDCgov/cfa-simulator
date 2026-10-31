@@ -164,7 +164,7 @@ function onInputKeydown(event: KeyboardEvent) {
   display: flex;
   align-items: center;
   gap: 0.25em;
-  min-height: 2.5em;
+  min-height: var(--input-height, 2.5em);
   padding: 0.25em 0.5em;
   font-size: var(--font-size-sm);
   background: var(--color-bg-0);

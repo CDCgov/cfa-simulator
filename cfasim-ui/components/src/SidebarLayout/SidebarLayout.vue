@@ -198,7 +198,8 @@ if (globals) {
 
 <style scoped>
 .SidebarLayout {
-  --bar-height: 3rem;
+  --bar-height: 2.75rem;
+  --bar-control-size: 1.75rem;
   display: flex;
   height: 100vh;
   height: 100dvh;
@@ -270,7 +271,7 @@ if (globals) {
   margin: var(--space-4) 0 var(--space-2);
 }
 
-.SidebarScroll > :deep(h2:first-child) {
+.SidebarHeader + :deep(h2) {
   margin-top: 0;
 }
 
@@ -279,11 +280,12 @@ if (globals) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: var(--toggle-size);
-  height: var(--toggle-size);
+  width: var(--bar-control-size);
+  height: var(--bar-control-size);
   margin: 0;
   padding: 0;
   border: none;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
@@ -302,16 +304,20 @@ if (globals) {
   box-shadow: var(--shadow-focus);
 }
 
+/* Pulled into the pane's padding so the band starts at the top edge and
+   the button sits a half step in from the corner. */
 .SidebarHeader {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4))
-    calc(-1 * var(--space-3));
+  flex-shrink: 0;
+  height: var(--bar-height);
+  margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-2)) 0 0;
 }
 
 .Toggle--expand {
   position: absolute;
-  top: 0;
+  top: calc((var(--bar-height) - var(--bar-control-size)) / 2);
   left: 50%;
   transform: translateX(-50%);
   opacity: 0;
@@ -343,11 +349,15 @@ if (globals) {
   flex-shrink: 0;
 }
 
-.TopbarEnd {
+/* Controls in either bar's end slot size to the toggles. */
+.TopbarEnd,
+.TabsBarEnd {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  --input-height: var(--bar-control-size);
+  --button-height: var(--bar-control-size);
 }
 
 @container (min-width: 768px) {
@@ -424,13 +434,6 @@ if (globals) {
   min-height: var(--bar-height);
   border-bottom: 1px solid var(--color-border);
   padding: 0 var(--space-4);
-}
-
-.TabsBarEnd {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
 }
 
 .TabsList {

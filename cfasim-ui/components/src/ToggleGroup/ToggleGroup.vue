@@ -96,7 +96,7 @@ const type = computed<"single" | "multiple">(() =>
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.5em;
+  min-height: var(--input-height, 2.5em);
   padding: 0 1em;
   margin: 0;
   border: none;

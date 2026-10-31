@@ -39,7 +39,6 @@ watchEffect(() => {
           :options="themeOptions"
           aria-label="Theme"
           hide-label
-          class="theme-select"
         />
       </label>
       <a
@@ -92,9 +91,5 @@ watchEffect(() => {
   gap: var(--space-2);
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
-}
-
-.theme-select {
-  min-width: 8rem;
 }
 </style>

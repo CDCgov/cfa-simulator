@@ -28,7 +28,7 @@
   display: flex;
   align-items: center;
   gap: 0.5em;
-  height: 2.5em;
+  height: var(--input-height, 2.5em);
   padding: 0 0.25em 0 0.75em;
   font-size: var(--font-size-sm);
   background: var(--color-bg-0);

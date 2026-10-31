@@ -37,7 +37,7 @@ defineEmits<{
   justify-content: center;
   align-self: flex-start;
   flex-shrink: 0;
-  min-height: 2.5em;
+  min-height: var(--button-height, 2.5em);
   padding: 0 1em;
   font-size: var(--font-size-sm);
   font-weight: 500;

@@ -205,8 +205,8 @@ function clear() {
   justify-content: space-between;
   gap: 0.5em;
   font-size: var(--font-size-sm);
-  height: 2.5em;
-  padding: 0 0.75em;
+  height: var(--input-height, 2.5em);
+  padding: 0 0.5em 0 0.75em;
   border: 1px solid var(--color-border);
   border-radius: 0.375em;
   background: var(--color-bg-0);
@@ -235,7 +235,7 @@ function clear() {
   display: flex;
   align-items: center;
   gap: 0.5em;
-  height: 2.5em;
+  height: var(--input-height, 2.5em);
   padding: 0 0.5em 0 0.75em;
   font-size: var(--font-size-sm);
   background: var(--color-bg-0);

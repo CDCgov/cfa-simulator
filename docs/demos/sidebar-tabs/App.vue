@@ -18,7 +18,7 @@ const tabs: Tab[] = [
 <template>
   <SidebarLayout :tabs="tabs">
     <template #sidebar>
-      <h2 class="mt-0">Parameters</h2>
+      <h2>Parameters</h2>
       <NumberInput
         v-model="population"
         label="Population"
