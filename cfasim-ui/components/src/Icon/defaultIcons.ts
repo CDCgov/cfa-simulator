@@ -38,6 +38,7 @@ import check from "@material-symbols/svg-400/outlined/check.svg?component";
 import search from "@material-symbols/svg-400/outlined/search.svg?component";
 import tune from "@material-symbols/svg-400/outlined/tune.svg?component";
 import download from "@material-symbols/svg-400/outlined/download.svg?component";
+import restart_alt from "@material-symbols/svg-400/outlined/restart_alt.svg?component";
 import calendar_today from "@material-symbols/svg-400/outlined/calendar_today.svg?component";
 // brand logos (not part of Material Symbols)
 import github from "./github.svg?component";
@@ -75,6 +76,7 @@ const defaults: Record<string, IconRegistration> = {
   search,
   tune,
   download,
+  restart_alt,
   calendar_today,
   // brand logos
   github,
