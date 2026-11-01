@@ -31,6 +31,7 @@ export {
   type ChartPadding,
   type ChartBounds,
   type PositionedLegendItem,
+  type InlineLegendLabel,
 } from "./useChartPadding.js";
 export {
   useChartTooltip,
@@ -127,6 +128,14 @@ export {
   LEGEND_DOT_MAX_RADIUS,
 } from "./chartProps.js";
 export { CATEGORICAL_COLORS } from "./palette.js";
+export {
+  colorScaleDomain,
+  colorScaleFn,
+  colorRampStops,
+  lineColorGradient,
+  SEQUENTIAL_COLORS,
+  type ColorScale,
+} from "./colorScale.js";
 export {
   parseRgb,
   resolveColorToRgb,

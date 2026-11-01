@@ -28,7 +28,7 @@ A responsive SVG line chart with support for multiple series, axis labels, and c
 
 <script setup>
 import { ref, computed } from "vue";
-import { stackAreas, sharedExtent } from "@cfasim-ui/charts";
+import { stackAreas, sharedExtent, groupSeries } from "@cfasim-ui/charts";
 
 const regionA = [4, 9, 18, 31, 42, 38, 27, 15];
 const regionB = [1, 2, 4, 7, 11, 14, 12, 9];
@@ -52,6 +52,45 @@ const trajectories = Array.from({ length: 20 }, (_, i) => ({
   ),
   color: "#0057b7",
 }));
+// Color as a dimension.
+const ageGroups = ["0–17", "18–64", "65+"];
+const contactRows = Array.from({ length: 45 }, (_, i) => {
+  const g = i % 3;
+  const contacts = 4 + (i % 15) + jitter(i, 1) * 3 - g * 2;
+  return {
+    contacts,
+    attack: 8 + contacts * (2.2 - g * 0.4) + jitter(i, 2) * 8,
+    group: ageGroups[g],
+  };
+});
+const contactSeries = groupSeries(
+  {
+    x: contactRows.map((r) => r.contacts),
+    y: contactRows.map((r) => r.attack),
+    group: contactRows.map((r) => r.group),
+  },
+  { order: ageGroups, style: { line: false, dots: true, dotRadius: 4 } },
+);
+const r0Runs = Array.from({ length: 12 }, (_, i) => {
+  const r0 = 1.3 + i * 0.15;
+  const peakDay = 70 / r0;
+  return {
+    data: Array.from({ length: 60 }, (_, t) =>
+      120 * (r0 - 1) * Math.exp(-((t - peakDay) ** 2) / (2 * (40 / r0) ** 2)),
+    ),
+    colorValue: r0,
+    strokeWidth: 1.5,
+  };
+});
+const rt = Array.from(
+  { length: 70 },
+  (_, t) => 1.05 + 0.55 * Math.sin(t / 9) - t * 0.004,
+);
+const rtCases = rt.reduce(
+  (acc, r) => [...acc, acc[acc.length - 1] * r ** 0.2],
+  [20],
+).slice(1);
+
 const calibrationRuns = Array.from({ length: 30 }, (_, i) => ({
   data: Array.from({ length: 40 }, (_, t) =>
     Math.max(
@@ -978,9 +1017,11 @@ Set `dots: true` to draw a dot at every point. `dotRadius`, `dotFill` and
 array) parallel to the data, one value per point, so a `line: false`
 series becomes a scatter plot that encodes more variables, like
 Vega-Lite's `size`, `color` and `opacity` channels. Map your data to radii
-and colors yourself; an entry that is `undefined` (or `NaN` in a typed
-array) falls back to the series default. The chart reserves no room for
-dots, so give large ones space at the plot edges with `chart-padding`.
+yourself; an entry that is `undefined` (or `NaN` in a typed array) falls
+back to the series default. For color, pass the raw values as
+`colorValue` and the chart maps them through its
+[color scale](#color-by-value), with a legend. The chart reserves no room
+for dots, so give large ones space at the plot edges with `chart-padding`.
 
 They also take a function of the point, `{ value, index, x, seriesIndex,
 color }` (`color` is the series' resolved color), which suits one style
@@ -1001,11 +1042,12 @@ const series = runs.map((data) => ({ data, dots: true, dotFill }));
         line: false,
         dots: true,
         dotRadius: [3, 5, 4, 8, 10, 6, 12, 9, 14, 16],
-        dotFill: ['#93c5fd', '#93c5fd', '#93c5fd', '#3b82f6', '#3b82f6', '#3b82f6', '#1d4ed8', '#1d4ed8', '#1e3a8a', '#1e3a8a'],
+        colorValue: [61, 48, 55, 37, 30, 41, 24, 28, 19, 15],
         dotOpacity: 0.8,
       },
     ]"
-    :height="220"
+    :color-scale="{ label: 'Days to peak' }"
+    :height="240"
     :chart-padding="16"
     x-label="R₀"
     y-label="Peak cases (%)"
@@ -1021,24 +1063,14 @@ const series = runs.map((data) => ({ data, dots: true, dotFill }));
       data: [12, 18, 15, 26, 30, 24, 38, 35, 44, 52],
       line: false,
       dots: true,
-      // one radius and one color per point
+      // one radius and one color value per point
       dotRadius: [3, 5, 4, 8, 10, 6, 12, 9, 14, 16],
-      dotFill: [
-        '#93c5fd',
-        '#93c5fd',
-        '#93c5fd',
-        '#3b82f6',
-        '#3b82f6',
-        '#3b82f6',
-        '#1d4ed8',
-        '#1d4ed8',
-        '#1e3a8a',
-        '#1e3a8a',
-      ],
+      colorValue: [61, 48, 55, 37, 30, 41, 24, 28, 19, 15],
       dotOpacity: 0.8,
     },
   ]"
-  :height="220"
+  :color-scale="{ label: 'Days to peak' }"
+  :height="240"
   :chart-padding="16"
   x-label="R₀"
   y-label="Peak cases (%)"
@@ -1133,6 +1165,139 @@ inverts. The white `outline`, if any, is unaffected.
   :height="240"
   x-label="Day"
   y-label="Incidence"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+## Color
+
+### Color by group
+
+For a categorical color (age group, region, scenario), `groupSeries` splits
+long-format columns into one series per group, each with its `legend` and a
+`color` from the categorical palette. Because the groups are ordinary
+series, the legend, [legend toggling](#toggle-series-from-the-legend),
+tooltip rows and CSV columns all follow them. `order` sets the legend order
+(other groups follow in the order they appear), `colors` takes a map by
+group or a list, `label` renames groups, and `style` is applied to every
+series. Per-point columns (`x`, `lower`, `upper`, `colorValue`, `dotRadius`,
+`dotOpacity`, `dotFill`) are split along with `y`.
+
+<ComponentDemo>
+  <LineChart
+    :series="contactSeries"
+    :height="260"
+    x-label="Daily contacts"
+    y-label="Attack rate (%)"
+  />
+
+<template #code>
+
+```ts
+import { groupSeries } from "@cfasim-ui/charts";
+
+const series = groupSeries(
+  { x: rows.contacts, y: rows.attackRate, group: rows.ageGroup },
+  {
+    order: ["0–17", "18–64", "65+"],
+    style: { line: false, dots: true, dotRadius: 4 },
+  },
+);
+```
+
+```vue
+<LineChart
+  :series="series"
+  x-label="Daily contacts"
+  y-label="Attack rate (%)"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Color by value
+
+For a continuous color, give series a `colorValue`. One number colors the
+whole series, which suits an ensemble colored by a parameter. The chart
+maps the values through `color-scale` and adds a gradient legend with the
+scale's `label` and the ends of its domain. By default the scale is
+viridis over the extent of every `colorValue`; `domain`, `range` (two or
+more colors, mixed in Oklab) and `format` change that, and `legend: false`
+drops the legend. A single `colorValue` also colors the series' legend
+entry, hover dot and tooltip swatch.
+
+<ComponentDemo>
+  <LineChart
+    :series="r0Runs"
+    :color-scale="{ label: 'R₀' }"
+    :height="260"
+    x-label="Day"
+    y-label="Incidence"
+  />
+
+<template #code>
+
+```ts
+const series = runs.map((run) => ({
+  data: run.incidence,
+  colorValue: run.r0, // one value colors the whole line
+}));
+```
+
+```vue
+<LineChart
+  :series="series"
+  :color-scale="{ label: 'R₀' }"
+  x-label="Day"
+  y-label="Incidence"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Color along a line
+
+An array `colorValue`, parallel to `y`, colors each point: dots take the
+point's color (a `dotFill` still wins) and the line runs a gradient through them (step curves
+change color at the step). The tooltip shows the hovered point's value
+next to the scale's `label`.
+
+A `domain` with more than two values makes a piecewise scale: the values
+land at evenly spaced positions along `range`, so `[0.6, 1, 1.6]` with a
+three-color range is a diverging scale centered on 1, here coloring daily
+cases by the reproduction number.
+
+<ComponentDemo>
+  <LineChart
+    :series="[{ data: rtCases, colorValue: rt, strokeWidth: 2.5, legend: 'Cases' }]"
+    :color-scale="{
+      label: 'Rₜ',
+      domain: [0.6, 1, 1.6],
+      range: ['#2563eb', '#a3a3a3', '#dc2626'],
+    }"
+    :height="260"
+    x-label="Day"
+    y-label="Daily cases"
+    tooltip-trigger="hover"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[{ data: cases, colorValue: rt, strokeWidth: 2.5, legend: 'Cases' }]"
+  :color-scale="{
+    label: 'Rₜ',
+    domain: [0.6, 1, 1.6],
+    range: ['#2563eb', '#a3a3a3', '#dc2626'],
+  }"
+  x-label="Day"
+  y-label="Daily cases"
+  tooltip-trigger="hover"
 />
 ```
 
@@ -2338,6 +2503,7 @@ interface Series {
   outlineWidth?: number; // extra width added to strokeWidth (default: 4)
   dots?: boolean;
   dotRadius?: PerPoint<number>; // one value, or one per point
+  colorValue?: number | ArrayLike<number>; // colored through colorScale; one number or one per point
   dotFill?: PerPoint<string>;
   dotStroke?: string;
   legend?: string; // inline legend label, also names the tooltip row
@@ -2348,6 +2514,37 @@ interface Series {
   upper?: LineChartData;
   intervalStyle?: IntervalStyle; // styles those whiskers
 }
+```
+
+### ColorScale
+
+```ts
+interface ColorScale {
+  domain?: number[]; // default: extent of every colorValue; 3+ values = piecewise
+  range?: string[]; // 2+ colors spaced evenly, mixed in Oklab (default: viridis)
+  label?: string; // legend title and tooltip name
+  format?: (value: number) => string; // legend ends and tooltip value
+  legend?: boolean; // default: true
+}
+```
+
+### groupSeries
+
+```ts
+function groupSeries(
+  columns: {
+    y: LineChartData;
+    group: ArrayLike<string | number | null | undefined>; // missing keys are dropped
+    x?: LineChartXInput;
+    // also split per group: lower, upper, colorValue, dotRadius, dotOpacity, dotFill
+  },
+  options?: {
+    order?: (string | number)[]; // legend order; unlisted groups follow
+    colors?: Record<string, string> | string[]; // default: CATEGORICAL_COLORS
+    label?: (key) => string; // default: String(key)
+    style?: Partial<Series> | ((key, index) => Partial<Series>);
+  },
+): Series[];
 ```
 
 ### PerPoint

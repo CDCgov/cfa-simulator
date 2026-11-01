@@ -9,9 +9,8 @@ import { stackAreas, type StackedAreaLayer } from "../LineChart/stackAreas.js";
 import {
   CATEGORICAL_COLORS,
   parseDate,
-  parseRgb,
-  type Rgb,
   type ChartAnnotation,
+  type ColorScale,
   type ChartInterval,
   type LineCurve,
 } from "../_shared/index.js";
@@ -415,6 +414,7 @@ function lineChart(
 ): LineChartProps {
   const series: Series[] = [];
   const areas: Area[] = [];
+  let colorScale: ColorScale | undefined;
   const marked = units.filter((u) => !DECORATIONS.has(u.mark.type));
   const xUnit = marked.find((u) => u.encoding.x?.field) ?? units[0];
   const xDef = xUnit?.encoding.x;
@@ -536,13 +536,14 @@ function lineChart(
         }),
         ...(dashed && { dashed: true }),
       };
-      if (pointMark) pointStyle(s, rows, u, warn);
+      if (pointMark) colorScale = pointStyle(s, rows, u, warn) ?? colorScale;
       series.push(s);
     }
   }
 
   // Horizontal rules must stay on the axis, which annotations do not widen.
   const props: LineChartProps = { series, ...(areas.length && { areas }) };
+  if (colorScale) props.colorScale = colorScale;
   const firstX = series[0]?.x?.[0] ?? areas[0]?.x?.[0];
   anchorRules(
     deco,
@@ -743,8 +744,16 @@ function anchorRules(deco: Decorations, x: number, y: unknown) {
 /** Vega-Lite's default point size, an area in px². */
 const POINT_SIZE = 30;
 
-/** Point mark fill, size, opacity and color channels on a series' dots. */
-function pointStyle(s: Series, rows: Row[], u: Unit, warn: Warn) {
+/**
+ * Point mark fill, size, opacity and color channels on a series' dots.
+ * Returns the chart `colorScale` for a quantitative `color` field.
+ */
+function pointStyle(
+  s: Series,
+  rows: Row[],
+  u: Unit,
+  warn: Warn,
+): ColorScale | undefined {
   const { mark, encoding: e } = u;
   const radius = (area: number) => Math.sqrt(area / Math.PI);
   const size = e.size;
@@ -769,14 +778,21 @@ function pointStyle(s: Series, rows: Row[], u: Unit, warn: Warn) {
     const range = Array.isArray(color.scale?.range)
       ? color.scale.range
       : ["#deebf7", "#08519c"];
-    const [c0, c1] = range.map((c) => parseRgb(String(c)));
-    if (range.length !== 2 || !c0 || !c1) {
-      warn("a continuous `color` needs a two-color `scale.range`");
+    if (range.length < 2) {
+      warn("a continuous `color` needs at least two `scale.range` colors");
     } else {
-      const t = linear(rows, color.field, 0, 1, false);
       // A missing value leaves its dot the series' default fill.
-      s.dotFill = rows.map((r) => mixRgb(c0, c1, t(r))) as string[];
-      return;
+      s.colorValue = rows.map((r) => num(get(r, color.field!)));
+      const [lo, hi] = numericDomain(color);
+      const title =
+        color.legend?.title !== undefined ? color.legend.title : color.title;
+      return {
+        range: range.map(String),
+        ...(lo !== undefined && hi !== undefined && { domain: [lo, hi] }),
+        ...(color.legend === null
+          ? { legend: false }
+          : title !== null && { label: title ?? color.field }),
+      };
     }
   }
   // Vega-Lite draws `point` marks as outlines unless `filled`.
@@ -819,12 +835,6 @@ function linear(
     if (!Number.isFinite(v)) return NaN;
     return span > 0 ? lo + ((v - min) / span) * (hi - lo) : (lo + hi) / 2;
   };
-}
-
-function mixRgb(a: Rgb, b: Rgb, t: number): string | undefined {
-  if (!Number.isFinite(t)) return undefined;
-  const c = a.map((v, i) => Math.round(v + (b[i] - v) * t));
-  return `rgb(${c.join(", ")})`;
 }
 
 function numericDomain(

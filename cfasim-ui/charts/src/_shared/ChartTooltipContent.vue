@@ -10,6 +10,10 @@ export interface ChartTooltipContentProps {
   areas?: ChartTooltipInterval[];
   intervals?: ChartTooltipInterval[];
   format?: (value: number) => string;
+  /** Names a row's `colorValue` (the color scale's `label`). */
+  colorLabel?: string;
+  /** Formats a row's `colorValue`; defaults to `format`. */
+  colorFormat?: (value: number) => string;
 }
 
 const props = defineProps<ChartTooltipContentProps>();
@@ -45,6 +49,13 @@ const rows = computed(() => {
           class="chart-tooltip-range"
         >
           ({{ fmt(v.lower) }}–{{ fmt(v.upper) }})
+        </span>
+        <span
+          v-if="v.colorValue !== undefined"
+          class="chart-tooltip-range chart-tooltip-color-value"
+        >
+          · {{ colorLabel ? colorLabel + " " : ""
+          }}{{ (colorFormat ?? fmt)(v.colorValue) }}
         </span>
       </span>
     </div>

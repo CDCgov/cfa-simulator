@@ -1115,6 +1115,24 @@ describe("LineChart", () => {
       wrapper.unmount();
     });
 
+    it("shows a row's color value and colors its hover dot by the scale", async () => {
+      const wrapper = await hoverMiddle({
+        series: [
+          {
+            data: [1, 2, 3],
+            legend: "Cases",
+            color: "#999",
+            colorValue: [0, 5, 10],
+          },
+        ],
+        colorScale: { label: "R₀", range: ["#000000", "#ffffff"] },
+      });
+      expect(wrapper.find(".chart-tooltip-color-value").text()).toBe("· R₀ 5");
+      const swatch = wrapper.find(".chart-tooltip-swatch");
+      expect(swatch.attributes("style")).not.toContain("#999");
+      wrapper.unmount();
+    });
+
     it("drops unnamed series from the tooltip once any row is named", async () => {
       const wrapper = await hoverMiddle({
         series: [
@@ -1335,6 +1353,101 @@ describe("LineChart", () => {
         wrapper.findAll("line").some((l) => l.attributes("stroke") === color);
       expect(legendLine("#0057b7")).toBe(true);
       expect(legendLine("#00aa00")).toBe(false);
+    });
+
+    describe("color scale", () => {
+      const mountScale = (props: Record<string, unknown>) =>
+        mount(LineChart, {
+          props: { width: 400, height: 200, menu: false, ...props },
+        });
+      const range = ["#000000", "#ffffff"];
+
+      it("colors a whole series from a single colorValue", () => {
+        const wrapper = mountScale({
+          series: [
+            { data: [1, 2], colorValue: 0, legend: "Low" },
+            { data: [2, 3], colorValue: 10, legend: "High" },
+          ],
+          colorScale: { range },
+        });
+        const strokes = wrapper
+          .findAll("path")
+          .map((p) => p.attributes("stroke"))
+          .filter((c) => c === "#000000" || c === "#ffffff");
+        expect(strokes).toEqual(["#000000", "#ffffff"]);
+        // The series legend lines follow the scale color too.
+        const legendLines = wrapper
+          .findAll("line")
+          .map((l) => l.attributes("stroke"));
+        expect(legendLines).toContain("#000000");
+        expect(legendLines).toContain("#ffffff");
+      });
+
+      it("draws a per-point line gradient and dot fills, with dotFill winning", () => {
+        const wrapper = mountScale({
+          series: [
+            {
+              data: [1, 2, 3],
+              colorValue: [0, 5, 10],
+              dots: true,
+              dotFill: [undefined, undefined, "red"],
+            },
+          ],
+          colorScale: { range },
+        });
+        const line = wrapper
+          .findAll("path")
+          .find((p) => p.attributes("stroke")?.startsWith("url(#"))!;
+        const id = line.attributes("stroke")!.slice(5, -1);
+        const stops = wrapper
+          .findAll(`linearGradient[id="${id}"] stop`)
+          .map((st) => [st.attributes("offset"), st.attributes("stop-color")]);
+        expect(stops[0]).toEqual(["0", "#000000"]);
+        expect(stops[2]).toEqual(["1", "#ffffff"]);
+        const fills = wrapper
+          .findAll("circle")
+          .map((c) => c.attributes("fill"))
+          .filter((f) => f !== "currentColor");
+        expect(fills[0]).toBe("#000000");
+        expect(fills[2]).toBe("red");
+      });
+
+      it("adds a gradient legend with the label and domain ends", () => {
+        const wrapper = mountScale({
+          series: [
+            { data: [1, 2, 3], colorValue: [0.5, 1, 2.5], legend: "Cases" },
+          ],
+          colorScale: { label: "R₀", range },
+        });
+        // A series colored per point shows the ramp as its legend line.
+        const swatch = wrapper
+          .findAll('rect[width="12"][height="2"]')
+          .map((r) => r.attributes("fill"));
+        expect(swatch).toEqual([expect.stringMatching(/-ramp\)$/)]);
+        const legend = wrapper.get('[data-testid="legend-color-scale"]');
+        expect(legend.findAll("text").map((t) => t.text())).toEqual([
+          "R₀",
+          "0.5",
+          "2.5",
+        ]);
+        expect(legend.get("rect").attributes("fill")).toMatch(/^url\(#/);
+      });
+
+      it("hides the gradient legend with legend: false and when unused", () => {
+        expect(
+          mountScale({
+            series: [{ data: [1, 2], colorValue: [0, 1] }],
+            colorScale: { legend: false },
+          })
+            .find('[data-testid="legend-color-scale"]')
+            .exists(),
+        ).toBe(false);
+        expect(
+          mountScale({ series: [{ data: [1, 2] }], colorScale: {} })
+            .find('[data-testid="legend-color-scale"]')
+            .exists(),
+        ).toBe(false);
+      });
     });
 
     it("renders an area legend entry with a filled swatch", () => {

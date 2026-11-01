@@ -13,6 +13,14 @@ export {
   type StackAreasOptions,
 } from "./LineChart/stackAreas.js";
 export {
+  groupSeries,
+  type GroupKey,
+  type GroupSeriesColumns,
+  type GroupSeriesOptions,
+} from "./LineChart/groupSeries.js";
+export { SEQUENTIAL_COLORS, type ColorScale } from "./_shared/colorScale.js";
+export { CATEGORICAL_COLORS } from "./_shared/palette.js";
+export {
   default as BarChart,
   type BarChartData,
   type BarChartXInput,
