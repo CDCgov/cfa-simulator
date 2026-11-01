@@ -1298,6 +1298,45 @@ describe("LineChart", () => {
       expect(texts).not.toContain("Reference");
     });
 
+    it("draws a legend dot matching dotted series, and no line for dots only", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [
+            {
+              data: [1, 2, 3],
+              legend: "Both",
+              color: "#0057b7",
+              dots: true,
+              dotFill: "#ff0000",
+              dotRadius: 3,
+            },
+            {
+              data: [4, 5, 6],
+              legend: "Dots",
+              color: "#00aa00",
+              dots: true,
+              line: false,
+              dotRadius: 10,
+            },
+          ],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const dots = wrapper.findAll('[data-testid="legend-dot"]');
+      expect(
+        dots.map((d) => [d.attributes("fill"), d.attributes("r")]),
+      ).toEqual([
+        ["#ff0000", "3"],
+        ["#00aa00", "4"],
+      ]);
+      const legendLine = (color: string) =>
+        wrapper.findAll("line").some((l) => l.attributes("stroke") === color);
+      expect(legendLine("#0057b7")).toBe(true);
+      expect(legendLine("#00aa00")).toBe(false);
+    });
+
     it("renders an area legend entry with a filled swatch", () => {
       const wrapper = mount(LineChart, {
         props: {

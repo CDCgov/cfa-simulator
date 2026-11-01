@@ -285,6 +285,20 @@ export type PerPoint<T> =
   T | ArrayLike<T> | ((point: PointContext) => T | undefined);
 
 /**
+ * A `PerPoint` style's single value when it is one for every point, else
+ * `undefined` (arrays, functions and NaN). Used where one swatch stands for
+ * the whole series, such as the legend.
+ */
+export function uniformPoint<T>(v: PerPoint<T> | undefined): T | undefined {
+  if (typeof v === "function" || (typeof v === "object" && v !== null))
+    return undefined;
+  return v === v ? (v as T | undefined) : undefined;
+}
+
+/** Largest dot drawn in a legend swatch, so big data dots stay in the row. */
+export const LEGEND_DOT_MAX_RADIUS = 4;
+
+/**
  * A `PerPoint` style's value for point `index`. `point` is only read by a
  * function style, so callers build it only when one is set.
  */

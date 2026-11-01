@@ -69,6 +69,8 @@ import {
   type PerPoint,
   atPoint,
   isPointFn,
+  uniformPoint,
+  LEGEND_DOT_MAX_RADIUS,
   CATEGORICAL_COLORS,
 } from "../_shared/index.js";
 import {
@@ -1678,6 +1680,9 @@ interface InlineLegendItem {
   color: string;
   kind: "bar" | "line";
   dashed?: boolean;
+  /** Summary lines only: false for a dots-only (zero-width) line. */
+  line?: boolean;
+  dot?: { r: number; opacity: number };
 }
 
 const inlineLegendItems = computed<InlineLegendItem[]>(() => {
@@ -1697,6 +1702,16 @@ const inlineLegendItems = computed<InlineLegendItem[]>(() => {
       color: line.color,
       kind: "line",
       dashed: line.dashed,
+      line: line.strokeWidth > 0,
+      dot: line.dots
+        ? {
+            r: Math.min(
+              uniformPoint(line.dotRadius) ?? line.strokeWidth + 1,
+              LEGEND_DOT_MAX_RADIUS,
+            ),
+            opacity: line.opacity,
+          }
+        : undefined,
     });
   });
   return items;
@@ -2358,16 +2373,27 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
               height="10"
               :fill="item.color"
             />
-            <line
-              v-else
-              :x1="item.x"
-              :y1="item.y"
-              :x2="item.x + 12"
-              :y2="item.y"
-              :stroke="item.color"
-              stroke-width="2"
-              :stroke-dasharray="item.dashed ? '4 2' : undefined"
-            />
+            <template v-else>
+              <line
+                v-if="item.line"
+                :x1="item.x"
+                :y1="item.y"
+                :x2="item.x + 12"
+                :y2="item.y"
+                :stroke="item.color"
+                stroke-width="2"
+                :stroke-dasharray="item.dashed ? '4 2' : undefined"
+              />
+              <circle
+                v-if="item.dot"
+                data-testid="legend-dot"
+                :cx="item.x + 6"
+                :cy="item.y"
+                :r="item.dot.r"
+                :fill="item.color"
+                :fill-opacity="item.dot.opacity"
+              />
+            </template>
             <text
               :x="item.x + 18"
               :y="item.y + 4"

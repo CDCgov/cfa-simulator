@@ -1755,6 +1755,36 @@ describe("BarChart", () => {
       expect(legendLines.length).toBeGreaterThan(0);
     });
 
+    it("draws only a dot in the legend for a zero-width dotted line", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          data: [10, 20, 30],
+          categories: ["a", "b", "c"],
+          summaryLines: [
+            {
+              data: [1, 2, 3],
+              legend: "Points",
+              color: "#ef4444",
+              dots: true,
+              strokeWidth: 0,
+              dotRadius: 3,
+            },
+          ],
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const dot = wrapper.get('[data-testid="legend-dot"]');
+      expect(dot.attributes("fill")).toBe("#ef4444");
+      expect(dot.attributes("r")).toBe("3");
+      expect(
+        wrapper
+          .findAll("line")
+          .some((l) => l.attributes("stroke") === "#ef4444"),
+      ).toBe(false);
+    });
+
     it("renders in horizontal orientation along the value axis", () => {
       const wrapper = mount(BarChart, {
         props: {
