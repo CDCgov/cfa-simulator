@@ -68,6 +68,8 @@ import {
   type PerPoint,
   atPoint,
   isPointFn,
+  uniformPoint,
+  LEGEND_DOT_MAX_RADIUS,
   type ChartMarker,
   type ChartMarkerDragPayload,
   type ChartPadding,
@@ -1246,17 +1248,34 @@ interface InlineLegendItem {
   type: "series" | "area" | "section";
   dashed?: boolean;
   fillOpacity?: number;
+  /** Series only: false for a dots-only series. */
+  line?: boolean;
+  dot?: { r: number; fill: string; opacity?: number; stroke?: string };
 }
 
 const inlineLegendItems = computed<InlineLegendItem[]>(() => {
   const items: InlineLegendItem[] = [];
   for (const s of allSeries.value) {
     if (!s.legend || s.showInLegend === false) continue;
+    const color = s.color ?? "currentColor";
     items.push({
       label: s.legend,
-      color: s.color ?? "currentColor",
+      color,
       type: "series",
       dashed: s.dashed,
+      line: s.line !== false,
+      dot: s.dots
+        ? {
+            r: Math.min(
+              uniformPoint(s.dotRadius) ?? (s.strokeWidth ?? 1.5) + 1,
+              LEGEND_DOT_MAX_RADIUS,
+            ),
+            fill: uniformPoint(s.dotFill) ?? color,
+            opacity:
+              uniformPoint(s.dotOpacity) ?? s.opacity ?? props.lineOpacity,
+            stroke: s.dotStroke,
+          }
+        : undefined,
     });
   }
   for (const a of allAreas.value) {
@@ -2343,17 +2362,29 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             :key="'ileg' + i"
             :opacity="legendItemHidden(item) ? 0.4 : undefined"
           >
-            <!-- series indicator: line -->
-            <line
-              v-if="item.type === 'series'"
-              :x1="item.x"
-              :y1="item.y"
-              :x2="item.x + 12"
-              :y2="item.y"
-              :stroke="item.color"
-              stroke-width="2"
-              :stroke-dasharray="item.dashed ? '4 2' : undefined"
-            />
+            <!-- series indicator: line and/or dot -->
+            <template v-if="item.type === 'series'">
+              <line
+                v-if="item.line"
+                :x1="item.x"
+                :y1="item.y"
+                :x2="item.x + 12"
+                :y2="item.y"
+                :stroke="item.color"
+                stroke-width="2"
+                :stroke-dasharray="item.dashed ? '4 2' : undefined"
+              />
+              <circle
+                v-if="item.dot"
+                data-testid="legend-dot"
+                :cx="item.x + 6"
+                :cy="item.y"
+                :r="item.dot.r"
+                :fill="item.dot.fill"
+                :fill-opacity="item.dot.opacity"
+                :stroke="item.dot.stroke"
+              />
+            </template>
             <!-- area and section indicator: filled swatch -->
             <rect
               v-else

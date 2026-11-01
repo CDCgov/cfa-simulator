@@ -119,7 +119,13 @@ export type {
   PerPoint,
   PointContext,
 } from "./chartProps.js";
-export { blendStyle, atPoint, isPointFn } from "./chartProps.js";
+export {
+  blendStyle,
+  atPoint,
+  isPointFn,
+  uniformPoint,
+  LEGEND_DOT_MAX_RADIUS,
+} from "./chartProps.js";
 export { CATEGORICAL_COLORS } from "./palette.js";
 export {
   parseRgb,
