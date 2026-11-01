@@ -75,14 +75,18 @@ export interface ChartPaddingOptions {
   /**
    * Labels for the inline legend items, in render order. Empty array
    * (or omitted) means no legend strip. Drives both row-count for
-   * reserving top padding and per-item wrap positions.
+   * reserving top padding and per-item wrap positions. An item that is
+   * not a swatch plus label (a color-scale ramp) gives its full `width`.
    */
-  inlineLegendLabels: () => readonly string[];
+  inlineLegendLabels: () => readonly InlineLegendLabel[];
   width: () => number;
   height: () => number;
   /** Extra pixels added on top of the standard axis spacing. */
   extraPadding?: () => ChartPadding | undefined;
 }
+
+/** A legend item's label, or the full pixel width of a custom item. */
+export type InlineLegendLabel = string | { width: number };
 
 /** Position of a single legend item within the legend strip. */
 export interface PositionedLegendItem {
@@ -128,8 +132,10 @@ function resolvePadding(p: ChartPadding | undefined) {
  * Estimated rendered width (in px) of a single legend item — indicator,
  * text, and surrounding spacing. Used to flow items into rows.
  */
-function estimateLegendItemWidth(label: string): number {
-  return LEGEND_TEXT_INDENT + label.length * LEGEND_CHAR_WIDTH;
+function estimateLegendItemWidth(label: InlineLegendLabel): number {
+  return typeof label === "string"
+    ? LEGEND_TEXT_INDENT + label.length * LEGEND_CHAR_WIDTH
+    : label.width;
 }
 
 /**

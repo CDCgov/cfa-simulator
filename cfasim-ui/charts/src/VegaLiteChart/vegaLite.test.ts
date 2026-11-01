@@ -513,12 +513,14 @@ describe("vegaLiteToChart: point channels and bins", () => {
     ]);
     // A missing value leaves its dot the default opacity.
     expect(s.dotOpacity).toEqual([0.3, undefined, 0.8]);
-    // A missing color value falls back to the series default.
-    expect(s.dotFill).toEqual([
-      "rgb(0, 0, 0)",
-      undefined,
-      "rgb(255, 255, 255)",
-    ]);
+    // Color goes through the chart's color scale; a missing value is NaN,
+    // which falls back to the series default.
+    expect(s.dotFill).toBeUndefined();
+    expect(s.colorValue).toEqual([0, NaN, 4]);
+    expect(props.colorScale).toEqual({
+      range: ["#000000", "#ffffff"],
+      label: "q",
+    });
   });
 
   it("draws `point` marks as outlines unless filled, at Vega-Lite's size", () => {

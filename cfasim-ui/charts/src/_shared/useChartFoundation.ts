@@ -2,7 +2,11 @@ import { computed } from "vue";
 import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import { formatTick } from "./axes.js";
 import { useChartSize } from "./useChartSize.js";
-import { useChartPadding, type ChartPadding } from "./useChartPadding.js";
+import {
+  useChartPadding,
+  type ChartPadding,
+  type InlineLegendLabel,
+} from "./useChartPadding.js";
 import { useChartTooltip } from "./useChartTooltip.js";
 import {
   useChartBrush,
@@ -39,7 +43,7 @@ export interface ChartFoundationOptions {
    * legend strip. Drives wrapping into multiple rows and the resulting
    * top-padding reservation.
    */
-  inlineLegendLabels: () => readonly string[];
+  inlineLegendLabels: () => readonly InlineLegendLabel[];
   hasTooltipSlot: () => boolean;
   getCsv: () => string;
   pointerToIndex: (clientX: number, clientY: number) => number | null;

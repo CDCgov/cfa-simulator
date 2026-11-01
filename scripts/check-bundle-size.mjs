@@ -80,7 +80,7 @@ const SCENARIOS = [
     name: "charts: LineChart only",
     pkg: "@cfasim-ui/charts",
     imports: ["LineChart"],
-    limit: 29 * KB,
+    limit: 31 * KB,
     lazyChunks: 0,
   },
   {
@@ -103,14 +103,14 @@ const SCENARIOS = [
     name: "charts: VegaLiteChart",
     pkg: "@cfasim-ui/charts/vega-lite",
     imports: ["VegaLiteChart"],
-    limit: 47 * KB,
+    limit: 48 * KB,
     lazyChunks: 0,
   },
   {
     name: "charts: everything",
     pkg: "@cfasim-ui/charts",
     imports: "*",
-    limit: 110 * KB,
+    limit: 112 * KB,
     lazyChunks: 1,
   },
 ];

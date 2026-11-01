@@ -341,6 +341,8 @@ export interface ChartTooltipValue {
   lower?: number;
   /** High end of the series' interval at this point. */
   upper?: number;
+  /** The series' `colorValue` at this point (LineChart `colorScale`). */
+  colorValue?: number;
 }
 
 /** One top-level interval sitting at the hovered position. */

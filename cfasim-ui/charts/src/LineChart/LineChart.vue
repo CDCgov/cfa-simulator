@@ -70,6 +70,11 @@ import {
   isPointFn,
   uniformPoint,
   LEGEND_DOT_MAX_RADIUS,
+  colorScaleDomain,
+  colorScaleFn,
+  colorRampStops,
+  lineColorGradient,
+  type ColorScale,
   type ChartMarker,
   type ChartMarkerDragPayload,
   type ChartPadding,
@@ -141,6 +146,14 @@ export interface Series extends LineMarkStyle {
    * `outline` is true.
    */
   outlineWidth?: number;
+  /**
+   * Colors the series through the chart's `colorScale`: one number
+   * colors the whole series (e.g. a trajectory by its parameter value),
+   * an array parallel to `y` colors each point and the line with a
+   * gradient between them. Wins over `color`, which stays the fallback
+   * for missing values.
+   */
+  colorValue?: number | ArrayLike<number>;
   /** Dot fill color; one color or one per point. Defaults to `color`. */
   dotFill?: PerPoint<string>;
   dotStroke?: string;
@@ -298,6 +311,12 @@ export interface LineChartProps extends ChartCommonProps {
    */
   markerLabelGap?: number;
   lineOpacity?: number;
+  /**
+   * Maps series `colorValue`s to colors, with a gradient legend in the
+   * inline legend row. See `ColorScale`. Only needed to change the
+   * defaults: any `colorValue` uses viridis over the values' extent.
+   */
+  colorScale?: ColorScale;
   /**
    * Default `curve` for every series and area; one set on a series or
    * area wins. `"linear"` (default), `"step"`, `"step-before"`,
@@ -503,8 +522,59 @@ const resolvedXAxis = computed<{
 });
 
 const xIsDate = computed(() => resolvedXAxis.value.isDate);
-const allSeries = computed<ResolvedSeries[]>(() => resolvedXAxis.value.series);
+
+/** The `colorScale` applied to series `colorValue`s; null when none has one. */
+const colorScaleResolved = computed(() => {
+  const values = (props.series ?? []).map((s) => s.colorValue);
+  if (values.every((v) => v === undefined)) return null;
+  const domain = colorScaleDomain(values, props.colorScale?.domain);
+  if (!domain) return null;
+  const scale = props.colorScale;
+  return {
+    domain,
+    colorAt: colorScaleFn(scale?.range, domain),
+    range: scale?.range,
+    label: scale?.label,
+    format:
+      scale?.format ?? ((v: number) => formatTick(v, tickDecimals(domain))),
+    legend: scale?.legend !== false,
+  };
+});
+
+/** A series' color at point `i` from its `colorValue`, if it has one. */
+function scaleColorAt(s: ResolvedSeries, i: number): string | undefined {
+  const cv = s.colorValue;
+  const scale = colorScaleResolved.value;
+  if (cv === undefined || !scale) return undefined;
+  return scale.colorAt(Number(typeof cv === "number" ? cv : cv[i]));
+}
+
+// A single `colorValue` becomes the series' color, so the legend,
+// tooltip, hover dot and whiskers all follow it.
+const allSeries = computed<ResolvedSeries[]>(() =>
+  resolvedXAxis.value.series.map((s) => {
+    if (typeof s.colorValue !== "number") return s;
+    const color = scaleColorAt(s, 0);
+    return color ? { ...s, color } : s;
+  }),
+);
 const allAreas = computed<ResolvedArea[]>(() => resolvedXAxis.value.areas);
+
+/**
+ * Point colors of series with an array `colorValue`, parallel to their
+ * data. Kept apart from pixel geometry so zoom and resize do not
+ * re-interpolate them.
+ */
+const seriesPointColors = computed(() =>
+  allSeries.value.map((s) => {
+    const cv = s.colorValue;
+    const scale = colorScaleResolved.value;
+    if (!scale || cv === undefined || typeof cv === "number") return null;
+    return Array.from({ length: s.data.length }, (_, i) =>
+      scale.colorAt(Number(cv[i])),
+    );
+  }),
+);
 
 const { isHidden, toggle: toggleLegend } = useLegendToggle({
   hidden: () => props.hiddenSeries,
@@ -906,7 +976,10 @@ function toPoints(s: ResolvedSeries, seriesIndex: number): DotPoint[] {
       x,
       y: yPixel(data[i]),
       r,
-      fill: atPoint(s.dotFill, i, point) ?? color,
+      fill:
+        atPoint(s.dotFill, i, point) ??
+        seriesPointColors.value[seriesIndex]?.[i] ??
+        color,
       opacity:
         atPoint(s.dotOpacity, i, point) ?? s.opacity ?? props.lineOpacity,
     });
@@ -1035,19 +1108,35 @@ function sectionColor(sec: AreaSection): string {
 // hover-move frame patches the svg), and rebuilding every path string
 // per frame is the expensive part of a large chart's render.
 
+const gradientId = useId();
+
+/** Horizontal gradient for a line colored per point by `colorValue`. */
+function seriesGradient(s: ResolvedSeries, colors: (string | undefined)[]) {
+  const pts: { x: number; color: string | undefined }[] = [];
+  for (let i = 0; i < s.data.length; i++) {
+    const xv = seriesXAt(s, i);
+    if (!isFinite(s.data[i]) || !isFinite(xv)) continue;
+    pts.push({ x: xPixel(xv), color: colors[i] });
+  }
+  return lineColorGradient(pts, seriesCurve(s));
+}
+
 /** Per-series path (and dot points when enabled). */
 const seriesRender = computed(() =>
-  allSeries.value.flatMap((s, i) =>
-    isHidden(s.legend)
-      ? []
-      : [
-          {
-            s,
-            path: s.line !== false ? toPath(s) : "",
-            points: s.dots ? toPoints(s, i) : [],
-          },
-        ],
-  ),
+  allSeries.value.flatMap((s, i) => {
+    if (isHidden(s.legend)) return [];
+    const line = s.line !== false;
+    const colors = seriesPointColors.value[i];
+    const gradient = line && colors ? seriesGradient(s, colors) : null;
+    return [
+      {
+        s,
+        path: line ? toPath(s) : "",
+        points: s.dots ? toPoints(s, i) : [],
+        gradient: gradient && { id: `${gradientId}-${i}`, ...gradient },
+      },
+    ];
+  }),
 );
 
 /** Per-area fill path. */
@@ -1245,22 +1334,58 @@ const sectionLabels = computed<{
 interface InlineLegendItem {
   label: string;
   color: string;
-  type: "series" | "area" | "section";
+  type: "series" | "area" | "section" | "scale";
   dashed?: boolean;
   fillOpacity?: number;
   /** Series only: false for a dots-only series. */
   line?: boolean;
+  /** Series only: colored per point, so `color` is the scale's ramp. */
+  ramp?: boolean;
   dot?: { r: number; fill: string; opacity?: number; stroke?: string };
+  /** Color-scale ramp: x offsets of its parts from the item's x. */
+  scale?: {
+    min: string;
+    max: string;
+    minX: number;
+    rampX: number;
+    maxX: number;
+    width: number;
+  };
 }
+
+const RAMP_WIDTH = 64;
+const RAMP_HEIGHT = 8;
+const RAMP_GAP = 4;
+/** Gap between the scale's title and its min label. */
+const RAMP_LABEL_GAP = 6;
+
+function legendTextWidth(text: string): number {
+  const { fontSize, fontWeight } = legendResolved.value;
+  return (
+    measureText(
+      text,
+      `${fontWeight ?? 400} ${fontSize}px ${chartFontFamily.value}`,
+    ) ?? text.length * fontSize * 0.6
+  );
+}
+
+const rampStops = computed(() =>
+  colorRampStops(colorScaleResolved.value?.range),
+);
 
 const inlineLegendItems = computed<InlineLegendItem[]>(() => {
   const items: InlineLegendItem[] = [];
   for (const s of allSeries.value) {
     if (!s.legend || s.showInLegend === false) continue;
-    const color = s.color ?? "currentColor";
+    // A series colored per point shows the scale's ramp instead.
+    const ramp = typeof s.colorValue === "object" && !!colorScaleResolved.value;
+    const color = ramp
+      ? `url(#${gradientId}-ramp)`
+      : (s.color ?? "currentColor");
     items.push({
       label: s.legend,
       color,
+      ramp,
       type: "series",
       dashed: s.dashed,
       line: s.line !== false,
@@ -1287,6 +1412,28 @@ const inlineLegendItems = computed<InlineLegendItem[]>(() => {
       fillOpacity: a.opacity ?? 0.2,
     });
   }
+  const scale = colorScaleResolved.value;
+  if (scale?.legend) {
+    const min = scale.format(scale.domain[0]);
+    const max = scale.format(scale.domain[scale.domain.length - 1]);
+    const label = scale.label ?? "";
+    const minX = label ? legendTextWidth(label) + RAMP_LABEL_GAP : 0;
+    const rampX = minX + legendTextWidth(min) + RAMP_GAP;
+    const maxX = rampX + RAMP_WIDTH + RAMP_GAP;
+    items.push({
+      label,
+      color: "currentColor",
+      type: "scale",
+      scale: {
+        min,
+        max,
+        minX,
+        rampX,
+        maxX,
+        width: maxX + legendTextWidth(max),
+      },
+    });
+  }
   const sections = props.areaSections;
   if (sections) {
     for (const sec of sections) {
@@ -1306,7 +1453,9 @@ const inlineLegendItems = computed<InlineLegendItem[]>(() => {
 });
 
 const inlineLegendLabels = computed(() =>
-  inlineLegendItems.value.map((item) => item.label),
+  inlineLegendItems.value.map((item) =>
+    item.scale ? { width: item.scale.width } : item.label,
+  ),
 );
 
 const totalHeight = computed(
@@ -1657,6 +1806,7 @@ const hoverPoints = computed(() => {
     value: number;
     lower?: number;
     upper?: number;
+    colorValue?: number;
     x: number;
     y: number;
   }[] = [];
@@ -1667,9 +1817,22 @@ const hoverPoints = computed(() => {
     const lower = nIdx !== null && s.lower ? Number(s.lower[nIdx]) : NaN;
     const upper = nIdx !== null && s.upper ? Number(s.upper[nIdx]) : NaN;
     const hasBounds = isFinite(lower) && isFinite(upper);
+    const cv = s.colorValue;
+    const colorValue =
+      cv === undefined || !colorScaleResolved.value
+        ? NaN
+        : typeof cv === "number"
+          ? cv
+          : nIdx !== null
+            ? Number(cv[nIdx])
+            : NaN;
     out.push({
       seriesIndex: i,
-      color: s.color ?? "currentColor",
+      color:
+        (nIdx !== null && finite ? scaleColorAt(s, nIdx) : undefined) ??
+        s.color ??
+        "currentColor",
+      colorValue: isFinite(colorValue) ? colorValue : undefined,
       label: s.tooltipLabel || s.legend || undefined,
       value,
       lower: hasBounds ? Math.min(lower, upper) : undefined,
@@ -1754,6 +1917,7 @@ const hoverSlotProps = computed(() => {
     label: p.label,
     lower: p.lower,
     upper: p.upper,
+    colorValue: p.colorValue,
   }));
   // Single source of truth for label dispatch: same as the x-axis ticks.
   const xLabel = formatXValue(targetX, idx);
@@ -1904,11 +2068,15 @@ const positionedLegendItems = computed(() =>
 );
 
 function legendItemHidden(item: InlineLegendItem): boolean {
-  return item.type !== "section" && isHidden(item.label);
+  return (
+    item.type !== "section" && item.type !== "scale" && isHidden(item.label)
+  );
 }
 
 const legendToggleItems = computed(() =>
-  positionedLegendItems.value.filter((item) => item.type !== "section"),
+  positionedLegendItems.value.filter(
+    (item) => item.type !== "section" && item.type !== "scale",
+  ),
 );
 
 const MARKER_LABEL_FONT_SIZE = 12;
@@ -2356,6 +2524,16 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
         />
         <ChartTitle :title="title" :title-style="titleStyle" :bounds="bounds" />
         <!-- inline legend -->
+        <defs v-if="colorScaleResolved">
+          <linearGradient :id="`${gradientId}-ramp`">
+            <stop
+              v-for="(st, j) in rampStops"
+              :key="j"
+              :offset="st.offset"
+              :stop-color="st.color"
+            />
+          </linearGradient>
+        </defs>
         <g v-if="positionedLegendItems.length > 0">
           <g
             v-for="(item, i) in positionedLegendItems"
@@ -2364,8 +2542,16 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           >
             <!-- series indicator: line and/or dot -->
             <template v-if="item.type === 'series'">
+              <rect
+                v-if="item.line && item.ramp"
+                :x="item.x"
+                :y="item.y - 1"
+                width="12"
+                height="2"
+                :fill="item.color"
+              />
               <line
-                v-if="item.line"
+                v-else-if="item.line"
                 :x1="item.x"
                 :y1="item.y"
                 :x2="item.x + 12"
@@ -2385,6 +2571,32 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
                 :stroke="item.dot.stroke"
               />
             </template>
+            <!-- color scale: title, min, ramp, max -->
+            <g
+              v-else-if="item.scale"
+              data-testid="legend-color-scale"
+              :font-size="legendResolved.fontSize"
+              :fill="legendResolved.fill"
+              :font-weight="legendResolved.fontWeight"
+            >
+              <text v-if="item.label" :x="item.x" :y="item.y + 4">
+                {{ item.label }}
+              </text>
+              <text :x="item.x + item.scale.minX" :y="item.y + 4">
+                {{ item.scale.min }}
+              </text>
+              <rect
+                :x="item.x + item.scale.rampX"
+                :y="item.y - RAMP_HEIGHT / 2"
+                :width="RAMP_WIDTH"
+                :height="RAMP_HEIGHT"
+                rx="2"
+                :fill="`url(#${gradientId}-ramp)`"
+              />
+              <text :x="item.x + item.scale.maxX" :y="item.y + 4">
+                {{ item.scale.max }}
+              </text>
+            </g>
             <!-- area and section indicator: filled swatch -->
             <rect
               v-else
@@ -2398,6 +2610,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
               stroke-width="1.5"
             />
             <text
+              v-if="!item.scale"
               :x="item.x + 18"
               :y="item.y + 4"
               :font-size="legendResolved.fontSize"
@@ -2503,7 +2716,27 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             :project="projectInterval"
           />
           <!-- data lines and dots -->
-          <template v-for="({ s, path, points }, i) in seriesRender" :key="i">
+          <template
+            v-for="({ s, path, points, gradient }, i) in seriesRender"
+            :key="i"
+          >
+            <defs v-if="gradient">
+              <linearGradient
+                :id="gradient.id"
+                gradientUnits="userSpaceOnUse"
+                :x1="gradient.x1"
+                :x2="gradient.x2"
+                y1="0"
+                y2="0"
+              >
+                <stop
+                  v-for="(st, j) in gradient.stops"
+                  :key="j"
+                  :offset="st.offset"
+                  :stop-color="st.color"
+                />
+              </linearGradient>
+            </defs>
             <path
               v-if="s.line !== false && s.outline"
               :d="path"
@@ -2518,7 +2751,9 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
               v-if="s.line !== false"
               :d="path"
               fill="none"
-              :stroke="s.color ?? 'currentColor'"
+              :stroke="
+                gradient ? `url(#${gradient.id})` : (s.color ?? 'currentColor')
+              "
               :stroke-width="s.strokeWidth ?? 1.5"
               :stroke-opacity="s.lineOpacity ?? s.opacity ?? lineOpacity"
               :stroke-dasharray="s.dashed ? '6 3' : undefined"
@@ -2813,6 +3048,8 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             :areas="hoverSlotProps.areas"
             :intervals="hoverSlotProps.intervals"
             :format="hoverSlotProps.format"
+            :color-label="colorScaleResolved?.label"
+            :color-format="colorScaleResolved?.format"
           />
         </slot>
       </div>
