@@ -412,15 +412,27 @@ test("the tooltip keeps dark text on a light fallback without the theme", async 
     .filter({ hasText: "90% interval" })
     .first();
   await chart.scrollIntoViewIfNeeded();
-  const box = (await chart
-    .locator("rect[fill='transparent']")
-    .first()
-    .boundingBox())!;
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.evaluate(() => document.fonts.ready);
   const tooltip = chart.locator(".chart-tooltip-content");
-  await expect(tooltip).toBeVisible();
-  await expect(tooltip).toHaveCSS("background-color", "rgb(255, 255, 255)");
-  await expect(tooltip).toHaveCSS("color", "rgb(33, 37, 41)");
+  // A late layout shift (fonts, demos mounting below) moves the chart out
+  // from under the resting pointer, and Chrome then re-dispatches a mouse
+  // move that leaves the overlay and hides the tooltip; hover again until
+  // it holds through the checks.
+  await expect(async () => {
+    const box = (await chart
+      .locator("rect[fill='transparent']")
+      .first()
+      .boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    const quick = { timeout: 1000 };
+    await expect(tooltip).toBeVisible(quick);
+    await expect(tooltip).toHaveCSS(
+      "background-color",
+      "rgb(255, 255, 255)",
+      quick,
+    );
+    await expect(tooltip).toHaveCSS("color", "rgb(33, 37, 41)", quick);
+  }).toPass();
 });
 
 test("Save as SVG resolves theme colors to what the page shows", async ({
