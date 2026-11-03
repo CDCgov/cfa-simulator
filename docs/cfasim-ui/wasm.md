@@ -120,6 +120,23 @@ Both wasm files live at fixed URLs (`/wasm/{model}/{model}.js` and `{model}_bg.w
 
 The explicit init path uses wasm-bindgen's `{ module_or_path }` form, which needs wasm-bindgen 0.2.93 or newer. Apps that ship prebuilt wasm without the plugin still load it from the plain URLs.
 
+## Rebuilding in dev
+
+In `vite dev` the plugin watches the crate's `src/` directory and `Cargo.toml` through Vite's own file watcher. A change runs the same `wasm-pack build` in the background (the dev server keeps serving meanwhile), and when it finishes the page reloads, so the fresh worker loads the new module and the app re-runs the model with its current inputs. The terminal shows `cfasim-wasm (<name>): rebuilt in 4.2s, reloading`. If the build fails, the compiler output goes to the terminal and to Vite's error overlay in the browser, and the page keeps running the last good build until the next successful one.
+
+Changes within 100 ms are batched into one build, and a change that lands while a build is running schedules one more after it. Vite's watcher never sees the crate's `target/` at all (the plugin adds it to `server.watch.ignored`), since cargo writes thousands of files there per build. Files or directories whose name starts with a dot or ends in `~` are ignored, as are `node_modules` and the crate's own `target/`, Vite's `publicDir` (where the build lands) and `build.outDir`. `Cargo.lock` is not watched: cargo rewrites it during the build.
+
+```ts
+cfasimWasm({
+  model: "..",
+  name: "my_sim",
+  // Also rebuild when a path dependency changes (relative to the Vite root).
+  watch: ["../../shared-crate/src"],
+});
+```
+
+`watch: false` builds once at startup, as before. Extra paths should be source directories that exist when the dev server starts: a path that contains the Vite root would rebuild the model on every `.vue` edit too, and one that does not exist is reported with a warning. `watch` only affects `vite dev`; the `__CFASIM_WASM_VERSIONS__` hash is fixed for the dev server's lifetime; that is fine in dev because Vite serves `public/` with `Cache-Control: no-cache`, so the reloaded page revalidates both wasm URLs. Production builds hash every time.
+
 ## Lower-level API
 
 For more control, use the worker API directly:

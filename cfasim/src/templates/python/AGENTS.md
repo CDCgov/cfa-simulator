@@ -18,13 +18,13 @@ The JSON output gives every component's `name`, `slug`, `keywords`, and absolute
 
 ## Commands
 
-- `pnpm dev` — start the Vite dev server
-- `pnpm build` — production build
-- `pnpm typecheck` — vue-tsc type checking
-- `pnpm test:e2e` — Playwright integration test (boots the dev server, loads the app). If Chromium is missing, run `cfasim tools` to install it.
-- `uv run pytest` — run Python model unit tests (colocated with the package at `src/{{ module_name }}/test_*.py`)
-- `uv run ruff format` — format Python code (`--check` to verify without writing)
-- `uv run ruff check` — lint Python code (`--fix` to auto-fix)
+- `pnpm dev`: start the Vite dev server (rebuilds the wheel and reloads the page when `src/` or `pyproject.toml` changes; a build error shows in the browser overlay and the terminal)
+- `pnpm build`: production build
+- `pnpm typecheck`: vue-tsc type checking
+- `pnpm test:e2e`: Playwright integration test (boots the dev server, loads the app). If Chromium is missing, run `cfasim tools` to install it.
+- `uv run pytest`: run Python model unit tests (colocated with the package at `src/{{ module_name }}/test_*.py`)
+- `uv run ruff format`: format Python code (`--check` to verify without writing)
+- `uv run ruff check`: lint Python code (`--fix` to auto-fix)
 
 ## Conventions
 
