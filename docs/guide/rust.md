@@ -148,8 +148,9 @@ export default defineConfig({
 
 Options:
 
-- `model` — path to your Rust crate directory (default: `"model"`)
-- `name` — output directory name and module name the worker loads (default: the Vite project directory's basename, hyphens converted to underscores)
+- `model`: path to your Rust crate directory (default: `"model"`)
+- `name`: output directory name and module name the worker loads (default: the Vite project directory's basename, hyphens converted to underscores)
+- `watch`: `true` (default) rebuilds and reloads when the crate's `src/` or `Cargo.toml` changes in `vite dev`; an array adds more paths to watch (relative to the Vite root, like `model`), e.g. a path dependency's `src/`; `false` builds once at startup only
 
 Add a minimal `tsconfig.json` at the project root:
 
@@ -245,7 +246,7 @@ From the project root:
 pnpm dev
 ```
 
-The Vite plugin will compile your Rust model to WASM on startup. Changes to your Rust code will trigger a rebuild when you refresh. `pnpm build` produces a static site in `dist/` at the project root.
+The Vite plugin compiles your Rust model to WASM on startup and watches the crate's `src/` and `Cargo.toml`: saving a Rust file rebuilds in the background and reloads the page once the build finishes, and a compile error shows in Vite's error overlay and in the terminal (see [Rebuilding in dev](../cfasim-ui/wasm#rebuilding-in-dev)). `pnpm build` produces a static site in `dist/` at the project root.
 
 ## Next steps
 

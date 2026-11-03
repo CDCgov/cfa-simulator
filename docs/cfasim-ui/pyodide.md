@@ -110,6 +110,22 @@ const [baseline, intervention] = await Promise.all([
 ]);
 ```
 
+## Rebuilding in dev
+
+In `vite dev` the `cfasimPyodide` plugin watches the model's `src/` directory and `pyproject.toml` through Vite's own file watcher. A change rebuilds the model wheel with `uv build` in the background, rewrites `wheels.json`, and reloads the page once the build finishes, so a fresh worker boots Pyodide and installs the new wheel. The terminal shows `cfasim-pyodide: rebuilt in 1.3s, reloading`. If the build fails, its output goes to the terminal and to Vite's error overlay, and the page keeps the last good wheel until the next successful build. A version bump in `pyproject.toml` replaces the old wheel rather than listing both, and the reload waits until Vite's file watcher has seen the new file, since Vite serves a public file only once it has.
+
+Only the model wheel is rebuilt: `pypiDeps` and `localDeps` are built once at startup. Changes within 100 ms are batched into one build, and a change during a build schedules one more after it. Files or directories whose name starts with a dot (`.venv`) or ends in `~`, `__pycache__`, `node_modules`, the `*.egg-info` directory setuptools writes into `src/` during the build, the package's `build/` and `dist/`, Vite's `publicDir` and `build.outDir` are ignored.
+
+```ts
+cfasimPyodide({
+  model: "..",
+  // Also rebuild when files outside src/ change (relative to the Vite root).
+  watch: ["../data"],
+});
+```
+
+`watch: false` builds once at startup, as before. Extra paths should be source directories that exist when the dev server starts: a path that contains the Vite root would rebuild the wheel on every `.vue` edit too, and one that does not exist is reported with a warning.
+
 ## Lower-level API
 
 For more control, use the worker API directly:

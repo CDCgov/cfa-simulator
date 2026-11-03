@@ -141,10 +141,11 @@ export default defineConfig({
 
 Other options:
 
-- `pypiDeps` — list of PyPI packages to prebuild as local wheels, avoiding PyPI round-trips on page load
-- `pyodidePackages` — extra [Pyodide built-in packages](https://pyodide.org/en/stable/usage/packages-in-pyodide.html) to preload in the worker (e.g. `["scipy", "pandas"]`). `micropip` and `numpy` are always loaded.
-- `pipCommand` — command used to invoke pip when downloading `pypiDeps` (default: `"uvx pip"`). Set to `"pip"` or `"uv run pip"` if you'd rather use a pip that's already on your PATH or in your project's venv.
-- `pythonVersion` — Python version passed to pip's `--python-version` flag when downloading `pypiDeps` (default: `"3.12"`). Should match the Python shipped by your Pyodide runtime.
+- `pypiDeps`: list of PyPI packages to prebuild as local wheels, avoiding PyPI round-trips on page load
+- `pyodidePackages`: extra [Pyodide built-in packages](https://pyodide.org/en/stable/usage/packages-in-pyodide.html) to preload in the worker (e.g. `["scipy", "pandas"]`). `micropip` and `numpy` are always loaded.
+- `pipCommand`: command used to invoke pip when downloading `pypiDeps` (default: `"uvx pip"`). Set to `"pip"` or `"uv run pip"` if you'd rather use a pip that's already on your PATH or in your project's venv. It runs without a shell, so `~`, `$VAR` and quotes are not expanded: a string is split on whitespace, and an argument with spaces needs the array form, such as `["uv", "run", "--project", "my proj", "pip"]`.
+- `pythonVersion`: Python version passed to pip's `--python-version` flag when downloading `pypiDeps` (default: `"3.12"`). Should match the Python shipped by your Pyodide runtime.
+- `watch`: `true` (default) rebuilds the model wheel and reloads when `src/` or `pyproject.toml` changes in `vite dev`; an array adds more paths to watch (relative to the Vite root, like `model`); `false` builds once at startup only. `pypiDeps` and `localDeps` are built once at startup either way.
 
 Add a minimal `tsconfig.json` at the project root:
 
@@ -240,7 +241,7 @@ From the project root:
 pnpm dev
 ```
 
-The Vite plugin will build your Python wheel on startup. Changes to your Python code will trigger a rebuild when you refresh. `pnpm build` produces a static site in `dist/` at the project root.
+The Vite plugin builds your Python wheel on startup and watches `src/` and `pyproject.toml`: saving a Python file rebuilds the wheel in the background and reloads the page once the build finishes, and a build error shows in Vite's error overlay and in the terminal (see [Rebuilding in dev](../cfasim-ui/pyodide#rebuilding-in-dev)). `pnpm build` produces a static site in `dist/` at the project root.
 
 ## Next steps
 
