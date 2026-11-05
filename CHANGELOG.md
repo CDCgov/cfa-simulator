@@ -1,6 +1,22 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.14.2] - 2026-11-05
+
+### Features
+
+- **charts:** Draw dots in legend swatches for dotted series
+- **charts:** Add continuous color scales and groupSeries
+- **wasm,pyodide:** Rebuild the model and reload on source changes in dev
+- **charts:** Add legendPosition to place the legend below the plot
+- **charts:** Add legendLayout for grid legends
+- **charts:** Add legendHighlight to fade other series on legend hover
+- **charts:** Add isolate legend toggle and legend-click events
+
+### Tests
+
+- **charts:** Re-hover the tooltip when a layout shift hides it
+
 ## [0.14.1] - 2026-10-31
 
 ### Bug Fixes
