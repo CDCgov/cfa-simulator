@@ -646,7 +646,17 @@ fn a_run_deleted_mid_run_does_not_wedge_the_queue() {
     let run = server.start_run("t", json!({}));
     server.wait_status(&run, &["running"]);
     let run_dir = server._dir.path().join("output").join(&run);
-    std::fs::remove_dir_all(&run_dir).unwrap();
+    // The server may create log.txt between the scan and the final rmdir
+    // (the worker's first line lands just after the run turns running), so
+    // retry until the directory is gone.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while let Err(e) = std::fs::remove_dir_all(&run_dir) {
+        if !run_dir.exists() {
+            break;
+        }
+        assert!(Instant::now() < deadline, "{e}");
+        std::thread::sleep(Duration::from_millis(10));
+    }
     let next = server.start_run("t", json!({}));
     server.wait_status(&next, &["done"]);
     assert!(!run_dir.exists());
