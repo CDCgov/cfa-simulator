@@ -80,7 +80,7 @@ const SCENARIOS = [
     name: "charts: LineChart only",
     pkg: "@cfasim-ui/charts",
     imports: ["LineChart"],
-    limit: 31 * KB,
+    limit: 32 * KB,
     lazyChunks: 0,
   },
   {

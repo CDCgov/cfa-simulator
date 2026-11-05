@@ -37,9 +37,9 @@ const props = withDefaults(
 );
 
 interface RenderedInterval extends IntervalGeometry {
+  interval: ChartInterval;
   style: ResolvedIntervalStyle;
   dot?: { x: number; y: number };
-  opacity?: number;
 }
 
 const items = computed<RenderedInterval[]>(() => {
@@ -64,9 +64,9 @@ const items = computed<RenderedInterval[]>(() => {
     }
     out.push({
       ...intervalGeometry(lo, hi, style.capWidth),
+      interval: iv,
       style,
       dot,
-      opacity: props.opacityFor?.(iv),
     });
   }
   return out;
@@ -80,7 +80,7 @@ const items = computed<RenderedInterval[]>(() => {
       :key="i"
       data-testid="interval"
       class="legend-dim"
-      :opacity="item.opacity"
+      :opacity="opacityFor?.(item.interval)"
       :stroke-opacity="item.style.opacity"
       :fill-opacity="item.style.opacity"
       :style="blendStyle(item.style.blendMode)"

@@ -1265,6 +1265,11 @@ array of legend labels) to read the state, set an initial selection, or
 drive it from your own controls; `hidden-series` works without
 `legend-toggle` too.
 
+`legend-toggle="isolate"` turns a click into "show only this one": every
+other series hides, and a second click on the only one left brings them all
+back. The `legend-click` event reports the clicked label either way, and
+whenever `legend-highlight` makes the legend interactive.
+
 <ComponentDemo>
   <BarChart
     data-testid="legend-toggle-bar-chart"
@@ -1305,7 +1310,7 @@ Set `legend-highlight` to fade every other bar, label and summary line while
 the pointer is over a legend item (or its toggle button has keyboard focus).
 Whenever the legend is interactive (`legend-highlight` or `legend-toggle`),
 the `legend-hover` event reports the label under the pointer, and `null`
-when it leaves.
+when it leaves; `legend-click` reports a click the same way.
 
 <ComponentDemo>
   <BarChart
@@ -1318,6 +1323,7 @@ when it leaves.
     y-label="Cases"
     tooltip-trigger="hover"
     legend-highlight
+    legend-toggle="isolate"
   />
 
 <template #code>
@@ -1333,6 +1339,7 @@ when it leaves.
   y-label="Cases"
   tooltip-trigger="hover"
   legend-highlight
+  legend-toggle="isolate"
   @legend-hover="(label) => (highlighted = label)"
 />
 ```

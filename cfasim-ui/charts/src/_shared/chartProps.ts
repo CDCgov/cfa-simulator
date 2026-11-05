@@ -152,8 +152,9 @@ export interface ChartCommonProps {
   /**
    * Fade every other mark while a legend item is hovered (or its toggle
    * button focused), so only that series shows. Default `false`. The
-   * `legend-hover` event reports the label under the pointer either way
-   * once the legend is interactive (this or `legendToggle`).
+   * `legend-hover` and `legend-click` events report the label under the
+   * pointer either way once the legend is interactive (this or
+   * `legendToggle`).
    */
   legendHighlight?: boolean;
   /**
@@ -161,9 +162,11 @@ export interface ChartCommonProps {
    * item. Default `false`. Each toggleable item gets a real `<button>`
    * (keyboard focusable, state exposed via `aria-pressed`). Hidden marks
    * leave the plot and the tooltip, and the value axis rescales to what
-   * remains; CSV downloads keep every series.
+   * remains; CSV downloads keep every series. `"isolate"` makes a click
+   * hide every other mark instead, and a second click on the only mark
+   * left brings them all back.
    */
-  legendToggle?: boolean;
+  legendToggle?: boolean | "isolate";
   /**
    * Legend labels of the marks currently hidden. Marks sharing a
    * `legend` label hide together. Bind with `v-model:hidden-series` to

@@ -1069,6 +1069,26 @@ describe("BarChart", () => {
       expect(opacityBySeries(0)).toEqual([undefined, undefined]);
     });
 
+    it("isolates a series on click with legendToggle isolate", async () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          series: [
+            { data: [1, 2], legend: "Pediatric" },
+            { data: [3, 4], legend: "Adult" },
+          ],
+          categories: ["A", "B"],
+          legendToggle: "isolate",
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      await wrapper.findAll(".chart-legend-toggle")[0].trigger("click");
+      expect(wrapper.emitted("legendClick")).toEqual([["Pediatric"]]);
+      expect(wrapper.emitted("update:hiddenSeries")).toEqual([[["Adult"]]]);
+      expect(wrapper.findAll('[data-testid="bar"]')).toHaveLength(2);
+    });
+
     it("hides a series legend entry when showInLegend is false", () => {
       const wrapper = mount(BarChart, {
         props: {

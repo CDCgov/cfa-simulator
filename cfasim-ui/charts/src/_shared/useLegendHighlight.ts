@@ -1,4 +1,5 @@
-import { ref } from "vue";
+import { computed, ref } from "vue";
+import type { ChartInterval } from "./intervals.js";
 
 /** Opacity of every mark outside the highlighted legend label. */
 export const LEGEND_DIM_OPACITY = 0.15;
@@ -6,9 +7,13 @@ export const LEGEND_DIM_OPACITY = 0.15;
 export interface LegendHighlightOptions {
   /** Whether hovering dims the other marks; the event fires regardless. */
   enabled: () => boolean | undefined;
-  onChange: (label: string | null) => void;
+  /** The chart's `legendToggle`: its buttons report hover when set. */
+  toggle: () => boolean | string | undefined;
+  /** Whether a label's marks are hidden, so highlighting it fades nothing. */
+  isHidden: (label: string) => boolean;
   /** Legend label of the series at an index, for marks tied to one. */
   seriesLabel: (index: number) => string | undefined;
+  onChange: (label: string | null) => void;
 }
 
 /**
@@ -21,6 +26,9 @@ export interface LegendHighlightOptions {
 export function useLegendHighlight(opts: LegendHighlightOptions) {
   const highlighted = ref<string | null>(null);
 
+  /** Svg hit rects behind the legend items; toggle buttons otherwise. */
+  const hitTargets = computed(() => !!opts.enabled() && !opts.toggle());
+
   function setHighlight(label: string | null) {
     if (label === highlighted.value) return;
     highlighted.value = label;
@@ -28,13 +36,26 @@ export function useLegendHighlight(opts: LegendHighlightOptions) {
   }
 
   function dimFor(label: string | undefined): number | undefined {
-    if (!opts.enabled() || highlighted.value === null) return undefined;
-    return label === highlighted.value ? undefined : LEGEND_DIM_OPACITY;
+    const current = highlighted.value;
+    if (!opts.enabled() || current === null || opts.isHidden(current)) {
+      return undefined;
+    }
+    return label === current ? undefined : LEGEND_DIM_OPACITY;
   }
 
   function dimForSeries(index: number | undefined): number | undefined {
     return dimFor(index != null ? opts.seriesLabel(index) : undefined);
   }
 
-  return { highlighted, setHighlight, dimFor, dimForSeries };
+  // A stable function, so ChartIntervals' props keep their identity.
+  const dimForInterval = (iv: ChartInterval) => dimForSeries(iv.seriesIndex);
+
+  return {
+    highlighted,
+    hitTargets,
+    setHighlight,
+    dimFor,
+    dimForSeries,
+    dimForInterval,
+  };
 }

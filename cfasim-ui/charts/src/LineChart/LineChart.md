@@ -1431,6 +1431,12 @@ array of legend labels) to read the state, set an initial selection, or
 drive it from your own controls; `hidden-series` works without
 `legend-toggle` too.
 
+`legend-toggle="isolate"` turns a click into "show only this one": every
+other mark hides, and a second click on the only mark left brings them all
+back. The `legend-click` event reports the clicked label either way, and
+whenever `legend-highlight` makes the legend interactive, so you can drive
+your own `hidden-series` logic instead.
+
 <ComponentDemo>
   <LineChart
     data-testid="legend-toggle-line-chart"
@@ -1474,7 +1480,7 @@ legend item (or its toggle button has keyboard focus), so just that series
 shows. Whenever the legend is interactive (`legend-highlight` or
 `legend-toggle`), the `legend-hover` event reports the label under the
 pointer, and `null` when it leaves, for your own highlighting or a linked
-view.
+view; `legend-click` reports a click the same way.
 
 <ComponentDemo>
   <LineChart
@@ -1490,6 +1496,7 @@ view.
     y-label="Incidence"
     tooltip-trigger="hover"
     legend-highlight
+    legend-toggle="isolate"
   />
 
 <template #code>
@@ -1502,6 +1509,7 @@ view.
   y-label="Incidence"
   tooltip-trigger="hover"
   legend-highlight
+  legend-toggle="isolate"
   @legend-hover="(label) => (highlighted = label)"
 />
 ```

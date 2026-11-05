@@ -20,13 +20,28 @@ export function useLegendToggle(opts: LegendToggleOptions) {
     return label != null && hiddenSet.value.has(label);
   }
 
-  function toggle(label: string) {
-    const next = isHidden(label)
-      ? hiddenLabels.value.filter((l) => l !== label)
-      : [...hiddenLabels.value, label];
+  function update(next: string[]) {
     local.value = next;
     opts.onUpdate(next);
   }
 
-  return { isHidden, toggle };
+  function toggle(label: string) {
+    update(
+      isHidden(label)
+        ? hiddenLabels.value.filter((l) => l !== label)
+        : [...hiddenLabels.value, label],
+    );
+  }
+
+  /**
+   * Show only `label` out of `labels`, or everything again when it is
+   * already the only one showing.
+   */
+  function isolate(label: string, labels: readonly string[]) {
+    const others = labels.filter((l) => l !== label);
+    const alone = !isHidden(label) && others.every(isHidden);
+    update(alone ? [] : others);
+  }
+
+  return { isHidden, toggle, isolate };
 }

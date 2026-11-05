@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import {
   INLINE_LEGEND_ROW_HEIGHT,
   LEGEND_TEXT_INDENT,
 } from "./useChartPadding.js";
 
-const props = defineProps<{
+defineProps<{
   /** Legend items positioned in svg pixels (`y` is the row center). */
   items: readonly { label: string; x: number; y: number }[];
   isHidden: (label: string) => boolean;
@@ -13,17 +14,27 @@ const props = defineProps<{
   fontWeight?: number | string;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (e: "toggle", label: string): void;
-  /** The label under the pointer or keyboard focus, `null` when none. */
+  /** The label under the pointer, else under keyboard focus, `null` when none. */
   (e: "hover", label: string | null): void;
 }>();
 
 const HIT_PAD_X = 4;
 
-/** A hidden series has no marks to single out, so its button reports none. */
-function hoverLabel(label: string): string | null {
-  return props.isHidden(label) ? null : label;
+// Pointer and focus are tracked apart, so leaving a focused button with
+// the mouse does not drop its highlight.
+const hovered = ref<string | null>(null);
+const focused = ref<string | null>(null);
+
+function setHovered(label: string | null) {
+  hovered.value = label;
+  emit("hover", hovered.value ?? focused.value);
+}
+
+function setFocused(label: string | null) {
+  focused.value = label;
+  emit("hover", hovered.value ?? focused.value);
 }
 </script>
 
@@ -55,10 +66,10 @@ function hoverLabel(label: string): string | null {
         fontWeight,
       }"
       @click="$emit('toggle', item.label)"
-      @mouseenter="$emit('hover', hoverLabel(item.label))"
-      @mouseleave="$emit('hover', null)"
-      @focus="$emit('hover', hoverLabel(item.label))"
-      @blur="$emit('hover', null)"
+      @mouseenter="setHovered(item.label)"
+      @mouseleave="setHovered(null)"
+      @focus="setFocused(item.label)"
+      @blur="setFocused(null)"
     >
       <!-- Invisible copy of the svg label: sizes the button to the text. -->
       <span class="chart-legend-toggle-sizer" aria-hidden="true">{{

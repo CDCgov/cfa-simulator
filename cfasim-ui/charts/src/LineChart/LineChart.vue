@@ -436,6 +436,8 @@ const emit = defineEmits<{
   (e: "update:hiddenSeries", hidden: string[]): void;
   /** Legend label under the pointer or focus, `null` when it leaves. */
   (e: "legendHover", label: string | null): void;
+  /** Legend item clicked, before any toggle it triggers. */
+  (e: "legendClick", label: string): void;
   (e: "update:markers", markers: ChartMarker[]): void;
   (e: "markerDrag", payload: ChartMarkerDragPayload): void;
   (e: "markerDragEnd", payload: ChartMarkerDragPayload): void;
@@ -580,15 +582,27 @@ const seriesPointColors = computed(() =>
   }),
 );
 
-const { isHidden, toggle: toggleLegend } = useLegendToggle({
+const {
+  isHidden,
+  toggle: toggleLegend,
+  isolate: isolateLegend,
+} = useLegendToggle({
   hidden: () => props.hiddenSeries,
   onUpdate: (hidden) => emit("update:hiddenSeries", hidden),
 });
 
-const { setHighlight, dimFor, dimForSeries } = useLegendHighlight({
+const {
+  hitTargets: legendHitTargets,
+  setHighlight,
+  dimFor,
+  dimForSeries,
+  dimForInterval,
+} = useLegendHighlight({
   enabled: () => props.legendHighlight,
-  onChange: (label) => emit("legendHover", label),
+  toggle: () => props.legendToggle,
+  isHidden,
   seriesLabel: (i) => allSeries.value[i]?.legend,
+  onChange: (label) => emit("legendHover", label),
 });
 
 const maxLen = computed(() => {
@@ -2097,11 +2111,28 @@ function legendItemHidden(item: InlineLegendItem): boolean {
  * overlay buttons report hover instead.
  */
 function legendHoverable(item: InlineLegendItem): boolean {
-  return !!props.legendHighlight && !props.legendToggle && isMarkItem(item);
+  return legendHitTargets.value && isMarkItem(item);
 }
 
 function onLegendEnter(item: InlineLegendItem) {
   if (legendHoverable(item)) setHighlight(item.label);
+}
+
+function onLegendClick(item: InlineLegendItem) {
+  if (legendHoverable(item)) emit("legendClick", item.label);
+}
+
+/** A toggle button click: toggle that mark, or isolate it. */
+function onLegendToggle(label: string) {
+  emit("legendClick", label);
+  if (props.legendToggle === "isolate") {
+    isolateLegend(
+      label,
+      legendToggleItems.value.map((item) => item.label),
+    );
+  } else {
+    toggleLegend(label);
+  }
 }
 
 function onLegendLeave(item: InlineLegendItem) {
@@ -2529,7 +2560,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
         :is-hidden="isHidden"
         :font-size="legendResolved.fontSize"
         :font-weight="legendResolved.fontWeight"
-        @toggle="toggleLegend"
+        @toggle="onLegendToggle"
         @hover="setHighlight"
       />
       <svg
@@ -2576,6 +2607,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             :class="{ 'legend-hoverable': legendHoverable(item) }"
             @mouseenter="onLegendEnter(item)"
             @mouseleave="onLegendLeave(item)"
+            @click="onLegendClick(item)"
           >
             <rect
               v-if="legendHoverable(item)"
@@ -2762,7 +2794,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             :intervals="seriesIntervalList"
             :defaults="intervalStyle"
             :project="projectInterval"
-            :opacity-for="(iv) => dimForSeries(iv.seriesIndex)"
+            :opacity-for="dimForInterval"
           />
           <!-- data lines and dots -->
           <g
@@ -2831,7 +2863,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             :defaults="intervalStyle"
             :project="projectInterval"
             :color-for="intervalColor"
-            :opacity-for="(iv) => dimForSeries(iv.seriesIndex)"
+            :opacity-for="dimForInterval"
           />
         </g>
         <!-- area sections (rendered above series) -->
@@ -2847,7 +2879,11 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             v-for="(r, i) in sectionRender"
             :key="'areasec' + i"
             class="legend-dim"
-            :opacity="dimForSeries(r.sec.seriesIndex)"
+            :opacity="
+              r.sec.seriesIndex != null
+                ? dimForSeries(r.sec.seriesIndex)
+                : undefined
+            "
           >
             <path
               data-testid="section-fill"
@@ -2911,6 +2947,8 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
         <circle
           v-for="(dot, i) in hoverDots"
           :key="'hd' + i"
+          class="legend-dim"
+          :opacity="dimForSeries(dot.seriesIndex)"
           :cx="dot.x"
           :cy="dot.y"
           r="4"

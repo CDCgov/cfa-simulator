@@ -462,6 +462,8 @@ const emit = defineEmits<{
   (e: "update:hiddenSeries", hidden: string[]): void;
   /** Legend label under the pointer or focus, `null` when it leaves. */
   (e: "legendHover", label: string | null): void;
+  /** Legend item clicked, before any toggle it triggers. */
+  (e: "legendClick", label: string): void;
 }>();
 
 defineSlots<{
@@ -599,24 +601,41 @@ watch(
   { immediate: true },
 );
 
-const { isHidden, toggle: toggleLegend } = useLegendToggle({
+const {
+  isHidden,
+  toggle: toggleLegend,
+  isolate: isolateLegend,
+} = useLegendToggle({
   hidden: () => props.hiddenSeries,
   onUpdate: (hidden) => emit("update:hiddenSeries", hidden),
 });
 
-const { setHighlight, dimFor, dimForSeries } = useLegendHighlight({
+const {
+  hitTargets: legendHitTargets,
+  setHighlight,
+  dimFor,
+  dimForSeries,
+  dimForInterval,
+} = useLegendHighlight({
   enabled: () => props.legendHighlight,
-  onChange: (label) => emit("legendHover", label),
+  toggle: () => props.legendToggle,
+  isHidden,
   seriesLabel: (i) => allSeries.value[i]?.legend,
+  onChange: (label) => emit("legendHover", label),
 });
 
-/**
- * Svg hover targets behind the legend items; with `legendToggle` the
- * overlay buttons report hover instead.
- */
-const legendHoverable = computed(
-  () => !!props.legendHighlight && !props.legendToggle,
-);
+/** A toggle button click: toggle that mark, or isolate it. */
+function onLegendToggle(label: string) {
+  emit("legendClick", label);
+  if (props.legendToggle === "isolate") {
+    isolateLegend(
+      label,
+      positionedLegendItems.value.map((item) => item.label),
+    );
+  } else {
+    toggleLegend(label);
+  }
+}
 
 /** Series still drawn, each with its index into `allSeries`. */
 const visibleSeries = computed(() =>
@@ -2344,7 +2363,7 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
         :is-hidden="isHidden"
         :font-size="legendResolved.fontSize"
         :font-weight="legendResolved.fontWeight"
-        @toggle="toggleLegend"
+        @toggle="onLegendToggle"
         @hover="setHighlight"
       />
       <svg
@@ -2388,12 +2407,13 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
             v-for="(item, i) in positionedLegendItems"
             :key="'ileg' + i"
             :opacity="isHidden(item.label) ? 0.4 : undefined"
-            :class="{ 'legend-hoverable': legendHoverable }"
-            @mouseenter="legendHoverable && setHighlight(item.label)"
-            @mouseleave="legendHoverable && setHighlight(null)"
+            :class="{ 'legend-hoverable': legendHitTargets }"
+            @mouseenter="legendHitTargets && setHighlight(item.label)"
+            @mouseleave="legendHitTargets && setHighlight(null)"
+            @click="legendHitTargets && $emit('legendClick', item.label)"
           >
             <rect
-              v-if="legendHoverable"
+              v-if="legendHitTargets"
               class="legend-hit"
               :x="item.x - 4"
               :y="item.y - INLINE_LEGEND_ROW_HEIGHT / 2"
@@ -2585,14 +2605,14 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
             :intervals="seriesIntervalList"
             :defaults="intervalStyle"
             :project="projectInterval"
-            :opacity-for="(iv) => dimForSeries(iv.seriesIndex)"
+            :opacity-for="dimForInterval"
           />
           <ChartIntervals
             v-if="topIntervals.length > 0"
             :intervals="topIntervals"
             :defaults="intervalStyle"
             :project="projectInterval"
-            :opacity-for="(iv) => dimForSeries(iv.seriesIndex)"
+            :opacity-for="dimForInterval"
           />
           <!-- value-on-bar labels -->
           <text

@@ -4605,13 +4605,54 @@ describe("LineChart", () => {
       expect(wrapper.emitted("legendHover")).toEqual([["B"]]);
       await buttons[1].trigger("blur");
       expect(wrapper.emitted("legendHover")).toEqual([["B"], [null]]);
-      // A hidden series has nothing to single out.
+      // A hidden series has nothing to single out, so nothing fades.
       await buttons[1].trigger("click");
       await buttons[1].trigger("mouseenter");
-      expect(wrapper.emitted("legendHover")).toEqual([["B"], [null]]);
+      expect(wrapper.emitted("legendHover")).toEqual([["B"], [null], ["B"]]);
       expect(
         wrapper.findAll("g.legend-dim").map((m) => m.attributes("opacity")),
       ).toEqual([undefined]);
+      // Leaving with the pointer keeps a focused button's highlight.
+      await buttons[0].trigger("focus");
+      await buttons[0].trigger("mouseenter");
+      await buttons[0].trigger("mouseleave");
+      expect(wrapper.emitted("legendHover")!.at(-1)).toEqual(["A"]);
+    });
+
+    it("emits legend-click from its own hover targets", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series,
+          legendHighlight: true,
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      wrapper
+        .findAll("rect.legend-hit")[1]
+        .element.parentElement!.dispatchEvent(new MouseEvent("click"));
+      expect(wrapper.emitted("legendClick")).toEqual([["B"]]);
+    });
+
+    it("isolates a series on click with legendToggle isolate", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [...series, { data: [2, 2, 2], legend: "C" }],
+          legendToggle: "isolate",
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const buttons = wrapper.findAll(".chart-legend-toggle");
+      await buttons[1].trigger("click");
+      expect(wrapper.emitted("legendClick")).toEqual([["B"]]);
+      expect(wrapper.emitted("update:hiddenSeries")).toEqual([[["A", "C"]]]);
+      expect(wrapper.findAll("g.legend-dim")).toHaveLength(1);
+      await buttons[1].trigger("click");
+      expect(wrapper.emitted("update:hiddenSeries")!.at(-1)).toEqual([[]]);
+      expect(wrapper.findAll("g.legend-dim")).toHaveLength(3);
     });
   });
 
