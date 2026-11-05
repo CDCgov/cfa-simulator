@@ -1304,13 +1304,15 @@ cases by the reproduction number.
   </template>
 </ComponentDemo>
 
-## Legend and tooltip
-
-### Legend
+## Legend
 
 Set `legend` on a series to add an entry to the inline legend strip above the plot. When the items don't all fit on one row at the chart's current width, the legend wraps to additional rows and the plot area shrinks to keep the legend clear of the data. Use `showInLegend: false` to keep a series off the legend (e.g. when its `legend` string is reused as a CSV column header) and `showInTooltip: false` to omit it from the hover tooltip.
 
+### Position and layout
+
 `legend-position="bottom"` moves the strip under the x-axis label instead. The legend still fits inside the chart's `height`, so the plot gives up the same rows it would have above; [area-section labels](#area-section-labels) stay between the axis and the legend.
+
+`legend-layout="grid"` lines the items up in equal columns, each as wide as the longest label, with as many columns as fit the plot width, so items in different rows align. Pass `:legend-layout="{ columns: 2 }"` to fix the column count instead.
 
 <ComponentDemo>
   <LineChart
@@ -1382,7 +1384,90 @@ Set `legend` on a series to add an entry to the inline legend strip above the pl
   </template>
 </ComponentDemo>
 
-### Tooltip
+<ComponentDemo>
+  <LineChart
+    :series="[
+      { data: [0, 12, 28, 45, 60, 55, 40, 25, 12], color: '#0057b7', legend: 'No interventions' },
+      { data: [0, 10, 22, 38, 50, 45, 32, 18, 8], color: '#fb7e38', legend: 'School closures' },
+      { data: [0, 8, 18, 30, 40, 35, 25, 14, 6], color: '#ef4444', legend: 'Masking + distancing' },
+      { data: [0, 6, 14, 24, 32, 28, 20, 10, 4], color: '#10b981', legend: 'Vaccination only' },
+      { data: [0, 4, 10, 16, 22, 19, 13, 7, 3], color: '#6366f1', legend: 'Vaccination + masking' },
+      { data: [0, 3, 7, 11, 15, 13, 9, 5, 2], color: '#a855f7', legend: 'All interventions combined' },
+    ]"
+    :height="260"
+    title="Legend in a grid"
+    x-label="Weeks"
+    y-label="Incidence"
+    legend-layout="grid"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="scenarios"
+  :height="260"
+  title="Legend in a grid"
+  x-label="Weeks"
+  y-label="Incidence"
+  legend-layout="grid"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Toggle series from the legend
+
+Set `legend-toggle` to let readers show and hide marks by clicking their
+legend item. Every series and area with a `legend` label becomes
+toggleable; marks that share a label toggle together. A hidden mark leaves
+the plot and the tooltip, its legend item dims with a strikethrough, and
+the y axis rescales to what is still shown. CSV downloads always include
+every series.
+
+The chart tracks the hidden labels itself. Bind `v-model:hidden-series` (an
+array of legend labels) to read the state, set an initial selection, or
+drive it from your own controls; `hidden-series` works without
+`legend-toggle` too.
+
+<ComponentDemo>
+  <LineChart
+    data-testid="legend-toggle-line-chart"
+    :series="[
+      { data: Array.from({ length: 60 }, (_, i) => Math.round(900 * Math.exp(-((i - 25) ** 2) / 120))), legend: 'Baseline', color: '#0057b7' },
+      { data: Array.from({ length: 60 }, (_, i) => Math.round(400 * Math.exp(-((i - 32) ** 2) / 200))), legend: 'Vaccination', color: '#fb7e38' },
+      { data: Array.from({ length: 60 }, (_, i) => Math.round(60 * Math.exp(-((i - 40) ** 2) / 260))), legend: 'Vaccination + masks', color: '#2e8540' },
+    ]"
+    :height="220"
+    x-label="Days"
+    y-label="Cases"
+    tooltip-trigger="hover"
+    legend-toggle
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    { data: baseline, legend: 'Baseline', color: '#0057b7' },
+    { data: vaccination, legend: 'Vaccination', color: '#fb7e38' },
+    { data: combined, legend: 'Vaccination + masks', color: '#2e8540' },
+  ]"
+  :height="220"
+  x-label="Days"
+  y-label="Cases"
+  tooltip-trigger="hover"
+  legend-toggle
+  v-model:hidden-series="hidden"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+## Tooltip
 
 Hover over the chart to see a tooltip with values at each data point. Set `tooltip-trigger="hover"` to enable the built-in tooltip with crosshair and highlight dots. Use the `#tooltip` slot for custom content. Pass `tooltip-value-format` to control how numeric values render (e.g. percentages, currency); it falls back to `y-tick-format` when omitted.
 
@@ -1490,56 +1575,6 @@ import { LineChart, ChartTooltipContent } from "@cfasim-ui/charts";
   </template>
 </LineChart>
 ```
-
-### Toggle series from the legend
-
-Set `legend-toggle` to let readers show and hide marks by clicking their
-legend item. Every series and area with a `legend` label becomes
-toggleable; marks that share a label toggle together. A hidden mark leaves
-the plot and the tooltip, its legend item dims with a strikethrough, and
-the y axis rescales to what is still shown. CSV downloads always include
-every series.
-
-The chart tracks the hidden labels itself. Bind `v-model:hidden-series` (an
-array of legend labels) to read the state, set an initial selection, or
-drive it from your own controls; `hidden-series` works without
-`legend-toggle` too.
-
-<ComponentDemo>
-  <LineChart
-    data-testid="legend-toggle-line-chart"
-    :series="[
-      { data: Array.from({ length: 60 }, (_, i) => Math.round(900 * Math.exp(-((i - 25) ** 2) / 120))), legend: 'Baseline', color: '#0057b7' },
-      { data: Array.from({ length: 60 }, (_, i) => Math.round(400 * Math.exp(-((i - 32) ** 2) / 200))), legend: 'Vaccination', color: '#fb7e38' },
-      { data: Array.from({ length: 60 }, (_, i) => Math.round(60 * Math.exp(-((i - 40) ** 2) / 260))), legend: 'Vaccination + masks', color: '#2e8540' },
-    ]"
-    :height="220"
-    x-label="Days"
-    y-label="Cases"
-    tooltip-trigger="hover"
-    legend-toggle
-  />
-
-<template #code>
-
-```vue
-<LineChart
-  :series="[
-    { data: baseline, legend: 'Baseline', color: '#0057b7' },
-    { data: vaccination, legend: 'Vaccination', color: '#fb7e38' },
-    { data: combined, legend: 'Vaccination + masks', color: '#2e8540' },
-  ]"
-  :height="220"
-  x-label="Days"
-  y-label="Cases"
-  tooltip-trigger="hover"
-  legend-toggle
-  v-model:hidden-series="hidden"
-/>
-```
-
-  </template>
-</ComponentDemo>
 
 ## Uncertainty
 

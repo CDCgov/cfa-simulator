@@ -2051,6 +2051,7 @@ const {
   chartPadding: () => markerChartPadding.value,
   inlineLegendLabels: () => inlineLegendLabels.value,
   legendPosition: () => props.legendPosition,
+  legendLayout: () => props.legendLayout,
   hasTooltipSlot: () => hasTooltipSlot.value,
   getCsv: toCsv,
   pointerToIndex: indexFromPointer,

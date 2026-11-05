@@ -1013,6 +1013,32 @@ describe("BarChart", () => {
       expect(Number(xLabel.attributes("y"))).toBe(176);
     });
 
+    it("fixes the legend column count with legendLayout columns", () => {
+      const series = Array.from({ length: 4 }, (_, i) => ({
+        data: [i, i + 1],
+        legend: `Series ${i}`,
+      }));
+      const wrapper = mount(BarChart, {
+        props: {
+          series,
+          categories: ["A", "B"],
+          legendLayout: { columns: 2 },
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const labels = wrapper
+        .findAll("text")
+        .filter((t) => /^Series /.test(t.text()));
+      const xs = labels.map((t) => t.attributes("x"));
+      const ys = labels.map((t) => t.attributes("y"));
+      expect(xs[2]).toBe(xs[0]);
+      expect(xs[3]).toBe(xs[1]);
+      expect(ys[0]).toBe(ys[1]);
+      expect(ys[2]).not.toBe(ys[0]);
+    });
+
     it("hides a series legend entry when showInLegend is false", () => {
       const wrapper = mount(BarChart, {
         props: {

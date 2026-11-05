@@ -1,5 +1,5 @@
 import { computed } from "vue";
-import type { LabelStyle, TitleStyle } from "./chartProps.js";
+import type { LabelStyle, LegendLayout, TitleStyle } from "./chartProps.js";
 
 /** Vertical space reserved per row of the inline legend strip. */
 export const INLINE_LEGEND_ROW_HEIGHT = 20;
@@ -81,6 +81,8 @@ export interface ChartPaddingOptions {
   inlineLegendLabels: () => readonly InlineLegendLabel[];
   /** Side of the plot the legend strip sits on. Defaults to `"top"`. */
   legendPosition?: () => "top" | "bottom" | undefined;
+  /** Item flow within the strip. Defaults to `"inline"`. */
+  legendLayout?: () => LegendLayout | undefined;
   width: () => number;
   height: () => number;
   /**
@@ -146,6 +148,30 @@ function estimateLegendItemWidth(label: InlineLegendLabel): number {
 }
 
 /**
+ * Equal columns as wide as the widest item: as many as fit `available`
+ * (never fewer than one), or exactly `columns` when given, which may run
+ * past the plot width. Items fill row by row.
+ */
+function gridLegendLayout(
+  widths: readonly number[],
+  available: number,
+  columns: number | undefined,
+): { positions: PositionedLegendItem[]; rowCount: number } {
+  const colWidth = Math.max(...widths);
+  const pitch = colWidth + LEGEND_ITEM_GAP;
+  const fit = Math.floor((available + LEGEND_ITEM_GAP) / pitch);
+  const cols = Math.max(
+    1,
+    Math.min(widths.length, Math.floor(columns ?? fit) || 1),
+  );
+  const positions = widths.map((_, i) => ({
+    x: (i % cols) * pitch,
+    row: Math.floor(i / cols),
+  }));
+  return { positions, rowCount: Math.ceil(widths.length / cols) };
+}
+
+/**
  * Computes the standard chart padding (top/right/bottom/left) and the
  * derived inner plotting region (innerW, innerH). Shared by LineChart
  * and BarChart so the axis label spacing and inline legend strip stay
@@ -185,6 +211,14 @@ export function useChartPadding(opts: ChartPaddingOptions) {
     const labels = opts.inlineLegendLabels();
     if (labels.length === 0) return { positions: [], rowCount: 0 };
     const available = Math.max(0, innerW.value);
+    const layout = opts.legendLayout?.() ?? "inline";
+    if (layout !== "inline") {
+      return gridLegendLayout(
+        labels.map(estimateLegendItemWidth),
+        available,
+        typeof layout === "object" ? layout.columns : undefined,
+      );
+    }
     const positions: PositionedLegendItem[] = [];
     let row = 0;
     let x = 0;

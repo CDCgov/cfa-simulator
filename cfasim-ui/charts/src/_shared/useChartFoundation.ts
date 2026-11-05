@@ -15,7 +15,7 @@ import {
 } from "./useChartBrush.js";
 import type { TooltipClamp } from "../tooltip-position.js";
 import { useChartMenu } from "./useChartMenu.js";
-import type { TitleStyle } from "./chartProps.js";
+import type { LegendLayout, TitleStyle } from "./chartProps.js";
 
 const DEFAULT_WIDTH_FALLBACK = 400;
 const DEFAULT_HEIGHT = 200;
@@ -46,6 +46,8 @@ export interface ChartFoundationOptions {
   inlineLegendLabels: () => readonly InlineLegendLabel[];
   /** Side of the plot the inline legend sits on. Defaults to `"top"`. */
   legendPosition?: () => "top" | "bottom" | undefined;
+  /** Item flow within the legend strip. Defaults to `"inline"`. */
+  legendLayout?: () => LegendLayout | undefined;
   hasTooltipSlot: () => boolean;
   getCsv: () => string;
   pointerToIndex: (clientX: number, clientY: number) => number | null;
@@ -138,6 +140,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     yLabel: opts.yLabel,
     inlineLegendLabels: opts.inlineLegendLabels,
     legendPosition: opts.legendPosition,
+    legendLayout: opts.legendLayout,
     width: () => width.value,
     height: () => height.value,
     extraBelowHeight: opts.extraBelowHeight,

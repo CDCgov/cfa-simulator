@@ -1299,11 +1299,13 @@ drive it from your own controls; `hidden-series` works without
   </template>
 </ComponentDemo>
 
-### Legend position
+### Legend position and layout
 
 The legend sits between the title and the plot. `legend-position="bottom"`
 moves it under the x-axis label; it still fits inside the chart's `height`,
-so the plot gives up the same rows it would have above.
+so the plot gives up the same rows it would have above. `legend-layout="grid"`
+lines the items up in equal columns as wide as the longest label (as many as
+fit the plot width), and `:legend-layout="{ columns: 2 }"` fixes the count.
 
 <ComponentDemo>
   <BarChart
@@ -1316,6 +1318,7 @@ so the plot gives up the same rows it would have above.
     x-label="Age group"
     y-label="Cases"
     legend-position="bottom"
+    :legend-layout="{ columns: 2 }"
   />
 
 <template #code>
@@ -1331,6 +1334,7 @@ so the plot gives up the same rows it would have above.
   x-label="Age group"
   y-label="Cases"
   legend-position="bottom"
+  :legend-layout="{ columns: 2 }"
 />
 ```
 

@@ -115,6 +115,7 @@ export type {
   ChartTooltipBaseProps,
   TitleStyle,
   LabelStyle,
+  LegendLayout,
   BlendMode,
   LineMarkStyle,
   PerPoint,

@@ -68,3 +68,50 @@ describe("useChartPadding legend position", () => {
     expect(legendY.value).toBe(200 - INLINE_LEGEND_ROW_HEIGHT / 2);
   });
 });
+
+describe("useChartPadding legend layout", () => {
+  const labels = ["A", "Quite a long label", "B", "C", "D"];
+
+  it("lines grid items up in equal columns as wide as the longest", () => {
+    const { inlineLegendLayout, padding } = layout({
+      inlineLegendLabels: () => labels,
+      legendLayout: () => "grid",
+      width: () => 400,
+    });
+    const { positions, rowCount } = inlineLegendLayout.value;
+    // Longest item: 18 + 18 * 7 = 144px, plus the 16px gap = 160px pitch.
+    // innerW 340 fits two columns.
+    expect(positions.map((p) => p.x)).toEqual([0, 160, 0, 160, 0]);
+    expect(positions.map((p) => p.row)).toEqual([0, 0, 1, 1, 2]);
+    expect(rowCount).toBe(3);
+    expect(padding.value.top).toBe(10 + 3 * INLINE_LEGEND_ROW_HEIGHT);
+  });
+
+  it("takes a fixed column count, even past the plot width", () => {
+    const { inlineLegendLayout } = layout({
+      inlineLegendLabels: () => labels,
+      legendLayout: () => ({ columns: 4 }),
+      width: () => 400,
+    });
+    const { positions, rowCount } = inlineLegendLayout.value;
+    expect(positions.map((p) => p.x)).toEqual([0, 160, 320, 480, 0]);
+    expect(rowCount).toBe(2);
+  });
+
+  it("never drops below one column or above the item count", () => {
+    const narrow = layout({
+      inlineLegendLabels: () => labels,
+      legendLayout: () => "grid",
+      width: () => 100,
+    });
+    expect(narrow.inlineLegendLayout.value.rowCount).toBe(5);
+    const wide = layout({
+      inlineLegendLabels: () => ["A", "B"],
+      legendLayout: () => ({ columns: 6 }),
+    });
+    expect(wide.inlineLegendLayout.value.positions.map((p) => p.x)).toEqual([
+      0, 41,
+    ]);
+    expect(wide.inlineLegendLayout.value.rowCount).toBe(1);
+  });
+});

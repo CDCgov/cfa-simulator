@@ -96,6 +96,9 @@ export interface LineMarkStyle {
   showInLegend?: boolean;
 }
 
+/** Legend item flow: packed rows, auto-fit equal columns, or a fixed count. */
+export type LegendLayout = "inline" | "grid" | { columns: number };
+
 /**
  * Props common to every cartesian chart component. Anything specific to
  * the chart type (series shape, layout, value-axis details) lives on the
@@ -139,6 +142,13 @@ export interface ChartCommonProps {
    * the plot shrinks to stay clear of it.
    */
   legendPosition?: "top" | "bottom";
+  /**
+   * How the legend items flow. `"inline"` (default) packs them left to
+   * right, wrapping when a row is full. `"grid"` lines them up in equal
+   * columns as wide as the longest item, as many as fit the plot width;
+   * `{ columns }` fixes the column count instead.
+   */
+  legendLayout?: LegendLayout;
   /**
    * Let readers show and hide marks by clicking their inline legend
    * item. Default `false`. Each toggleable item gets a real `<button>`

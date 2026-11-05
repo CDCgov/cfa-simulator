@@ -1545,6 +1545,31 @@ describe("LineChart", () => {
       expect(Number(yAxis.attributes("y1"))).toBeLessThan(12);
     });
 
+    it("aligns legend items in columns with legendLayout grid", () => {
+      const series = Array.from({ length: 6 }, (_, i) => ({
+        data: [i, i + 1],
+        legend: i % 2 ? "Long label" : `S${i}`,
+      }));
+      const wrapper = mount(LineChart, {
+        props: {
+          series,
+          legendLayout: "grid",
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const xs = wrapper
+        .findAll("text")
+        .filter((t) => /^(S\d|Long label)/.test(t.text()))
+        .map((t) => Number(t.attributes("x")));
+      // Three 104px columns fit the 340px plot: six items, three x positions,
+      // the second row directly under the first.
+      expect(new Set(xs).size).toBe(3);
+      expect(xs[3]).toBe(xs[0]);
+      expect(xs[4]).toBe(xs[1]);
+    });
+
     it("keeps a bottom legend under the area-section labels", () => {
       const wrapper = mount(LineChart, {
         props: {
