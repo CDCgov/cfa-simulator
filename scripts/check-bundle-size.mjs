@@ -91,6 +91,13 @@ const SCENARIOS = [
     lazyChunks: 0,
   },
   {
+    name: "charts: Heatmap only",
+    pkg: "@cfasim-ui/charts",
+    imports: ["Heatmap"],
+    limit: 20 * KB,
+    lazyChunks: 0,
+  },
+  {
     name: "charts: ChoroplethMap only",
     pkg: "@cfasim-ui/charts",
     imports: ["ChoroplethMap"],
@@ -98,18 +105,18 @@ const SCENARIOS = [
     lazyChunks: 0,
   },
   {
-    // The translator renders both charts, so it carries both.
+    // The translator renders all three cartesian charts, so it carries them.
     name: "charts: VegaLiteChart",
     pkg: "@cfasim-ui/charts/vega-lite",
     imports: ["VegaLiteChart"],
-    limit: 51 * KB,
+    limit: 57 * KB,
     lazyChunks: 0,
   },
   {
     name: "charts: everything",
     pkg: "@cfasim-ui/charts",
     imports: "*",
-    limit: 114 * KB,
+    limit: 120 * KB,
     lazyChunks: 0,
   },
 ];

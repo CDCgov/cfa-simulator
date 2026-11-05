@@ -75,6 +75,7 @@ const CHART_NAMES = [
   "BarChart",
   "ChoroplethMap",
   "DataTable",
+  "Heatmap",
   "LineChart",
   "VegaLiteChart",
 ];
@@ -113,6 +114,18 @@ function findMatchingBrace(text, start) {
   for (let i = start; i < text.length; i++) {
     if (text[i] === "{") depth++;
     if (text[i] === "}") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function findMatchingParen(text, start) {
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === "(") depth++;
+    if (text[i] === ")") {
       depth--;
       if (depth === 0) return i;
     }
@@ -322,6 +335,22 @@ function extractEmits(script) {
   let m;
   while ((m = emitRe.exec(body)) !== null) {
     emits.push({ name: m[1], payload: m[2].trim() });
+  }
+  // Call-signature form: `(e: "name", payload: Type): void`. The payload
+  // runs to the signature's closing paren, so a type with parens of its
+  // own (a function type) is kept whole.
+  const callRe = /\(e:\s*"([^"]+)"/g;
+  while ((m = callRe.exec(body)) !== null) {
+    const end = findMatchingParen(body, m.index);
+    if (end === -1) break;
+    const rest = body.slice(m.index + m[0].length, end).trim();
+    const payload = rest.startsWith(",")
+      ? rest
+          .slice(1)
+          .trim()
+          .replace(/^\w+\??:\s*/, "")
+      : "";
+    emits.push({ name: m[1], payload });
   }
   return emits;
 }

@@ -24,5 +24,11 @@ test("VegaLiteChart renders specs as native charts", async ({ page }) => {
   await bars.scrollIntoViewIfNeeded();
   await expect(bars.locator('[data-testid="bar"]')).toHaveCount(8);
 
+  // A rect mark with a text layer: one labeled cell per state and age group.
+  const heatmap = page.locator('[data-testid="vega-heatmap"]');
+  await heatmap.scrollIntoViewIfNeeded();
+  await expect(heatmap.locator('[data-testid="cell"]')).toHaveCount(40);
+  await expect(heatmap.locator('[data-testid="cell-label"]')).toHaveCount(40);
+
   expect(errors).toEqual([]);
 });

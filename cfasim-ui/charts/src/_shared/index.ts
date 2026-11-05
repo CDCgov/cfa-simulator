@@ -18,7 +18,11 @@ export { useChartSize, type ChartSizeOptions } from "./useChartSize.js";
 export {
   useChartPadding,
   resolveLabelStyle,
+  resolvePadding,
   positionLegendItems,
+  CARTESIAN_LEFT_PADDING,
+  CARTESIAN_RIGHT_PADDING,
+  CARTESIAN_BOTTOM_PADDING,
   INLINE_LEGEND_ROW_HEIGHT,
   TITLE_LINE_HEIGHT,
   TITLE_FONT_SIZE,
@@ -113,6 +117,7 @@ export {
   type ChartFoundationOptions,
 } from "./useChartFoundation.js";
 export type {
+  ChartBaseProps,
   ChartCommonProps,
   ChartHoverPayload,
   ChartTooltipValue,
@@ -142,6 +147,13 @@ export {
   SEQUENTIAL_COLORS,
   type ColorScale,
 } from "./colorScale.js";
+export {
+  layoutColorScaleLegend,
+  RAMP_WIDTH,
+  RAMP_HEIGHT,
+  type ColorScaleLegendLayout,
+} from "./colorScaleLegend.js";
+export { default as ChartColorScaleLegend } from "./ChartColorScaleLegend.vue";
 export {
   parseRgb,
   resolveColorToRgb,
@@ -174,6 +186,7 @@ export {
   isDateXAxis,
   toNumericX,
   measureText,
+  textWidthOrEstimate,
   tickLabelsFit,
   useChartFontFamily,
   type ChartXInput,
