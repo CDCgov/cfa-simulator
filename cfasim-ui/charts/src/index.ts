@@ -41,6 +41,7 @@ export {
   type FocusValue,
   type FocusStyle,
   type RegionsSource,
+  type HsaMapping,
   type MapProjection,
   type MapProjectionName,
 } from "./ChoroplethMap/ChoroplethMap.vue";

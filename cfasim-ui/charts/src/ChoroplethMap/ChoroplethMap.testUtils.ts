@@ -7,10 +7,14 @@ import usStates from "us-atlas/states-10m.json";
 import usCounties from "us-atlas/counties-10m.json";
 import type { Topology } from "topojson-specification";
 import { usHsaTopology } from "../us-hsa-topology/index.js";
+import { fipsToHsa, hsaNames } from "./hsaMapping.js";
 
 export const statesTopo = usStates as unknown as Topology;
 export const countiesTopo = usCounties as unknown as Topology;
 export const hsaTopo = usHsaTopology;
+/** The `hsaMapping` prop for every HSA-shaped mount: the map never imports
+ * the tables itself. */
+export const hsaMapping = { fipsToHsa, hsaNames };
 
 /**
  * Unmount every root wrapper a test mounted once it finishes. Leaked
@@ -31,14 +35,6 @@ export function autoUnmount() {
       if (!w.vm.$.isUnmounted) w.unmount();
     }
   });
-}
-
-/** HSA mapping is dynamic-imported inside ChoroplethMap to keep the main
- * bundle small. Tests that exercise hsas geoType or cross-geoType focus
- * must await both the dynamic import and the Vue render that follows. */
-export async function flushDynamicImports() {
-  await vi.dynamicImportSettled();
-  await flushPromises();
 }
 
 /** happy-dom has no TouchEvent; dispatch a plain bubbling event with the

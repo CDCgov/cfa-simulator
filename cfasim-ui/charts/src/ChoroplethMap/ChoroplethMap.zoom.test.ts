@@ -6,8 +6,8 @@ import {
   autoUnmount,
   statesTopo,
   countiesTopo,
-  flushDynamicImports,
   clickSelect,
+  hsaMapping,
 } from "./ChoroplethMap.testUtils.js";
 
 // Touch detection is probed per event, so tests can flip devices per case.
@@ -64,6 +64,7 @@ describe("ChoroplethMap zoom, controls, and tooltip placement", () => {
   it("draws no NaN paths while the lazy HSA module is still loading", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "hsas",
         width: 600,
@@ -78,7 +79,6 @@ describe("ChoroplethMap zoom, controls, and tooltip placement", () => {
       .filter((p) => (p.attributes("d") ?? "").includes("NaN"));
     expect(bad.length).toBe(0);
     // Once the module lands the real features (and valid paths) appear.
-    await flushDynamicImports();
     expect(wrapper.findAll(".state-path").length).toBeGreaterThan(100);
     for (const p of wrapper.findAll("path")) {
       expect(p.attributes("d") ?? "").not.toContain("NaN");
@@ -283,21 +283,22 @@ describe("ChoroplethMap zoom, controls, and tooltip placement", () => {
     });
 
     it("tightFit crops Alaska on a national HSA map", async () => {
-      // HSA ids aren't FIPS, so AK/HI HSAs are identified via the (lazily
-      // loaded) fipsToHsa table — the crop kicks in once that chunk resolves.
+      // HSA ids aren't FIPS, so AK/HI HSAs are identified via the fipsToHsa
+      // table.
       const base = mount(ChoroplethMap, {
-        props: { topology: countiesTopo, geoType: "hsas" },
+        props: { hsaMapping, topology: countiesTopo, geoType: "hsas" },
       });
-      await flushDynamicImports();
-      await flushDynamicImports();
       expect(globalMinX(base)).toBeGreaterThan(-1);
       base.unmount();
 
       const tight = mount(ChoroplethMap, {
-        props: { topology: countiesTopo, geoType: "hsas", tightFit: true },
+        props: {
+          hsaMapping,
+          topology: countiesTopo,
+          geoType: "hsas",
+          tightFit: true,
+        },
       });
-      await flushDynamicImports();
-      await flushDynamicImports();
       expect(globalMinX(tight)).toBeLessThan(-1);
       tight.unmount();
     });

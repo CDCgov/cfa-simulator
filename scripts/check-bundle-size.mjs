@@ -95,8 +95,7 @@ const SCENARIOS = [
     pkg: "@cfasim-ui/charts",
     imports: ["ChoroplethMap"],
     limit: 57 * KB,
-    lazyChunks: 1,
-    lazyLimit: 26 * KB,
+    lazyChunks: 0,
   },
   {
     // The translator renders both charts, so it carries both.
@@ -111,7 +110,7 @@ const SCENARIOS = [
     pkg: "@cfasim-ui/charts",
     imports: "*",
     limit: 113 * KB,
-    lazyChunks: 1,
+    lazyChunks: 0,
   },
 ];
 

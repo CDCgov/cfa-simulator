@@ -6,11 +6,11 @@ import {
   autoUnmount,
   statesTopo,
   countiesTopo,
-  flushDynamicImports,
   dispatchTouch,
   strokeStyle,
   pathFor,
   clickSelect,
+  hsaMapping,
 } from "./ChoroplethMap.testUtils.js";
 
 // Touch detection is probed per event, so tests can flip devices per case.
@@ -655,7 +655,8 @@ describe("ChoroplethMap", () => {
     expect(wrapper.find(".choropleth-state-borders").exists()).toBe(false);
   });
 
-  it("renders HSA paths when geoType is hsas", async () => {
+  it("renders HSA paths when geoType is hsas, once the mapping arrives", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const wrapper = mount(ChoroplethMap, {
       props: {
         topology: countiesTopo,
@@ -664,13 +665,20 @@ describe("ChoroplethMap", () => {
         geoType: "hsas",
       },
     });
+    // Without the tables the map keeps its layout but hides the geometry,
+    // and says why once.
     expect(wrapper.find(".choropleth-wrapper").classes()).toContain(
       "is-geometry-pending",
     );
     expect(wrapper.find(".choropleth-wrapper").attributes("aria-busy")).toBe(
       "true",
     );
-    await flushDynamicImports();
+    expect(wrapper.findAll(".state-path")).toHaveLength(0);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain("hsa-mapping");
+    await wrapper.setProps({ hsaMapping });
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
     expect(wrapper.find(".choropleth-wrapper").classes()).not.toContain(
       "is-geometry-pending",
     );
@@ -686,6 +694,7 @@ describe("ChoroplethMap", () => {
   it("colors HSAs by HSA code", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: countiesTopo,
         width: 600,
         height: 400,
@@ -696,7 +705,6 @@ describe("ChoroplethMap", () => {
         ],
       },
     });
-    await flushDynamicImports();
     const butler = wrapper
       .findAll(".state-path")
       .find((p) => p.find("title").text().includes("Butler, AL"));
@@ -707,6 +715,7 @@ describe("ChoroplethMap", () => {
   it("renders state borders overlay in HSA mode", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: countiesTopo,
         width: 600,
         height: 400,
@@ -715,7 +724,6 @@ describe("ChoroplethMap", () => {
     });
     // Borders arrive with the features, once the lazy HSA module resolves
     // (nothing renders through the unfittable pre-module projection).
-    await flushDynamicImports();
     expect(wrapper.find(".choropleth-state-borders").exists()).toBe(true);
   });
 
@@ -1152,6 +1160,7 @@ describe("ChoroplethMap", () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "hsas",
         width: 600,
@@ -1178,6 +1187,7 @@ describe("ChoroplethMap", () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "counties" as const,
         width: 600,
@@ -1185,7 +1195,6 @@ describe("ChoroplethMap", () => {
         focus: { id: "060737", geoType: "hsas", stroke: "#666" },
       },
     });
-    await flushDynamicImports();
     const overlay = wrapper.find(".focus-overlay");
     expect(overlay.exists()).toBe(true);
     expect(overlay.attributes("stroke")).toBe("#666");
@@ -1196,6 +1205,7 @@ describe("ChoroplethMap", () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "hsas",
         width: 600,
@@ -1218,6 +1228,7 @@ describe("ChoroplethMap", () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "hsas",
         width: 600,
@@ -1236,6 +1247,7 @@ describe("ChoroplethMap", () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "counties" as const,
         dataGeoType: "hsas" as const,
@@ -1312,6 +1324,7 @@ describe("ChoroplethMap", () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "counties" as const,
         width: 600,
@@ -1319,7 +1332,6 @@ describe("ChoroplethMap", () => {
         focus: { id: "060737", geoType: "hsas", style: "dotted" },
       },
     });
-    await flushDynamicImports();
     const overlay = wrapper.find(".focus-overlay");
     expect(overlay.exists()).toBe(true);
     expect(overlay.attributes("stroke-dasharray")).toBe("0 5");
@@ -1371,6 +1383,7 @@ describe("ChoroplethMap", () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
       props: {
+        hsaMapping,
         topology: countiesTopo,
         width: 600,
         height: 400,
@@ -1384,7 +1397,6 @@ describe("ChoroplethMap", () => {
         focusZoom: false,
       },
     });
-    await flushDynamicImports();
     const overlay = wrapper.find(".focus-overlay");
     expect(overlay.attributes("stroke")).toBe("#666");
     expect(overlay.attributes("stroke-width")).toBe("4");
@@ -1428,6 +1440,7 @@ describe("ChoroplethMap", () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
       props: {
+        hsaMapping,
         topology: countiesTopo,
         width: 600,
         height: 400,
@@ -1436,7 +1449,6 @@ describe("ChoroplethMap", () => {
         focusZoom: false,
       },
     });
-    await flushDynamicImports();
     expect(wrapper.find(".focus-overlay").exists()).toBe(true);
     expect(wrapper.find("g").attributes("transform")).toBeUndefined();
     wrapper.unmount();

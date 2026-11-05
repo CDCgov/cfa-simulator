@@ -220,6 +220,17 @@ export interface RegionsSource {
   borders?: { object?: string; geojson?: GeoJSON.FeatureCollection };
 }
 
+/**
+ * The county-to-HSA tables from `@cfasim-ui/charts/hsa-mapping`, passed in
+ * by the consumer so a map that never draws HSAs never bundles them.
+ */
+export interface HsaMapping {
+  /** 5-digit county FIPS → 6-digit HSA code. */
+  fipsToHsa: Record<string, string>;
+  /** HSA code → name. */
+  hsaNames: Record<string, string>;
+}
+
 export type MapProjectionName =
   | "albersUsa"
   | "albersUsaTerritories"
@@ -261,6 +272,16 @@ const props = withDefaults(
      * are re-exported from `@cfasim-ui/charts` (`geoMercator`, ...).
      */
     projection?: MapProjection;
+    /**
+     * The county-to-HSA tables, needed whenever the map draws or groups by
+     * HSAs: `geoType`/`dataGeoType` `"hsas"`, an HSA row in `data`, an HSA
+     * `focus` item, or `theme.hsaBorders` on a county or state map. Import
+     * `{ fipsToHsa, hsaNames }` from `@cfasim-ui/charts/hsa-mapping` (a
+     * ~25 KB gzipped chunk) and pass them; the HSA geometry stays hidden
+     * (`aria-busy`) until they arrive, and the map warns once if they are
+     * missing.
+     */
+    hsaMapping?: HsaMapping | null;
     data?: StateData[];
     /** Geographic type: "states" (default), "counties", or "hsas" (Health Service Areas) */
     geoType?: GeoType;
@@ -1626,22 +1647,11 @@ watch(
   { immediate: true },
 );
 
-// HSA mapping is loaded lazily — it's ~25KB gzipped and only needed when
-// geoType or dataGeoType is "hsas". Keeps the main bundle small for users
-// who only need states/counties maps.
-type HsaModule = typeof import("./hsaMapping.js");
-const hsaModule = ref<HsaModule | null>(null);
-let hsaModulePromise: Promise<HsaModule> | null = null;
-function loadHsaModule() {
-  if (!hsaModulePromise) {
-    hsaModulePromise = import("./hsaMapping.js").then((m) => {
-      hsaModule.value = m;
-      return m;
-    });
-  }
-  return hsaModulePromise;
-}
-const needsHsaModule = computed(() => {
+// The county-to-HSA tables come from the consumer (`hsaMapping`), never from
+// an import here: a dynamic import still lands in an IIFE build, and only
+// HSA maps need the ~25 KB gzipped chunk.
+const hsaTables = computed(() => props.hsaMapping ?? null);
+const needsHsaMapping = computed(() => {
   if (isGeneric.value) return false;
   if (props.geoType === "hsas" || props.dataGeoType === "hsas") return true;
   // A mixed-level row can pull HSAs in (`data[].geoType`), and any state
@@ -1661,18 +1671,23 @@ const needsHsaModule = computed(() => {
   return items.some((f) => typeof f !== "string" && f.geoType === "hsas");
 });
 const hsaGeometryPending = computed(
-  () => needsHsaModule.value && hsaModule.value == null,
+  () => needsHsaMapping.value && hsaTables.value == null,
 );
+let warnedHsaMapping = false;
 watch(
-  needsHsaModule,
-  (needsHsa) => {
-    if (needsHsa) loadHsaModule();
+  hsaGeometryPending,
+  (pending) => {
+    if (!pending || warnedHsaMapping) return;
+    warnedHsaMapping = true;
+    console.warn(
+      '[ChoroplethMap] this map uses HSAs but has no `hsa-mapping`: import { fipsToHsa, hsaNames } from "@cfasim-ui/charts/hsa-mapping" and pass { fipsToHsa, hsaNames }. The HSA geometry stays hidden until it arrives.',
+    );
   },
   { immediate: true },
 );
 
 const hsaFeaturesGeo = computed(() => {
-  const mod = hsaModule.value;
+  const mod = hsaTables.value;
   if (!mod) return { type: "FeatureCollection" as const, features: [] };
   const { fipsToHsa, hsaNames } = mod;
   const topo = usTopology.value as unknown as
@@ -1682,7 +1697,7 @@ const hsaFeaturesGeo = computed(() => {
   // Fast path: a pre-merged HSA topology (@cfasim-ui/charts/us-hsa-topology)
   // carries an `objects.hsas` collection whose ids are already HSA codes —
   // no county merge needed. HSA codes are state-FIPS-prefixed, so
-  // single-state scoping filters by prefix; names still come from the lazy
+  // single-state scoping filters by prefix; names still come from the
   // `hsaNames` table.
   const hsasObj = topo?.objects?.hsas;
   if (hsasObj) {
@@ -1938,10 +1953,10 @@ const baseFeaturesGeo = computed<ChoroplethFeature[]>(() => {
 // one shape, a county row splits a state map's state into counties. See
 // `mixedGeo.ts` for the substitution itself.
 
-// HSA code → 2-digit state FIPS, inverted from the lazy FIPS→HSA table. HSA
+// HSA code → 2-digit state FIPS, inverted from the FIPS→HSA table. HSA
 // codes aren't state-prefixed, so this is the only way to place one.
 const hsaToState = computed<Map<string, string> | null>(() => {
-  const mod = hsaModule.value;
+  const mod = hsaTables.value;
   if (!mod) return null;
   const m = new Map<string, string>();
   for (const fips in mod.fipsToHsa)
@@ -2030,12 +2045,12 @@ const dcScaleBase = computed<number | null>(() => {
 });
 
 // DC's feature id at the rendered level. Null when the enlargement is off,
-// or until the lazy HSA table resolves on HSA maps.
+// or until the HSA mapping arrives on HSA maps.
 const dcFeatureId = computed<string | null>(() => {
   if (dcScaleBase.value == null) return null;
   if (props.geoType === "states") return "11";
   if (props.geoType === "counties") return "11001";
-  return hsaModule.value?.fipsToHsa["11001"] ?? null;
+  return hsaTables.value?.fipsToHsa["11001"] ?? null;
 });
 
 // Zoom-aware effective scale: hold DC at a constant enlarged on-screen size
@@ -2154,7 +2169,7 @@ const countyBordersMesh = computed<GeoJSON.MultiLineString | null>(() => {
   if (props.geoType !== "hsas" && props.geoType !== "states") return null;
   let groupOf: (id: unknown) => string | undefined;
   if (props.geoType === "hsas") {
-    const table = hsaModule.value?.fipsToHsa;
+    const table = hsaTables.value?.fipsToHsa;
     if (!table) return null;
     groupOf = (id) => table[pad5(id)];
   } else {
@@ -2173,7 +2188,7 @@ const countyBordersMesh = computed<GeoJSON.MultiLineString | null>(() => {
 const hsaBordersMesh = computed<GeoJSON.MultiLineString | null>(() => {
   if (!resolvedTheme.value.hsaBorders) return null;
   if (props.geoType !== "counties" && props.geoType !== "states") return null;
-  const table = hsaModule.value?.fipsToHsa;
+  const table = hsaTables.value?.fipsToHsa;
   if (!table) return null;
   return meshCounties(
     usTopology.value,
@@ -2213,7 +2228,7 @@ const tightFitAmount = computed(() => {
 // and the territories that albersUsaTerritories draws as insets), so the
 // projection can re-fit to just the contiguous US. States/counties key off
 // the FIPS prefix directly; HSA ids are HSA codes, so an HSA has to be placed
-// through the `fipsToHsa` table (null until that lazy chunk loads, so the crop
+// through the `fipsToHsa` table (null until the mapping arrives, so the crop
 // kicks in once it's ready). Each id is read at the level it renders at, which
 // mixed-level maps make per-feature.
 const OFF_CONUS_STATES = new Set(["02", "15", "60", "66", "69", "72", "78"]);
@@ -2387,7 +2402,7 @@ function baseToDataId(baseId: string): string | undefined {
   const dataGt = props.dataGeoType;
   if (isGeneric.value || !dataGt || dataGt === props.geoType) return baseId;
   if (props.geoType === "counties" && dataGt === "hsas") {
-    return hsaModule.value?.fipsToHsa[baseId];
+    return hsaTables.value?.fipsToHsa[baseId];
   }
   if (props.geoType === "counties" && dataGt === "states") {
     return baseId.slice(0, 2);
@@ -4195,7 +4210,7 @@ function rebuildPaths() {
 
   const path = pathGenerator.value;
   const features = featuresGeo.value.features;
-  // No features (e.g. geoType="hsas" before the lazy HSA module resolves)
+  // No features (e.g. geoType="hsas" before the HSA mapping arrives)
   // means the projection was fitted to an empty collection and yields NaN
   // coordinates — skip drawing entirely, including the state-borders mesh,
   // until real features arrive and re-trigger a rebuild.
@@ -4315,7 +4330,7 @@ function rebuildPaths() {
 // rebuilding the feature tree. SVG: a path inserted below the state-borders
 // mesh and the exterior outline. Canvas: scene state for finishBasePass.
 function syncCountyBordersPath() {
-  // No features (e.g. hsas before the lazy module resolves) means a
+  // No features (e.g. hsas before the HSA mapping arrives) means a
   // projection fitted to an empty collection and NaN paths — treat the
   // mesh as absent until rebuildPaths runs with real data.
   const m = featuresGeo.value.features.length ? countyBordersMesh.value : null;
@@ -4414,7 +4429,7 @@ function syncCountyBordersVisibility() {
 // it, matching the borders behavior). Canvas: scene state for
 // finishBasePass.
 function syncOutlinePath() {
-  // With no features (e.g. hsas before the lazy module resolves) the
+  // With no features (e.g. hsas before the HSA mapping arrives) the
   // projection was fitted to an empty collection and yields NaN paths;
   // treat the outline as absent until rebuildPaths runs with real data.
   const m = featuresGeo.value.features.length ? outlineMesh.value : null;
@@ -4682,7 +4697,7 @@ const menuItems = computed<ChartMenuItem[]>(() => {
 // Geometry / projection / tooltip-mode → full rebuild. `featuresGeo` is
 // watched explicitly because in single-state mode the projection is pinned
 // to the static state outline, so an async change to the feature set (e.g.
-// the lazy HSA module resolving) wouldn't otherwise change `pathGenerator`.
+// the HSA mapping arriving) wouldn't otherwise change `pathGenerator`.
 watch(
   () => [featuresGeo.value, pathGenerator.value, hasInteractiveTooltip.value],
   () => rebuildPaths(),
@@ -4776,7 +4791,7 @@ watch(outlineDeps, (deps) => {
 });
 
 // County-borders mesh or color → create/update/remove its path (or canvas
-// scene state). Also fires when the lazy HSA table resolves on HSA maps.
+// scene state). Also fires when the HSA mapping arrives on HSA maps.
 watch(countyBordersDeps, (deps) => {
   if (samePaint(deps, paintedCountyBordersDeps)) return;
   paintedCountyBordersDeps = deps;
@@ -4797,11 +4812,11 @@ watch(countyBordersZoomVisible, () => syncCountyBordersVisibility());
 // `flush: "post"` so any pending path rebuild from the watcher above has
 // already run; we still use the GeoJSON pathGenerator directly so the SVG
 // path tree isn't actually required, but keeping the order avoids stacking
-// two zoom transforms in the same tick. `hsaModule` is included so a
-// cross-geoType focus on an hsa item re-applies once the lazy module
-// resolves (the base pathGenerator doesn't depend on hsa data).
+// two zoom transforms in the same tick. `hsaTables` is included so a
+// cross-geoType focus on an hsa item re-applies once the mapping arrives
+// (the base pathGenerator doesn't depend on hsa data).
 watch(
-  () => [normalizedFocus.value, pathGenerator.value, hsaModule.value],
+  () => [normalizedFocus.value, pathGenerator.value, hsaTables.value],
   () => applyFocus(),
   { flush: "post" },
 );

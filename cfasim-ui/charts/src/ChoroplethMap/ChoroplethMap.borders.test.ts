@@ -6,7 +6,7 @@ import {
   autoUnmount,
   countiesTopo,
   hsaTopo,
-  flushDynamicImports,
+  hsaMapping,
 } from "./ChoroplethMap.testUtils.js";
 
 // Touch detection is probed per event, so tests can flip devices per case.
@@ -21,7 +21,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
   const countyMesh = (wrapper: ReturnType<typeof mount>) =>
     wrapper.find(".choropleth-county-borders");
 
-  it("draws the county mesh on an HSA map once the lazy module resolves", async () => {
+  it("draws the county mesh on an HSA map once the mapping arrives", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         topology: countiesTopo,
@@ -31,9 +31,9 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
         theme: { countyBorders: "#999" },
       },
     });
-    // Pre-module: no features and no FIPS→HSA table, so no mesh yet.
+    // No FIPS→HSA table yet: no features and no mesh.
     expect(countyMesh(wrapper).exists()).toBe(false);
-    await flushDynamicImports();
+    await wrapper.setProps({ hsaMapping });
     const mesh = countyMesh(wrapper);
     expect(mesh.exists()).toBe(true);
     expect(mesh.attributes("stroke")).toBe("#999");
@@ -46,6 +46,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
   it("keeps the mesh below the state-borders mesh and the outline", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "hsas" as const,
         width: 600,
@@ -53,7 +54,6 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
         theme: { countyBorders: "#999", borders: "#900", outline: "#0a0" },
       },
     });
-    await flushDynamicImports();
     const county = countyMesh(wrapper).element;
     const stateMesh = wrapper
       .find(".choropleth-wrapper > svg")
@@ -79,6 +79,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
   it("defaults the mesh width to the feature stroke width", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "hsas" as const,
         width: 600,
@@ -86,7 +87,6 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
         theme: { countyBorders: "#999" },
       },
     });
-    await flushDynamicImports();
     // Dense-map feature stroke default is 0.25.
     expect(countyMesh(wrapper).attributes("stroke-width")).toBe("0.25");
     await wrapper.setProps({
@@ -98,6 +98,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
   it("scopes the mesh to the selected state in single-state mode", async () => {
     const national = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "hsas" as const,
         width: 600,
@@ -107,6 +108,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
     });
     const scoped = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "hsas" as const,
         state: "California",
@@ -115,7 +117,6 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
         theme: { countyBorders: "#999" },
       },
     });
-    await flushDynamicImports();
     const nationalD = countyMesh(national).attributes("d")!;
     const scopedD = countyMesh(scoped).attributes("d")!;
     expect(scopedD).toBeTruthy();
@@ -150,6 +151,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
   it("draws nothing from a pre-merged HSA topology (no counties object)", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: hsaTopo as unknown as Topology,
         geoType: "hsas" as const,
         width: 600,
@@ -157,7 +159,6 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
         theme: { countyBorders: "#999" },
       },
     });
-    await flushDynamicImports();
     expect(wrapper.findAll(".state-path").length).toBeGreaterThan(0);
     expect(countyMesh(wrapper).exists()).toBe(false);
   });
@@ -209,6 +210,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
   it("draws no mesh at all over a single state merged to its state shape", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "hsas" as const,
         state: "California",
@@ -218,7 +220,6 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
         theme: { countyBorders: "#999" },
       },
     });
-    await flushDynamicImports();
     expect(countyMesh(wrapper).exists()).toBe(false);
   });
 });
@@ -227,9 +228,9 @@ describe("ChoroplethMap HSA borders (theme.hsaBorders)", () => {
   const hsaMesh = (wrapper: ReturnType<typeof mount>) =>
     wrapper.find(".choropleth-hsa-borders");
 
-  it("draws HSA separators on a county map, loading the lazy table itself", async () => {
-    // Nothing else on this map is HSA-shaped: the theme key alone must
-    // trigger the FIPS→HSA module load.
+  it("draws HSA separators on a county map once the mapping arrives", async () => {
+    // Nothing else on this map is HSA-shaped: the theme key alone needs
+    // the FIPS→HSA table.
     const wrapper = mount(ChoroplethMap, {
       props: {
         topology: countiesTopo,
@@ -240,7 +241,10 @@ describe("ChoroplethMap HSA borders (theme.hsaBorders)", () => {
       },
     });
     expect(hsaMesh(wrapper).exists()).toBe(false);
-    await flushDynamicImports();
+    expect(wrapper.find(".choropleth-wrapper").attributes("aria-busy")).toBe(
+      "true",
+    );
+    await wrapper.setProps({ hsaMapping });
     const mesh = hsaMesh(wrapper);
     expect(mesh.exists()).toBe(true);
     expect(mesh.attributes("stroke")).toBe("#eee");
@@ -255,6 +259,7 @@ describe("ChoroplethMap HSA borders (theme.hsaBorders)", () => {
   it("keeps the mesh above county features and below the state mesh", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "counties" as const,
         width: 600,
@@ -262,7 +267,6 @@ describe("ChoroplethMap HSA borders (theme.hsaBorders)", () => {
         theme: { hsaBorders: "#eee", borders: "#900" },
       },
     });
-    await flushDynamicImports();
     const mesh = hsaMesh(wrapper).element;
     const feature = wrapper.find(".state-path").element;
     const stateMesh = wrapper
@@ -288,6 +292,7 @@ describe("ChoroplethMap HSA borders (theme.hsaBorders)", () => {
   it("draws nothing on HSA maps, where feature strokes are the HSA lines", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "hsas" as const,
         width: 600,
@@ -295,13 +300,13 @@ describe("ChoroplethMap HSA borders (theme.hsaBorders)", () => {
         theme: { hsaBorders: "#eee" },
       },
     });
-    await flushDynamicImports();
     expect(hsaMesh(wrapper).exists()).toBe(false);
   });
 
   it("removes the mesh when the theme drops it", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "counties" as const,
         width: 600,
@@ -309,7 +314,6 @@ describe("ChoroplethMap HSA borders (theme.hsaBorders)", () => {
         theme: { hsaBorders: "#eee" },
       },
     });
-    await flushDynamicImports();
     expect(hsaMesh(wrapper).exists()).toBe(true);
     await wrapper.setProps({ theme: {} });
     expect(hsaMesh(wrapper).exists()).toBe(false);
@@ -318,6 +322,7 @@ describe("ChoroplethMap HSA borders (theme.hsaBorders)", () => {
   it("scopes the mesh to the selected state in single-state mode", async () => {
     const national = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "counties" as const,
         width: 600,
@@ -327,6 +332,7 @@ describe("ChoroplethMap HSA borders (theme.hsaBorders)", () => {
     });
     const scoped = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "counties" as const,
         state: "California",
@@ -335,7 +341,6 @@ describe("ChoroplethMap HSA borders (theme.hsaBorders)", () => {
         theme: { hsaBorders: "#eee" },
       },
     });
-    await flushDynamicImports();
     const nationalD = hsaMesh(national).attributes("d")!;
     const scopedD = hsaMesh(scoped).attributes("d")!;
     expect(scopedD).toBeTruthy();

@@ -7,9 +7,9 @@ import {
   statesTopo,
   countiesTopo,
   hsaTopo,
-  flushDynamicImports,
   flushOverlayLayout,
   strokeStyle,
+  hsaMapping,
 } from "./ChoroplethMap.testUtils.js";
 
 // Touch detection is probed per event, so tests can flip devices per case.
@@ -406,7 +406,7 @@ describe("ChoroplethMap theming", () => {
     expect(wrapper.find(".choropleth-outline").exists()).toBe(false);
   });
 
-  it("defers the HSA-map outline until the lazy module resolves", async () => {
+  it("defers the HSA-map outline until the mapping arrives", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         topology: countiesTopo,
@@ -416,10 +416,10 @@ describe("ChoroplethMap theming", () => {
         theme: { outline: "#0a0" },
       },
     });
-    // Pre-module: no features, so no outline path (a NaN-fitted projection
+    // No mapping: no features, so no outline path (a NaN-fitted projection
     // must not leak a "MNaN…" path).
     expect(wrapper.find(".choropleth-outline").exists()).toBe(false);
-    await flushDynamicImports();
+    await wrapper.setProps({ hsaMapping });
     const outline = wrapper.find(".choropleth-outline");
     expect(outline.exists()).toBe(true);
     expect(outline.attributes("d")).not.toContain("NaN");
@@ -700,11 +700,11 @@ describe("ChoroplethMap enlargeDc", () => {
   });
 
   it("enlarges DC's HSA on an HSA map", async () => {
-    const { fipsToHsa } = await import("./hsaMapping.js");
-    const dcHsa = fipsToHsa["11001"];
+    const dcHsa = hsaMapping.fipsToHsa["11001"];
     expect(dcHsa).toBeTruthy();
     const plain = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: hsaTopo,
         geoType: "hsas" as const,
         width: 800,
@@ -713,6 +713,7 @@ describe("ChoroplethMap enlargeDc", () => {
     });
     const scaled = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: hsaTopo,
         geoType: "hsas" as const,
         width: 800,
@@ -720,7 +721,6 @@ describe("ChoroplethMap enlargeDc", () => {
         enlargeDc: 4,
       },
     });
-    await flushDynamicImports();
     const before = pathBBox(dOf(plain, dcHsa));
     const after = pathBBox(dOf(scaled, dcHsa));
     expect(after.w / before.w).toBeGreaterThan(3.2);

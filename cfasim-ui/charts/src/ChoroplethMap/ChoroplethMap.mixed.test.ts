@@ -6,9 +6,9 @@ import {
   statesTopo,
   countiesTopo,
   hsaTopo,
-  flushDynamicImports,
   strokeStyle,
   clickSelect,
+  hsaMapping,
 } from "./ChoroplethMap.testUtils.js";
 
 // Touch detection is probed per event, so tests can flip devices per case.
@@ -227,6 +227,7 @@ describe("ChoroplethMap mixed geographic levels", () => {
   it("substitutes HSAs for one state once the mapping loads", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: countiesTopo,
         geoType: "counties" as const,
         width: 600,
@@ -235,7 +236,6 @@ describe("ChoroplethMap mixed geographic levels", () => {
         data: [{ id: "060723", value: 3, geoType: "hsas" as const }],
       },
     });
-    await flushDynamicImports();
     const rendered = ids(wrapper);
     expect(rendered).toContain("060723");
     expect(rendered.some((id) => /^06\d{3}$/.test(id))).toBe(false);
@@ -319,6 +319,7 @@ describe("ChoroplethMap pre-merged HSA topology (objects.hsas fast path)", () =>
   async function mountHsas(extra: Record<string, unknown> = {}) {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: hsaTopo,
         width: 600,
         height: 400,
@@ -326,7 +327,6 @@ describe("ChoroplethMap pre-merged HSA topology (objects.hsas fast path)", () =>
         ...extra,
       },
     });
-    await flushDynamicImports();
     return wrapper;
   }
 
@@ -334,13 +334,13 @@ describe("ChoroplethMap pre-merged HSA topology (objects.hsas fast path)", () =>
     const fast = await mountHsas();
     const legacy = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: countiesTopo,
         width: 600,
         height: 400,
         geoType: "hsas" as const,
       },
     });
-    await flushDynamicImports();
     const fastPaths = pathsById(fast);
     const legacyPaths = pathsById(legacy);
     expect(fastPaths.size).toBeGreaterThan(900);
@@ -353,6 +353,7 @@ describe("ChoroplethMap pre-merged HSA topology (objects.hsas fast path)", () =>
     const fast = await mountHsas({ state: "06" });
     const legacy = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: countiesTopo,
         width: 600,
         height: 400,
@@ -360,7 +361,6 @@ describe("ChoroplethMap pre-merged HSA topology (objects.hsas fast path)", () =>
         state: "06",
       },
     });
-    await flushDynamicImports();
     const fastPaths = pathsById(fast);
     expect(fastPaths.size).toBeGreaterThan(10);
     for (const id of fastPaths.keys()) expect(id.slice(0, 2)).toBe("06");
@@ -401,6 +401,7 @@ describe("ChoroplethMap pre-merged HSA topology (objects.hsas fast path)", () =>
   it("does not outline a states-only topology in hsas mode", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: statesTopo,
         width: 600,
         height: 400,
@@ -408,7 +409,6 @@ describe("ChoroplethMap pre-merged HSA topology (objects.hsas fast path)", () =>
         theme: { outline: "#0a0" },
       },
     });
-    await flushDynamicImports();
     expect(wrapper.find(".choropleth-outline").exists()).toBe(false);
     wrapper.unmount();
   });
@@ -468,6 +468,7 @@ describe("ChoroplethMap single-state mode", () => {
   it("scopes HSAs to a single state", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
+        hsaMapping,
         topology: countiesTopo,
         width: 600,
         height: 400,
@@ -475,7 +476,6 @@ describe("ChoroplethMap single-state mode", () => {
         state: "California",
       },
     });
-    await flushDynamicImports();
     const paths = wrapper.findAll(".state-path");
     // A handful of HSAs, far fewer than the national 949, all "06"-prefixed.
     expect(paths.length).toBeGreaterThan(0);
@@ -598,6 +598,7 @@ describe("ChoroplethMap single-state mode", () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
       props: {
+        hsaMapping,
         topology: countiesTopo,
         width: 600,
         height: 400,
@@ -607,7 +608,6 @@ describe("ChoroplethMap single-state mode", () => {
         focus: { id: "060766", geoType: "hsas" }, // a California HSA
       },
     });
-    await flushDynamicImports();
     const overlay = wrapper.find(".focus-overlay");
     expect(overlay.exists()).toBe(true);
     expect(overlay.attributes("fill")).toBe("none");

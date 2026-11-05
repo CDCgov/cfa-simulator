@@ -18,6 +18,8 @@ import { useModelParams } from "../useModelParams";
 import usCounties from "us-atlas/counties-10m.json";
 import type { Topology } from "topojson-specification";
 
+const hsaMapping = { fipsToHsa, hsaNames };
+
 const topology = usCounties as unknown as Topology;
 
 type NamedGeom = { id: string | number; properties: { name: string } };
@@ -514,6 +516,7 @@ const subtitle = computed(() => {
     >
       <div class="map-container">
         <ChoroplethMap
+          :hsa-mapping="hsaMapping"
           :topology="topology"
           :state="params.selectedState"
           :geo-type="mapGeoType"
@@ -608,6 +611,7 @@ const subtitle = computed(() => {
       >
         <ChoroplethMap
           v-if="showOutlineComparison"
+          :hsa-mapping="hsaMapping"
           :topology="topology"
           :state="params.selectedState"
           :geo-type="mapGeoType"

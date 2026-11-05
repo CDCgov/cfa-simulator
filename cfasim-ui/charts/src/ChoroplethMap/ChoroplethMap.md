@@ -9,12 +9,13 @@ const countiesTopo = shallowRef(null);
 const hsaTopo = shallowRef(null);
 const worldTopo = shallowRef(null);
 const fipsToHsa = shallowRef({});
+const hsaMapping = shallowRef(null);
 const nationalCities = shallowRef([]);
 const californiaCities = shallowRef([]);
 const geoReady = ref(false);
 
 onMounted(async () => {
-  const [states, counties, hsa, world, hsaMapping, cities] = await Promise.all([
+  const [states, counties, hsa, world, mapping, cities] = await Promise.all([
     import("us-atlas/states-10m.json"),
     import("us-atlas/counties-10m.json"),
     import("@cfasim-ui/charts/us-hsa-topology"),
@@ -26,7 +27,8 @@ onMounted(async () => {
   countiesTopo.value = counties.default;
   hsaTopo.value = hsa.usHsaTopology;
   worldTopo.value = world.default;
-  fipsToHsa.value = hsaMapping.fipsToHsa;
+  fipsToHsa.value = mapping.fipsToHsa;
+  hsaMapping.value = { fipsToHsa: mapping.fipsToHsa, hsaNames: mapping.hsaNames };
   // Capital + 100 most-populous US cities for the national demo, and
   // California's capital + top cities for the single-state demo.
   nationalCities.value = cities.nationalCityMarkers();
@@ -843,17 +845,34 @@ screen. The pre-merged one still carries state boundaries, so `state` and
 state-level rows work; only county-level rendering needs the county
 topology.
 
+Anything HSA-shaped (`geoType` or `dataGeoType` `"hsas"`, an HSA row or
+`focus` item, `theme.hsaBorders`) also needs the county-to-HSA tables, which
+the map never imports itself so that a states or counties map never bundles
+them (about 25 KB gzipped): import `fipsToHsa` and `hsaNames` from
+`@cfasim-ui/charts/hsa-mapping` and pass them as `hsa-mapping`. The map
+keeps its layout but hides the HSA geometry (`aria-busy`) until they
+arrive, so they can be loaded lazily, and warns once if they never do.
+
 ```vue
 <script setup>
 import { ChoroplethMap } from "@cfasim-ui/charts";
+import { fipsToHsa, hsaNames } from "@cfasim-ui/charts/hsa-mapping";
 import { usHsaTopology } from "@cfasim-ui/charts/us-hsa-topology";
+
+const hsaMapping = { fipsToHsa, hsaNames };
 </script>
 
-<ChoroplethMap :topology="usHsaTopology" geo-type="hsas" :data="hsaData" />
+<ChoroplethMap
+  :topology="usHsaTopology"
+  geo-type="hsas"
+  :data="hsaData"
+  :hsa-mapping="hsaMapping"
+/>
 ```
 
 <ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
+    :hsa-mapping="hsaMapping"
     :topology="hsaTopo"
     geo-type="hsas"
     zoom
@@ -886,6 +905,7 @@ import { usHsaTopology } from "@cfasim-ui/charts/us-hsa-topology";
 
 ```vue
 <ChoroplethMap
+  :hsa-mapping="hsaMapping"
   :topology="usHsaTopology"
   geo-type="hsas"
   zoom
@@ -925,6 +945,7 @@ separators over a county map, as in
 
 <ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
+    :hsa-mapping="hsaMapping"
     :topology="countiesTopo"
     geo-type="hsas"
     state="California"
@@ -942,6 +963,7 @@ separators over a county map, as in
 
 ```vue
 <ChoroplethMap
+  :hsa-mapping="hsaMapping"
   :topology="countiesTopo"
   geo-type="hsas"
   state="California"
@@ -971,6 +993,7 @@ array; the cross-geoType item renders as a dashed overlay.
 
 <ComponentDemo lazy :ready="geoReady">
   <ChoroplethMap
+    :hsa-mapping="hsaMapping"
     :topology="countiesTopo"
     geo-type="counties"
     data-geo-type="hsas"
@@ -1018,6 +1041,7 @@ const focus = computed(() => {
 </script>
 
 <ChoroplethMap
+  :hsa-mapping="hsaMapping"
   :topology="countiesTopo"
   geo-type="counties"
   data-geo-type="hsas"
