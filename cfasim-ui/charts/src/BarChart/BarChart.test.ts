@@ -992,6 +992,27 @@ describe("BarChart", () => {
       expect(labelYs.size).toBeGreaterThan(1);
     });
 
+    it("draws the legend under the x-axis label with legendPosition bottom", () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          series: [{ data: [1, 2], legend: "Pediatric" }],
+          categories: ["A", "B"],
+          xLabel: "Age group",
+          legendPosition: "bottom",
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const texts = wrapper.findAll("text");
+      const legend = texts.find((t) => t.text() === "Pediatric")!;
+      const xLabel = texts.find((t) => t.text() === "Age group")!;
+      // One 20px legend row at the bottom of the 200px svg (row center
+      // 190, baseline +4); the x label moves up from height - 4.
+      expect(Number(legend.attributes("y"))).toBe(194);
+      expect(Number(xLabel.attributes("y"))).toBe(176);
+    });
+
     it("hides a series legend entry when showInLegend is false", () => {
       const wrapper = mount(BarChart, {
         props: {

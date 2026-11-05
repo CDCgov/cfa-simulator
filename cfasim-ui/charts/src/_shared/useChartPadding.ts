@@ -79,8 +79,15 @@ export interface ChartPaddingOptions {
    * not a swatch plus label (a color-scale ramp) gives its full `width`.
    */
   inlineLegendLabels: () => readonly InlineLegendLabel[];
+  /** Side of the plot the legend strip sits on. Defaults to `"top"`. */
+  legendPosition?: () => "top" | "bottom" | undefined;
   width: () => number;
   height: () => number;
+  /**
+   * Height the chart adds below `height` (LineChart's area-section
+   * labels). A bottom legend sits under that, at the svg's real bottom.
+   */
+  extraBelowHeight?: () => number;
   /** Extra pixels added on top of the standard axis spacing. */
   extraPadding?: () => ChartPadding | undefined;
 }
@@ -147,8 +154,9 @@ function estimateLegendItemWidth(label: InlineLegendLabel): number {
  * clipping.
  *
  * The inline legend wraps to multiple rows when items don't fit in the
- * available width; `padding.top` grows by `INLINE_LEGEND_ROW_HEIGHT` per
- * row so the plot stays clear of the legend strip.
+ * available width; `padding.top` (or `padding.bottom` with
+ * `legendPosition: "bottom"`) grows by `INLINE_LEGEND_ROW_HEIGHT` per row
+ * so the plot stays clear of the legend strip.
  */
 export function useChartPadding(opts: ChartPaddingOptions) {
   // Horizontal padding is computed first because `innerW` depends only
@@ -206,24 +214,43 @@ export function useChartPadding(opts: ChartPaddingOptions) {
     return lineCount * lineHeight + TITLE_BOTTOM_GAP;
   });
 
+  const legendAtBottom = computed(() => opts.legendPosition?.() === "bottom");
+  const legendHeight = computed(
+    () => inlineLegendLayout.value.rowCount * INLINE_LEGEND_ROW_HEIGHT,
+  );
+  /**
+   * Height of the legend strip when it sits under the plot, else 0. The
+   * x-axis label and anything else drawn against the svg's bottom edge
+   * moves up by this much.
+   */
+  const bottomLegendHeight = computed(() =>
+    legendAtBottom.value ? legendHeight.value : 0,
+  );
+
   const padding = computed(() => {
     const extra = resolvePadding(opts.extraPadding?.());
-    const rowCount = inlineLegendLayout.value.rowCount;
+    const topLegend = legendAtBottom.value ? 0 : legendHeight.value;
     return {
-      top: titleHeight.value + rowCount * INLINE_LEGEND_ROW_HEIGHT + extra.top,
-      bottom: (opts.xLabel() ? 38 : 30) + extra.bottom,
+      top: titleHeight.value + topLegend + extra.top,
+      bottom:
+        (opts.xLabel() ? 38 : 30) + bottomLegendHeight.value + extra.bottom,
       left: horizontalPadding.value.left,
       right: horizontalPadding.value.right,
     };
   });
 
-  // Y-center of the first inline-legend row. Sits at the top of the
-  // padding band (just below any title), so any user-supplied
+  // Y-center of the first inline-legend row. On top it sits at the top of
+  // the padding band (just below any title), so any user-supplied
   // `extraPadding.top` becomes empty room between the legend and the
-  // plot. Subsequent rows are offset by `INLINE_LEGEND_ROW_HEIGHT`.
-  const legendY = computed(
-    () => titleHeight.value + INLINE_LEGEND_ROW_HEIGHT / 2,
-  );
+  // plot; at the bottom it fills the last rows of the svg, under the
+  // x-axis label. Subsequent rows are offset by `INLINE_LEGEND_ROW_HEIGHT`.
+  const legendY = computed(() => {
+    if (!legendAtBottom.value) {
+      return titleHeight.value + INLINE_LEGEND_ROW_HEIGHT / 2;
+    }
+    const svgBottom = opts.height() + (opts.extraBelowHeight?.() ?? 0);
+    return svgBottom - legendHeight.value + INLINE_LEGEND_ROW_HEIGHT / 2;
+  });
 
   const innerH = computed(
     () => opts.height() - padding.value.top - padding.value.bottom,
@@ -245,6 +272,7 @@ export function useChartPadding(opts: ChartPaddingOptions) {
   return {
     padding,
     legendY,
+    bottomLegendHeight,
     inlineLegendLayout,
     innerW,
     innerH,

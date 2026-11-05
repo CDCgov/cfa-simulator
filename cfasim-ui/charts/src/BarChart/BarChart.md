@@ -1299,6 +1299,44 @@ drive it from your own controls; `hidden-series` works without
   </template>
 </ComponentDemo>
 
+### Legend position
+
+The legend sits between the title and the plot. `legend-position="bottom"`
+moves it under the x-axis label; it still fits inside the chart's `height`,
+so the plot gives up the same rows it would have above.
+
+<ComponentDemo>
+  <BarChart
+    :series="[
+      { data: [120, 180, 90, 60], legend: 'Unvaccinated', color: '#0057b7' },
+      { data: [30, 45, 20, 12], legend: 'Vaccinated', color: '#fb7e38' },
+    ]"
+    :categories="['0-17', '18-49', '50-64', '65+']"
+    :height="220"
+    x-label="Age group"
+    y-label="Cases"
+    legend-position="bottom"
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :series="[
+    { data: unvaccinated, legend: 'Unvaccinated', color: '#0057b7' },
+    { data: vaccinated, legend: 'Vaccinated', color: '#fb7e38' },
+  ]"
+  :categories="['0-17', '18-49', '50-64', '65+']"
+  :height="220"
+  x-label="Age group"
+  y-label="Cases"
+  legend-position="bottom"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ## Accessibility
 
 The chart's `<svg>` is exposed as a single labeled image so screen readers

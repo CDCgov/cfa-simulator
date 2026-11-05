@@ -13,6 +13,7 @@ withDefaults(
     padding: { top: number; left: number };
     innerW: number;
     innerH: number;
+    /** Bottom edge of the x label (the svg height, less any bottom legend). */
     height: number;
     labelStyle: ReturnType<typeof resolveLabelStyle>;
     xLabelAlign?: "left" | "center";

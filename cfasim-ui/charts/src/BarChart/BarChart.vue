@@ -1809,6 +1809,7 @@ const {
   height,
   padding,
   legendY,
+  bottomLegendHeight,
   inlineLegendLayout,
   innerW,
   innerH,
@@ -1845,6 +1846,7 @@ const {
   fullscreenTarget: () => props.fullscreenTarget,
   chartPadding: () => effectiveChartPadding.value,
   inlineLegendLabels: () => inlineLegendLabels.value,
+  legendPosition: () => props.legendPosition,
   hasTooltipSlot: () => hasTooltipSlot.value,
   getCsv: toCsv,
   pointerToIndex,
@@ -2487,7 +2489,7 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
           :padding="padding"
           :inner-w="innerW"
           :inner-h="innerH"
-          :height="height"
+          :height="height - bottomLegendHeight"
           :label-style="axisLabelResolved"
         />
         <!-- category tick labels -->

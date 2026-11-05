@@ -44,6 +44,8 @@ export interface ChartFoundationOptions {
    * top-padding reservation.
    */
   inlineLegendLabels: () => readonly InlineLegendLabel[];
+  /** Side of the plot the inline legend sits on. Defaults to `"top"`. */
+  legendPosition?: () => "top" | "bottom" | undefined;
   hasTooltipSlot: () => boolean;
   getCsv: () => string;
   pointerToIndex: (clientX: number, clientY: number) => number | null;
@@ -121,17 +123,26 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     return opts.height() ?? DEFAULT_HEIGHT;
   });
 
-  const { padding, legendY, inlineLegendLayout, innerW, innerH, bounds } =
-    useChartPadding({
-      title: opts.title,
-      titleStyle: opts.titleStyle,
-      xLabel: opts.xLabel,
-      yLabel: opts.yLabel,
-      inlineLegendLabels: opts.inlineLegendLabels,
-      width: () => width.value,
-      height: () => height.value,
-      extraPadding: opts.chartPadding,
-    });
+  const {
+    padding,
+    legendY,
+    bottomLegendHeight,
+    inlineLegendLayout,
+    innerW,
+    innerH,
+    bounds,
+  } = useChartPadding({
+    title: opts.title,
+    titleStyle: opts.titleStyle,
+    xLabel: opts.xLabel,
+    yLabel: opts.yLabel,
+    inlineLegendLabels: opts.inlineLegendLabels,
+    legendPosition: opts.legendPosition,
+    width: () => width.value,
+    height: () => height.value,
+    extraBelowHeight: opts.extraBelowHeight,
+    extraPadding: opts.chartPadding,
+  });
 
   const {
     hoverIndex,
@@ -200,6 +211,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     height,
     padding,
     legendY,
+    bottomLegendHeight,
     inlineLegendLayout,
     innerW,
     innerH,

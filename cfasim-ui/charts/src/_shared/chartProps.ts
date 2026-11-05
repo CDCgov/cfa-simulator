@@ -133,6 +133,13 @@ export interface ChartCommonProps {
   /** Styling for the inline legend item labels. */
   legendStyle?: LabelStyle;
   /**
+   * Where the inline legend sits: `"top"` (default) between the title and
+   * the plot, or `"bottom"` under the x-axis label. Either way the legend
+   * wraps to as many rows as it needs within the chart's `height`, and
+   * the plot shrinks to stay clear of it.
+   */
+  legendPosition?: "top" | "bottom";
+  /**
    * Let readers show and hide marks by clicking their inline legend
    * item. Default `false`. Each toggleable item gets a real `<button>`
    * (keyboard focusable, state exposed via `aria-pressed`). Hidden marks

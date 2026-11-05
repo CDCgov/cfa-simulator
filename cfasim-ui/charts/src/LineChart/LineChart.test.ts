@@ -1520,6 +1520,62 @@ describe("LineChart", () => {
       expect(labelYs.size).toBeGreaterThan(1);
     });
 
+    it("draws the legend under the x-axis label with legendPosition bottom", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [1, 2, 3], legend: "Cases" }],
+          xLabel: "Weeks",
+          legendPosition: "bottom",
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const texts = wrapper.findAll("text");
+      const legend = texts.find((t) => t.text() === "Cases")!;
+      const xLabel = texts.find((t) => t.text() === "Weeks")!;
+      // One 20px legend row fills the bottom of the 200px svg: row center
+      // 190, text baseline +4. The x label moves up from height - 4.
+      expect(Number(legend.attributes("y"))).toBe(194);
+      expect(Number(xLabel.attributes("y"))).toBe(176);
+      // The y axis starts at the title-less top margin, not under a legend.
+      const yAxis = wrapper
+        .findAll("line")
+        .find((l) => l.attributes("x1") === l.attributes("x2"))!;
+      expect(Number(yAxis.attributes("y1"))).toBeLessThan(12);
+    });
+
+    it("keeps a bottom legend under the area-section labels", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ data: [1, 2, 3, 4], legend: "Cases" }],
+          areaSections: [{ startIndex: 1, endIndex: 2, label: "Phase 1" }],
+          xLabel: "Weeks",
+          legendPosition: "bottom",
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const svgHeight = Number(wrapper.find("svg").attributes("height"));
+      expect(svgHeight).toBeGreaterThan(200);
+      const texts = wrapper.findAll("text");
+      const legendY = Number(
+        texts.find((t) => t.text() === "Cases")!.attributes("y"),
+      );
+      const xLabelY = Number(
+        texts.find((t) => t.text() === "Weeks")!.attributes("y"),
+      );
+      const sectionY = Number(
+        wrapper.find('[data-testid="section-label"] text').attributes("y"),
+      );
+      // The x label joins the first section-label row; both stay above
+      // the legend, which takes the svg's last row.
+      expect(legendY).toBe(svgHeight - 6);
+      expect(xLabelY).toBe(sectionY);
+      expect(sectionY).toBeLessThan(legendY);
+    });
+
     it("falls back to yTickFormat for tooltip values when tooltipValueFormat is not set", async () => {
       const wrapper = mount(LineChart, {
         props: {

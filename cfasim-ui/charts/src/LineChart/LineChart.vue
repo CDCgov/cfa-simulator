@@ -1318,7 +1318,7 @@ const sectionLabels = computed<{
   const maxRow = Math.max(...items.map((it) => it.row));
   // The bar sits inside the standard bottom padding; the label rows (and
   // a centered x-axis label, which moves beneath them) grow the svg past
-  // `height`.
+  // `height`, less the rows a bottom legend keeps for itself.
   const rowsBottom =
     sectionBarY.value +
     sectionLayout.value.labelGap +
@@ -1327,7 +1327,10 @@ const sectionLabels = computed<{
     props.xLabel && props.xLabelAlign === "center"
       ? axisLabelResolved.value.fontSize + SECTION_X_LABEL_GAP
       : 0;
-  const extraHeight = Math.max(0, rowsBottom + xLabelSpace - height.value);
+  const extraHeight = Math.max(
+    0,
+    rowsBottom + xLabelSpace - (height.value - bottomLegendHeight.value),
+  );
   return { labels: items, extraHeight };
 });
 
@@ -2010,6 +2013,7 @@ const {
   height,
   padding,
   legendY,
+  bottomLegendHeight,
   inlineLegendLayout,
   innerW,
   innerH,
@@ -2046,6 +2050,7 @@ const {
   fullscreenTarget: () => props.fullscreenTarget,
   chartPadding: () => markerChartPadding.value,
   inlineLegendLabels: () => inlineLegendLabels.value,
+  legendPosition: () => props.legendPosition,
   hasTooltipSlot: () => hasTooltipSlot.value,
   getCsv: toCsv,
   pointerToIndex: indexFromPointer,
@@ -2680,7 +2685,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           :padding="padding"
           :inner-w="innerW"
           :inner-h="innerH"
-          :height="totalHeight"
+          :height="totalHeight - bottomLegendHeight"
           :label-style="axisLabelResolved"
         />
         <!-- x-axis label, on the left of the first section label row -->
