@@ -12,7 +12,6 @@ import {
 } from "vue";
 import {
   geoPath,
-  geoAlbersUsa,
   geoMercator,
   geoEquirectangular,
   geoEqualEarth,
@@ -21,7 +20,10 @@ import {
   type GeoProjection,
   type GeoPermissibleObjects,
 } from "d3-geo";
-import { geoAlbersUsaTerritories } from "../_shared/albersUsaTerritories.js";
+import {
+  geoAlbersUsa,
+  geoAlbersUsaTerritories,
+} from "../_shared/albersUsaTerritories.js";
 import {
   zoom as d3Zoom,
   zoomIdentity,

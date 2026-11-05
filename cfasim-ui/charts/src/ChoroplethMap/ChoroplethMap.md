@@ -1697,7 +1697,7 @@ interface RegionsSource {
 
 The `projection` prop. Defaults to `"albersUsa"` for US maps and `"mercator"` with `regions`; always fitted to the drawn regions.
 
-`"albersUsa"` places only the 50 states and DC: the island territories in `us-atlas` (Puerto Rico, the Virgin Islands, Guam, the Northern Marianas, American Samoa) draw as nothing, and the map warns once when any of them has data. `"albersUsaTerritories"` (also exported as `geoAlbersUsaTerritories`) adds them as enlarged insets.
+`"albersUsa"` places only the 50 states and DC: the island territories in `us-atlas` (Puerto Rico, the Virgin Islands, Guam, the Northern Marianas, American Samoa) draw as nothing, and the map warns once when any of them has data. `"albersUsaTerritories"` (also exported as `geoAlbersUsaTerritories`) adds them as enlarged insets. Both composites send each polygon to the one sub-projection that owns it instead of streaming every geometry through all of them like d3's `geoAlbersUsa`, so the `geoAlbersUsa` re-exported from `@cfasim-ui/charts` is that routed form of d3's: the same projection, fit and paths at about a third of the cost.
 
 See [US territories](#us-territories-projection-albersusaterritories) for a demo.
 

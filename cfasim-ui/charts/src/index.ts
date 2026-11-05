@@ -47,13 +47,15 @@ export {
 // The projections ChoroplethMap bundles, re-exported so a `projection`
 // factory needs no d3-geo dependency of its own.
 export {
-  geoAlbersUsa,
   geoMercator,
   geoEquirectangular,
   geoEqualEarth,
   type GeoProjection,
 } from "d3-geo";
-export { geoAlbersUsaTerritories } from "./_shared/albersUsaTerritories.js";
+export {
+  geoAlbersUsa,
+  geoAlbersUsaTerritories,
+} from "./_shared/albersUsaTerritories.js";
 export { default as ChartTooltip } from "./ChartTooltip/ChartTooltip.vue";
 export {
   default as DataTable,
