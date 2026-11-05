@@ -1,6 +1,16 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.15.0] - 2026-11-05
+
+### Features
+
+- **charts:** Take the HSA mapping as a ChoroplethMap prop
+
+### Performance
+
+- **charts:** Route the Albers USA projections instead of multiplexing
+
 ## [0.14.2] - 2026-11-05
 
 ### Features
