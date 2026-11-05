@@ -1,0 +1,40 @@
+import { ref } from "vue";
+
+/** Opacity of every mark outside the highlighted legend label. */
+export const LEGEND_DIM_OPACITY = 0.15;
+
+export interface LegendHighlightOptions {
+  /** Whether hovering dims the other marks; the event fires regardless. */
+  enabled: () => boolean | undefined;
+  onChange: (label: string | null) => void;
+  /** Legend label of the series at an index, for marks tied to one. */
+  seriesLabel: (index: number) => string | undefined;
+}
+
+/**
+ * The legend label under the pointer (or focused toggle button), and the
+ * opacity each mark takes while one is: `undefined` leaves a mark as it
+ * is, `LEGEND_DIM_OPACITY` fades the rest, unlabeled marks included.
+ * `dimForSeries` does the same for a mark that knows only its series
+ * index (intervals, sections, bars), or no series at all.
+ */
+export function useLegendHighlight(opts: LegendHighlightOptions) {
+  const highlighted = ref<string | null>(null);
+
+  function setHighlight(label: string | null) {
+    if (label === highlighted.value) return;
+    highlighted.value = label;
+    opts.onChange(label);
+  }
+
+  function dimFor(label: string | undefined): number | undefined {
+    if (!opts.enabled() || highlighted.value === null) return undefined;
+    return label === highlighted.value ? undefined : LEGEND_DIM_OPACITY;
+  }
+
+  function dimForSeries(index: number | undefined): number | undefined {
+    return dimFor(index != null ? opts.seriesLabel(index) : undefined);
+  }
+
+  return { highlighted, setHighlight, dimFor, dimForSeries };
+}

@@ -35,7 +35,9 @@ import {
   ChartBrushRect,
   ChartLegendToggles,
   useLegendToggle,
+  useLegendHighlight,
   positionLegendItems,
+  INLINE_LEGEND_ROW_HEIGHT,
   TICK_LABEL_FONT_SIZE,
   pickContrastColor,
   parseDate,
@@ -458,6 +460,8 @@ defineOptions({ inheritAttrs: false });
 const emit = defineEmits<{
   (e: "hover", payload: ChartHoverPayload): void;
   (e: "update:hiddenSeries", hidden: string[]): void;
+  /** Legend label under the pointer or focus, `null` when it leaves. */
+  (e: "legendHover", label: string | null): void;
 }>();
 
 defineSlots<{
@@ -599,6 +603,20 @@ const { isHidden, toggle: toggleLegend } = useLegendToggle({
   hidden: () => props.hiddenSeries,
   onUpdate: (hidden) => emit("update:hiddenSeries", hidden),
 });
+
+const { setHighlight, dimFor, dimForSeries } = useLegendHighlight({
+  enabled: () => props.legendHighlight,
+  onChange: (label) => emit("legendHover", label),
+  seriesLabel: (i) => allSeries.value[i]?.legend,
+});
+
+/**
+ * Svg hover targets behind the legend items; with `legendToggle` the
+ * overlay buttons report hover instead.
+ */
+const legendHoverable = computed(
+  () => !!props.legendHighlight && !props.legendToggle,
+);
 
 /** Series still drawn, each with its index into `allSeries`. */
 const visibleSeries = computed(() =>
@@ -2061,6 +2079,7 @@ function barColorAt(cat: number, px: number, py: number): string | null {
 
 interface BarLabelItem {
   key: string;
+  seriesIndex: number;
   x: number;
   y: number;
   text: string;
@@ -2228,6 +2247,7 @@ const barLabelItems = computed<BarLabelItem[]>(() => {
     }
     items.push({
       key: `${d.bar.categoryIndex}-${d.bar.seriesIndex}`,
+      seriesIndex: d.bar.seriesIndex,
       x,
       y,
       text: d.text,
@@ -2325,6 +2345,7 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
         :font-size="legendResolved.fontSize"
         :font-weight="legendResolved.fontWeight"
         @toggle="toggleLegend"
+        @hover="setHighlight"
       />
       <svg
         ref="svgRef"
@@ -2367,7 +2388,19 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
             v-for="(item, i) in positionedLegendItems"
             :key="'ileg' + i"
             :opacity="isHidden(item.label) ? 0.4 : undefined"
+            :class="{ 'legend-hoverable': legendHoverable }"
+            @mouseenter="legendHoverable && setHighlight(item.label)"
+            @mouseleave="legendHoverable && setHighlight(null)"
           >
+            <rect
+              v-if="legendHoverable"
+              class="legend-hit"
+              :x="item.x - 4"
+              :y="item.y - INLINE_LEGEND_ROW_HEIGHT / 2"
+              :width="item.width + 8"
+              :height="INLINE_LEGEND_ROW_HEIGHT"
+              fill="transparent"
+            />
             <rect
               v-if="item.kind === 'bar'"
               :x="item.x"
@@ -2540,6 +2573,8 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
             :y="bar.y"
             :width="bar.w"
             :height="bar.h"
+            class="legend-dim"
+            :opacity="dimForSeries(bar.seriesIndex)"
             :fill="bar.color"
             :fill-opacity="bar.opacity"
             :style="blendStyle(bar.blendMode)"
@@ -2550,18 +2585,22 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
             :intervals="seriesIntervalList"
             :defaults="intervalStyle"
             :project="projectInterval"
+            :opacity-for="(iv) => dimForSeries(iv.seriesIndex)"
           />
           <ChartIntervals
             v-if="topIntervals.length > 0"
             :intervals="topIntervals"
             :defaults="intervalStyle"
             :project="projectInterval"
+            :opacity-for="(iv) => dimForSeries(iv.seriesIndex)"
           />
           <!-- value-on-bar labels -->
           <text
             v-for="item in barLabelItems"
             :key="'blbl' + item.key"
             data-testid="bar-label"
+            class="legend-dim"
+            :opacity="dimForSeries(item.seriesIndex)"
             :x="item.x"
             :y="item.y"
             :text-anchor="item.anchor"
@@ -2574,7 +2613,12 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
             {{ item.text }}
           </text>
           <!-- summary lines (drawn above bars, below annotations) -->
-          <template v-for="(line, i) in summaryLinesResolved" :key="'sl' + i">
+          <g
+            v-for="(line, i) in summaryLinesResolved"
+            :key="'sl' + i"
+            class="legend-dim"
+            :opacity="dimFor(line.legend)"
+          >
             <path
               v-if="line.pathD"
               data-testid="summary-line"
@@ -2600,7 +2644,7 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
                 :style="blendStyle(line.blendMode)"
               />
             </template>
-          </template>
+          </g>
         </g>
         <!-- drag-to-zoom selection -->
         <ChartBrushRect v-if="brushRect" :rect="brushRect" />
@@ -2677,6 +2721,14 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
 </template>
 
 <style scoped>
+.legend-dim {
+  transition: opacity 120ms ease;
+}
+
+.legend-hoverable {
+  cursor: pointer;
+}
+
 .bar-chart-wrapper {
   position: relative;
   width: 100%;

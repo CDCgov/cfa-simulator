@@ -103,25 +103,29 @@ export interface PositionedLegendItem {
   x: number;
   /** Row index, 0-based. */
   row: number;
+  /** Estimated width of the item, for hover targets. */
+  width: number;
 }
 
 /**
  * Join legend items with their wrapped pixel positions (from
  * `inlineLegendLayout`). `x` is the left edge of the indicator anchored
- * at `padLeft`; `y` is the center of the row starting at `baseY`.
+ * at `padLeft`; `y` is the center of the row starting at `baseY`;
+ * `width` is the estimated item width.
  */
 export function positionLegendItems<T extends object>(
   items: readonly T[],
   positions: readonly PositionedLegendItem[],
   padLeft: number,
   baseY: number,
-): (T & { x: number; y: number })[] {
+): (T & { x: number; y: number; width: number })[] {
   return items.map((item, i) => {
     const pos = positions[i];
     return {
       ...item,
       x: padLeft + pos.x,
       y: baseY + pos.row * INLINE_LEGEND_ROW_HEIGHT,
+      width: pos.width,
     };
   });
 }
@@ -164,9 +168,10 @@ function gridLegendLayout(
     1,
     Math.min(widths.length, Math.floor(columns ?? fit) || 1),
   );
-  const positions = widths.map((_, i) => ({
+  const positions = widths.map((width, i) => ({
     x: (i % cols) * pitch,
     row: Math.floor(i / cols),
+    width,
   }));
   return { positions, rowCount: Math.ceil(widths.length / cols) };
 }
@@ -231,7 +236,7 @@ export function useChartPadding(opts: ChartPaddingOptions) {
         row++;
         x = 0;
       }
-      positions.push({ x, row });
+      positions.push({ x, row, width: w });
       x += w + LEGEND_ITEM_GAP;
     }
     return { positions, rowCount: row + 1 };

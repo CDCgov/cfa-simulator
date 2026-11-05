@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { nextTick } from "vue";
 import { mount } from "@vue/test-utils";
 import BarChart from "./BarChart.vue";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
@@ -1037,6 +1038,35 @@ describe("BarChart", () => {
       expect(xs[3]).toBe(xs[1]);
       expect(ys[0]).toBe(ys[1]);
       expect(ys[2]).not.toBe(ys[0]);
+    });
+
+    it("fades the other series' bars while a legend item is hovered", async () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          series: [
+            { data: [1, 2], legend: "Pediatric" },
+            { data: [3, 4], legend: "Adult" },
+          ],
+          categories: ["A", "B"],
+          legendHighlight: true,
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const item = wrapper.findAll("rect.legend-hit")[1].element.parentElement!;
+      item.dispatchEvent(new MouseEvent("mouseenter"));
+      await nextTick();
+      const opacityBySeries = (i: number) =>
+        wrapper
+          .findAll(`[data-testid="bar"][data-series="${i}"]`)
+          .map((b) => b.attributes("opacity"));
+      expect(opacityBySeries(0)).toEqual(["0.15", "0.15"]);
+      expect(opacityBySeries(1)).toEqual([undefined, undefined]);
+      expect(wrapper.emitted("legendHover")).toEqual([["Adult"]]);
+      item.dispatchEvent(new MouseEvent("mouseleave"));
+      await nextTick();
+      expect(opacityBySeries(0)).toEqual([undefined, undefined]);
     });
 
     it("hides a series legend entry when showInLegend is false", () => {

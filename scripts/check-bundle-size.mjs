@@ -103,14 +103,14 @@ const SCENARIOS = [
     name: "charts: VegaLiteChart",
     pkg: "@cfasim-ui/charts/vega-lite",
     imports: ["VegaLiteChart"],
-    limit: 48 * KB,
+    limit: 49 * KB,
     lazyChunks: 0,
   },
   {
     name: "charts: everything",
     pkg: "@cfasim-ui/charts",
     imports: "*",
-    limit: 112 * KB,
+    limit: 113 * KB,
     lazyChunks: 1,
   },
 ];

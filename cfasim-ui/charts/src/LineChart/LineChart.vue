@@ -34,7 +34,9 @@ import {
   ChartBrushRect,
   ChartLegendToggles,
   useLegendToggle,
+  useLegendHighlight,
   positionLegendItems,
+  INLINE_LEGEND_ROW_HEIGHT,
   layoutMarkerLabels,
   markerDashArray,
   markerPillPadding,
@@ -432,6 +434,8 @@ defineOptions({ inheritAttrs: false });
 const emit = defineEmits<{
   (e: "hover", payload: ChartHoverPayload): void;
   (e: "update:hiddenSeries", hidden: string[]): void;
+  /** Legend label under the pointer or focus, `null` when it leaves. */
+  (e: "legendHover", label: string | null): void;
   (e: "update:markers", markers: ChartMarker[]): void;
   (e: "markerDrag", payload: ChartMarkerDragPayload): void;
   (e: "markerDragEnd", payload: ChartMarkerDragPayload): void;
@@ -579,6 +583,12 @@ const seriesPointColors = computed(() =>
 const { isHidden, toggle: toggleLegend } = useLegendToggle({
   hidden: () => props.hiddenSeries,
   onUpdate: (hidden) => emit("update:hiddenSeries", hidden),
+});
+
+const { setHighlight, dimFor, dimForSeries } = useLegendHighlight({
+  enabled: () => props.legendHighlight,
+  onChange: (label) => emit("legendHover", label),
+  seriesLabel: (i) => allSeries.value[i]?.legend,
 });
 
 const maxLen = computed(() => {
@@ -2073,16 +2083,33 @@ const positionedLegendItems = computed(() =>
   ),
 );
 
+/** Items that stand for a toggleable, highlightable mark. */
+function isMarkItem(item: InlineLegendItem): boolean {
+  return item.type !== "section" && item.type !== "scale";
+}
+
 function legendItemHidden(item: InlineLegendItem): boolean {
-  return (
-    item.type !== "section" && item.type !== "scale" && isHidden(item.label)
-  );
+  return isMarkItem(item) && isHidden(item.label);
+}
+
+/**
+ * Svg hover targets behind the legend items; with `legendToggle` the
+ * overlay buttons report hover instead.
+ */
+function legendHoverable(item: InlineLegendItem): boolean {
+  return !!props.legendHighlight && !props.legendToggle && isMarkItem(item);
+}
+
+function onLegendEnter(item: InlineLegendItem) {
+  if (legendHoverable(item)) setHighlight(item.label);
+}
+
+function onLegendLeave(item: InlineLegendItem) {
+  if (legendHoverable(item)) setHighlight(null);
 }
 
 const legendToggleItems = computed(() =>
-  positionedLegendItems.value.filter(
-    (item) => item.type !== "section" && item.type !== "scale",
-  ),
+  positionedLegendItems.value.filter(isMarkItem),
 );
 
 const MARKER_LABEL_FONT_SIZE = 12;
@@ -2503,6 +2530,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
         :font-size="legendResolved.fontSize"
         :font-weight="legendResolved.fontWeight"
         @toggle="toggleLegend"
+        @hover="setHighlight"
       />
       <svg
         ref="svgRef"
@@ -2545,7 +2573,19 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             v-for="(item, i) in positionedLegendItems"
             :key="'ileg' + i"
             :opacity="legendItemHidden(item) ? 0.4 : undefined"
+            :class="{ 'legend-hoverable': legendHoverable(item) }"
+            @mouseenter="onLegendEnter(item)"
+            @mouseleave="onLegendLeave(item)"
           >
+            <rect
+              v-if="legendHoverable(item)"
+              class="legend-hit"
+              :x="item.x - 4"
+              :y="item.y - INLINE_LEGEND_ROW_HEIGHT / 2"
+              :width="item.width + 8"
+              :height="INLINE_LEGEND_ROW_HEIGHT"
+              fill="transparent"
+            />
             <!-- series indicator: line and/or dot -->
             <template v-if="item.type === 'series'">
               <rect
@@ -2709,6 +2749,8 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             v-for="({ a, path }, i) in areaRender"
             :key="'area' + i"
             :d="path"
+            class="legend-dim"
+            :opacity="dimFor(a.legend)"
             :fill="a.color ?? 'currentColor'"
             :fill-opacity="a.opacity ?? 0.2"
             stroke="none"
@@ -2720,11 +2762,14 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             :intervals="seriesIntervalList"
             :defaults="intervalStyle"
             :project="projectInterval"
+            :opacity-for="(iv) => dimForSeries(iv.seriesIndex)"
           />
           <!-- data lines and dots -->
-          <template
+          <g
             v-for="({ s, path, points, gradient }, i) in seriesRender"
             :key="i"
+            class="legend-dim"
+            :opacity="dimFor(s.legend)"
           >
             <defs v-if="gradient">
               <linearGradient
@@ -2778,7 +2823,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
                 :style="blendStyle(s.blendMode)"
               />
             </template>
-          </template>
+          </g>
           <!-- standalone intervals (above series, e.g. calibration targets) -->
           <ChartIntervals
             v-if="topIntervals.length > 0"
@@ -2786,6 +2831,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             :defaults="intervalStyle"
             :project="projectInterval"
             :color-for="intervalColor"
+            :opacity-for="(iv) => dimForSeries(iv.seriesIndex)"
           />
         </g>
         <!-- area sections (rendered above series) -->
@@ -2797,7 +2843,12 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
               : undefined
           "
         >
-          <template v-for="(r, i) in sectionRender" :key="'areasec' + i">
+          <g
+            v-for="(r, i) in sectionRender"
+            :key="'areasec' + i"
+            class="legend-dim"
+            :opacity="dimForSeries(r.sec.seriesIndex)"
+          >
             <path
               data-testid="section-fill"
               :d="r.fillPath"
@@ -2827,7 +2878,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
                 :stroke-dasharray="r.sec.dashed ? '6 3' : undefined"
               />
             </template>
-          </template>
+          </g>
         </g>
         <!-- x tick labels (after the sections so they read over an extended fill) -->
         <text
@@ -3080,6 +3131,14 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
 </template>
 
 <style scoped>
+.legend-dim {
+  transition: opacity 120ms ease;
+}
+
+.legend-hoverable {
+  cursor: pointer;
+}
+
 .line-chart-wrapper {
   position: relative;
   width: 100%;

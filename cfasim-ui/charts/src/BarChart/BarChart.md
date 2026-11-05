@@ -1299,6 +1299,47 @@ drive it from your own controls; `hidden-series` works without
   </template>
 </ComponentDemo>
 
+### Highlight a series from the legend
+
+Set `legend-highlight` to fade every other bar, label and summary line while
+the pointer is over a legend item (or its toggle button has keyboard focus).
+Whenever the legend is interactive (`legend-highlight` or `legend-toggle`),
+the `legend-hover` event reports the label under the pointer, and `null`
+when it leaves.
+
+<ComponentDemo>
+  <BarChart
+    :series="[
+      { data: [120, 180, 90, 60], legend: 'Unvaccinated', color: '#0057b7' },
+      { data: [30, 45, 20, 12], legend: 'Vaccinated', color: '#fb7e38' },
+    ]"
+    :categories="['0-17', '18-49', '50-64', '65+']"
+    :height="220"
+    y-label="Cases"
+    tooltip-trigger="hover"
+    legend-highlight
+  />
+
+<template #code>
+
+```vue
+<BarChart
+  :series="[
+    { data: unvaccinated, legend: 'Unvaccinated', color: '#0057b7' },
+    { data: vaccinated, legend: 'Vaccinated', color: '#fb7e38' },
+  ]"
+  :categories="['0-17', '18-49', '50-64', '65+']"
+  :height="220"
+  y-label="Cases"
+  tooltip-trigger="hover"
+  legend-highlight
+  @legend-hover="(label) => (highlighted = label)"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Legend position and layout
 
 The legend sits between the title and the plot. `legend-position="bottom"`

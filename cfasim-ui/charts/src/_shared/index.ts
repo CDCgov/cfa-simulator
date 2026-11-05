@@ -50,6 +50,11 @@ export {
   type LegendToggleOptions,
 } from "./useLegendToggle.js";
 export {
+  useLegendHighlight,
+  LEGEND_DIM_OPACITY,
+  type LegendHighlightOptions,
+} from "./useLegendHighlight.js";
+export {
   seriesToCsv,
   categoricalToCsv,
   resolveCsvOverride,

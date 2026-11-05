@@ -498,3 +498,23 @@ test("Save as PNG downloads the chart at twice its size", async ({ page }) => {
   expect(view.getUint32(16)).toBe(size.w * 2);
   expect(view.getUint32(20)).toBe(size.h * 2);
 });
+
+test("hovering a legend item fades the other series", async ({ page }) => {
+  await page.goto("./cfasim-ui/charts/line-chart");
+  const chart = page.locator('[data-testid="legend-highlight-line-chart"]');
+  await chart.scrollIntoViewIfNeeded();
+  const marks = chart.locator("g.legend-dim");
+  await expect(marks).toHaveCount(4);
+  const faded = chart.locator('g.legend-dim[opacity="0.15"]');
+  await expect(faded).toHaveCount(0);
+
+  // The hit target spans the whole label, so a hover anywhere on it holds.
+  const label = chart.locator("svg text", { hasText: "School closures" });
+  const box = (await label.boundingBox())!;
+  await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2);
+  await expect(faded).toHaveCount(3);
+  await expect(marks.nth(1)).not.toHaveAttribute("opacity", "0.15");
+
+  await page.mouse.move(box.x, box.y - 40);
+  await expect(faded).toHaveCount(0);
+});

@@ -150,6 +150,13 @@ export interface ChartCommonProps {
    */
   legendLayout?: LegendLayout;
   /**
+   * Fade every other mark while a legend item is hovered (or its toggle
+   * button focused), so only that series shows. Default `false`. The
+   * `legend-hover` event reports the label under the pointer either way
+   * once the legend is interactive (this or `legendToggle`).
+   */
+  legendHighlight?: boolean;
+  /**
    * Let readers show and hide marks by clicking their inline legend
    * item. Default `false`. Each toggleable item gets a real `<button>`
    * (keyboard focusable, state exposed via `aria-pressed`). Hidden marks

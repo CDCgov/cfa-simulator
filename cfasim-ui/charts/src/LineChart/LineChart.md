@@ -1467,6 +1467,48 @@ drive it from your own controls; `hidden-series` works without
   </template>
 </ComponentDemo>
 
+### Highlight a series from the legend
+
+Set `legend-highlight` to fade every other mark while the pointer is over a
+legend item (or its toggle button has keyboard focus), so just that series
+shows. Whenever the legend is interactive (`legend-highlight` or
+`legend-toggle`), the `legend-hover` event reports the label under the
+pointer, and `null` when it leaves, for your own highlighting or a linked
+view.
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      { data: [0, 12, 28, 45, 60, 55, 40, 25, 12], color: '#0057b7', legend: 'No interventions' },
+      { data: [0, 10, 22, 38, 50, 45, 32, 18, 8], color: '#fb7e38', legend: 'School closures' },
+      { data: [0, 8, 18, 30, 40, 35, 25, 14, 6], color: '#ef4444', legend: 'Masking + distancing' },
+      { data: [0, 6, 14, 24, 32, 28, 20, 10, 4], color: '#10b981', legend: 'Vaccination only' },
+    ]"
+    data-testid="legend-highlight-line-chart"
+    :height="220"
+    x-label="Weeks"
+    y-label="Incidence"
+    tooltip-trigger="hover"
+    legend-highlight
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="scenarios"
+  :height="220"
+  x-label="Weeks"
+  y-label="Incidence"
+  tooltip-trigger="hover"
+  legend-highlight
+  @legend-hover="(label) => (highlighted = label)"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ## Tooltip
 
 Hover over the chart to see a tooltip with values at each data point. Set `tooltip-trigger="hover"` to enable the built-in tooltip with crosshair and highlight dots. Use the `#tooltip` slot for custom content. Pass `tooltip-value-format` to control how numeric values render (e.g. percentages, currency); it falls back to `y-tick-format` when omitted.

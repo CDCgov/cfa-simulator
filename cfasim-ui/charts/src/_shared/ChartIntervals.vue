@@ -25,17 +25,21 @@ const props = withDefaults(
     ) => { x: number; y: number } | null;
     /** Fallback color when neither the interval nor `defaults` sets one. */
     colorFor?: (interval: ChartInterval) => string | undefined;
+    /** Whole-interval opacity, e.g. a legend-highlight fade. */
+    opacityFor?: (interval: ChartInterval) => number | undefined;
   }>(),
   {
     intervals: () => [],
     defaults: undefined,
     colorFor: undefined,
+    opacityFor: undefined,
   },
 );
 
 interface RenderedInterval extends IntervalGeometry {
   style: ResolvedIntervalStyle;
   dot?: { x: number; y: number };
+  opacity?: number;
 }
 
 const items = computed<RenderedInterval[]>(() => {
@@ -58,7 +62,12 @@ const items = computed<RenderedInterval[]>(() => {
       const p = props.project(iv, iv.value);
       if (p && isFinite(p.x) && isFinite(p.y)) dot = p;
     }
-    out.push({ ...intervalGeometry(lo, hi, style.capWidth), style, dot });
+    out.push({
+      ...intervalGeometry(lo, hi, style.capWidth),
+      style,
+      dot,
+      opacity: props.opacityFor?.(iv),
+    });
   }
   return out;
 });
@@ -70,6 +79,8 @@ const items = computed<RenderedInterval[]>(() => {
       v-for="(item, i) in items"
       :key="i"
       data-testid="interval"
+      class="legend-dim"
+      :opacity="item.opacity"
       :stroke-opacity="item.style.opacity"
       :fill-opacity="item.style.opacity"
       :style="blendStyle(item.style.blendMode)"
@@ -123,3 +134,9 @@ const items = computed<RenderedInterval[]>(() => {
     </g>
   </g>
 </template>
+
+<style scoped>
+.legend-dim {
+  transition: opacity 120ms ease;
+}
+</style>

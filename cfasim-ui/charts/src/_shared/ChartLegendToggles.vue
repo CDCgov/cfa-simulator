@@ -4,7 +4,7 @@ import {
   LEGEND_TEXT_INDENT,
 } from "./useChartPadding.js";
 
-defineProps<{
+const props = defineProps<{
   /** Legend items positioned in svg pixels (`y` is the row center). */
   items: readonly { label: string; x: number; y: number }[];
   isHidden: (label: string) => boolean;
@@ -13,9 +13,18 @@ defineProps<{
   fontWeight?: number | string;
 }>();
 
-defineEmits<{ (e: "toggle", label: string): void }>();
+defineEmits<{
+  (e: "toggle", label: string): void;
+  /** The label under the pointer or keyboard focus, `null` when none. */
+  (e: "hover", label: string | null): void;
+}>();
 
 const HIT_PAD_X = 4;
+
+/** A hidden series has no marks to single out, so its button reports none. */
+function hoverLabel(label: string): string | null {
+  return props.isHidden(label) ? null : label;
+}
 </script>
 
 <template>
@@ -46,6 +55,10 @@ const HIT_PAD_X = 4;
         fontWeight,
       }"
       @click="$emit('toggle', item.label)"
+      @mouseenter="$emit('hover', hoverLabel(item.label))"
+      @mouseleave="$emit('hover', null)"
+      @focus="$emit('hover', hoverLabel(item.label))"
+      @blur="$emit('hover', null)"
     >
       <!-- Invisible copy of the svg label: sizes the button to the text. -->
       <span class="chart-legend-toggle-sizer" aria-hidden="true">{{

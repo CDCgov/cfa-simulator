@@ -4540,6 +4540,81 @@ describe("LineChart", () => {
     });
   });
 
+  describe("legend highlight", () => {
+    const series = [
+      { data: [1, 2, 3], legend: "A" },
+      { data: [3, 2, 1], legend: "B" },
+    ];
+
+    async function hover(el: Element, type: "mouseenter" | "mouseleave") {
+      el.dispatchEvent(new MouseEvent(type));
+      await nextTick();
+    }
+
+    it("fades the other series while a legend item is hovered", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series,
+          legendHighlight: true,
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      const hits = wrapper.findAll("rect.legend-hit");
+      expect(hits).toHaveLength(2);
+      const itemA = hits[0].element.parentElement!;
+      await hover(itemA, "mouseenter");
+      const marks = wrapper.findAll("g.legend-dim");
+      expect(marks.map((m) => m.attributes("opacity"))).toEqual([
+        undefined,
+        "0.15",
+      ]);
+      expect(wrapper.emitted("legendHover")).toEqual([["A"]]);
+      await hover(itemA, "mouseleave");
+      expect(
+        wrapper.findAll("g.legend-dim").map((m) => m.attributes("opacity")),
+      ).toEqual([undefined, undefined]);
+      expect(wrapper.emitted("legendHover")).toEqual([["A"], [null]]);
+    });
+
+    it("renders no hover targets without legendHighlight", () => {
+      const wrapper = mount(LineChart, {
+        props: { series, width: 400, height: 200, menu: false },
+      });
+      expect(wrapper.findAll("rect.legend-hit")).toHaveLength(0);
+    });
+
+    it("follows the toggle buttons' hover and focus when both are on", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series,
+          legendHighlight: true,
+          legendToggle: true,
+          width: 400,
+          height: 200,
+          menu: false,
+        },
+      });
+      expect(wrapper.findAll("rect.legend-hit")).toHaveLength(0);
+      const buttons = wrapper.findAll(".chart-legend-toggle");
+      await buttons[1].trigger("focus");
+      expect(
+        wrapper.findAll("g.legend-dim").map((m) => m.attributes("opacity")),
+      ).toEqual(["0.15", undefined]);
+      expect(wrapper.emitted("legendHover")).toEqual([["B"]]);
+      await buttons[1].trigger("blur");
+      expect(wrapper.emitted("legendHover")).toEqual([["B"], [null]]);
+      // A hidden series has nothing to single out.
+      await buttons[1].trigger("click");
+      await buttons[1].trigger("mouseenter");
+      expect(wrapper.emitted("legendHover")).toEqual([["B"], [null]]);
+      expect(
+        wrapper.findAll("g.legend-dim").map((m) => m.attributes("opacity")),
+      ).toEqual([undefined]);
+    });
+  });
+
   describe("legend toggle", () => {
     const toggleProps = {
       series: [
