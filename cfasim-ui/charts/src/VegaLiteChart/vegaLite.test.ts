@@ -13,11 +13,24 @@ function line(spec: VegaLiteSpec, data?: Record<string, unknown>[]) {
   return out;
 }
 
-function bars(spec: VegaLiteSpec) {
-  const out = vegaLiteToChart(spec);
+function bars(spec: VegaLiteSpec, data?: Record<string, unknown>[]) {
+  const out = vegaLiteToChart(spec, { data });
   if (out.component !== "BarChart") throw new Error(out.component);
   return out;
 }
+
+function heatmap(spec: VegaLiteSpec) {
+  const out = vegaLiteToChart(spec);
+  if (out.component !== "Heatmap") throw new Error(out.component);
+  return out;
+}
+
+const scores = [
+  { loc: "NY", model: "b", wis: 2 },
+  { loc: "AZ", model: "b", wis: 4 },
+  { loc: "AZ", model: "a", wis: 1 },
+  { loc: "NY", model: "a", wis: 2 },
+];
 
 describe("vegaLiteToChart: LineChart", () => {
   it("splits a color field into series, sorted by x, colored in domain order", () => {
@@ -432,7 +445,7 @@ describe("vegaLiteToChart: rules, error bars and text", () => {
   });
 
   it("puts error bars and value rules on a bar chart's categories", () => {
-    const bars = vegaLiteToChart(
+    const out = bars(
       {
         // The rule inherits the shared x field but sets y itself: it is a
         // threshold across the plot, drawn once for its repeated value.
@@ -455,16 +468,14 @@ describe("vegaLiteToChart: rules, error bars and text", () => {
           },
         ],
       },
-      {
-        data: [
-          ...pts.map((r) => ({ ...r, cap: 8 })),
-          // Only in the error bars: still a category on the axis.
-          { label: "z", lo: 4, hi: 6, cap: 8 },
-        ],
-      },
+      [
+        ...pts.map((r) => ({ ...r, cap: 8 })),
+        // Only in the error bars: still a category on the axis.
+        { label: "z", lo: 4, hi: 6, cap: 8 },
+      ],
     );
-    expect(bars.warnings).toEqual([]);
-    expect(bars.props).toMatchObject({
+    expect(out.warnings).toEqual([]);
+    expect(out.props).toMatchObject({
       categories: ["a", "b", "z"],
       valueMax: 8,
       intervals: [
@@ -473,7 +484,7 @@ describe("vegaLiteToChart: rules, error bars and text", () => {
         { x: 2, lower: 4, upper: 6 },
       ],
     });
-    expect(bars.props.annotations).toEqual([
+    expect(out.props.annotations).toEqual([
       expect.objectContaining({ pointer: "ruleY", y: 8 }),
     ]);
   });
@@ -595,7 +606,7 @@ describe("vegaLiteToChart: unsupported pieces", () => {
       },
       { data: [{ t: 1, n: 2, g: "a" }] },
     );
-    expect(component).toBe("LineChart");
+    if (component !== "LineChart") throw new Error(component);
     expect(props.series).toHaveLength(2);
     expect(warnings).toEqual([
       "`facet` is not supported",
@@ -634,5 +645,139 @@ describe("vegaLiteToChart: unsupported pieces", () => {
         { strict: true },
       ),
     ).toThrow("Vega-Lite: `transform` is not supported");
+  });
+});
+
+describe("vegaLiteToChart: Heatmap", () => {
+  it("pivots a rect mark into rows, columns and a color scale, in domain order", () => {
+    const { props, warnings } = heatmap({
+      data: { values: scores },
+      mark: { type: "rect", cornerRadius: 2 },
+      encoding: {
+        x: {
+          field: "model",
+          type: "nominal",
+          title: "Model",
+          axis: { orient: "top", labelAngle: -30 },
+        },
+        y: { field: "loc", type: "ordinal", sort: "-color", axis: null },
+        color: {
+          field: "wis",
+          type: "quantitative",
+          scale: { domain: [0, 5], range: ["#fff", "#000"] },
+          legend: { title: "WIS", format: ".1f" },
+        },
+      },
+    });
+    expect(warnings).toEqual([]);
+    expect(props).toMatchObject({
+      rows: ["AZ", "NY"],
+      columns: ["a", "b"],
+      data: [
+        [1, 4],
+        [2, 2],
+      ],
+      colorScale: { domain: [0, 5], range: ["#fff", "#000"], label: "WIS" },
+      xLabel: "Model",
+      columnAxis: "top",
+      columnLabelAngle: -30,
+      rowAxis: "none",
+      cellRadius: 2,
+    });
+    expect(props.valueFormat).toBeUndefined();
+    expect(props.colorScale!.format!(2)).toBe("2.0");
+  });
+
+  it("keeps a diverging three-value color domain", () => {
+    const { props } = heatmap({
+      data: { values: scores },
+      mark: "rect",
+      encoding: {
+        x: { field: "model", type: "nominal" },
+        y: { field: "loc", type: "nominal" },
+        color: {
+          field: "wis",
+          type: "quantitative",
+          scale: { domain: [0, 2, 4], range: ["#00f", "#fff", "#f00"] },
+        },
+      },
+    });
+    expect(props.colorScale).toMatchObject({ domain: [0, 2, 4] });
+  });
+
+  it("turns a text layer into cell labels and warns about the rest", () => {
+    const { props, warnings } = heatmap({
+      data: { values: scores },
+      encoding: {
+        x: { field: "model", type: "nominal" },
+        y: { field: "loc", type: "nominal" },
+      },
+      layer: [
+        {
+          mark: "rect",
+          encoding: {
+            color: { field: "wis", type: "quantitative", legend: null },
+          },
+        },
+        {
+          mark: { type: "text", color: "white", fontSize: 9 },
+          encoding: { text: { field: "wis", format: ".2f" } },
+        },
+        { mark: "point" },
+      ],
+    });
+    expect(props.colorScale).toEqual({ legend: false });
+    expect(props.cellLabels).toMatchObject({ color: "white", fontSize: 9 });
+    expect(
+      (props.cellLabels as { format: (v: number) => string }).format(1),
+    ).toBe("1.00");
+    expect(warnings).toEqual([
+      "`point` layers over a heatmap are not supported",
+    ]);
+    // A conditional text color leaves contrast to the chart per cell.
+    const conditional = heatmap({
+      data: { values: scores },
+      encoding: {
+        x: { field: "model", type: "nominal" },
+        y: { field: "loc", type: "nominal" },
+      },
+      layer: [
+        {
+          mark: "rect",
+          encoding: { color: { field: "wis", type: "quantitative" } },
+        },
+        {
+          mark: "text",
+          encoding: {
+            text: { field: "wis" },
+            color: {
+              condition: { test: "datum.wis > 2", value: "white" },
+              value: "black",
+            },
+          },
+        },
+      ],
+    });
+    expect(
+      (conditional.props.cellLabels as { color?: string }).color,
+    ).toBeUndefined();
+  });
+
+  it("warns when the channels are not what a heatmap needs", () => {
+    const { props, warnings } = heatmap({
+      data: { values: scores },
+      mark: "rect",
+      encoding: {
+        x: { field: "model", type: "nominal" },
+        y: { field: "wis", type: "quantitative" },
+        color: { field: "loc", type: "nominal" },
+      },
+    });
+    expect(props.rows).toEqual(["1", "2", "4"]);
+    expect(props.data[0]).toEqual([NaN, NaN]);
+    expect(warnings).toEqual([
+      "a `rect` heatmap needs a nominal or ordinal `y`; its values are used as categories",
+      "a `rect` heatmap needs a quantitative `color`; values are read as numbers",
+    ]);
   });
 });

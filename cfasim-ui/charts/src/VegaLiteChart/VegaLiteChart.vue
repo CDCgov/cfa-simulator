@@ -2,6 +2,7 @@
 import { computed, watch } from "vue";
 import LineChart from "../LineChart/LineChart.vue";
 import BarChart from "../BarChart/BarChart.vue";
+import Heatmap from "../Heatmap/Heatmap.vue";
 import { vegaLiteToChart, type VegaLiteSpec } from "./vegaLite.js";
 
 export interface VegaLiteChartProps {
@@ -67,11 +68,13 @@ watch(
 const chart = computed(() =>
   result.value instanceof Error ? null : result.value,
 );
+
+const COMPONENTS = { LineChart, BarChart, Heatmap };
 </script>
 
 <template>
   <component
-    :is="chart.component === 'BarChart' ? BarChart : LineChart"
+    :is="COMPONENTS[chart.component]"
     v-if="chart"
     v-bind="{ ...chart.props, ...$attrs }"
   >

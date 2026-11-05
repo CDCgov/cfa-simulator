@@ -14,6 +14,8 @@ export interface ChartTooltipContentProps {
   colorLabel?: string;
   /** Formats a row's `colorValue`; defaults to `format`. */
   colorFormat?: (value: number) => string;
+  /** Keep rows whose value is `NaN` (shown as `—`), e.g. an empty heatmap cell. */
+  showMissing?: boolean;
 }
 
 const props = defineProps<ChartTooltipContentProps>();
@@ -24,9 +26,9 @@ const fmt = (v: number) =>
 // Rows with nothing to show at the hovered x drop out, and once any row
 // is named, so do unnamed ones (e.g. fan trajectories).
 const rows = computed(() => {
-  const finite = props.values.filter(
-    (v) => isFinite(v.value) || v.lower !== undefined,
-  );
+  const finite = props.showMissing
+    ? props.values
+    : props.values.filter((v) => isFinite(v.value) || v.lower !== undefined);
   return finite.some((v) => v.label) ? finite.filter((v) => v.label) : finite;
 });
 </script>

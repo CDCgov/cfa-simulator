@@ -48,8 +48,9 @@ cfasim-ui is the shared component and theming library you use to make simulators
 - [BarChart](./charts/bar-chart) — grouped/stacked/overlay bar chart, vertical or horizontal
 - [ChoroplethMap](./charts/choropleth-map) — choropleth map of US states, counties, and HSAs, or any custom geography
 - [DataTable](./charts/data-table) — table for columnar data or ModelOutput
+- [Heatmap](./charts/heatmap) — grid of cells colored by value, with a continuous color scale
 - [LineChart](./charts/line-chart) — responsive SVG line chart
-- [VegaLiteChart](./charts/vega-lite-chart) — renders a Vega-Lite spec as a LineChart or BarChart
+- [VegaLiteChart](./charts/vega-lite-chart) — renders a Vega-Lite spec as a LineChart, BarChart or Heatmap
 
 The export helpers behind the chart menu (standalone SVG, PNG blobs, clipboard copies, file downloads) are documented under [Chart export](./export).
 

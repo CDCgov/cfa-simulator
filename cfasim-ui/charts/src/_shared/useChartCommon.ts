@@ -1,5 +1,5 @@
 import { computed } from "vue";
-import type { ChartCommonProps } from "./chartProps.js";
+import type { ChartBaseProps } from "./chartProps.js";
 import {
   resolveLabelStyle,
   AXIS_LABEL_FONT_SIZE,
@@ -9,11 +9,11 @@ import {
 } from "./useChartPadding.js";
 
 /**
- * Computeds derived purely from `ChartCommonProps`, shared verbatim by
+ * Computeds derived purely from `ChartBaseProps`, shared verbatim by
  * every cartesian chart. Pass the component's reactive `props` object;
  * property reads inside the computeds track as usual.
  */
-export function useChartCommon(props: ChartCommonProps) {
+export function useChartCommon(props: ChartBaseProps) {
   // Accessible name for the chart; falls back to the visible title.
   const chartAriaLabel = computed(() => props.ariaLabel ?? props.title);
   // Expose the <svg> as a single labeled image so screen readers announce

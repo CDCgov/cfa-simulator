@@ -64,9 +64,13 @@ export function colorScaleDomain(
     if (v > max) max = v;
   };
   for (const vals of values) {
-    if (vals === undefined) continue;
+    if (vals == null) continue;
     if (typeof vals === "number") add(vals);
-    else for (let i = 0; i < vals.length; i++) add(Number(vals[i]));
+    else
+      for (let i = 0; i < vals.length; i++) {
+        const v = vals[i];
+        if (v != null && (v as unknown) !== "") add(Number(v));
+      }
   }
   if (!Number.isFinite(min)) return null;
   return min === max ? [min - 1, max + 1] : [min, max];

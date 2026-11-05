@@ -21,6 +21,27 @@ afterEach(() => {
 });
 
 describe("VegaLiteChart", () => {
+  it("renders a Heatmap for a rect mark", () => {
+    const wrapper = mount(VegaLiteChart, {
+      props: {
+        spec: {
+          mark: "rect",
+          encoding: {
+            x: { field: "day", type: "nominal" },
+            y: { field: "day", type: "nominal" },
+            color: { field: "n", type: "quantitative" },
+          },
+        },
+        data: rows,
+      },
+      attrs: { menu: false, "data-testid": "vl" },
+      attachTo: document.body,
+    });
+    const root = document.querySelector('[data-testid="vl"]')!;
+    expect(root.querySelectorAll('[data-testid="cell"]')).toHaveLength(2);
+    wrapper.unmount();
+  });
+
   it("renders the chart the spec asks for, with extra attributes over its props", () => {
     const wrapper = mount(VegaLiteChart, {
       props: { spec: { ...barSpec, title: "From spec" }, data: rows },

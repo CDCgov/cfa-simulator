@@ -58,6 +58,18 @@ export function measureText(text: string, font: string): number | null {
 }
 
 /**
+ * `measureText`, or `length × fontSize × 0.6` where there is no canvas
+ * (happy-dom), so layout code never has to branch on the null.
+ */
+export function textWidthOrEstimate(
+  text: string,
+  font: string,
+  fontSize: number,
+): number {
+  return measureText(text, font) ?? text.length * fontSize * 0.6;
+}
+
+/**
  * Whether tick labels fit between their ticks along an axis of `size`
  * pixels spanning `[min, max]`, measured in `font`. Trusts the caller's
  * density budget where text cannot be measured.

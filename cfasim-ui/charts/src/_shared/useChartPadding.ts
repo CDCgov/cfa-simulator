@@ -19,6 +19,12 @@ export const TICK_LABEL_OPACITY = 0.6;
 export const LEGEND_FONT_SIZE = 11;
 /** Vertical space below the title's last baseline before the next element. */
 const TITLE_BOTTOM_GAP = 8;
+/** Left padding for a value axis' tick labels, and with a `yLabel` beside them. */
+export const CARTESIAN_LEFT_PADDING = { plain: 50, withYLabel: 56 };
+/** Right padding of every cartesian chart, before `chartPadding`. */
+export const CARTESIAN_RIGHT_PADDING = 10;
+/** Bottom padding for an axis' tick labels, and with an `xLabel` under them. */
+export const CARTESIAN_BOTTOM_PADDING = { plain: 30, withXLabel: 38 };
 
 /**
  * Resolve a `LabelStyle` against per-element defaults. Returns the
@@ -130,7 +136,8 @@ export function positionLegendItems<T extends object>(
   });
 }
 
-function resolvePadding(p: ChartPadding | undefined) {
+/** A `ChartPadding` as four numbers, zero where unset. */
+export function resolvePadding(p: ChartPadding | undefined) {
   if (p == null) return { top: 0, right: 0, bottom: 0, left: 0 };
   if (typeof p === "number") return { top: p, right: p, bottom: p, left: p };
   return {
@@ -197,8 +204,11 @@ export function useChartPadding(opts: ChartPaddingOptions) {
   const horizontalPadding = computed(() => {
     const extra = resolvePadding(opts.extraPadding?.());
     return {
-      left: (opts.yLabel() ? 56 : 50) + extra.left,
-      right: 10 + extra.right,
+      left:
+        (opts.yLabel()
+          ? CARTESIAN_LEFT_PADDING.withYLabel
+          : CARTESIAN_LEFT_PADDING.plain) + extra.left,
+      right: CARTESIAN_RIGHT_PADDING + extra.right,
     };
   });
 
@@ -272,7 +282,11 @@ export function useChartPadding(opts: ChartPaddingOptions) {
     return {
       top: titleHeight.value + topLegend + extra.top,
       bottom:
-        (opts.xLabel() ? 38 : 30) + bottomLegendHeight.value + extra.bottom,
+        (opts.xLabel()
+          ? CARTESIAN_BOTTOM_PADDING.withXLabel
+          : CARTESIAN_BOTTOM_PADDING.plain) +
+        bottomLegendHeight.value +
+        extra.bottom,
       left: horizontalPadding.value.left,
       right: horizontalPadding.value.right,
     };

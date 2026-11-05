@@ -100,11 +100,10 @@ export interface LineMarkStyle {
 export type LegendLayout = "inline" | "grid" | { columns: number };
 
 /**
- * Props common to every cartesian chart component. Anything specific to
- * the chart type (series shape, layout, value-axis details) lives on the
- * component itself.
+ * Props common to every cartesian chart component (`LineChart`, `BarChart`,
+ * `Heatmap`). Series/value-axis props live on `ChartCommonProps`.
  */
-export interface ChartCommonProps {
+export interface ChartBaseProps {
   width?: number;
   height?: number;
   /**
@@ -142,38 +141,6 @@ export interface ChartCommonProps {
    * the plot shrinks to stay clear of it.
    */
   legendPosition?: "top" | "bottom";
-  /**
-   * How the legend items flow. `"inline"` (default) packs them left to
-   * right, wrapping when a row is full. `"grid"` lines them up in equal
-   * columns as wide as the longest item, as many as fit the plot width;
-   * `{ columns }` fixes the column count instead.
-   */
-  legendLayout?: LegendLayout;
-  /**
-   * Fade every other mark while a legend item is hovered (or its toggle
-   * button focused), so only that series shows. Default `false`. The
-   * `legend-hover` and `legend-click` events report the label under the
-   * pointer either way once the legend is interactive (this or
-   * `legendToggle`).
-   */
-  legendHighlight?: boolean;
-  /**
-   * Let readers show and hide marks by clicking their inline legend
-   * item. Default `false`. Each toggleable item gets a real `<button>`
-   * (keyboard focusable, state exposed via `aria-pressed`). Hidden marks
-   * leave the plot and the tooltip, and the value axis rescales to what
-   * remains; CSV downloads keep every series. `"isolate"` makes a click
-   * hide every other mark instead, and a second click on the only mark
-   * left brings them all back.
-   */
-  legendToggle?: boolean | "isolate";
-  /**
-   * Legend labels of the marks currently hidden. Marks sharing a
-   * `legend` label hide together. Bind with `v-model:hidden-series` to
-   * control or observe the state; when omitted the chart tracks it
-   * internally. Applies whether or not `legendToggle` is set.
-   */
-  hiddenSeries?: string[];
   xLabel?: string;
   yLabel?: string;
   /**
@@ -242,6 +209,50 @@ export interface ChartCommonProps {
    */
   fullscreenTarget?: string | HTMLElement;
   /**
+   * Extra padding (pixels) added around the plot. Number = same on all
+   * sides; object = per-side. Useful for giving annotations or other
+   * overlays room to extend past the data area without clipping.
+   */
+  chartPadding?: ChartPadding;
+}
+
+/**
+ * Props common to series/axis charts (`LineChart` and `BarChart`).
+ */
+export interface ChartCommonProps extends ChartBaseProps {
+  /**
+   * How the legend items flow. `"inline"` (default) packs them left to
+   * right, wrapping when a row is full. `"grid"` lines them up in equal
+   * columns as wide as the longest item, as many as fit the plot width;
+   * `{ columns }` fixes the column count instead.
+   */
+  legendLayout?: LegendLayout;
+  /**
+   * Fade every other mark while a legend item is hovered (or its toggle
+   * button focused), so only that series shows. Default `false`. The
+   * `legend-hover` and `legend-click` events report the label under the
+   * pointer either way once the legend is interactive (this or
+   * `legendToggle`).
+   */
+  legendHighlight?: boolean;
+  /**
+   * Let readers show and hide marks by clicking their inline legend
+   * item. Default `false`. Each toggleable item gets a real `<button>`
+   * (keyboard focusable, state exposed via `aria-pressed`). Hidden marks
+   * leave the plot and the tooltip, and the value axis rescales to what
+   * remains; CSV downloads keep every series. `"isolate"` makes a click
+   * hide every other mark instead, and a second click on the only mark
+   * left brings them all back.
+   */
+  legendToggle?: boolean | "isolate";
+  /**
+   * Legend labels of the marks currently hidden. Marks sharing a
+   * `legend` label hide together. Bind with `v-model:hidden-series` to
+   * control or observe the state; when omitted the chart tracks it
+   * internally. Applies whether or not `legendToggle` is set.
+   */
+  hiddenSeries?: string[];
+  /**
    * Enable drag-to-zoom. Default `false`. With `true`, a roughly straight
    * drag along the main axis (x, or the category axis of a BarChart) zooms
    * that axis only and the value axis rescales to the visible data; a
@@ -276,12 +287,6 @@ export interface ChartCommonProps {
    * See `GridStyle`.
    */
   gridStyle?: GridStyle;
-  /**
-   * Extra padding (pixels) added around the plot. Number = same on all
-   * sides; object = per-side. Useful for giving annotations or other
-   * overlays room to extend past the data area without clipping.
-   */
-  chartPadding?: ChartPadding;
 }
 
 /** Whether a `PerPoint` style is a function, which needs a `PointContext`. */

@@ -50,6 +50,7 @@ import {
   isDateXAxis,
   toNumericX,
   measureText,
+  textWidthOrEstimate,
   tickLabelsFit,
   useChartFontFamily,
   type ChartXInput,
@@ -75,6 +76,9 @@ import {
   colorScaleDomain,
   colorScaleFn,
   colorRampStops,
+  layoutColorScaleLegend,
+  ChartColorScaleLegend,
+  type ColorScaleLegendLayout,
   lineColorGradient,
   type ColorScale,
   type ChartMarker,
@@ -1369,30 +1373,16 @@ interface InlineLegendItem {
   /** Series only: colored per point, so `color` is the scale's ramp. */
   ramp?: boolean;
   dot?: { r: number; fill: string; opacity?: number; stroke?: string };
-  /** Color-scale ramp: x offsets of its parts from the item's x. */
-  scale?: {
-    min: string;
-    max: string;
-    minX: number;
-    rampX: number;
-    maxX: number;
-    width: number;
-  };
+  /** Color-scale legend: title, min, ramp and max laid out in a row. */
+  scale?: ColorScaleLegendLayout;
 }
-
-const RAMP_WIDTH = 64;
-const RAMP_HEIGHT = 8;
-const RAMP_GAP = 4;
-/** Gap between the scale's title and its min label. */
-const RAMP_LABEL_GAP = 6;
 
 function legendTextWidth(text: string): number {
   const { fontSize, fontWeight } = legendResolved.value;
-  return (
-    measureText(
-      text,
-      `${fontWeight ?? 400} ${fontSize}px ${chartFontFamily.value}`,
-    ) ?? text.length * fontSize * 0.6
+  return textWidthOrEstimate(
+    text,
+    `${fontWeight ?? 400} ${fontSize}px ${chartFontFamily.value}`,
+    fontSize,
   );
 }
 
@@ -1441,24 +1431,17 @@ const inlineLegendItems = computed<InlineLegendItem[]>(() => {
   }
   const scale = colorScaleResolved.value;
   if (scale?.legend) {
-    const min = scale.format(scale.domain[0]);
-    const max = scale.format(scale.domain[scale.domain.length - 1]);
-    const label = scale.label ?? "";
-    const minX = label ? legendTextWidth(label) + RAMP_LABEL_GAP : 0;
-    const rampX = minX + legendTextWidth(min) + RAMP_GAP;
-    const maxX = rampX + RAMP_WIDTH + RAMP_GAP;
+    const layout = layoutColorScaleLegend(
+      scale.label,
+      scale.format(scale.domain[0]),
+      scale.format(scale.domain[scale.domain.length - 1]),
+      legendTextWidth,
+    );
     items.push({
-      label,
+      label: layout.label,
       color: "currentColor",
       type: "scale",
-      scale: {
-        min,
-        max,
-        minX,
-        rampX,
-        maxX,
-        width: maxX + legendTextWidth(max),
-      },
+      scale: layout,
     });
   }
   const sections = props.areaSections;
@@ -2656,31 +2639,16 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
               />
             </template>
             <!-- color scale: title, min, ramp, max -->
-            <g
+            <ChartColorScaleLegend
               v-else-if="item.scale"
-              data-testid="legend-color-scale"
+              :layout="item.scale"
+              :x="item.x"
+              :y="item.y"
+              :fill="`url(#${gradientId}-ramp)`"
               :font-size="legendResolved.fontSize"
-              :fill="legendResolved.fill"
+              :text-fill="legendResolved.fill"
               :font-weight="legendResolved.fontWeight"
-            >
-              <text v-if="item.label" :x="item.x" :y="item.y + 4">
-                {{ item.label }}
-              </text>
-              <text :x="item.x + item.scale.minX" :y="item.y + 4">
-                {{ item.scale.min }}
-              </text>
-              <rect
-                :x="item.x + item.scale.rampX"
-                :y="item.y - RAMP_HEIGHT / 2"
-                :width="RAMP_WIDTH"
-                :height="RAMP_HEIGHT"
-                rx="2"
-                :fill="`url(#${gradientId}-ramp)`"
-              />
-              <text :x="item.x + item.scale.maxX" :y="item.y + 4">
-                {{ item.scale.max }}
-              </text>
-            </g>
+            />
             <!-- area and section indicator: filled swatch -->
             <rect
               v-else

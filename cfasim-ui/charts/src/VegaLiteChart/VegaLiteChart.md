@@ -17,8 +17,9 @@ keywords:
 # VegaLiteChart
 
 Renders a [Vega-Lite](https://vega.github.io/vega-lite/) spec with the
-native cfasim charts: a spec with a `bar` mark becomes a `BarChart`, anything
-else a `LineChart`, so the chart gets the same styling, tooltips, CSV
+native cfasim charts: a spec with a `rect` mark becomes a `Heatmap`, one with
+a `bar` mark a `BarChart`, anything else a `LineChart`, so the chart gets the
+same styling, tooltips, CSV
 download, zoom and dark mode as the rest of the app. Specs from Altair
 (`chart.to_dict()`), Observable or an LLM work as long as they stay in the
 [supported subset](#supported-subset). There is no Vega dependency: the spec
@@ -102,6 +103,37 @@ const scatterSpec = {
     size: { field: "attack", type: "quantitative" },
     color: { field: "attack", type: "quantitative", scale: { range: ["#bfdbfe", "#1e3a8a"] } },
   },
+};
+
+const states = ["AL", "CO", "DE", "HI", "ID", "KS", "ME", "NV"];
+const ages2 = ["0-4", "5-17", "18-49", "50-64", "65+"];
+const coverage = states.flatMap((state, i) =>
+  ages2.map((age, j) => ({
+    state,
+    age,
+    pct: Math.round(58 + 7 * j + 9 * Math.sin(i * 1.3 + j) + 3 * Math.cos(i)),
+  })),
+);
+const heatmapSpec = {
+  data: { values: coverage },
+  encoding: {
+    x: { field: "age", type: "ordinal", sort: ages2, title: "Age group", axis: { orient: "top" } },
+    y: { field: "state", type: "nominal", sort: "-color", title: null },
+  },
+  layer: [
+    {
+      mark: { type: "rect", cornerRadius: 2 },
+      encoding: {
+        color: {
+          field: "pct",
+          type: "quantitative",
+          scale: { domain: [50, 100], range: ["#fef3c7", "#b45309"] },
+          legend: { title: "Coverage (%)" },
+        },
+      },
+    },
+    { mark: "text", encoding: { text: { field: "pct", format: ".0f" } } },
+  ],
 };
 
 const unsupportedSpec = {
@@ -267,6 +299,52 @@ const spec = {
   </template>
 </ComponentDemo>
 
+### Heatmap
+
+A `rect` mark over nominal or ordinal `x` and `y` with a quantitative `color`
+is a [`Heatmap`](./heatmap): `y` values are the rows, `x` values the columns
+(each in domain order, so `sort` applies), and a `text` layer on the same
+channels prints the values on the cells. `axis.orient: "top"` moves the
+column labels above the plot and `cornerRadius` rounds the cells.
+
+<ComponentDemo>
+  <VegaLiteChart :spec="heatmapSpec" :cell-height="30" data-testid="vega-heatmap" />
+
+<template #code>
+
+```ts
+const spec = {
+  data: { values: coverage }, // [{ state: "AL", age: "0-4", pct: 71 }, ...]
+  encoding: {
+    x: {
+      field: "age",
+      type: "ordinal",
+      sort: ages2,
+      title: "Age group",
+      axis: { orient: "top" },
+    },
+    y: { field: "state", type: "nominal", sort: "-color", title: null },
+  },
+  layer: [
+    {
+      mark: { type: "rect", cornerRadius: 2 },
+      encoding: {
+        color: {
+          field: "pct",
+          type: "quantitative",
+          scale: { domain: [50, 100], range: ["#fef3c7", "#b45309"] },
+          legend: { title: "Coverage (%)" },
+        },
+      },
+    },
+    { mark: "text", encoding: { text: { field: "pct", format: ".0f" } } },
+  ],
+};
+```
+
+  </template>
+</ComponentDemo>
+
 ## Data and chart props
 
 Pass rows with the `data` prop to keep the spec separate from its data (it
@@ -306,10 +384,11 @@ warnings; `strict: true` throws on the first unsupported piece instead.
 
 ```ts
 import { vegaLiteToChart } from "@cfasim-ui/charts/vega-lite";
-import { LineChart, BarChart } from "@cfasim-ui/charts";
+import { LineChart, BarChart, Heatmap } from "@cfasim-ui/charts";
 
+const charts = { LineChart, BarChart, Heatmap };
 const { component, props, warnings } = vegaLiteToChart(spec, { data: rows });
-// <component :is="component === 'BarChart' ? BarChart : LineChart" v-bind="props" />
+// <component :is="charts[component]" v-bind="props" />
 ```
 
 ## Supported subset
@@ -317,17 +396,17 @@ const { component, props, warnings } = vegaLiteToChart(spec, { data: rows });
 | Spec                        | Supported                                                                                                                                                                                                           |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Top level                   | `title` (text, multi-line), numeric `width` / `height`, inline `data.values`, `layer` (nested, inheriting data and encodings)                                                                                       |
-| Marks                       | `line`, `trail`, `point`, `circle`, `square`, `area`, `bar`, `rule`, `errorbar`, `errorband`, `text`                                                                                                                |
-| Mark properties             | `color`, `opacity`, `strokeWidth`, `strokeDash`, `interpolate` (`linear`, `step`, `step-before`, `step-after`, `monotone`), `point: true`, `filled`, `size`                                                         |
+| Marks                       | `line`, `trail`, `point`, `circle`, `square`, `area`, `bar`, `rect`, `rule`, `errorbar`, `errorband`, `text`                                                                                                        |
+| Mark properties             | `color`, `opacity`, `strokeWidth`, `strokeDash`, `interpolate` (`linear`, `step`, `step-before`, `step-after`, `monotone`), `point: true`, `filled`, `size`, `cornerRadius` / `stroke` / `fontSize` on heatmaps     |
 | `x` / `y`                   | `quantitative`, `temporal`, `nominal` and `ordinal` fields; `datum` for rules and text; `x2` / `y2`; `bin: "binned"` bars                                                                                           |
-| `color`                     | a nominal or ordinal field (one series per value; `scale.domain` / `scale.range`), a constant `value`, a quantitative field on point marks                                                                          |
+| `color`                     | a nominal or ordinal field (one series per value; `scale.domain` / `scale.range`), a constant `value`, a quantitative field on point and rect marks (`legend.title`, `legend.format`, `legend: null`)               |
 | `size`, `opacity`           | fields on point marks, `value`                                                                                                                                                                                      |
 | `xOffset` / `yOffset`       | groups bars side by side                                                                                                                                                                                            |
-| `text`                      | a field or value on `text` marks                                                                                                                                                                                    |
+| `text`                      | a field or value on `text` marks; over a `rect` heatmap, the cell labels (`format`)                                                                                                                                 |
 | Stacking                    | stacked bars and areas by color (default), `stack: "normalize"`, `stack: null`                                                                                                                                      |
 | `sort`                      | arrays, `"ascending"` / `"descending"`, `null`, and channel sorts like `"-y"` (by each value's sum)                                                                                                                 |
 | `scale`                     | `type: "log"` on the value axis, `domain`                                                                                                                                                                           |
-| `axis`                      | `title`, `format` (d3), `formatType: "time"`, `grid`, `axis: null` for a bar value axis                                                                                                                             |
+| `axis`                      | `title`, `format` (d3), `formatType: "time"`, `grid`, `axis: null` for a bar value axis or a heatmap axis, `orient: "top"` and `labelAngle` on a heatmap's `x`                                                      |
 | Not supported (each warned) | `transform`, `aggregate`, `timeUnit`, `bin: true`, `url` data without the `data` prop, `config`, `params` / selections, `facet` / `repeat` / `concat`, color `scheme`s, other marks, interpolations and scale types |
 
 The chart applies its own styling: Vega-Lite's default grid lines, axis

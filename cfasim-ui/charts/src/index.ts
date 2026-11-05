@@ -31,6 +31,19 @@ export {
 // Re-exported so a histogram needs no direct @cfasim-ui/shared dependency.
 export { binValues, type BinOptions, type Bins } from "@cfasim-ui/shared";
 export {
+  default as Heatmap,
+  type HeatmapProps,
+  type HeatmapCell,
+  type HeatmapCellLabels,
+  type HeatmapAxisItem,
+  type HeatmapTooltipProps,
+} from "./Heatmap/Heatmap.vue";
+export {
+  pivotCells,
+  type HeatmapMatrix,
+  type PivotCellsOptions,
+} from "./Heatmap/heatmapLayout.js";
+export {
   default as ChoroplethMap,
   type GeoType,
   type StateData,

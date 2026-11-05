@@ -6,6 +6,8 @@ import type {
   BarSummaryLine,
 } from "../BarChart/BarChart.vue";
 import { stackAreas, type StackedAreaLayer } from "../LineChart/stackAreas.js";
+import type { HeatmapProps } from "../Heatmap/Heatmap.vue";
+import { pivotCells } from "../Heatmap/heatmapLayout.js";
 import {
   CATEGORICAL_COLORS,
   parseDate,
@@ -39,8 +41,10 @@ export interface VegaLiteFieldDef {
     format?: string;
     formatType?: string;
     grid?: boolean;
+    orient?: string;
+    labelAngle?: number;
   } | null;
-  legend?: { title?: string | null } | null;
+  legend?: { title?: string | null; format?: string } | null;
   sort?: unknown;
   aggregate?: unknown;
   bin?: unknown;
@@ -96,7 +100,8 @@ export interface VegaLiteOptions {
 /** A cfasim chart to render, with what the spec asked for that it could not. */
 export type VegaLiteChart =
   | { component: "LineChart"; props: LineChartProps; warnings: string[] }
-  | { component: "BarChart"; props: BarChartProps; warnings: string[] };
+  | { component: "BarChart"; props: BarChartProps; warnings: string[] }
+  | { component: "Heatmap"; props: HeatmapProps; warnings: string[] };
 
 type Row = Record<string, unknown>;
 
@@ -109,9 +114,10 @@ const CURVES: Record<string, LineCurve> = {
 };
 
 /**
- * Translate a Vega-Lite spec to a cfasim `LineChart` or `BarChart`: a bar
- * mark makes a BarChart (other layers become summary lines), anything else
- * a LineChart. Every piece of the spec outside the supported subset is
+ * Translate a Vega-Lite spec to a cfasim `Heatmap`, `BarChart` or
+ * `LineChart`: a rect mark makes a Heatmap (a text layer becomes its cell
+ * labels), a bar mark a BarChart (other layers become summary lines),
+ * anything else a LineChart. Every piece of the spec outside the supported subset is
  * skipped with a warning (or throws with `strict`). Data must arrive ready
  * to plot: transforms, aggregates, `bin: true` and `timeUnit` are not
  * applied.
@@ -140,6 +146,13 @@ export function vegaLiteToChart(
     ...(typeof spec.width === "number" && { width: spec.width }),
     ...(typeof spec.height === "number" && { height: spec.height }),
   };
+  if (units.some((u) => u.mark.type === "rect")) {
+    return {
+      component: "Heatmap",
+      props: { ...common, ...heatmapChart(units, rows, warn) },
+      warnings,
+    };
+  }
   const isBar = units.some((u) => u.mark.type === "bar");
   return isBar
     ? {
@@ -848,6 +861,147 @@ function numericDomain(
     Number.isFinite(lo) ? lo : undefined,
     Number.isFinite(hi) ? hi : undefined,
   ];
+}
+
+/** A d3 format string as a value formatter, or undefined. */
+function valueFormat(format: string | undefined) {
+  if (format === undefined) return undefined;
+  const f = d3Format(format);
+  return (v: number) => f(v);
+}
+
+/**
+ * A `rect` mark over discrete `x` and `y` with a quantitative `color` as a
+ * Heatmap: `y` values are the rows, `x` values the columns (each in domain
+ * order, so `sort` works), `color` the cell values. A `text` layer on the
+ * same channels prints the values on the cells.
+ */
+function heatmapChart(
+  units: Unit[],
+  rowsFor: (u: Unit) => readonly Row[],
+  warn: Warn,
+): HeatmapProps {
+  const rect = units.find((u) => u.mark.type === "rect")!;
+  const e = rect.encoding;
+  const xField = fieldOf(e.x, "x", warn);
+  const yField = fieldOf(e.y, "y", warn);
+  const props: HeatmapProps = { rows: [], columns: [], data: [] };
+  if (!xField || !yField || !e.x || !e.y) {
+    warn("a `rect` layer needs `x` and `y` fields");
+    return props;
+  }
+  for (const [ch, def] of [
+    ["x", e.x],
+    ["y", e.y],
+  ] as const) {
+    if (!isDiscrete(def)) {
+      warn(
+        `a \`rect\` heatmap needs a nominal or ordinal \`${ch}\`; its values are used as categories`,
+      );
+    }
+  }
+  const colorField = fieldOf(e.color, "color", warn);
+  if (!colorField) warn("a `rect` heatmap needs a `color` field");
+  else if (e.color?.type !== "quantitative") {
+    warn(
+      "a `rect` heatmap needs a quantitative `color`; values are read as numbers",
+    );
+  }
+  const rows = rowsFor(rect).filter(
+    (r) => get(r, xField) != null && get(r, yField) != null,
+  );
+  const columns = domainOf(rows, xField, e.x, warn, e).map(String);
+  const rowLabels = domainOf(rows, yField, e.y, warn, e).map(String);
+  const matrix = pivotCells(rows, {
+    row: (r) => get(r, yField),
+    column: (r) => get(r, xField),
+    value: (r) => (colorField ? get(r, colorField) : NaN),
+    rows: rowLabels,
+    columns,
+  });
+  props.rows = matrix.rows;
+  props.columns = matrix.columns;
+  props.data = matrix.data;
+
+  const color = e.color;
+  if (color) {
+    if (color.scale?.scheme !== undefined) {
+      warn("`color.scale.scheme` is not supported; use `scale.range`");
+    }
+    const range = Array.isArray(color.scale?.range)
+      ? color.scale.range.map(String)
+      : undefined;
+    if (range && range.length < 2) {
+      warn("a continuous `color` needs at least two `scale.range` colors");
+    }
+    // Two values span the scale; more make it piecewise (`[min, mid, max]`
+    // for a diverging scale), which the chart's `ColorScale` takes as is.
+    const domain = Array.isArray(color.scale?.domain)
+      ? color.scale.domain.map(num)
+      : [];
+    const title =
+      color.legend?.title !== undefined ? color.legend.title : color.title;
+    props.colorScale = {
+      ...(range && range.length >= 2 && { range }),
+      ...(domain.length >= 2 && domain.every(Number.isFinite) && { domain }),
+      ...(color.legend === null
+        ? { legend: false }
+        : title !== null && { label: title ?? color.field }),
+      // Vega-Lite's legend format is the legend's alone; the cells and the
+      // tooltip keep the chart's own formatting.
+      ...(color.legend?.format !== undefined && {
+        format: valueFormat(color.legend.format),
+      }),
+    };
+  }
+
+  const xLabel = labelOf(e.x);
+  const yLabel = labelOf(e.y);
+  if (xLabel !== undefined) props.xLabel = xLabel;
+  if (yLabel !== undefined) props.yLabel = yLabel;
+  if (e.x.axis === null) props.columnAxis = "none";
+  else if (e.x.axis?.orient === "top") props.columnAxis = "top";
+  if (typeof e.x.axis?.labelAngle === "number") {
+    props.columnLabelAngle = e.x.axis.labelAngle;
+  }
+  if (e.y.axis === null) props.rowAxis = "none";
+
+  const { mark } = rect;
+  if (typeof mark.cornerRadius === "number")
+    props.cellRadius = mark.cornerRadius;
+  if (typeof mark.stroke === "string") props.cellStroke = mark.stroke;
+  if (typeof mark.strokeWidth === "number") {
+    props.cellStrokeWidth = mark.strokeWidth;
+  }
+
+  for (const u of units) {
+    if (u === rect) continue;
+    const kind = u.mark.type;
+    if (kind !== "text") {
+      warn(`\`${kind}\` layers over a heatmap are not supported`);
+      continue;
+    }
+    const t = u.encoding.text;
+    if (t?.field && colorField && t.field !== colorField) {
+      warn("a heatmap's `text` layer shows the `color` field");
+    }
+    // Vega-Lite specs use a `color.condition` on the text layer for cell
+    // contrast; ignore its fallback `value` so the chart picks per cell.
+    const textColor =
+      u.mark.color ??
+      (u.encoding.color?.condition === undefined
+        ? u.encoding.color?.value
+        : undefined);
+    const format = valueFormat(
+      typeof t?.format === "string" ? t.format : undefined,
+    );
+    props.cellLabels = {
+      ...(format && { format }),
+      ...(typeof textColor === "string" && { color: textColor }),
+      ...(typeof u.mark.fontSize === "number" && { fontSize: u.mark.fontSize }),
+    };
+  }
+  return props;
 }
 
 function barChart(
