@@ -1,11 +1,16 @@
 # Chart export
 
-The chart menu's **Save as SVG**, **Save as PNG** and **Download CSV** items
-are built on helpers that `@cfasim-ui/charts` also exports, for export
-buttons, reports, or bundling several charts into one download.
+The chart menu's **Save PNG**, **Copy PNG**, **Save SVG**, **Copy SVG** and
+**Download CSV** items (pick a subset with the chart's `menuItems` prop) are
+built on helpers that `@cfasim-ui/charts` also exports, for export buttons,
+reports, or bundling several charts into one download.
 
 ```ts
 import {
+  canCopyToClipboard,
+  copyCanvasPng,
+  copyPng,
+  copySvg,
   downloadBlob,
   downloadCsv,
   prepareSvgForExport,
@@ -65,6 +70,28 @@ const png = await svgToPngBlob(svg, { scale: 3, background: "#fff" });
 await savePng(svg, "cases"); // cases.png
 ```
 
+## Clipboard
+
+`copySvg` puts the standalone svg on the clipboard as plain text, which is
+what Figma, Excalidraw, code editors and chat apps paste, plus an
+`image/svg+xml` entry in browsers that support one (Chromium; Safari and
+Firefox accept the type and drop it). `copyPng` copies the same PNG that
+`svgToPngBlob` renders, and `copyCanvasPng` copies a canvas-rendered map.
+All three resolve once the write succeeds and reject when the browser refuses
+it, so call them straight from a click handler: Safari allows one clipboard
+write per click and only inside the click's own tick, which is why `copyPng`
+hands the browser a promise rather than awaiting the render first.
+
+The async Clipboard API exists only in secure contexts (https or localhost),
+and `canCopyToClipboard()` says whether it is available; the chart menu hides
+its copy items otherwise.
+
+```ts
+button.addEventListener("click", () => {
+  copySvg(svg, { background: "white" }).catch(() => notify("Copy failed"));
+});
+```
+
 ## Files
 
 `downloadBlob(blob, name)` downloads any `Blob` under a full file name.
@@ -86,5 +113,9 @@ downloadBlob(zipBlob, "outputs.zip");
 | `saveSvg(svg, filename, options?)`           | `void`          | Downloads `<filename>.svg`                         |
 | `savePng(svg, filename, options?)`           | `Promise<void>` | Downloads `<filename>.png`                         |
 | `saveCanvasPng(canvas, filename)`            | `void`          | Downloads a canvas's contents as `<filename>.png`  |
+| `copySvg(svg, { background? })`              | `Promise<void>` | Copies the standalone svg to the clipboard         |
+| `copyPng(svg, { scale?, background? })`      | `Promise<void>` | Copies the PNG to the clipboard                    |
+| `copyCanvasPng(canvas)`                      | `Promise<void>` | Copies a canvas's contents to the clipboard as PNG |
+| `canCopyToClipboard()`                       | `boolean`       | Whether the async Clipboard API is available       |
 | `downloadCsv(csv, filename)`                 | `void`          | Downloads `<filename>.csv`                         |
 | `downloadBlob(blob, name)`                   | `void`          | Downloads `blob` as `name`                         |

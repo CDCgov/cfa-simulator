@@ -599,7 +599,7 @@ describe("LineChart", () => {
       });
       const items = wrapper.findComponent(ChartMenu).props("items");
       expect(items.find((i) => i.label === "Download CSV")).toBeUndefined();
-      expect(items.find((i) => i.label === "Save as SVG")).toBeTruthy();
+      expect(items.find((i) => i.label === "Save SVG")).toBeTruthy();
     });
 
     it("download link uses custom csv content", () => {
@@ -673,8 +673,78 @@ describe("LineChart", () => {
       const wrapper = mount(LineChart, {
         props: { data: [1, 2, 3], height: 100, filename: "my-chart" },
       });
-      getMenuItem(wrapper, "Save as SVG").action();
+      getMenuItem(wrapper, "Save SVG").action();
       expect(spy).toHaveBeenCalledWith(expect.anything(), "my-chart");
+    });
+
+    it("copies the SVG to the clipboard and announces it in the live region", async () => {
+      const spy = vi.spyOn(download, "copySvg").mockResolvedValue();
+      const wrapper = mount(LineChart, {
+        props: { data: [1, 2, 3], height: 100 },
+      });
+      const live = wrapper.find(".chart-sr-only");
+      expect(live.text()).toBe("");
+      getMenuItem(wrapper, "Copy SVG").action();
+      expect(spy).toHaveBeenCalledWith(
+        wrapper.find(".line-chart-wrapper > svg").element,
+      );
+      await vi.waitFor(() =>
+        expect(live.text()).toBe("Chart SVG copied to clipboard"),
+      );
+    });
+
+    it("announces a failed copy and logs the error", async () => {
+      vi.spyOn(download, "copyPng").mockRejectedValue(new Error("denied"));
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const wrapper = mount(LineChart, {
+        props: { data: [1, 2, 3], height: 100 },
+      });
+      getMenuItem(wrapper, "Copy PNG").action();
+      await vi.waitFor(() =>
+        expect(wrapper.find(".chart-sr-only").text()).toBe(
+          "Could not copy to clipboard",
+        ),
+      );
+      expect(warn).toHaveBeenCalledOnce();
+    });
+
+    it("offers copy items only when the clipboard is available", () => {
+      const labels = () =>
+        mount(LineChart, { props: { data: [1, 2, 3], height: 100 } })
+          .findComponent(ChartMenu)
+          .props("items")
+          .map((i) => i.label);
+      expect(labels()).toEqual([
+        "Fullscreen",
+        "Save PNG",
+        "Copy PNG",
+        "Save SVG",
+        "Copy SVG",
+        "Download CSV",
+      ]);
+      vi.spyOn(download, "canCopyToClipboard").mockReturnValue(false);
+      expect(labels()).toEqual([
+        "Fullscreen",
+        "Save PNG",
+        "Save SVG",
+        "Download CSV",
+      ]);
+    });
+
+    it("menuItems picks the items, in the menu's own order", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1, 2, 3],
+          height: 100,
+          menuItems: ["csv", "save-svg", "copy-png"],
+        },
+      });
+      const labels = wrapper
+        .findComponent(ChartMenu)
+        .props("items")
+        .map((i) => i.label);
+      expect(labels).toEqual(["Copy PNG", "Save SVG", "Download CSV"]);
+      // (save-png was not asked for, so Copy PNG leads)
     });
 
     describe("expand", () => {

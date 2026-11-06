@@ -1,5 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { prepareSvgForExport, svgToString } from "./download.js";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import {
+  canCopyToClipboard,
+  copyCanvasPng,
+  copySvg,
+  prepareSvgForExport,
+  svgToString,
+} from "./download.js";
 
 function mountSvg(html: string): SVGSVGElement {
   const host = document.createElement("div");
@@ -124,5 +130,82 @@ describe("svgToString", () => {
     expect(xml).toContain('fill="white"');
     expect(xml).toContain("<circle");
     wrapper.remove();
+  });
+});
+
+describe("clipboard", () => {
+  // A fake ClipboardItem exposes the values as given, so the tests can tell a
+  // promise-valued PNG from a resolved one.
+  class FakeClipboardItem {
+    static supported: string[] = [];
+    constructor(public data: Record<string, Blob | Promise<Blob>>) {}
+    static supports(type: string) {
+      return FakeClipboardItem.supported.includes(type);
+    }
+  }
+  const write = vi.fn<(items: FakeClipboardItem[]) => Promise<void>>();
+
+  beforeEach(() => {
+    FakeClipboardItem.supported = [];
+    write.mockReset().mockResolvedValue();
+    vi.stubGlobal("ClipboardItem", FakeClipboardItem);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { write },
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete (navigator as { clipboard?: unknown }).clipboard;
+  });
+
+  function writtenData(call = 0) {
+    return write.mock.calls[call][0][0].data;
+  }
+
+  it("canCopyToClipboard needs the async Clipboard API", () => {
+    expect(canCopyToClipboard()).toBe(true);
+    Object.defineProperty(navigator, "clipboard", {
+      value: undefined,
+      configurable: true,
+    });
+    expect(canCopyToClipboard()).toBe(false);
+  });
+
+  it("copySvg writes the standalone markup as text, plus image/svg+xml when supported", async () => {
+    const host = document.createElement("div");
+    host.innerHTML = `<svg width="10" height="10"><circle r="1" fill="var(--nope, red)" /></svg>`;
+    document.body.appendChild(host);
+    const svg = host.querySelector("svg") as SVGSVGElement;
+
+    await copySvg(svg);
+    expect(Object.keys(writtenData())).toEqual(["text/plain"]);
+    const text = await (writtenData()["text/plain"] as Blob).text();
+    expect(text).toMatch(/^<svg[^>]*xmlns="http:\/\/www.w3.org\/2000\/svg"/);
+    expect(text).toContain('fill="red"');
+
+    FakeClipboardItem.supported = ["image/svg+xml"];
+    await copySvg(svg);
+    const data = writtenData(1);
+    expect(Object.keys(data)).toEqual(["text/plain", "image/svg+xml"]);
+    expect(await (data["image/svg+xml"] as Blob).text()).toBe(text);
+    host.remove();
+  });
+
+  it("copyCanvasPng passes the PNG as a promise, then as a blob if the browser rejects promises", async () => {
+    const png = new Blob(["png"], { type: "image/png" });
+    const canvas = document.createElement("canvas");
+    canvas.toBlob = (callback) => callback(png);
+
+    await copyCanvasPng(canvas);
+    expect(write).toHaveBeenCalledOnce();
+    expect(writtenData()["image/png"]).toBeInstanceOf(Promise);
+    expect(await writtenData()["image/png"]).toBe(png);
+
+    write.mockRejectedValueOnce(new TypeError("no promise values"));
+    await copyCanvasPng(canvas);
+    expect(write).toHaveBeenCalledTimes(3);
+    expect(writtenData(2)["image/png"]).toBe(png);
   });
 });

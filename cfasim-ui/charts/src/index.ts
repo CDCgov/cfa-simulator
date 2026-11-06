@@ -81,10 +81,12 @@ export type { ChartAnnotation } from "./_shared/annotations.js";
 export type { ChartInterval, IntervalStyle } from "./_shared/intervals.js";
 export type { GridStyle, GridLineStyle } from "./_shared/grid.js";
 export type {
+  ChartMenuItemKey,
   ChartTooltipValue,
   ChartTooltipInterval,
   ChartTooltipBaseProps,
 } from "./_shared/chartProps.js";
+export { CHART_MENU_ITEM_KEYS } from "./_shared/chartProps.js";
 export type { ChartMarker, ChartMarkerDragPayload } from "./_shared/markers.js";
 export type {
   BlendMode,
@@ -94,6 +96,10 @@ export type {
 } from "./_shared/chartProps.js";
 export type { LineCurve } from "./_shared/curve.js";
 export {
+  canCopyToClipboard,
+  copyCanvasPng,
+  copyPng,
+  copySvg,
   downloadBlob,
   downloadCsv,
   prepareSvgForExport,

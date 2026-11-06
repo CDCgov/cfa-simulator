@@ -186,6 +186,11 @@ export interface ChartCommonProps {
   debounce?: number;
   menu?: boolean | string;
   /**
+   * Which chart menu items to offer, in the menu's fixed order. Default:
+   * all of them. The copy items also need the clipboard (a secure context).
+   */
+  menuItems?: ChartMenuItemKey[];
+  /**
    * Custom per-index data forwarded to the `tooltip` slot. Accepts a
    * plain array or any `ArrayLike` (e.g. a typed-array column).
    */
@@ -399,3 +404,16 @@ export interface ChartTooltipBaseProps {
   /** The chart's tooltip value formatter (`tooltipValueFormat`, then the axis format). */
   format: (value: number) => string;
 }
+
+/** The chart menu's items, in the order the menu lists them. */
+export type ChartMenuItemKey =
+  "fullscreen" | "copy-png" | "save-png" | "copy-svg" | "save-svg" | "csv";
+
+export const CHART_MENU_ITEM_KEYS: readonly ChartMenuItemKey[] = [
+  "fullscreen",
+  "copy-png",
+  "save-png",
+  "copy-svg",
+  "save-svg",
+  "csv",
+];

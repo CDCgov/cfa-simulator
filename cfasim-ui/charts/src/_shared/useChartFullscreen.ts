@@ -207,6 +207,7 @@ export function useChartFullscreen(opts: ChartFullscreenOptions = {}) {
    */
   const menuItem = computed<ChartMenuItem>(() => ({
     label: isFullscreen.value ? "Collapse" : "Fullscreen",
+    icon: "expand",
     action: toggle,
     ariaPressed: isFullscreen.value,
   }));

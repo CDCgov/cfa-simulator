@@ -8,11 +8,16 @@ import {
   type CSSProperties,
 } from "vue";
 
+export type ChartMenuIcon =
+  "copy" | "download" | "image" | "vector" | "file" | "expand";
+
 export interface ChartMenuItem {
   label: string;
   action: () => void;
   /** Sets aria-pressed on the menu item — use for toggle-style items. */
   ariaPressed?: boolean;
+  /** Icon drawn before the label. */
+  icon?: ChartMenuIcon;
 }
 
 const props = withDefaults(
@@ -293,6 +298,47 @@ watch(
             :aria-pressed="item.ariaPressed"
             @click="onItemClick(item)"
           >
+            <svg
+              v-if="item.icon"
+              class="chart-menu-item-icon"
+              width="12"
+              height="12"
+              viewBox="0 0 14 14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <template v-if="item.icon === 'copy'">
+                <rect x="5" y="5" width="8" height="8" rx="1" />
+                <path
+                  d="M3 9H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v1"
+                />
+              </template>
+              <path
+                v-else-if="item.icon === 'download'"
+                d="M7 1v8M3 6l4 4 4-4M2 13h10"
+              />
+              <template v-else-if="item.icon === 'image'">
+                <rect x="1.5" y="2.5" width="11" height="9" rx="1" />
+                <circle cx="5" cy="6" r="1" />
+                <path d="M12.5 10L9 7l-4 4" />
+              </template>
+              <template v-else-if="item.icon === 'vector'">
+                <path d="M3 11L6 5l3 4 3-6" />
+                <circle cx="3" cy="11" r="1.25" />
+                <circle cx="6" cy="5" r="1.25" />
+                <circle cx="9" cy="9" r="1.25" />
+                <circle cx="12" cy="3" r="1.25" />
+              </template>
+              <path
+                v-else-if="item.icon === 'file'"
+                d="M3 1h5l3 3v9H3zM8 1v3h3"
+              />
+              <path v-else d="M8 1h5v5M13 1L8 6M6 13H1V8M1 13l5-5" />
+            </svg>
             {{ item.label }}
           </button>
         </div>
@@ -324,9 +370,10 @@ watch(
   width: 28px;
   height: 28px;
   padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: 0.25em;
+  border: none;
+  border-radius: 0.375em;
   background: var(--color-bg-0, #fff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
   color: var(--color-text-secondary);
   cursor: pointer;
   opacity: 0;
@@ -350,13 +397,13 @@ watch(
 .chart-menu-content {
   position: fixed;
   z-index: 100;
-  min-width: 140px;
-  padding: 0.25em;
+  min-width: 180px;
+  padding: 0.375em;
   background: var(--color-bg-0);
   border: 1px solid var(--color-border);
-  border-radius: 0.25em;
+  border-radius: 0.5em;
   box-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 8px 16px -4px rgba(0, 0, 0, 0.15),
     0 2px 4px -2px rgba(0, 0, 0, 0.1);
   outline: none;
 }
@@ -364,10 +411,12 @@ watch(
 .chart-menu-item {
   display: flex;
   align-items: center;
+  gap: 0.625em;
   width: 100%;
-  padding: 0.375em 0.5em;
+  min-height: 2em;
+  padding: 0.25em 0.875em 0.25em 0.75em;
   border: none;
-  border-radius: 0.25em;
+  border-radius: 0.375em;
   background: none;
   color: inherit;
   font: inherit;
@@ -383,6 +432,10 @@ watch(
 .chart-menu-item:focus {
   background: var(--color-primary);
   color: white;
+}
+
+.chart-menu-item-icon {
+  flex: none;
 }
 </style>
 

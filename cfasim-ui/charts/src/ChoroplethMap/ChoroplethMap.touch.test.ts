@@ -618,13 +618,21 @@ describe("ChoroplethMap canvas renderer", () => {
     wrapper.unmount();
   });
 
-  it("menu offers Fullscreen and Save as PNG only", () => {
+  it("menu offers Fullscreen and the PNG items only", () => {
     const wrapper = mountCanvas();
     const labels = wrapper
       .findComponent(ChartMenu)
       .props("items")
       .map((i) => i.label);
-    expect(labels).toEqual(["Fullscreen", "Save as PNG"]);
+    expect(labels).toEqual(["Fullscreen", "Save PNG", "Copy PNG"]);
+    const narrowed = mountCanvas({ menuItems: ["save-png", "copy-svg"] });
+    expect(
+      narrowed
+        .findComponent(ChartMenu)
+        .props("items")
+        .map((i) => i.label),
+    ).toEqual(["Save PNG"]);
+    narrowed.unmount();
     wrapper.unmount();
   });
 

@@ -435,7 +435,7 @@ test("the tooltip keeps dark text on a light fallback without the theme", async 
   }).toPass();
 });
 
-test("Save as SVG resolves theme colors to what the page shows", async ({
+test("Save SVG resolves theme colors to what the page shows", async ({
   page,
 }) => {
   await page.goto("./cfasim-ui/charts/line-chart");
@@ -460,7 +460,7 @@ test("Save as SVG resolves theme colors to what the page shows", async ({
   await wrapper.getByRole("button", { name: "Chart options" }).click();
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    page.getByRole("menuitem", { name: "Save as SVG" }).click(),
+    page.getByRole("menuitem", { name: "Save SVG" }).click(),
   ]);
   const stream = await download.createReadStream();
   let xml = "";
@@ -472,7 +472,7 @@ test("Save as SVG resolves theme colors to what the page shows", async ({
   expect(xml).not.toMatch(/(fill|stroke)="[^"]*(var|light-dark)\(/);
 });
 
-test("Save as PNG downloads the chart at twice its size", async ({ page }) => {
+test("Save PNG downloads the chart at twice its size", async ({ page }) => {
   await page.goto("./cfasim-ui/charts/line-chart");
   const wrapper = page.locator(".line-chart-wrapper").first();
   await expect(wrapper).toBeVisible();
@@ -484,7 +484,7 @@ test("Save as PNG downloads the chart at twice its size", async ({ page }) => {
   await wrapper.getByRole("button", { name: "Chart options" }).click();
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    page.getByRole("menuitem", { name: "Save as PNG" }).click(),
+    page.getByRole("menuitem", { name: "Save PNG" }).click(),
   ]);
   // The PNG signature plus the IHDR chunk fit in the first stream chunk.
   const stream = await download.createReadStream();
@@ -497,6 +497,81 @@ test("Save as PNG downloads the chart at twice its size", async ({ page }) => {
   // IHDR width and height, big-endian, right after the 8-byte signature.
   expect(view.getUint32(16)).toBe(size.w * 2);
   expect(view.getUint32(20)).toBe(size.h * 2);
+});
+
+test.describe("clipboard", () => {
+  test.use({ permissions: ["clipboard-read", "clipboard-write"] });
+
+  test("Copy SVG puts the standalone markup on the clipboard", async ({
+    page,
+  }) => {
+    await page.goto("./cfasim-ui/charts/line-chart");
+    const wrapper = page.locator(".line-chart-wrapper").first();
+    await expect(wrapper).toBeVisible();
+
+    await wrapper.getByRole("button", { name: "Chart options" }).click();
+    await page.getByRole("menuitem", { name: "Copy SVG" }).click();
+    await expect(wrapper.locator(".chart-sr-only")).toHaveText(
+      "Chart SVG copied to clipboard",
+    );
+
+    const entries = await page.evaluate(async () => {
+      const out: Record<string, string> = {};
+      for (const item of await navigator.clipboard.read()) {
+        for (const type of item.types) {
+          out[type] = await (await item.getType(type)).text();
+        }
+      }
+      return out;
+    });
+    expect(Object.keys(entries).sort()).toEqual([
+      "image/svg+xml",
+      "text/plain",
+    ]);
+    expect(entries["text/plain"]).toMatch(
+      /^<svg[^>]*xmlns="http:\/\/www.w3.org\/2000\/svg"/,
+    );
+    expect(entries["text/plain"]).not.toMatch(
+      /(fill|stroke)="[^"]*(var|light-dark)\(/,
+    );
+    // Chromium re-serializes the image entry on read (attribute order,
+    // explicit closing tags), so compare the content, not the bytes.
+    expect(entries["image/svg+xml"]).toMatch(/^<svg[^>]*xmlns="http:/);
+    expect(entries["image/svg+xml"]).toContain(
+      entries["text/plain"]
+        .match(/<path[^>]*d="[^"]*"/)![0]
+        .match(/d="[^"]*"/)![0],
+    );
+  });
+
+  test("Copy PNG puts a PNG at twice the chart size on the clipboard", async ({
+    page,
+  }) => {
+    await page.goto("./cfasim-ui/charts/line-chart");
+    const wrapper = page.locator(".line-chart-wrapper").first();
+    await expect(wrapper).toBeVisible();
+    const size = await wrapper.locator(":scope > svg").evaluate((svg) => ({
+      w: (svg as SVGSVGElement).width.baseVal.value,
+      h: (svg as SVGSVGElement).height.baseVal.value,
+    }));
+
+    await wrapper.getByRole("button", { name: "Chart options" }).click();
+    await page.getByRole("menuitem", { name: "Copy PNG" }).click();
+    await expect(wrapper.locator(".chart-sr-only")).toHaveText(
+      "Chart PNG copied to clipboard",
+    );
+
+    const head = await page.evaluate(async () => {
+      const [item] = await navigator.clipboard.read();
+      const blob = await item.getType("image/png");
+      return Array.from(new Uint8Array(await blob.slice(0, 24).arrayBuffer()));
+    });
+    const bytes = Uint8Array.from(head);
+    const view = new DataView(bytes.buffer);
+    expect(String.fromCharCode(...bytes.subarray(1, 4))).toBe("PNG");
+    expect(view.getUint32(16)).toBe(size.w * 2);
+    expect(view.getUint32(20)).toBe(size.h * 2);
+  });
 });
 
 test("hovering a legend item fades the other series", async ({ page }) => {

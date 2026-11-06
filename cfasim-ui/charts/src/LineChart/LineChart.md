@@ -2509,8 +2509,12 @@ its full extent there.
 
 ### Chart menu
 
-The chart menu (top-right) leads with Fullscreen and then Save as SVG,
-Save as PNG, and Download CSV. Fullscreen grows the chart to fill the browser
+The chart menu (top-right) leads with Fullscreen, then Save PNG, Copy PNG,
+Save SVG, Copy SVG (the copy items write to the clipboard and are hidden when
+the page is not a secure context; a copy is reported through the chart's live
+region), then Download CSV. `menuItems` narrows the list to the keys given
+(`fullscreen`, `save-png`, `copy-png`, `save-svg`, `copy-svg`, `csv`), always
+in that order. Fullscreen grows the chart to fill the browser
 window so the plot has more room; while expanded the menu trigger is replaced
 by a close (✕) button: click it or press <kbd>Esc</kbd> to return to the
 inline size. Set `menu="false"` to hide the trigger entirely.

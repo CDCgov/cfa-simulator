@@ -179,3 +179,65 @@ export function saveCanvasPng(canvas: HTMLCanvasElement, filename: string) {
 export function downloadCsv(csv: string, filename: string) {
   downloadBlob(new Blob([csv], { type: "text/csv" }), `${filename}.csv`);
 }
+
+/** Whether the page can write to the system clipboard. The async Clipboard
+ *  API exists only in secure contexts (https or localhost). */
+export function canCopyToClipboard(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    typeof ClipboardItem !== "undefined" &&
+    typeof navigator.clipboard?.write === "function"
+  );
+}
+
+/** Copy a standalone copy of `svg` to the clipboard: the markup as plain
+ *  text (what Figma, editors and chat apps paste) plus an `image/svg+xml`
+ *  entry where the browser supports one. Safari and Firefox accept that type
+ *  and silently drop it, so the text entry is always written. */
+export async function copySvg(
+  svg: SVGSVGElement,
+  options: SvgExportOptions = {},
+) {
+  const xml = svgToString(svg, options);
+  const data: Record<string, Blob> = {
+    "text/plain": new Blob([xml], { type: "text/plain" }),
+  };
+  if (ClipboardItem.supports?.("image/svg+xml")) {
+    data["image/svg+xml"] = new Blob([xml], { type: "image/svg+xml" });
+  }
+  await navigator.clipboard.write([new ClipboardItem(data)]);
+}
+
+/** Copy `svg` rasterized as a PNG to the clipboard (see `svgToPngBlob`). */
+export async function copyPng(
+  svg: SVGSVGElement,
+  options: PngExportOptions = {},
+) {
+  await writePngToClipboard(svgToPngBlob(svg, options));
+}
+
+/** Copy a rendering canvas's current contents to the clipboard as a PNG. */
+export async function copyCanvasPng(canvas: HTMLCanvasElement) {
+  await writePngToClipboard(
+    new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("Could not encode the chart PNG"));
+      }, "image/png"),
+    ),
+  );
+}
+
+/** Safari honors only a clipboard write issued in the click's own tick and
+ *  allows one write per click, so the PNG goes in as a promise. A browser
+ *  that rejects promise values gets the resolved blob on a second write,
+ *  which its longer activation window still allows. */
+async function writePngToClipboard(png: Promise<Blob>) {
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+  } catch {
+    await navigator.clipboard.write([
+      new ClipboardItem({ "image/png": await png }),
+    ]);
+  }
+}

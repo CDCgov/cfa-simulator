@@ -398,7 +398,7 @@ describe("BarChart", () => {
       });
       const items = wrapper.findComponent(ChartMenu).props("items");
       expect(items.find((i) => i.label === "Download CSV")).toBeUndefined();
-      expect(items.find((i) => i.label === "Save as SVG")).toBeTruthy();
+      expect(items.find((i) => i.label === "Save SVG")).toBeTruthy();
     });
 
     it("renders a download button with default text when downloadButton=true", () => {
@@ -475,7 +475,7 @@ describe("BarChart", () => {
           filename: "my-chart",
         },
       });
-      getMenuItem(wrapper, "Save as SVG").action();
+      getMenuItem(wrapper, "Save SVG").action();
       expect(spy).toHaveBeenCalledWith(expect.anything(), "my-chart");
     });
   });

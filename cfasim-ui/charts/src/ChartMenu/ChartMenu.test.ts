@@ -13,7 +13,7 @@ function mountMenu(
 ) {
   const items = [
     { label: "Fullscreen", action: vi.fn() },
-    { label: "Save as SVG", action: vi.fn() },
+    { label: "Save SVG", action: vi.fn() },
     { label: "Download CSV", action: vi.fn() },
   ];
   const wrapper = mount(ChartMenu, {
@@ -37,11 +37,11 @@ describe("ChartMenu", () => {
   it("renders a single item as a plain button", () => {
     const action = vi.fn();
     const wrapper = mount(ChartMenu, {
-      props: { items: [{ label: "Save as PNG", action }] },
+      props: { items: [{ label: "Save PNG", action }] },
     });
     wrappers.push(wrapper);
     expect(trigger(wrapper).exists()).toBe(false);
-    wrapper.find('[aria-label="Save as PNG"]').trigger("click");
+    wrapper.find('[aria-label="Save PNG"]').trigger("click");
     expect(action).toHaveBeenCalledOnce();
   });
 
@@ -61,7 +61,7 @@ describe("ChartMenu", () => {
     expect(button.attributes("aria-controls")).toBe(menu().attributes("id"));
     expect(itemEls().map((i) => i.text())).toEqual([
       "Fullscreen",
-      "Save as SVG",
+      "Save SVG",
       "Download CSV",
     ]);
 
@@ -75,7 +75,7 @@ describe("ChartMenu", () => {
     const { wrapper } = mountMenu({
       items: [
         { label: "Fullscreen", action: vi.fn(), ariaPressed: true },
-        { label: "Save as SVG", action: vi.fn() },
+        { label: "Save SVG", action: vi.fn() },
       ],
     });
     await trigger(wrapper).trigger("click");
@@ -221,5 +221,27 @@ describe("ChartMenu", () => {
     expect(trigger(wrapper).exists()).toBe(false);
     await wrapper.find('[aria-label="Collapse"]').trigger("click");
     expect(wrapper.emitted("close")).toHaveLength(1);
+  });
+});
+
+describe("ChartMenu icons", () => {
+  it("draws an item's icon before its label, hidden from AT", async () => {
+    const wrapper = mount(ChartMenu, {
+      props: {
+        items: [
+          { label: "Copy SVG", icon: "copy", action: vi.fn() },
+          { label: "Plain", action: vi.fn() },
+        ],
+      },
+      attachTo: document.body,
+    });
+    wrappers.push(wrapper);
+    await trigger(wrapper).trigger("click");
+    const [withIcon, plain] = itemEls();
+    const icon = withIcon.find("svg.chart-menu-item-icon");
+    expect(icon.exists()).toBe(true);
+    expect(icon.attributes("aria-hidden")).toBe("true");
+    expect(withIcon.text()).toBe("Copy SVG");
+    expect(plain.find("svg").exists()).toBe(false);
   });
 });

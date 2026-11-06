@@ -49,7 +49,12 @@ import type {
 import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
-import { saveSvg, savePng, saveCanvasPng } from "../ChartMenu/download.js";
+import {
+  exportMenuItems,
+  menuItemFilter,
+  useCopyFeedback,
+} from "../_shared/useChartMenu.js";
+import type { ChartMenuItemKey } from "../_shared/chartProps.js";
 import {
   buildScene,
   buildPicking,
@@ -355,6 +360,12 @@ const props = withDefaults(
      */
     theme?: MapTheme;
     menu?: boolean | string;
+    /**
+     * Which chart menu items to offer, in the menu's fixed order. Default:
+     * all of them. The copy items also need the clipboard (a secure
+     * context), and the SVG items a `renderer` of `"svg"`.
+     */
+    menuItems?: ChartMenuItemKey[];
     /** Show legend. Default: true */
     legend?: boolean;
     /** Title displayed next to the legend */
@@ -4658,36 +4669,24 @@ const fullscreen = useChartFullscreen({
   target: () => props.fullscreenTarget,
 });
 
+const { announcement: menuAnnouncement, copy: copyToClipboard } =
+  useCopyFeedback();
+
 const menuItems = computed<ChartMenuItem[]>(() => {
-  const fname = menuFilename();
-  if (isCanvas.value) {
-    // No SVG DOM to serialize in canvas mode; PNG exports straight off
-    // the rendering canvas (already devicePixelRatio-sized).
-    return [
-      fullscreen.menuItem.value,
-      {
-        label: "Save as PNG",
-        action: () => {
-          if (canvasRef.value) saveCanvasPng(canvasRef.value, fname);
-        },
-      },
-    ];
-  }
-  return [
-    fullscreen.menuItem.value,
-    {
-      label: "Save as SVG",
-      action: () => {
-        if (svgRef.value) saveSvg(svgRef.value, fname);
-      },
-    },
-    {
-      label: "Save as PNG",
-      action: () => {
-        if (svgRef.value) savePng(svgRef.value, fname);
-      },
-    },
-  ];
+  const show = menuItemFilter(props.menuItems);
+  const items: ChartMenuItem[] = [];
+  if (show("fullscreen")) items.push(fullscreen.menuItem.value);
+  items.push(
+    ...exportMenuItems({
+      filename: menuFilename(),
+      subject: "Map",
+      show,
+      copy: copyToClipboard,
+      svg: () => svgRef.value,
+      canvas: isCanvas.value ? () => canvasRef.value : undefined,
+    }),
+  );
+  return items;
 });
 
 // ─── Reactive triggers for the imperative SVG tree ───────────────────────
@@ -4909,7 +4908,10 @@ watch(
         @close="fullscreen.exit"
       />
       <div class="chart-sr-only" aria-live="polite">
-        {{ fullscreen.isFullscreen.value ? "Map expanded to fill window" : "" }}
+        {{
+          menuAnnouncement ||
+          (fullscreen.isFullscreen.value ? "Map expanded to fill window" : "")
+        }}
       </div>
       <!--
       Title + legend live as an HTML overlay on top of the SVG so they keep

@@ -15,7 +15,11 @@ import {
 } from "./useChartBrush.js";
 import type { TooltipClamp } from "../tooltip-position.js";
 import { useChartMenu } from "./useChartMenu.js";
-import type { LegendLayout, TitleStyle } from "./chartProps.js";
+import type {
+  ChartMenuItemKey,
+  LegendLayout,
+  TitleStyle,
+} from "./chartProps.js";
 
 const DEFAULT_WIDTH_FALLBACK = 400;
 const DEFAULT_HEIGHT = 200;
@@ -33,6 +37,7 @@ export interface ChartFoundationOptions {
   tooltipTrigger: () => "hover" | "click" | undefined;
   tooltipClamp: () => TooltipClamp | undefined;
   filename: () => string | undefined;
+  menuItems?: () => ChartMenuItemKey[] | undefined;
   downloadLink: () => boolean | string | undefined;
   downloadButton: () => boolean | string | undefined;
   fullscreenTarget: () => string | HTMLElement | undefined;
@@ -91,6 +96,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
   const {
     svgRef,
     items: menuItems,
+    announcement: menuAnnouncement,
     downloadLinkText,
     csvHref,
     downloadButtonText,
@@ -102,6 +108,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     exitFullscreen,
   } = useChartMenu({
     filename: opts.filename,
+    menuItems: opts.menuItems,
     legacyMenuLabel: opts.menu,
     getCsv: opts.getCsv,
     downloadLink: opts.downloadLink,
@@ -224,6 +231,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     tooltipPos,
     tooltipHandlers,
     menuItems,
+    menuAnnouncement,
     downloadLinkText,
     csvHref,
     downloadButtonText,

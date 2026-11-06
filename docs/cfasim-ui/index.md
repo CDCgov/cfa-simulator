@@ -47,7 +47,7 @@ cfasim-ui is the shared component and theming library you use to make simulators
 - [LineChart](./charts/line-chart) — responsive SVG line chart
 - [VegaLiteChart](./charts/vega-lite-chart) — renders a Vega-Lite spec as a LineChart or BarChart
 
-The export helpers behind the chart menu (standalone SVG, PNG blobs, file downloads) are documented under [Chart export](./export).
+The export helpers behind the chart menu (standalone SVG, PNG blobs, clipboard copies, file downloads) are documented under [Chart export](./export).
 
 ## Runtimes
 

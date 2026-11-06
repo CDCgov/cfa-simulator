@@ -2048,6 +2048,7 @@ const {
   overlayHandlers,
   brushRect,
   menuItems,
+  menuAnnouncement,
   downloadLinkText,
   csvHref,
   downloadButtonText,
@@ -2069,6 +2070,7 @@ const {
   tooltipTrigger: () => props.tooltipTrigger,
   tooltipClamp: () => props.tooltipClamp,
   filename: () => props.filename,
+  menuItems: () => props.menuItems,
   downloadLink: () => props.downloadLink,
   downloadButton: () => props.downloadButton,
   fullscreenTarget: () => props.fullscreenTarget,
@@ -2552,7 +2554,10 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
         @close="exitFullscreen"
       />
       <div class="chart-sr-only" aria-live="polite">
-        {{ isFullscreen ? "Chart expanded to fill window" : "" }}
+        {{
+          menuAnnouncement ||
+          (isFullscreen ? "Chart expanded to fill window" : "")
+        }}
       </div>
       <ChartLegendToggles
         v-if="legendToggle && legendToggleItems.length > 0"
