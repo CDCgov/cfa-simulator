@@ -4,6 +4,10 @@ A responsive two-panel layout with a collapsible sidebar and main content area. 
 
 When the sidebar is collapsed it is marked [`inert`](https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/inert), so its contents (including the collapse button) are removed from the tab order and the accessibility tree while visually hidden. The expand button is likewise `inert` while the sidebar is open. This keeps keyboard and screen-reader focus on whichever control is actually visible.
 
+## Printing
+
+The layout prints as a plain document: the sidebar, header bands and tabs bar are hidden, the main pane unrolls to its full height so the active content paginates, and the theme switches to the light color scheme (`@media print` in `theme.css`), so a dark-mode screen prints dark text on white. Inactive tab panels are the consumer's to hide (for example with `inert` and `height: 0`).
+
 ## Demo
 
 <a href="/cfa-simulator/docs/demos/sidebar-layout/index.html" target="_blank">Open in full window ↗</a>

@@ -10,6 +10,15 @@
   color-scheme: dark;
 }
 
+/* Print in the light scheme even from dark mode: light-dark() then picks
+   dark text on the white page. */
+@media print {
+  :root,
+  :root.dark {
+    color-scheme: light;
+  }
+}
+
 :root {
   /* Primary */
   --color-primary: light-dark(#0066ff, #4d94ff);
