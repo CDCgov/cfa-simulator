@@ -436,8 +436,9 @@ if (globals) {
   }
 }
 
-/* Mobile: use transform instead of width resize */
-@media (max-width: 767px) {
+/* Mobile: use transform instead of width resize. Screen only: a printed
+   page is narrower than the breakpoint too. */
+@media screen and (max-width: 767px) {
   .SidebarLayout {
     transition: transform var(--transition-normal);
   }
@@ -526,5 +527,35 @@ if (globals) {
   transition:
     width var(--transition-fast),
     left var(--transition-fast);
+}
+
+/* Print: the layout is a viewport-high flex box whose main pane scrolls, so a
+   printout would be the one visible screenful. Unroll it into plain blocks
+   with the chrome hidden so the active content paginates. Last in the file
+   so it wins by source order. */
+@media print {
+  .SidebarLayout,
+  .Main,
+  .TabsLayout,
+  .MainScroll {
+    display: block;
+    height: auto;
+    min-width: 0;
+    overflow: visible;
+    transform: none;
+  }
+
+  .SidebarRail,
+  .Topbar,
+  .TabsBar,
+  .Toggle {
+    display: none;
+  }
+
+  .MainScroll,
+  .MainContent {
+    padding: 0;
+    max-width: none;
+  }
 }
 </style>
