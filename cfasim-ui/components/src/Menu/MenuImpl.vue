@@ -99,28 +99,41 @@ function itemKey(item: MenuOption, index: number) {
    root, so scoped rules on .Menu never matched. */
 .Menu {
   --option-line-height: 1.25rem;
+  --menu-icon-size: 1rem;
   display: flex;
   flex-direction: column;
-  min-width: 10rem;
+  min-width: 11.25rem;
   max-width: min(20rem, var(--reka-dropdown-menu-content-available-width));
   max-height: var(--reka-dropdown-menu-content-available-height);
   overflow-y: auto;
-  padding: 0.25rem;
+  padding: 0.375rem;
+  border-radius: 0.5em;
+  box-shadow:
+    0 8px 16px -4px rgba(0, 0, 0, 0.15),
+    0 2px 4px -2px rgba(0, 0, 0, 0.1);
   font-size: var(--font-size-sm);
 }
 
+/* Same row rhythm and icon size as the chart menu (ChartMenu.vue). */
 .MenuItem {
   display: flex;
   align-items: flex-start;
-  gap: 0.5em;
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--radius-sm);
+  gap: 0.625em;
+  min-height: 2em;
+  padding: 0.25rem 0.875rem 0.25rem 0.75rem;
+  border-radius: 0.375em;
   line-height: var(--option-line-height);
   color: var(--color-text);
   text-decoration: none;
   cursor: pointer;
   user-select: none;
   outline: none;
+}
+
+.Menu .OptionIcon {
+  width: var(--menu-icon-size);
+  height: var(--menu-icon-size);
+  margin-block: calc((var(--option-line-height) - var(--menu-icon-size)) / 2);
 }
 
 .MenuItem[data-highlighted] {
