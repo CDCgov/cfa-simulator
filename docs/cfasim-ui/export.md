@@ -112,7 +112,7 @@ downloadBlob(zipBlob, "outputs.zip");
 | `svgToPngBlob(svg, { scale?, background? })` | `Promise<Blob>` | PNG at `scale` (default 2) times the rendered size |
 | `saveSvg(svg, filename, options?)`           | `void`          | Downloads `<filename>.svg`                         |
 | `savePng(svg, filename, options?)`           | `Promise<void>` | Downloads `<filename>.png`                         |
-| `saveCanvasPng(canvas, filename)`            | `void`          | Downloads a canvas's contents as `<filename>.png`  |
+| `saveCanvasPng(canvas, filename)`            | `Promise<void>` | Downloads a canvas's contents as `<filename>.png`  |
 | `copySvg(svg, { background? })`              | `Promise<void>` | Copies the standalone svg to the clipboard         |
 | `copyPng(svg, { scale?, background? })`      | `Promise<void>` | Copies the PNG to the clipboard                    |
 | `copyCanvasPng(canvas)`                      | `Promise<void>` | Copies a canvas's contents to the clipboard as PNG |

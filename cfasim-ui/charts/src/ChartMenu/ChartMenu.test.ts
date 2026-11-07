@@ -34,6 +34,16 @@ const itemEls = () =>
 const rect = (r: Partial<DOMRect>) => () => r as DOMRect;
 
 describe("ChartMenu", () => {
+  it("renders nothing with no items, unless fullscreen needs its close button", () => {
+    const empty = mount(ChartMenu, { props: { items: [] } });
+    const fullscreen = mount(ChartMenu, {
+      props: { items: [], isFullscreen: true },
+    });
+    wrappers.push(empty, fullscreen);
+    expect(empty.find(".chart-menu-trigger-area").exists()).toBe(false);
+    expect(fullscreen.find('[aria-label="Collapse"]').exists()).toBe(true);
+  });
+
   it("renders a single item as a plain button", () => {
     const action = vi.fn();
     const wrapper = mount(ChartMenu, {
@@ -225,6 +235,20 @@ describe("ChartMenu", () => {
 });
 
 describe("ChartMenu icons", () => {
+  it("draws a lone item's own icon, and download when it has none", () => {
+    const iconPath = (item: object) => {
+      const wrapper = mount(ChartMenu, {
+        props: { items: [{ label: "Only", action: vi.fn(), ...item }] },
+      });
+      wrappers.push(wrapper);
+      return wrapper.find(".chart-menu-single path").attributes("d");
+    };
+    expect(iconPath({ icon: "expand" })).toBe(
+      "M8 1h5v5M13 1L8 6M6 13H1V8M1 13l5-5",
+    );
+    expect(iconPath({})).toBe("M7 1v8M3 6l4 4 4-4M2 13h10");
+  });
+
   it("draws an item's icon before its label, hidden from AT", async () => {
     const wrapper = mount(ChartMenu, {
       props: {

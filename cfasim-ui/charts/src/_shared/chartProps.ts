@@ -407,13 +407,13 @@ export interface ChartTooltipBaseProps {
 
 /** The chart menu's items, in the order the menu lists them. */
 export type ChartMenuItemKey =
-  "fullscreen" | "copy-png" | "save-png" | "copy-svg" | "save-svg" | "csv";
+  "fullscreen" | "save-png" | "copy-png" | "save-svg" | "copy-svg" | "csv";
 
 export const CHART_MENU_ITEM_KEYS: readonly ChartMenuItemKey[] = [
   "fullscreen",
-  "copy-png",
   "save-png",
-  "copy-svg",
+  "copy-png",
   "save-svg",
+  "copy-svg",
   "csv",
 ];

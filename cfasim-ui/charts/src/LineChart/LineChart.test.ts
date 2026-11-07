@@ -6,6 +6,7 @@ import { stackAreas } from "./stackAreas.js";
 import type { ChartAnnotation } from "../_shared/annotations.js";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import * as download from "../ChartMenu/download.js";
+import { CHART_MENU_ITEM_KEYS } from "../_shared/chartProps.js";
 
 describe("LineChart", () => {
   it("renders a single series as a path", () => {
@@ -682,6 +683,7 @@ describe("LineChart", () => {
       const wrapper = mount(LineChart, {
         props: { data: [1, 2, 3], height: 100 },
       });
+      await nextTick();
       const live = wrapper.find(".chart-sr-only");
       expect(live.text()).toBe("");
       getMenuItem(wrapper, "Copy SVG").action();
@@ -699,6 +701,7 @@ describe("LineChart", () => {
       const wrapper = mount(LineChart, {
         props: { data: [1, 2, 3], height: 100 },
       });
+      await nextTick();
       getMenuItem(wrapper, "Copy PNG").action();
       await vi.waitFor(() =>
         expect(wrapper.find(".chart-sr-only").text()).toBe(
@@ -708,13 +711,26 @@ describe("LineChart", () => {
       expect(warn).toHaveBeenCalledOnce();
     });
 
-    it("offers copy items only when the clipboard is available", () => {
-      const labels = () =>
-        mount(LineChart, { props: { data: [1, 2, 3], height: 100 } })
+    it("adds the copy items after mount, when the clipboard is available", async () => {
+      const labels = (wrapper: ReturnType<typeof mount>) =>
+        wrapper
           .findComponent(ChartMenu)
           .props("items")
           .map((i) => i.label);
-      expect(labels()).toEqual([
+      const mountChart = () =>
+        mount(LineChart, { props: { data: [1, 2, 3], height: 100 } });
+      const withoutCopy = [
+        "Fullscreen",
+        "Save PNG",
+        "Save SVG",
+        "Download CSV",
+      ];
+
+      const chart = mountChart();
+      // The first render matches the server, which has no clipboard.
+      expect(labels(chart)).toEqual(withoutCopy);
+      await nextTick();
+      expect(labels(chart)).toEqual([
         "Fullscreen",
         "Save PNG",
         "Copy PNG",
@@ -722,16 +738,48 @@ describe("LineChart", () => {
         "Copy SVG",
         "Download CSV",
       ]);
+
       vi.spyOn(download, "canCopyToClipboard").mockReturnValue(false);
-      expect(labels()).toEqual([
-        "Fullscreen",
-        "Save PNG",
-        "Save SVG",
-        "Download CSV",
-      ]);
+      const noClipboard = mountChart();
+      await nextTick();
+      expect(labels(noClipboard)).toEqual(withoutCopy);
     });
 
-    it("menuItems picks the items, in the menu's own order", () => {
+    it("lists CHART_MENU_ITEM_KEYS in the menu's order", async () => {
+      const wrapper = mount(LineChart, {
+        props: { data: [1, 2, 3], height: 100 },
+      });
+      await nextTick();
+      const labelForKey = {
+        fullscreen: "Fullscreen",
+        "save-png": "Save PNG",
+        "copy-png": "Copy PNG",
+        "save-svg": "Save SVG",
+        "copy-svg": "Copy SVG",
+        csv: "Download CSV",
+      };
+      expect(CHART_MENU_ITEM_KEYS.map((key) => labelForKey[key])).toEqual(
+        wrapper
+          .findComponent(ChartMenu)
+          .props("items")
+          .map((i) => i.label),
+      );
+    });
+
+    it("renders no menu when menuItems leaves nothing to offer", async () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1, 2, 3],
+          height: 100,
+          menuItems: ["csv"],
+          downloadLink: true,
+        },
+      });
+      await nextTick();
+      expect(wrapper.find(".chart-menu-trigger-area").exists()).toBe(false);
+    });
+
+    it("menuItems picks the items, in the menu's own order", async () => {
       const wrapper = mount(LineChart, {
         props: {
           data: [1, 2, 3],
@@ -739,6 +787,7 @@ describe("LineChart", () => {
           menuItems: ["csv", "save-svg", "copy-png"],
         },
       });
+      await nextTick();
       const labels = wrapper
         .findComponent(ChartMenu)
         .props("items")

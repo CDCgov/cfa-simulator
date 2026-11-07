@@ -119,6 +119,15 @@ export interface PngExportOptions extends SvgExportOptions {
   scale?: number;
 }
 
+function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) =>
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("Could not encode the chart PNG"));
+    }, "image/png"),
+  );
+}
+
 /** Rasterize `svg` to a PNG blob at its rendered size times `scale`. */
 export async function svgToPngBlob(
   svg: SVGSVGElement,
@@ -145,11 +154,7 @@ export async function svgToPngBlob(
     const ctx = canvas.getContext("2d")!;
     ctx.scale(scale, scale);
     ctx.drawImage(img, 0, 0, w, h);
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/png"),
-    );
-    if (!blob) throw new Error("Could not encode the chart PNG");
-    return blob;
+    return await canvasToPngBlob(canvas);
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -169,10 +174,11 @@ export async function savePng(
  * round-trip. The canvas backing store is already sized at
  * devicePixelRatio, so the export is naturally high-resolution.
  */
-export function saveCanvasPng(canvas: HTMLCanvasElement, filename: string) {
-  canvas.toBlob((blob) => {
-    if (blob) downloadBlob(blob, `${filename}.png`);
-  }, "image/png");
+export async function saveCanvasPng(
+  canvas: HTMLCanvasElement,
+  filename: string,
+) {
+  downloadBlob(await canvasToPngBlob(canvas), `${filename}.png`);
 }
 
 /** Download `csv` as `<filename>.csv`. */
@@ -218,14 +224,7 @@ export async function copyPng(
 
 /** Copy a rendering canvas's current contents to the clipboard as a PNG. */
 export async function copyCanvasPng(canvas: HTMLCanvasElement) {
-  await writePngToClipboard(
-    new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob((blob) => {
-        if (blob) resolve(blob);
-        else reject(new Error("Could not encode the chart PNG"));
-      }, "image/png"),
-    ),
-  );
+  await writePngToClipboard(canvasToPngBlob(canvas));
 }
 
 /** Safari honors only a clipboard write issued in the click's own tick and

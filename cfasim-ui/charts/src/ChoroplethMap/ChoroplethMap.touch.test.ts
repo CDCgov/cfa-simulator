@@ -618,8 +618,9 @@ describe("ChoroplethMap canvas renderer", () => {
     wrapper.unmount();
   });
 
-  it("menu offers Fullscreen and the PNG items only", () => {
+  it("menu offers Fullscreen and the PNG items only", async () => {
     const wrapper = mountCanvas();
+    await flushPromises();
     const labels = wrapper
       .findComponent(ChartMenu)
       .props("items")
