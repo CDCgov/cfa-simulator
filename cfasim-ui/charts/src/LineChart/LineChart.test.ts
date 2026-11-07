@@ -711,38 +711,45 @@ describe("LineChart", () => {
       expect(warn).toHaveBeenCalledOnce();
     });
 
-    it("adds the copy items after mount, when the clipboard is available", async () => {
-      const labels = (wrapper: ReturnType<typeof mount>) =>
-        wrapper
-          .findComponent(ChartMenu)
-          .props("items")
-          .map((i) => i.label);
-      const mountChart = () =>
-        mount(LineChart, { props: { data: [1, 2, 3], height: 100 } });
-      const withoutCopy = [
-        "Fullscreen",
-        "Save PNG",
-        "Save SVG",
-        "Download CSV",
-      ];
-
-      const chart = mountChart();
-      // The first render matches the server, which has no clipboard.
-      expect(labels(chart)).toEqual(withoutCopy);
+    it("shows the copy items without re-rendering the chart", async () => {
+      let chartUpdates = 0;
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1, 2, 3],
+          width: 400,
+          height: 100,
+          menuItems: ["save-png", "copy-png"],
+        },
+        global: {
+          mixins: [
+            {
+              updated(this: { $options: unknown }) {
+                if (this.$options === LineChart) chartUpdates++;
+              },
+            },
+          ],
+        },
+      });
+      expect(wrapper.find(".chart-menu-single").exists()).toBe(true);
       await nextTick();
-      expect(labels(chart)).toEqual([
-        "Fullscreen",
-        "Save PNG",
-        "Copy PNG",
-        "Save SVG",
-        "Copy SVG",
-        "Download CSV",
-      ]);
+      expect(wrapper.find(".chart-menu-single").exists()).toBe(false);
+      expect(wrapper.find('[aria-label="Chart options"]').exists()).toBe(true);
+      expect(chartUpdates).toBe(0);
+      wrapper.unmount();
+    });
 
+    it("hides the copy items where the clipboard is unavailable", async () => {
       vi.spyOn(download, "canCopyToClipboard").mockReturnValue(false);
-      const noClipboard = mountChart();
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1, 2, 3],
+          height: 100,
+          menuItems: ["save-svg", "copy-svg"],
+        },
+      });
       await nextTick();
-      expect(labels(noClipboard)).toEqual(withoutCopy);
+      const button = wrapper.find(".chart-menu-single");
+      expect(button.attributes("aria-label")).toBe("Save SVG");
     });
 
     it("lists CHART_MENU_ITEM_KEYS in the menu's order", async () => {

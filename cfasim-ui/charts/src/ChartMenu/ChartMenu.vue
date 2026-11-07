@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import {
+  computed,
   nextTick,
   onBeforeUnmount,
+  onMounted,
   ref,
   useId,
   watch,
   type CSSProperties,
 } from "vue";
+import { canCopyToClipboard } from "./download.js";
 import ChartMenuItemIcon, { type ChartMenuIcon } from "./ChartMenuItemIcon.vue";
 
 export type { ChartMenuIcon };
@@ -18,6 +21,8 @@ export interface ChartMenuItem {
   ariaPressed?: boolean;
   /** Icon drawn before the label. */
   icon?: ChartMenuIcon;
+  /** Only offered once mounted, where the clipboard is available. */
+  needsClipboard?: boolean;
 }
 
 const props = withDefaults(
@@ -36,7 +41,23 @@ const props = withDefaults(
 
 const emit = defineEmits<{ (e: "close"): void }>();
 
-const useDropdown = () => props.forceDropdown || props.items.length > 1;
+// Checked here, not by the chart: after mount so the server and the hydrating
+// client render the same trigger, and the update stays inside this component
+// instead of re-rendering the whole chart.
+const canCopy = ref(false);
+onMounted(() => {
+  canCopy.value = canCopyToClipboard();
+});
+// Returns props.items itself when nothing is hidden, so a menu with no
+// clipboard items does not update when canCopy flips.
+const visibleItems = computed(() => {
+  if (canCopy.value || !props.items.some((item) => item.needsClipboard)) {
+    return props.items;
+  }
+  return props.items.filter((item) => !item.needsClipboard);
+});
+
+const useDropdown = () => props.forceDropdown || visibleItems.value.length > 1;
 
 // A hand-rolled menu button (WAI-ARIA menu pattern) rather than a popover
 // library, so chart consumers do not bundle one. The menu is teleported to
@@ -203,7 +224,7 @@ watch(
 <template>
   <!-- menuItems or the clipboard check can leave nothing to offer. -->
   <div
-    v-if="isFullscreen || items.length > 0"
+    v-if="isFullscreen || visibleItems.length > 0"
     ref="rootRef"
     class="chart-menu-trigger-area"
     :class="{ 'chart-menu-trigger-area--expanded': isFullscreen }"
@@ -233,11 +254,14 @@ watch(
     <button
       v-else-if="!useDropdown()"
       class="chart-menu-button chart-menu-single"
-      :aria-label="items[0].label"
-      :aria-pressed="items[0].ariaPressed"
-      @click="items[0].action"
+      :aria-label="visibleItems[0].label"
+      :aria-pressed="visibleItems[0].ariaPressed"
+      @click="visibleItems[0].action"
     >
-      <ChartMenuItemIcon :icon="items[0].icon ?? 'download'" :size="14" />
+      <ChartMenuItemIcon
+        :icon="visibleItems[0].icon ?? 'download'"
+        :size="14"
+      />
     </button>
     <!-- Multiple items: dropdown menu -->
     <template v-else>
@@ -280,7 +304,7 @@ watch(
           @focusout="onFocusOut"
         >
           <button
-            v-for="item in items"
+            v-for="item in visibleItems"
             :key="item.label"
             type="button"
             class="chart-menu-item"

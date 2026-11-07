@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { DOMWrapper, mount, type VueWrapper } from "@vue/test-utils";
 import { nextTick } from "vue";
 import ChartMenu from "./ChartMenu.vue";
+import * as download from "./download.js";
 
 const wrappers: VueWrapper[] = [];
 afterEach(() => {
@@ -231,6 +232,57 @@ describe("ChartMenu", () => {
     expect(trigger(wrapper).exists()).toBe(false);
     await wrapper.find('[aria-label="Collapse"]').trigger("click");
     expect(wrapper.emitted("close")).toHaveLength(1);
+  });
+});
+
+describe("ChartMenu clipboard items", () => {
+  const items = [
+    { label: "Save PNG", action: vi.fn() },
+    { label: "Copy PNG", action: vi.fn(), needsClipboard: true },
+  ];
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("adds them after mount, so the first render matches the server", async () => {
+    const wrapper = mount(ChartMenu, { props: { items } });
+    wrappers.push(wrapper);
+    expect(wrapper.find(".chart-menu-single").exists()).toBe(true);
+    await nextTick();
+    expect(wrapper.find(".chart-menu-single").exists()).toBe(false);
+    expect(trigger(wrapper).exists()).toBe(true);
+  });
+
+  it("does not update a menu with nothing to reveal", async () => {
+    const updated = vi.fn();
+    const wrapper = mount(ChartMenu, {
+      props: { items: [items[0]] },
+      global: {
+        mixins: [
+          {
+            updated(this: { $options: unknown }) {
+              if (this.$options === ChartMenu) updated();
+            },
+          },
+        ],
+      },
+    });
+    wrappers.push(wrapper);
+    await nextTick();
+    expect(updated).not.toHaveBeenCalled();
+  });
+
+  it("leaves them out where the clipboard is unavailable", async () => {
+    vi.spyOn(download, "canCopyToClipboard").mockReturnValue(false);
+    const wrapper = mount(ChartMenu, { props: { items } });
+    const onlyCopy = mount(ChartMenu, { props: { items: [items[1]] } });
+    wrappers.push(wrapper, onlyCopy);
+    await nextTick();
+    expect(wrapper.find(".chart-menu-single").attributes("aria-label")).toBe(
+      "Save PNG",
+    );
+    expect(onlyCopy.find(".chart-menu-trigger-area").exists()).toBe(false);
   });
 });
 

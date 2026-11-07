@@ -4669,11 +4669,8 @@ const fullscreen = useChartFullscreen({
   target: () => props.fullscreenTarget,
 });
 
-const {
-  announcement: menuAnnouncement,
-  canCopy,
-  copy: copyToClipboard,
-} = useCopyFeedback();
+const { announcement: menuAnnouncement, copy: copyToClipboard } =
+  useCopyFeedback();
 
 const menuItems = computed<ChartMenuItem[]>(() => {
   const show = menuItemFilter(props.menuItems);
@@ -4684,7 +4681,6 @@ const menuItems = computed<ChartMenuItem[]>(() => {
       filename: menuFilename(),
       subject: "Map",
       show,
-      canCopy: canCopy.value,
       copy: copyToClipboard,
       svg: () => svgRef.value,
       canvas: isCanvas.value ? () => canvasRef.value : undefined,

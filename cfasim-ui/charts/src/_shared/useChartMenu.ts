@@ -1,14 +1,6 @@
-import {
-  computed,
-  nextTick,
-  onMounted,
-  onScopeDispose,
-  ref,
-  type Ref,
-} from "vue";
+import { computed, nextTick, onScopeDispose, ref, type Ref } from "vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
 import {
-  canCopyToClipboard,
   copyCanvasPng,
   copyPng,
   copySvg,
@@ -29,12 +21,6 @@ const COPY_ANNOUNCEMENT_MS = 2000;
  */
 export function useCopyFeedback() {
   const announcement = ref("");
-  // After mount, so the server and the hydrating client list the same items
-  // (the count decides between ChartMenu's plain button and its dropdown).
-  const canCopy = ref(false);
-  onMounted(() => {
-    canCopy.value = canCopyToClipboard();
-  });
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   async function announce(text: string) {
@@ -58,7 +44,7 @@ export function useCopyFeedback() {
 
   onScopeDispose(() => clearTimeout(timer));
 
-  return { announcement, canCopy, copy };
+  return { announcement, copy };
 }
 
 /** `show(key)` for a `menuItems` prop: every item when the prop is unset. */
@@ -72,8 +58,6 @@ export interface ExportMenuSource {
   /** Names the copied thing in the live region, e.g. "Chart" or "Map". */
   subject: string;
   show: (key: ChartMenuItemKey) => boolean;
-  /** `useCopyFeedback().canCopy`: whether to offer the copy items. */
-  canCopy: boolean;
   /** `useCopyFeedback().copy`. */
   copy: (action: () => Promise<void>, what: string) => Promise<void>;
   svg: () => SVGSVGElement | null;
@@ -93,9 +77,10 @@ function withElement<T>(get: () => T | null, run: (el: T) => void) {
   };
 }
 
-/** The Save PNG, Copy PNG, Save SVG, Copy SVG items, in that order. */
+/** The Save PNG, Copy PNG, Save SVG, Copy SVG items, in that order. ChartMenu
+ *  drops the copy items where the clipboard is unavailable. */
 export function exportMenuItems(source: ExportMenuSource): ChartMenuItem[] {
-  const { filename, subject, show, canCopy, copy, svg, canvas } = source;
+  const { filename, subject, show, copy, svg, canvas } = source;
   const items: ChartMenuItem[] = [];
   if (show("save-png")) {
     items.push({
@@ -106,11 +91,12 @@ export function exportMenuItems(source: ExportMenuSource): ChartMenuItem[] {
         : withElement(svg, (el) => void savePng(el, filename)),
     });
   }
-  if (canCopy && show("copy-png")) {
+  if (show("copy-png")) {
     const what = `${subject} PNG`;
     items.push({
       label: "Copy PNG",
       icon: "copy",
+      needsClipboard: true,
       action: canvas
         ? withElement(canvas, (el) => void copy(() => copyCanvasPng(el), what))
         : withElement(svg, (el) => void copy(() => copyPng(el), what)),
@@ -124,10 +110,11 @@ export function exportMenuItems(source: ExportMenuSource): ChartMenuItem[] {
       action: withElement(svg, (el) => saveSvg(el, filename)),
     });
   }
-  if (canCopy && show("copy-svg")) {
+  if (show("copy-svg")) {
     items.push({
       label: "Copy SVG",
       icon: "copy",
+      needsClipboard: true,
       action: withElement(
         svg,
         (el) => void copy(() => copySvg(el), `${subject} SVG`),
@@ -167,7 +154,7 @@ export interface ChartMenuOptions {
  */
 export function useChartMenu(opts: ChartMenuOptions) {
   const svgRef = ref<SVGSVGElement | null>(null);
-  const { announcement, canCopy, copy } = useCopyFeedback();
+  const { announcement, copy } = useCopyFeedback();
 
   function resolvedFilename(): string {
     const f = opts.filename();
@@ -192,7 +179,6 @@ export function useChartMenu(opts: ChartMenuOptions) {
         filename: fname,
         subject: "Chart",
         show,
-        canCopy: canCopy.value,
         copy,
         svg: () => svgRef.value,
       }),
