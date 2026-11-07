@@ -1,6 +1,7 @@
 import { computed, nextTick, onScopeDispose, ref, type Ref } from "vue";
 import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
 import {
+  canCopyToClipboard,
   copyCanvasPng,
   copyPng,
   copySvg,
@@ -194,6 +195,12 @@ export function useChartMenu(opts: ChartMenuOptions) {
     return out;
   });
 
+  // For placing the zoom reset beside the trigger. That only renders after an
+  // interaction, so unlike ChartMenu this can read the clipboard directly.
+  const hasMenuItems = computed(() =>
+    items.value.some((item) => !item.needsClipboard || canCopyToClipboard()),
+  );
+
   const downloadLinkText = computed<string | null>(() => {
     if (opts.downloadButton?.()) return null;
     const v = opts.downloadLink();
@@ -220,6 +227,7 @@ export function useChartMenu(opts: ChartMenuOptions) {
   return {
     svgRef: svgRef as Ref<SVGSVGElement | null>,
     items,
+    hasMenuItems,
     /** Live-region text reporting a clipboard copy; empty otherwise. */
     announcement,
     downloadLinkText,

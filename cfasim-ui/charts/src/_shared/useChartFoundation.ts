@@ -96,6 +96,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
   const {
     svgRef,
     items: menuItems,
+    hasMenuItems,
     announcement: menuAnnouncement,
     downloadLinkText,
     csvHref,
@@ -231,6 +232,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     tooltipPos,
     tooltipHandlers,
     menuItems,
+    hasMenuItems,
     menuAnnouncement,
     downloadLinkText,
     csvHref,

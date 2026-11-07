@@ -2422,6 +2422,25 @@ describe("BarChart", () => {
       ).toEqual(["1", "2", "3"]);
     });
 
+    it("places the zoom reset beside the menu only when a trigger renders", async () => {
+      const resetPosition = async (props: object) => {
+        const wrapper = mount(BarChart, {
+          props: { ...zoomProps, menu: true, ...props },
+        });
+        await brush(wrapper, { clientX: 140 }, { clientX: 240 });
+        return wrapper.find(".chart-zoom-controls").classes();
+      };
+      expect(await resetPosition({ menuItems: ["save-png"] })).toContain(
+        "chart-zoom-controls--beside-menu",
+      );
+      expect(
+        await resetPosition({ menuItems: ["csv"], downloadLink: true }),
+      ).toContain("chart-zoom-controls--right");
+      expect(await resetPosition({ menu: false })).toContain(
+        "chart-zoom-controls--right",
+      );
+    });
+
     it("resets from the reset button and on double-click", async () => {
       const wrapper = mount(BarChart, { props: zoomProps });
       await brush(wrapper, { clientX: 140 }, { clientX: 240 });

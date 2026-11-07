@@ -1857,6 +1857,7 @@ const {
   overlayHandlers,
   brushRect,
   menuItems,
+  hasMenuItems,
   menuAnnouncement,
   downloadLinkText,
   csvHref,
@@ -2696,7 +2697,9 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
       <ChartZoomControls
         v-if="isZoomed"
         reset-only
-        :position="menu ? 'beside-menu' : 'right'"
+        :position="
+          menu && (hasMenuItems || isFullscreen) ? 'beside-menu' : 'right'
+        "
         :is-fullscreen="isFullscreen"
         @reset="resetZoom"
       />

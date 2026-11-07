@@ -286,6 +286,40 @@ describe("ChartMenu clipboard items", () => {
   });
 });
 
+describe("ChartMenu buttons", () => {
+  it("never submits a surrounding form, and names a lone button visually", () => {
+    const single = mount(ChartMenu, {
+      props: { items: [{ label: "Download CSV", action: vi.fn() }] },
+    });
+    const close = mount(ChartMenu, {
+      props: { items: [], isFullscreen: true },
+    });
+    wrappers.push(single, close);
+    const button = single.find(".chart-menu-single");
+    expect(button.attributes("type")).toBe("button");
+    expect(button.attributes("title")).toBe("Download CSV");
+    expect(close.find(".chart-close-button").attributes("type")).toBe("button");
+  });
+
+  it("closes when its items empty, and stays closed when they return", async () => {
+    const items = [
+      { label: "A", action: vi.fn() },
+      { label: "B", action: vi.fn() },
+    ];
+    const wrapper = mount(ChartMenu, {
+      props: { items, forceDropdown: true },
+      attachTo: document.body,
+    });
+    wrappers.push(wrapper);
+    await trigger(wrapper).trigger("click");
+    expect(menu().exists()).toBe(true);
+    await wrapper.setProps({ items: [] });
+    await wrapper.setProps({ items });
+    await nextTick();
+    expect(menu().exists()).toBe(false);
+  });
+});
+
 describe("ChartMenu icons", () => {
   it("draws a lone item's own icon, and download when it has none", () => {
     const iconPath = (item: object) => {

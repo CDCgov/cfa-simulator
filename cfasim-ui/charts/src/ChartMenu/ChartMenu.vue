@@ -212,11 +212,11 @@ watch(open, (isOpen) => (isOpen ? listen() : unlisten()));
 
 onBeforeUnmount(unlisten);
 
-// Dropping to a single item (or into fullscreen) unmounts the menu.
+// Dropping to a single item, no items, or into fullscreen unmounts the menu.
 watch(
-  () => [useDropdown(), props.isFullscreen],
-  ([dropdown, fullscreen]) => {
-    if (!dropdown || fullscreen) open.value = false;
+  () => [useDropdown(), visibleItems.value.length === 0, props.isFullscreen],
+  ([dropdown, empty, fullscreen]) => {
+    if (!dropdown || empty || fullscreen) open.value = false;
   },
 );
 </script>
@@ -233,6 +233,7 @@ watch(
     <!-- Expanded: a close button replaces the menu trigger -->
     <button
       v-if="isFullscreen"
+      type="button"
       class="chart-menu-button chart-close-button"
       aria-label="Collapse"
       @click="emit('close')"
@@ -253,8 +254,10 @@ watch(
     <!-- Single item: plain button -->
     <button
       v-else-if="!useDropdown()"
+      type="button"
       class="chart-menu-button chart-menu-single"
       :aria-label="visibleItems[0].label"
+      :title="visibleItems[0].label"
       :aria-pressed="visibleItems[0].ariaPressed"
       @click="visibleItems[0].action"
     >
