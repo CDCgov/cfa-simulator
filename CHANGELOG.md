@@ -1,6 +1,22 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.15.2] - 2026-11-07
+
+### Bug Fixes
+
+- **components:** Keep light-dark() native in the built CSS
+- **charts:** Handle narrowed chart menus and defer the copy items
+- **charts:** Handle empty menus and label single menu buttons
+
+### Performance
+
+- **charts:** Check clipboard support inside ChartMenu
+
+### Tests
+
+- **charts:** Remove the slow borders fallback test
+
 ## [0.15.1] - 2026-11-07
 
 ### Bug Fixes
