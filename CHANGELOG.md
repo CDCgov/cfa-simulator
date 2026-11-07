@@ -1,6 +1,21 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.15.1] - 2026-11-07
+
+### Bug Fixes
+
+- **components:** Print the active SidebarLayout content
+
+### Features
+
+- **charts:** Add copy SVG and copy PNG to the chart menu
+- **components:** Add Button's variants to ToggleGroup
+
+### Tests
+
+- **cli:** Retry deleting the run dir in the deleted-run serve test
+
 ## [0.15.0] - 2026-11-05
 
 ### Features
