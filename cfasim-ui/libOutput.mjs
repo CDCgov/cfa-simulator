@@ -1,6 +1,15 @@
 import { readFileSync } from "node:fs";
 
 /**
+ * `build.cssTarget` for the library builds: the first browsers with native
+ * light-dark(), which the theme already requires. Under Vite's default target
+ * lightningcss rewrites light-dark() into `--lightningcss-*` variables that
+ * nothing defines, which breaks the rule in consumer apps only, since docs
+ * compile from source. `plz bundle-size` fails if those variables come back.
+ */
+export const LIB_CSS_TARGET = ["chrome123", "firefox120", "safari17.5"];
+
+/**
  * Build options shared by the component library builds.
  *
  * Every runtime dependency declared in the package's package.json is

@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import dts from "vite-plugin-dts";
-import { libBuildOptions } from "../libOutput.mjs";
+import { LIB_CSS_TARGET, libBuildOptions } from "../libOutput.mjs";
 
 export default defineConfig({
   plugins: [
@@ -13,6 +13,7 @@ export default defineConfig({
     }),
   ],
   build: {
+    cssTarget: LIB_CSS_TARGET,
     lib: {
       entry: {
         index: "src/index.ts",

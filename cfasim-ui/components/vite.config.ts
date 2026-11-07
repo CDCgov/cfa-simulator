@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import svgLoader from "vite-svg-loader";
 import dts from "vite-plugin-dts";
-import { libBuildOptions } from "../libOutput.mjs";
+import { LIB_CSS_TARGET, libBuildOptions } from "../libOutput.mjs";
 import { iconSvgoConfig } from "./svgLoaderConfig.mjs";
 
 export default defineConfig({
@@ -16,6 +16,7 @@ export default defineConfig({
     }),
   ],
   build: {
+    cssTarget: LIB_CSS_TARGET,
     lib: {
       entry: "src/index.ts",
       formats: ["es"],

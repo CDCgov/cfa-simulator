@@ -241,10 +241,100 @@ for (const entry of CSS_LIMITS) {
   );
 }
 
+// A var() that nothing defines makes its whole declaration invalid at computed
+// time, and it only shows up in consumer apps: docs and the e2e tests compile
+// from source, not dist. Two kinds of reference are flagged:
+// - `--lightningcss-*`, which the lib build emits when it rewrites light-dark().
+//   Nothing defines them and their fallbacks do not help. LIB_CSS_TARGET in
+//   cfasim-ui/libOutput.mjs keeps light-dark() native; check it if these appear.
+// - any other var() without a fallback that no stylesheet declares and no
+//   component sets at runtime (a typo, or a removed token). A var() with a
+//   fallback is left alone, since that is how optional theming hooks work.
+function listFiles(dir, matches) {
+  const files = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = resolve(dir, entry.name);
+    if (entry.isDirectory()) files.push(...listFiles(path, matches));
+    else if (matches(entry.name)) files.push(path);
+  }
+  return files;
+}
+
+function findUndefinedCssVars(css, declared, setAtRuntime) {
+  const undefinedVars = new Set();
+  for (const [, name, comma] of css.matchAll(/var\(\s*(--[\w-]+)\s*(,?)/g)) {
+    if (name.startsWith("--lightningcss-")) undefinedVars.add(name);
+    else if (comma || name.startsWith("--reka-")) continue;
+    else if (!declared.has(name) && !setAtRuntime.has(name)) {
+      undefinedVars.add(name);
+    }
+  }
+  return [...undefinedVars];
+}
+
+const BUILT_CSS_PACKAGES = ["components", "charts"];
+const stylesheets = [
+  ...listFiles(resolve(root, "cfasim-ui/theme/src"), (name) =>
+    name.endsWith(".css"),
+  ),
+  ...BUILT_CSS_PACKAGES.map((pkg) =>
+    resolve(root, `cfasim-ui/${pkg}/dist/index.css`),
+  ),
+];
+const declaredCssVars = new Set();
+for (const path of stylesheets) {
+  const css = readFileSync(path, "utf8");
+  for (const [, name] of css.matchAll(/(--[\w-]+)\s*:/g)) {
+    declaredCssVars.add(name);
+  }
+}
+
+// Set from outside <style>: a style key or inline declaration, or setProperty.
+// Comments are stripped so a mention in one cannot hide a typo.
+const RUNTIME_CSS_VAR =
+  /(?:setProperty\(\s*["'`]|["'`;\s])(--[a-zA-Z][\w-]*)(?:["'`]\s*[:,)]|\s*:)/g;
+const runtimeCssVars = new Set();
+for (const pkg of BUILT_CSS_PACKAGES) {
+  const sources = listFiles(
+    resolve(root, `cfasim-ui/${pkg}/src`),
+    (name) => /\.(vue|ts)$/.test(name) && !/\.(test|spec)\.ts$/.test(name),
+  );
+  for (const path of sources) {
+    const script = readFileSync(path, "utf8")
+      .replace(/<style[\s\S]*?<\/style>/g, "")
+      .replace(/<!--[\s\S]*?-->/g, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+    for (const [, name] of script.matchAll(RUNTIME_CSS_VAR)) {
+      runtimeCssVars.add(name);
+    }
+  }
+}
+
+for (const pkg of BUILT_CSS_PACKAGES) {
+  const css = readFileSync(
+    resolve(root, `cfasim-ui/${pkg}/dist/index.css`),
+    "utf8",
+  );
+  const undefinedVars = findUndefinedCssVars(
+    css,
+    declaredCssVars,
+    runtimeCssVars,
+  );
+  report(
+    undefinedVars.length === 0,
+    `@cfasim-ui/${pkg} CSS: ${
+      undefinedVars.length === 0
+        ? "no undefined custom properties"
+        : `undefined custom properties: ${undefinedVars.join(", ")}`
+    }`,
+  );
+}
+
 console.log();
 
 if (failed) {
-  console.error("Bundle size check failed: one or more limits exceeded.");
+  console.error("Bundle size check failed: see the failures above.");
   process.exit(1);
 }
 

@@ -142,15 +142,21 @@ const type = computed<"single" | "multiple">(() =>
   z-index: 1;
 }
 
-/* Disabled fades the text only: a translucent item would show the
- * divider-colored group background through it. */
+/* Disabled never uses opacity: a translucent item would show the
+ * divider-colored group background through it. Text fades, and a pressed item
+ * mixes its fill toward the unpressed one. */
 .toggle-group-item[data-disabled] {
   color: color-mix(in srgb, var(--toggle-item-color) 40%, transparent);
   cursor: not-allowed;
 }
 
 .toggle-group-item[data-disabled][data-state="on"] {
-  color: color-mix(in srgb, var(--toggle-on-color) 60%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--toggle-on-bg) 50%,
+    var(--toggle-item-bg)
+  );
+  color: color-mix(in srgb, var(--toggle-on-color) 80%, transparent);
 }
 
 /* Variants mirror Button's. Tints mix into the item background rather than

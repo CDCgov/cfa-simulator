@@ -13,6 +13,8 @@ import "@cfasim-ui/theme/all";
 
 This pulls in `@cfasim-ui/theme`, `@cfasim-ui/components/style.css`, and `@cfasim-ui/charts/style.css` together. Use it whenever you're consuming the prebuilt packages from npm — without it, components and charts will render unstyled because their CSS is shipped as a separate file alongside their compiled JS.
 
+Import the theme through your bundler rather than loading it with a `<link>` or from `public/`. A bundler can rewrite `light-dark()` in the component CSS for older browsers, and that only works when it processes the theme's `color-scheme` rules in the same build.
+
 ## Granular imports
 
 If you want only the design tokens and base styles (no component or chart CSS), import the theme entry directly:
