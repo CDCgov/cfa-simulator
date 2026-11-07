@@ -19,6 +19,13 @@ describe("ToggleGroup", () => {
     expect(items.map((i) => i.text())).toEqual(["Left", "Center", "Right"]);
   });
 
+  it("exposes the variant on the group, primary by default", () => {
+    const group = (variant?: "secondary" | "neutral") =>
+      mount(ToggleGroup, { props: { options, variant } }).find(".toggle-group");
+    expect(group().attributes("data-variant")).toBe("primary");
+    expect(group("neutral").attributes("data-variant")).toBe("neutral");
+  });
+
   it("marks the selected value as pressed (single mode)", () => {
     const wrapper = mount(ToggleGroup, {
       props: { options, modelValue: "center" },

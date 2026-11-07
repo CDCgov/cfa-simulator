@@ -18,10 +18,13 @@ interface Props extends FieldProps {
   multiple?: boolean;
   disabled?: boolean;
   orientation?: "horizontal" | "vertical";
+  /** Same palette as `Button`: how the pressed item is painted. */
+  variant?: "primary" | "secondary" | "neutral";
 }
 
 const props = withDefaults(defineProps<Props>(), {
   orientation: "horizontal",
+  variant: "primary",
 });
 
 const { labelId, ariaProps } = useField(props);
@@ -45,6 +48,7 @@ const type = computed<"single" | "multiple">(() =>
       :disabled="disabled"
       :orientation="orientation"
       :class="['toggle-group', `toggle-group--${orientation}`]"
+      :data-variant="variant"
       v-bind="ariaProps"
     >
       <ToggleGroupItem
@@ -76,6 +80,13 @@ const type = computed<"single" | "multiple">(() =>
 }
 
 .toggle-group {
+  /* The palette, per variant below; the item rules only read these. */
+  --toggle-item-bg: var(--color-bg-0);
+  --toggle-item-color: var(--color-text);
+  --toggle-hover-bg: var(--color-bg-2);
+  --toggle-on-bg: var(--color-primary);
+  --toggle-on-hover-bg: var(--color-primary-hover);
+  --toggle-on-color: var(--color-text-on-primary);
   display: inline-flex;
   /* 1px gaps reveal the group background as dividers between items. */
   gap: 1px;
@@ -100,8 +111,8 @@ const type = computed<"single" | "multiple">(() =>
   padding: 0 1em;
   margin: 0;
   border: none;
-  background: var(--color-bg-0);
-  color: var(--color-text);
+  background: var(--toggle-item-bg);
+  color: var(--toggle-item-color);
   font: inherit;
   font-size: var(--font-size-sm);
   font-weight: 500;
@@ -113,16 +124,16 @@ const type = computed<"single" | "multiple">(() =>
 }
 
 .toggle-group-item:hover:not([data-disabled]) {
-  background: var(--color-bg-2);
+  background: var(--toggle-hover-bg);
 }
 
 .toggle-group-item[data-state="on"] {
-  background: var(--color-primary);
-  color: var(--color-text-on-primary);
+  background: var(--toggle-on-bg);
+  color: var(--toggle-on-color);
 }
 
 .toggle-group-item[data-state="on"]:hover:not([data-disabled]) {
-  background: var(--color-primary-hover);
+  background: var(--toggle-on-hover-bg);
 }
 
 .toggle-group-item:focus-visible {
@@ -131,8 +142,54 @@ const type = computed<"single" | "multiple">(() =>
   z-index: 1;
 }
 
+/* Disabled fades the text only: a translucent item would show the
+ * divider-colored group background through it. */
 .toggle-group-item[data-disabled] {
-  opacity: 0.5;
+  color: color-mix(in srgb, var(--toggle-item-color) 40%, transparent);
   cursor: not-allowed;
+}
+
+.toggle-group-item[data-disabled][data-state="on"] {
+  color: color-mix(in srgb, var(--toggle-on-color) 60%, transparent);
+}
+
+/* Variants mirror Button's. Tints mix into the item background rather than
+ * into transparent, for the same reason. */
+.toggle-group[data-variant="secondary"] {
+  --toggle-item-color: var(--color-primary);
+  --toggle-hover-bg: color-mix(
+    in srgb,
+    var(--color-primary) 10%,
+    var(--color-bg-0)
+  );
+  --toggle-on-bg: color-mix(
+    in srgb,
+    var(--color-primary) 15%,
+    var(--color-bg-0)
+  );
+  --toggle-on-hover-bg: var(--toggle-on-bg);
+  --toggle-on-color: var(--color-primary);
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+/* Neutral: the pressed item is the lighter one. Light mode has grey items
+ * with the pressed one on the page background; dark mode has items on the
+ * page background with a lighter grey pressed one. */
+.toggle-group[data-variant="neutral"] {
+  --toggle-item-bg: light-dark(
+    color-mix(in srgb, var(--color-text) 6%, var(--color-bg-0)),
+    var(--color-bg-0)
+  );
+  --toggle-hover-bg: light-dark(
+    color-mix(in srgb, var(--color-text) 10%, var(--color-bg-0)),
+    color-mix(in srgb, var(--color-text) 6%, var(--color-bg-0))
+  );
+  --toggle-on-bg: light-dark(
+    var(--color-bg-0),
+    color-mix(in srgb, var(--color-text) 12%, var(--color-bg-0))
+  );
+  --toggle-on-hover-bg: var(--toggle-on-bg);
+  --toggle-on-color: var(--color-text);
 }
 </style>

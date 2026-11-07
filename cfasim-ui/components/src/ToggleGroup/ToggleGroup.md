@@ -29,6 +29,7 @@ clears the selection.
 import { ref } from 'vue'
 const interval = ref('weekly')
 const days = ref(['mon', 'wed'])
+const variantValue = ref('weekly')
 </script>
 
 <ComponentDemo>
@@ -106,6 +107,66 @@ const days = ref(["mon", "wed"]);
     { value: 'thu', label: 'Thu' },
     { value: 'fri', label: 'Fri' },
   ]"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Variants
+
+`variant` paints the pressed item with the same palette as
+[`Button`](./button): `primary` (default), `secondary` (a primary tint and
+border) or `neutral` (a grey tint).
+
+<ComponentDemo>
+  <div style="display: flex; flex-wrap: wrap; gap: 1rem">
+    <ToggleGroup
+      v-model="variantValue"
+      aria-label="Primary"
+      :options="[
+        { value: 'daily', label: 'Daily' },
+        { value: 'weekly', label: 'Weekly' },
+        { value: 'monthly', label: 'Monthly' },
+      ]"
+    />
+    <ToggleGroup
+      v-model="variantValue"
+      variant="secondary"
+      aria-label="Secondary"
+      :options="[
+        { value: 'daily', label: 'Daily' },
+        { value: 'weekly', label: 'Weekly' },
+        { value: 'monthly', label: 'Monthly' },
+      ]"
+    />
+    <ToggleGroup
+      v-model="variantValue"
+      variant="neutral"
+      aria-label="Neutral"
+      :options="[
+        { value: 'daily', label: 'Daily' },
+        { value: 'weekly', label: 'Weekly' },
+        { value: 'monthly', label: 'Monthly' },
+      ]"
+    />
+  </div>
+
+<template #code>
+
+```vue
+<ToggleGroup v-model="value" aria-label="Primary" :options="options" />
+<ToggleGroup
+  v-model="value"
+  variant="secondary"
+  aria-label="Secondary"
+  :options="options"
+/>
+<ToggleGroup
+  v-model="value"
+  variant="neutral"
+  aria-label="Neutral"
+  :options="options"
 />
 ```
 
