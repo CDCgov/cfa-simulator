@@ -5,6 +5,7 @@ import {
   autoUnmount,
   statesTopo,
   countiesTopo,
+  countyFixtureTopo,
   hsaTopo,
   strokeStyle,
   clickSelect,
@@ -28,7 +29,7 @@ describe("ChoroplethMap mixed geographic levels", () => {
   it("draws a state-level row as one merged shape on a county map", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -55,7 +56,7 @@ describe("ChoroplethMap mixed geographic levels", () => {
   it("colors the merged state from its own row", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -77,7 +78,7 @@ describe("ChoroplethMap mixed geographic levels", () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -109,7 +110,7 @@ describe("ChoroplethMap mixed geographic levels", () => {
   it("falls back to the <title> for a merged state with no interactive tooltip", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -126,7 +127,7 @@ describe("ChoroplethMap mixed geographic levels", () => {
   it("applies per-stop strokes and highlights to mixed-level features", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -156,7 +157,7 @@ describe("ChoroplethMap mixed geographic levels", () => {
   it("splits one state into counties on a state map", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "states" as const,
         width: 600,
         height: 400,
@@ -181,7 +182,7 @@ describe("ChoroplethMap mixed geographic levels", () => {
   it("resolves an off-level row by feature name", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -199,7 +200,7 @@ describe("ChoroplethMap mixed geographic levels", () => {
   it("looks an off-level row up by its own id, ignoring dataGeoType", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         // Base counties read their value from their parent state...
         dataGeoType: "states" as const,
@@ -228,7 +229,7 @@ describe("ChoroplethMap mixed geographic levels", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -246,7 +247,7 @@ describe("ChoroplethMap mixed geographic levels", () => {
   it("keeps the feature tree when only values change", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -270,7 +271,7 @@ describe("ChoroplethMap mixed geographic levels", () => {
   it("re-mixes when a row's geoType changes", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -289,7 +290,7 @@ describe("ChoroplethMap mixed geographic levels", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -354,7 +355,7 @@ describe("ChoroplethMap pre-merged HSA topology (objects.hsas fast path)", () =>
     const legacy = mount(ChoroplethMap, {
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
         geoType: "hsas" as const,
@@ -433,7 +434,7 @@ describe("ChoroplethMap single-state mode", () => {
   it("scopes counties to a single state by name", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
         geoType: "counties",
@@ -451,7 +452,7 @@ describe("ChoroplethMap single-state mode", () => {
   it("scopes counties to a single state by FIPS code", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
         geoType: "counties",
@@ -488,7 +489,7 @@ describe("ChoroplethMap single-state mode", () => {
   it("renders a single state outline instead of the national border mesh", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
         geoType: "counties",
@@ -509,7 +510,7 @@ describe("ChoroplethMap single-state mode", () => {
   it("colors only the scoped state's counties from national data", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
         geoType: "counties",
@@ -536,7 +537,7 @@ describe("ChoroplethMap single-state mode", () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
         geoType: "counties",
@@ -578,7 +579,7 @@ describe("ChoroplethMap single-state mode", () => {
     // yield a NaN transform and every path would render as "MNaN,NaN…".
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
         geoType: "counties",
@@ -599,7 +600,7 @@ describe("ChoroplethMap single-state mode", () => {
       attachTo: document.body,
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
         geoType: "counties",
@@ -623,7 +624,7 @@ describe("ChoroplethMap single-state mode", () => {
   it("emits stateClick and update:focus for a county on the state map", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
         geoType: "counties",

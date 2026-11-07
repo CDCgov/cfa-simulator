@@ -5,6 +5,7 @@ import ChoroplethMap from "./ChoroplethMap.vue";
 import {
   autoUnmount,
   countiesTopo,
+  countyFixtureTopo,
   hsaTopo,
   hsaMapping,
 } from "./ChoroplethMap.testUtils.js";
@@ -24,7 +25,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
   it("draws the county mesh on an HSA map once the mapping arrives", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "hsas" as const,
         width: 600,
         height: 400,
@@ -47,7 +48,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "hsas" as const,
         width: 600,
         height: 400,
@@ -80,7 +81,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "hsas" as const,
         width: 600,
         height: 400,
@@ -99,7 +100,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
     const national = mount(ChoroplethMap, {
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "hsas" as const,
         width: 600,
         height: 400,
@@ -109,7 +110,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
     const scoped = mount(ChoroplethMap, {
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "hsas" as const,
         state: "California",
         width: 600,
@@ -126,7 +127,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
   it("draws county texture on a states-level map without the HSA module", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
         theme: { countyBorders: "#999" },
@@ -138,7 +139,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
   it("draws nothing on county maps, where feature strokes are the county lines", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -166,7 +167,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
   it("renders no county mesh by default and removes it when the theme drops it", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
       },
@@ -181,7 +182,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
   it("hides the mesh below countyBordersMinZoom while zoom is enabled", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
         zoom: true,
@@ -197,7 +198,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
   it("ignores countyBordersMinZoom on a static map", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
         countyBordersMinZoom: 2,
@@ -211,7 +212,7 @@ describe("ChoroplethMap county borders (theme.countyBorders)", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "hsas" as const,
         state: "California",
         width: 600,
@@ -233,7 +234,7 @@ describe("ChoroplethMap HSA borders (theme.hsaBorders)", () => {
     // the FIPS→HSA table.
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -260,7 +261,7 @@ describe("ChoroplethMap HSA borders (theme.hsaBorders)", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -293,7 +294,7 @@ describe("ChoroplethMap HSA borders (theme.hsaBorders)", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "hsas" as const,
         width: 600,
         height: 400,
@@ -307,7 +308,7 @@ describe("ChoroplethMap HSA borders (theme.hsaBorders)", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -333,7 +334,7 @@ describe("ChoroplethMap HSA borders (theme.hsaBorders)", () => {
     const scoped = mount(ChoroplethMap, {
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         state: "California",
         width: 600,

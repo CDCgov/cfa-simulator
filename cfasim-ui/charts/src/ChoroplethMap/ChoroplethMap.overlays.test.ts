@@ -5,7 +5,7 @@ import ChoroplethMap from "./ChoroplethMap.vue";
 import {
   autoUnmount,
   statesTopo,
-  countiesTopo,
+  countyFixtureTopo,
   hsaTopo,
   flushOverlayLayout,
   strokeStyle,
@@ -393,7 +393,7 @@ describe("ChoroplethMap theming", () => {
   it("defers the HSA-map outline until the mapping arrives", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "hsas" as const,
         width: 600,
         height: 400,
@@ -412,7 +412,7 @@ describe("ChoroplethMap theming", () => {
   it("scopes the outline to the selected state in single-state mode", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         state: "California",
         width: 600,
@@ -444,7 +444,7 @@ describe("ChoroplethMap theming", () => {
   it("theme.strokeWidth applies as-is on county maps", () => {
     const explicit = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -457,7 +457,7 @@ describe("ChoroplethMap theming", () => {
     );
     const dflt = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -561,7 +561,7 @@ describe("ChoroplethMap enlargeDc", () => {
     // County maps stay opt-in.
     const countyAuto = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 800,
         height: 500,
@@ -569,7 +569,7 @@ describe("ChoroplethMap enlargeDc", () => {
     });
     const countyOff = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 800,
         height: 500,
@@ -662,7 +662,7 @@ describe("ChoroplethMap enlargeDc", () => {
   it("enlarges DC's county on a county map", () => {
     const plain = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 800,
         height: 500,
@@ -670,7 +670,7 @@ describe("ChoroplethMap enlargeDc", () => {
     });
     const scaled = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 800,
         height: 500,
@@ -732,7 +732,7 @@ describe("ChoroplethMap enlargeDc", () => {
   it("does nothing in single-state mode", () => {
     const plain = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         state: "11",
         width: 800,
@@ -741,7 +741,7 @@ describe("ChoroplethMap enlargeDc", () => {
     });
     const scaled = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         state: "11",
         width: 800,
@@ -859,7 +859,7 @@ describe("ChoroplethMap state labels (stateLabels)", () => {
   it("keeps the halo default on county maps (no uniform state fill)", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 800,
         height: 500,
@@ -877,7 +877,7 @@ describe("ChoroplethMap state labels (stateLabels)", () => {
   it("labels only the scoped state in single-state mode", async () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         state: "California",
         width: 800,
@@ -987,7 +987,7 @@ describe("ChoroplethMap state labels (stateLabels)", () => {
     // there's nothing to proxy hover to.
     const counties = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 800,
         height: 500,

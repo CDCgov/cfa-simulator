@@ -5,12 +5,42 @@ import { config, flushPromises } from "@vue/test-utils";
 import type { DOMWrapper, VueWrapper } from "@vue/test-utils";
 import usStates from "us-atlas/states-10m.json";
 import usCounties from "us-atlas/counties-10m.json";
-import type { Topology } from "topojson-specification";
+import type { GeometryCollection, Topology } from "topojson-specification";
 import { usHsaTopology } from "../us-hsa-topology/index.js";
 import { fipsToHsa, hsaNames } from "./hsaMapping.js";
 
 export const statesTopo = usStates as unknown as Topology;
 export const countiesTopo = usCounties as unknown as Topology;
+
+/** States the county tests refer to. Each mounted county is a path in
+ * happy-dom, so a smaller map is what keeps these tests under the timeout. */
+const COUNTY_FIXTURE_STATES = new Set([
+  "02",
+  "04",
+  "06",
+  "11",
+  "36",
+  "48",
+  "72",
+]);
+
+/** `countiesTopo` with only those states' counties, for tests that do not
+ * depend on the whole map. A national map fits to these counties, so its
+ * projected coordinates differ from the full map's. */
+export const countyFixtureTopo: Topology = {
+  ...countiesTopo,
+  objects: {
+    ...countiesTopo.objects,
+    counties: {
+      type: "GeometryCollection",
+      geometries: (
+        countiesTopo.objects.counties as GeometryCollection
+      ).geometries.filter((county) =>
+        COUNTY_FIXTURE_STATES.has(String(county.id).slice(0, 2)),
+      ),
+    },
+  },
+};
 export const hsaTopo = usHsaTopology;
 /** The `hsaMapping` prop for every HSA-shaped mount: the map never imports
  * the tables itself. */

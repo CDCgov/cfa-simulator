@@ -5,7 +5,7 @@ import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import {
   autoUnmount,
   statesTopo,
-  countiesTopo,
+  countyFixtureTopo,
   clickSelect,
   hsaMapping,
 } from "./ChoroplethMap.testUtils.js";
@@ -65,7 +65,7 @@ describe("ChoroplethMap zoom, controls, and tooltip placement", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "hsas",
         width: 600,
         height: 400,
@@ -267,14 +267,18 @@ describe("ChoroplethMap zoom, controls, and tooltip placement", () => {
 
     it("tightFit crops Alaska on a national county map", async () => {
       const base = mount(ChoroplethMap, {
-        props: { topology: countiesTopo, geoType: "counties" },
+        props: { topology: countyFixtureTopo, geoType: "counties" },
       });
       await flushPromises();
       expect(globalMinX(base)).toBeGreaterThan(-1);
       base.unmount();
 
       const tight = mount(ChoroplethMap, {
-        props: { topology: countiesTopo, geoType: "counties", tightFit: true },
+        props: {
+          topology: countyFixtureTopo,
+          geoType: "counties",
+          tightFit: true,
+        },
       });
       await flushPromises();
       // Alaska counties clip off the left once CONUS fills the frame.
@@ -286,7 +290,7 @@ describe("ChoroplethMap zoom, controls, and tooltip placement", () => {
       // HSA ids aren't FIPS, so AK/HI HSAs are identified via the fipsToHsa
       // table.
       const base = mount(ChoroplethMap, {
-        props: { hsaMapping, topology: countiesTopo, geoType: "hsas" },
+        props: { hsaMapping, topology: countyFixtureTopo, geoType: "hsas" },
       });
       expect(globalMinX(base)).toBeGreaterThan(-1);
       base.unmount();
@@ -294,7 +298,7 @@ describe("ChoroplethMap zoom, controls, and tooltip placement", () => {
       const tight = mount(ChoroplethMap, {
         props: {
           hsaMapping,
-          topology: countiesTopo,
+          topology: countyFixtureTopo,
           geoType: "hsas",
           tightFit: true,
         },

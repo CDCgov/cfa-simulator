@@ -6,6 +6,7 @@ import {
   autoUnmount,
   statesTopo,
   countiesTopo,
+  countyFixtureTopo,
   dispatchTouch,
   strokeStyle,
   pathFor,
@@ -619,7 +620,7 @@ describe("ChoroplethMap", () => {
   it("colors counties by FIPS id", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
         geoType: "counties",
@@ -639,7 +640,7 @@ describe("ChoroplethMap", () => {
   it("renders state borders overlay in county mode", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
         geoType: "counties",
@@ -716,7 +717,7 @@ describe("ChoroplethMap", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
         geoType: "hsas",
@@ -1161,7 +1162,7 @@ describe("ChoroplethMap", () => {
       attachTo: document.body,
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "hsas",
         width: 600,
         height: 400,
@@ -1188,7 +1189,7 @@ describe("ChoroplethMap", () => {
       attachTo: document.body,
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -1206,7 +1207,7 @@ describe("ChoroplethMap", () => {
       attachTo: document.body,
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "hsas",
         width: 600,
         height: 400,
@@ -1229,7 +1230,7 @@ describe("ChoroplethMap", () => {
       attachTo: document.body,
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "hsas",
         width: 600,
         height: 400,
@@ -1248,7 +1249,7 @@ describe("ChoroplethMap", () => {
       attachTo: document.body,
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         dataGeoType: "hsas" as const,
         width: 600,
@@ -1276,7 +1277,7 @@ describe("ChoroplethMap", () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         dataGeoType: "states" as const,
         width: 600,
@@ -1303,7 +1304,7 @@ describe("ChoroplethMap", () => {
     const wrapper = mount(ChoroplethMap, {
       attachTo: document.body,
       props: {
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         dataGeoType: "states" as const,
         width: 600,
@@ -1325,7 +1326,7 @@ describe("ChoroplethMap", () => {
       attachTo: document.body,
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         geoType: "counties" as const,
         width: 600,
         height: 400,
@@ -1384,7 +1385,7 @@ describe("ChoroplethMap", () => {
       attachTo: document.body,
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
         geoType: "counties",
@@ -1441,7 +1442,7 @@ describe("ChoroplethMap", () => {
       attachTo: document.body,
       props: {
         hsaMapping,
-        topology: countiesTopo,
+        topology: countyFixtureTopo,
         width: 600,
         height: 400,
         geoType: "counties",
