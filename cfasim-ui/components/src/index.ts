@@ -15,6 +15,7 @@ export type { IconSize } from "./Icon/Icon.vue";
 export { registerIcons, hasIcon } from "./Icon/registry";
 export type { IconRegistration, IconVariants } from "./Icon/registry";
 export { default as LightDarkToggle } from "./LightDarkToggle/LightDarkToggle.vue";
+export type { ColorScheme } from "./LightDarkToggle/LightDarkToggle.vue";
 export { default as List } from "./List/List.vue";
 export type {
   ListActionVisibility,
