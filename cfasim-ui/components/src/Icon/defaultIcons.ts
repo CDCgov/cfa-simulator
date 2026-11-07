@@ -11,6 +11,7 @@
 import help from "@material-symbols/svg-400/outlined/help.svg?component";
 import favorite from "@material-symbols/svg-400/outlined/favorite.svg?component";
 import favorite_fill from "@material-symbols/svg-400/outlined/favorite-fill.svg?component";
+import contrast from "@material-symbols/svg-400/outlined/contrast.svg?component";
 import dark_mode from "@material-symbols/svg-400/outlined/dark_mode.svg?component";
 import light_mode from "@material-symbols/svg-400/outlined/light_mode.svg?component";
 // chevrons / navigation
@@ -49,6 +50,7 @@ const defaults: Record<string, IconRegistration> = {
   // status / theme
   help,
   favorite: { outline: favorite, fill: favorite_fill },
+  contrast,
   dark_mode,
   light_mode,
   // chevrons / navigation

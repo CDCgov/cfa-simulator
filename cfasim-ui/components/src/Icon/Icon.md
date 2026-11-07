@@ -68,7 +68,7 @@ just pass the name to `icon`. Anything not listed here must be
 
 <script setup>
 const baseIcons = [
-  "help", "favorite", "dark_mode", "light_mode",
+  "help", "favorite", "contrast", "dark_mode", "light_mode",
   "chevron_left", "chevron_right", "keyboard_arrow_up", "keyboard_arrow_down",
   "keyboard_double_arrow_left", "keyboard_double_arrow_right",
   "arrow_upward", "arrow_downward", "arrow_back", "arrow_forward",
