@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { scrollIntoSettledView } from "../_shared/e2e.testUtils.js";
 
 // Demos mount lazily as they near the viewport, so start at the section
 // under test rather than scrolling past (and mounting) every map above it.
@@ -19,7 +20,7 @@ async function mapAt(page: Page, testId: string) {
     { polling: 100 },
   );
   const map = page.locator(selector);
-  await map.scrollIntoViewIfNeeded();
+  await scrollIntoSettledView(map);
   return map;
 }
 

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { scrollIntoSettledView } from "../_shared/e2e.testUtils.js";
 
 test("BarChart page renders demos", async ({ page }) => {
   await page.goto("./cfasim-ui/charts/bar-chart");
@@ -27,7 +28,7 @@ test("drag zooms to the brushed categories and reset restores them", async ({
 }) => {
   await page.goto("./cfasim-ui/charts/bar-chart");
   const chart = page.locator('[data-testid="zoom-bar-chart"]');
-  await chart.scrollIntoViewIfNeeded();
+  await scrollIntoSettledView(chart);
   const overlay = chart.locator('[data-testid="chart-overlay"]');
   const bars = chart.locator('[data-testid="bar"]');
   await expect(bars).toHaveCount(40);
@@ -52,7 +53,7 @@ test("drag zooms to the brushed categories and reset restores them", async ({
 test("legend buttons hide and restore bar series", async ({ page }) => {
   await page.goto("./cfasim-ui/charts/bar-chart");
   const chart = page.locator('[data-testid="legend-toggle-bar-chart"]');
-  await chart.scrollIntoViewIfNeeded();
+  await scrollIntoSettledView(chart);
   const bars = chart.locator('[data-testid="bar"]');
   await expect(bars).toHaveCount(8);
   const toggle = chart.getByRole("button", { name: "Unvaccinated" });
@@ -66,7 +67,7 @@ test("legend buttons hide and restore bar series", async ({ page }) => {
 test("BarChart centers series whiskers on their bars", async ({ page }) => {
   await page.goto("./cfasim-ui/charts/bar-chart");
   const chart = page.locator('[data-testid="interval-bar-chart"]');
-  await chart.scrollIntoViewIfNeeded();
+  await scrollIntoSettledView(chart);
   const intervals = chart.locator('[data-testid="interval"]');
   await expect(intervals).toHaveCount(8);
   const bar = chart.locator('[data-testid="bar"][data-series="1"]').first();
@@ -86,7 +87,7 @@ test("weekly bars on a date axis leave a gap for the missing week", async ({
 }) => {
   await page.goto("./cfasim-ui/charts/bar-chart");
   const chart = page.locator('[data-testid="weekly-bar-chart"]');
-  await chart.scrollIntoViewIfNeeded();
+  await scrollIntoSettledView(chart);
   const bars = chart.locator('[data-testid="bar"]');
   await expect(bars).toHaveCount(6);
   const boxes = await Promise.all(

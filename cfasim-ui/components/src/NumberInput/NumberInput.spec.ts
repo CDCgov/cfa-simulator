@@ -1,4 +1,13 @@
 import { test, expect } from "@playwright/test";
+import type { Locator } from "@playwright/test";
+
+// The dev server loads Inter after the first layout, and the swap moves the
+// page under raw mouse coordinates; scroll again once the fonts are in.
+async function scrollIntoSettledView(target: Locator) {
+  await target.scrollIntoViewIfNeeded();
+  await target.page().evaluate(() => document.fonts.ready);
+  await target.scrollIntoViewIfNeeded();
+}
 
 test("NumberInput page renders demos", async ({ page }) => {
   await page.goto("./cfasim-ui/components/number-input");
@@ -28,7 +37,7 @@ test("using the slider leaves the hint closed", async ({ page }) => {
   await expect(thumb).toHaveAttribute("aria-valuenow", /\d/);
   const before = await thumb.getAttribute("aria-valuenow");
   const track = r0.locator(".slider-track");
-  await track.scrollIntoViewIfNeeded();
+  await scrollIntoSettledView(track);
   const box = await track.boundingBox();
   if (!box) throw new Error("no track");
   await page.mouse.click(box.x + box.width * 0.8, box.y + box.height / 2);
@@ -161,6 +170,7 @@ test("disabled ranges block drags and keyboard steps", async ({ page }) => {
 
   // A drag released near 47 lands on the near edge of the middle stretch.
   const track = season.locator(".slider-track");
+  await scrollIntoSettledView(track);
   const box = (await track.boundingBox())!;
   const thumbBox = (await thumbs.nth(1).boundingBox())!;
   await page.mouse.move(
@@ -226,6 +236,7 @@ test("crowded handle labels stay inside the field without overlapping", async ({
   await page.keyboard.press("Home");
   await check();
   const track = slider.locator(".slider-track");
+  await scrollIntoSettledView(track);
   const trackY = (await track.boundingBox())!.y;
   const from = (await thumbs.nth(1).boundingBox())!;
   const to = (await thumbs.nth(2).boundingBox())!;

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { scrollIntoSettledView } from "../_shared/e2e.testUtils.js";
 
 test("LineChart page renders demos", async ({ page }) => {
   await page.goto("./cfasim-ui/charts/line-chart");
@@ -54,7 +55,7 @@ test("the tooltip stays up over a marker's line", async ({ page }) => {
   await page.goto("./cfasim-ui/charts/line-chart");
   const hit = page.locator('[data-testid="marker-hit"]').first();
   await expect(hit).toBeAttached();
-  await hit.scrollIntoViewIfNeeded();
+  await scrollIntoSettledView(hit);
   const box = (await hit.boundingBox())!;
   const chart = page
     .locator(".line-chart-wrapper")
@@ -94,7 +95,7 @@ test("markers drag along the x-axis and update the bound model", async ({
   const hit = page.locator('[data-testid="marker-hit"]').first();
   await expect(hit).toBeAttached();
   // Raw mouse coords are viewport-relative and don't auto-scroll.
-  await hit.scrollIntoViewIfNeeded();
+  await scrollIntoSettledView(hit);
   const box = await hit.boundingBox();
   expect(box).not.toBeNull();
   const startX = box!.x + box!.width / 2;
@@ -127,7 +128,7 @@ test.describe("touch", () => {
     await expect(readout).toContainText("Isolation: day 12.0");
 
     const hit = page.locator('[data-testid="marker-hit"]').first();
-    await hit.scrollIntoViewIfNeeded();
+    await scrollIntoSettledView(hit);
     const box = (await hit.boundingBox())!;
     const x0 = box.x + box.width / 2;
     const y0 = box.y + box.height / 2;
@@ -181,7 +182,7 @@ test("drag zooms the x-range and the reset button restores it", async ({
 }) => {
   await page.goto("./cfasim-ui/charts/line-chart");
   const chart = page.locator('[data-testid="zoom-line-chart"]');
-  await chart.scrollIntoViewIfNeeded();
+  await scrollIntoSettledView(chart);
   const overlay = chart.locator('[data-testid="chart-overlay"]');
   const ticks = chart.locator('[data-testid="x-tick"]');
   const fullTicks = await ticks.allTextContents();
@@ -226,7 +227,7 @@ test("a tall drag box-zooms both axes; a flat drag zooms x only", async ({
 }) => {
   await page.goto("./cfasim-ui/charts/line-chart");
   const chart = page.locator('[data-testid="zoom-line-chart"]');
-  await chart.scrollIntoViewIfNeeded();
+  await scrollIntoSettledView(chart);
   const overlay = chart.locator('[data-testid="chart-overlay"]');
   const brush = chart.locator('[data-testid="zoom-brush"]');
   const yTicks = async () =>
@@ -272,7 +273,7 @@ test("legend buttons toggle series by keyboard and keep working expanded", async
 }) => {
   await page.goto("./cfasim-ui/charts/line-chart");
   const chart = page.locator('[data-testid="legend-toggle-line-chart"]');
-  await chart.scrollIntoViewIfNeeded();
+  await scrollIntoSettledView(chart);
   const yMax = async () =>
     Math.max(
       ...(await chart.locator('[data-testid="y-tick"]').allTextContents()).map(
@@ -320,7 +321,7 @@ test("LineChart draws calibration intervals above the trajectories", async ({
 }) => {
   await page.goto("./cfasim-ui/charts/line-chart");
   const chart = page.locator('[data-testid="calibration-chart"]');
-  await chart.scrollIntoViewIfNeeded();
+  await scrollIntoSettledView(chart);
   const intervals = chart.locator('[data-testid="interval"]');
   await expect(intervals).toHaveCount(4);
   const first = intervals.first();
@@ -351,7 +352,7 @@ test("tooltip stops at every x of every series, not just the first", async ({
     .locator(".line-chart-wrapper")
     .filter({ hasText: "Weekly" })
     .first();
-  await chart.scrollIntoViewIfNeeded();
+  await scrollIntoSettledView(chart);
   const overlay = chart.locator("rect[fill='transparent']").first();
   const box = (await overlay.boundingBox())!;
   const labels = new Set<string>();
@@ -374,7 +375,7 @@ test("default tooltip names rows and leaves unnamed fan lines out", async ({
     .locator(".line-chart-wrapper")
     .filter({ hasText: "90% interval" })
     .first();
-  await chart.scrollIntoViewIfNeeded();
+  await scrollIntoSettledView(chart);
   const box = (await chart
     .locator("rect[fill='transparent']")
     .first()
@@ -411,8 +412,7 @@ test("the tooltip keeps dark text on a light fallback without the theme", async 
     .locator(".line-chart-wrapper")
     .filter({ hasText: "90% interval" })
     .first();
-  await chart.scrollIntoViewIfNeeded();
-  await page.evaluate(() => document.fonts.ready);
+  await scrollIntoSettledView(chart);
   const tooltip = chart.locator(".chart-tooltip-content");
   // A late layout shift (fonts, demos mounting below) moves the chart out
   // from under the resting pointer, and Chrome then re-dispatches a mouse
@@ -577,7 +577,7 @@ test.describe("clipboard", () => {
 test("hovering a legend item fades the other series", async ({ page }) => {
   await page.goto("./cfasim-ui/charts/line-chart");
   const chart = page.locator('[data-testid="legend-highlight-line-chart"]');
-  await chart.scrollIntoViewIfNeeded();
+  await scrollIntoSettledView(chart);
   const marks = chart.locator("g.legend-dim");
   await expect(marks).toHaveCount(4);
   const faded = chart.locator('g.legend-dim[opacity="0.15"]');
