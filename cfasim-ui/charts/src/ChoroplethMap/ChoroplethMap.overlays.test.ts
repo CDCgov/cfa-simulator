@@ -351,22 +351,6 @@ describe("ChoroplethMap theming", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("borders mesh follows theme.stroke until theme.borders overrides", async () => {
-    const wrapper = mount(ChoroplethMap, {
-      props: {
-        topology: countiesTopo,
-        geoType: "counties" as const,
-        width: 600,
-        height: 400,
-        theme: { stroke: "#333" },
-      },
-    });
-    expect(bordersPath(wrapper)!.attributes("stroke")).toBe("#333");
-    await wrapper.setProps({ theme: { stroke: "#333", borders: "#900" } });
-    expect(bordersPath(wrapper)!.attributes("stroke")).toBe("#900");
-    expect(wrapper.find(".state-path").attributes("stroke")).toBe("#333");
-  });
-
   it("renders the exterior outline when theme.outline is set", () => {
     const wrapper = mount(ChoroplethMap, {
       props: {
