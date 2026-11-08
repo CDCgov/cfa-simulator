@@ -19,10 +19,12 @@ cfasim-ui is the shared component and theming library you use to make simulators
 - [Box](./components/box) — colored container for callouts and alerts
 - [Button](./components/button) — primary and secondary actions
 - [ButtonGroup](./components/button-group) — visually joins a set of buttons into one unit
+- [Checkbox](./components/checkbox) — labeled checkbox with description and indeterminate state
 - [Container](./components/container) — vertical or horizontal layout wrapper with optional border, height, and gap
 - [DatePicker](./components/date-picker) — date field with a calendar popover and custom formats
 - [DateRangePicker](./components/date-range-picker) — start and end date fields with a range calendar
 - [Expander](./components/expander) — collapsible content section
+- [FileInput](./components/file-input) — file picker with a drop target, for CSV and parameter files
 - [Grid](./components/grid) — responsive multi-column layout
 - [Hint](./components/hint) — inline tooltip for help text
 - [Icon](./components/icon) — inline-SVG Material Symbols icon (tree-shakeable, no webfont)
@@ -32,9 +34,11 @@ cfasim-ui is the shared component and theming library you use to make simulators
 - [NumberInput](./components/number-input) — number field with optional single, range, or multi-handle slider
 - [ParamEditor](./components/param-editor) — lazy-loaded JSON/TOML/YAML editor for parameter sets
 - [PriorInput](./components/prior-input) — distribution family and parameters for a Bayesian prior, using numpyro names
+- [RadioGroup](./components/radio-group) — vertical radio list with per-option descriptions
 - [SelectBox](./components/select-box) — dropdown select
 - [SidebarLayout](./components/sidebar-layout) — two-panel layout with a collapsible sidebar
 - [Spinner](./components/spinner) — loading indicator
+- [TextArea](./components/text-area) — multi-line text field
 - [TextInput](./components/text-input) — text field
 - [Toggle](./components/toggle) — boolean switch
 - [ToggleGroup](./components/toggle-group) — segmented single/multi-select control

@@ -66,7 +66,7 @@ const SCENARIOS = [
     name: "components: everything",
     pkg: "@cfasim-ui/components",
     imports: "*",
-    limit: 83 * KB,
+    limit: 90 * KB,
     lazyChunks: 4,
   },
   {
@@ -119,7 +119,7 @@ const CSS_LIMITS = [
   {
     name: "@cfasim-ui/components CSS",
     path: "cfasim-ui/components/dist/index.css",
-    limit: 40 * KB,
+    limit: 45 * KB,
   },
   {
     name: "@cfasim-ui/charts CSS",
