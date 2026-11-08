@@ -336,7 +336,7 @@ async function onFileChange(e: Event) {
         ref="fileInput"
         type="file"
         accept=".json,.toml,.yaml,.yml,application/json,text/plain"
-        class="param-editor-file-input"
+        class="visually-hidden"
         tabindex="-1"
         aria-hidden="true"
         @change="onFileChange"
@@ -378,17 +378,6 @@ async function onFileChange(e: Event) {
 .param-editor-actions {
   display: flex;
   gap: 0.25em;
-}
-
-.param-editor-file-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  border: 0;
 }
 
 .param-editor-cm {

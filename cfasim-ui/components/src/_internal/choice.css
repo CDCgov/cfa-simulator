@@ -1,0 +1,70 @@
+/* Shared layout for a checkbox or radio beside its label and description.
+ * `.cfasim-choice-control` is the reka button; the component adds its own
+ * shape (radius, checked fill, indicator). Global like `input.css`. */
+
+.cfasim-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+  font-size: var(--font-size-sm);
+  line-height: 1.25rem;
+}
+
+.cfasim-choice-control {
+  --choice-size: 1.125rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--choice-size);
+  height: var(--choice-size);
+  /* Center the control on the first line of the label text. */
+  margin-top: calc((1.25rem - var(--choice-size)) / 2);
+  padding: 0;
+  background: var(--color-bg-0);
+  border: 1px solid var(--color-border-hover);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.cfasim-choice-control:hover {
+  border-color: var(--color-text-secondary);
+}
+
+.cfasim-choice-control[data-state="checked"],
+.cfasim-choice-control[data-state="indeterminate"] {
+  border-color: var(--color-primary);
+}
+
+.cfasim-choice-control:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.cfasim-choice-control[data-disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cfasim-choice-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.cfasim-choice-label {
+  user-select: none;
+  cursor: pointer;
+}
+
+.cfasim-choice[data-disabled] .cfasim-choice-label {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+
+.cfasim-choice-description {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
