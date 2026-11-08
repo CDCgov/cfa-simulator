@@ -37,7 +37,7 @@ jobs:
             target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Build wheels
@@ -46,7 +46,7 @@ jobs:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux || 'auto' }}
           args: --release --out dist
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.target }}
           path: dist
@@ -61,7 +61,7 @@ jobs:
         with:
           command: sdist
           args: --out dist
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-sdist
           path: dist
@@ -76,7 +76,7 @@ jobs:
       name: pypi
       url: https://pypi.org/p/cfasim
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: wheels-*
           merge-multiple: true
