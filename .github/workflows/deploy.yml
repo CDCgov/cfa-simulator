@@ -18,14 +18,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: k88hudson/setup-plz@v1
       - uses: ./.github/actions/setup-node
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v10.3.3
       - uses: ./.github/actions/setup-rust
       - run: echo "date=$(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
         id: date
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: .cache/nssp_ed_raw.csv
           key: nssp-ed-data-${{ steps.date.outputs.date }}
@@ -44,7 +44,7 @@ jobs:
         run: |
           curl -fsSL https://github.com/${{ github.repository }}/releases/latest/download/cfasim-installer.sh -o _site/install.sh
           curl -fsSL https://github.com/${{ github.repository }}/releases/latest/download/cfasim-installer.ps1 -o _site/install.ps1
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
@@ -55,5 +55,5 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v5
         id: deployment

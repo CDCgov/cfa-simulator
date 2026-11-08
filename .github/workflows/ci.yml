@@ -9,7 +9,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: k88hudson/setup-plz@v1
       - uses: ./.github/actions/setup-node
       - run: plz format
@@ -18,7 +18,7 @@ jobs:
   lint-rust:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: k88hudson/setup-plz@v1
       - uses: ./.github/actions/setup-rust
       - run: plz cli format
@@ -27,7 +27,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: k88hudson/setup-plz@v1
       - uses: ./.github/actions/setup-node
       - run: plz test
@@ -35,7 +35,7 @@ jobs:
   test-rust:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: k88hudson/setup-plz@v1
       - uses: ./.github/actions/setup-rust
       - run: plz cli test
@@ -43,9 +43,9 @@ jobs:
   test-python:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: k88hudson/setup-plz@v1
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: cfasim-model-py/uv.lock
@@ -55,7 +55,7 @@ jobs:
   test-docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: k88hudson/setup-plz@v1
       - uses: ./.github/actions/setup-node
       - uses: ./.github/actions/setup-playwright
@@ -64,11 +64,11 @@ jobs:
   test-cli-e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: k88hudson/setup-plz@v1
       - uses: ./.github/actions/setup-node
       - uses: ./.github/actions/setup-rust
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v10.3.3
       - uses: ./.github/actions/setup-playwright
       - run: cargo build -p cfasim
       - run: plz cli e2e
@@ -76,14 +76,14 @@ jobs:
   test-models:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: k88hudson/setup-plz@v1
       - uses: ./.github/actions/setup-node
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v10.3.3
       - uses: ./.github/actions/setup-rust
       # The demo models are excluded from the cargo workspace and build into
       # their own target dirs, which setup-rust's cache does not cover.
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: models/src/*/model/target
           key: models-wasm-${{ runner.os }}-${{ hashFiles('models/src/*/model/Cargo.lock') }}
@@ -91,7 +91,7 @@ jobs:
       - uses: ./.github/actions/setup-playwright
       - run: echo "week=$(date +%G-W%V)" >> "$GITHUB_OUTPUT"
         id: week
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: .cache/nssp_ed_raw.csv
           key: nssp-ed-data-${{ steps.week.outputs.week }}
