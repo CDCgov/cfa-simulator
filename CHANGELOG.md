@@ -1,6 +1,8 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.15.4] - 2026-11-08
+
 ## [0.15.3] - 2026-11-08
 
 ### Features
