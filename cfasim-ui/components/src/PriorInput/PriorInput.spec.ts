@@ -83,11 +83,23 @@ test("PriorInput compact layout puts the family and params in equal columns", as
     hasText: "R0 prior",
   });
   await expect(field).toBeVisible();
+  // The web font swap and the hash scroll both move the page after first
+  // layout; measure everything at once after the fonts are in, or the label
+  // measured last compares against fields measured before the shift.
+  await page.evaluate(() => document.fonts.ready);
   const family = field.getByRole("combobox", { name: "Family" });
   const loc = field.getByLabel("loc", { exact: true });
   const scale = field.getByLabel("scale", { exact: true });
-  const [f, l, s] = await Promise.all(
-    [family, loc, scale].map((c) => c.boundingBox()),
+  const [f, l, s, fieldLabel, locLabel, preview, summary] = await Promise.all(
+    [
+      family,
+      loc,
+      scale,
+      field.getByText("R0 prior", { exact: true }),
+      field.locator("label", { hasText: "loc" }),
+      field.locator("svg.prior-preview"),
+      field.locator(".prior-summary"),
+    ].map((c) => c.boundingBox()),
   );
   // Same row, same width, left to right.
   expect(Math.abs(l!.y - f!.y)).toBeLessThan(1);
@@ -98,18 +110,10 @@ test("PriorInput compact layout puts the family and params in equal columns", as
   expect(s!.x).toBeGreaterThan(l!.x + l!.width - 1);
   // The field label spans above the row, parameter names sit beneath their
   // fields, and the preview and summary follow the row.
-  const fieldLabel = await field
-    .getByText("R0 prior", { exact: true })
-    .boundingBox();
-  const locLabel = await field
-    .locator("label", { hasText: "loc" })
-    .boundingBox();
   expect(fieldLabel!.y + fieldLabel!.height).toBeLessThanOrEqual(f!.y);
   expect(fieldLabel!.width).toBeGreaterThan(f!.width * 2);
   expect(locLabel!.y).toBeGreaterThanOrEqual(l!.y + l!.height);
   expect(Math.abs(locLabel!.x - l!.x)).toBeLessThan(1);
-  const preview = await field.locator("svg.prior-preview").boundingBox();
-  const summary = await field.locator(".prior-summary").boundingBox();
   expect(preview!.y).toBeGreaterThanOrEqual(locLabel!.y + locLabel!.height);
   expect(Math.abs(preview!.x - f!.x)).toBeLessThan(1);
   expect(Math.abs(preview!.width - (s!.x + s!.width - f!.x))).toBeLessThan(1);
