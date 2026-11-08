@@ -1,6 +1,19 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.15.3] - 2026-11-08
+
+### Features
+
+- **components:** Persist LightDarkToggle color scheme and add auto mode
+- **components:** Add Checkbox, TextArea, RadioGroup and FileInput
+
+### Tests
+
+- **charts,components:** Wait for web fonts before raw-coordinate drags
+- **charts:** Shrink the county fixture in ChoroplethMap unit tests
+- **components:** Measure the compact PriorInput layout in one pass
+
 ## [0.15.2] - 2026-11-07
 
 ### Bug Fixes
