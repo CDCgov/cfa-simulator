@@ -13,7 +13,8 @@
     "access": "public"
   },
   "files": [
-    "src"
+    "src",
+    "!src/**/*.test.ts"
   ],
   "sideEffects": [
     "*.css",
@@ -25,10 +26,17 @@
     "./base.css": "./src/base.css",
     "./theme.css": "./src/theme.css",
     "./utilities.css": "./src/utilities.css",
-    "./themes/cdc.css": "./src/themes/cdc.css"
+    "./themes/cdc.css": "./src/themes/cdc.css",
+    "./vite": "./src/vite.js"
   },
   "dependencies": {
     "@cfasim-ui/charts": "workspace:*",
-    "@cfasim-ui/components": "workspace:*"
+    "@cfasim-ui/components": "workspace:*",
+    "@cfasim-ui/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1",
+    "happy-dom": "21.0.4",
+    "vitest": "4.1.12"
   }
 }

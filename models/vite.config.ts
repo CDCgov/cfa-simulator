@@ -2,11 +2,13 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import { cfasimWasm } from "@cfasim-ui/wasm/vite";
 import { cfasimPyodide } from "@cfasim-ui/pyodide/vite";
+import { cfasimTheme } from "@cfasim-ui/theme/vite";
 
 export default defineConfig({
   base: process.env.BASE_URL || "/",
   plugins: [
     vue(),
+    cfasimTheme(),
     cfasimWasm({ model: "src/reed-frost/model", name: "rust_example" }),
     cfasimWasm({ model: "src/ixa-example/model", name: "ixa_example" }),
     cfasimPyodide({

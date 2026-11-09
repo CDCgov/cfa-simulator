@@ -19,7 +19,8 @@
     ".": "./src/index.ts",
     "./transfer": "./src/transferUtils.ts",
     "./workerError": "./src/workerError.ts",
-    "./vite": "./src/rebuildWatcher.js"
+    "./vite": "./src/rebuildWatcher.js",
+    "./colorScheme": "./src/colorScheme.js"
   },
   "peerDependencies": {
     "vue": "^3.5.0"

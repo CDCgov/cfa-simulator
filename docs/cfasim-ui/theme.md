@@ -15,6 +15,33 @@ This pulls in `@cfasim-ui/theme`, `@cfasim-ui/components/style.css`, and `@cfasi
 
 Import the theme through your bundler rather than loading it with a `<link>` or from `public/`. A bundler can rewrite `light-dark()` in the component CSS for older browsers, and that only works when it processes the theme's `color-scheme` rules in the same build.
 
+## Persisting the color scheme
+
+`LightDarkToggle` (used in `SidebarLayout`'s topbar) saves a light or dark override to `localStorage` under the `color-scheme` key and applies it as a `light` or `dark` class on `<html>`. That code runs with the app's JavaScript, after the first paint, so on reload the page would show the system scheme and then switch. The theme package ships a Vite plugin that prepends a small inline script to `<head>` so the stored class is in place before the first paint:
+
+```ts
+// vite.config.ts
+import { cfasimTheme } from "@cfasim-ui/theme/vite";
+
+export default defineConfig({
+  plugins: [vue(), cfasimTheme()],
+});
+```
+
+Projects scaffolded by `cfasim init` include it. Without Vite, paste the script into your HTML's `<head>` before the stylesheets (a minified equivalent is exported as `colorSchemeScript` from `@cfasim-ui/theme/vite`):
+
+```html
+<script id="cfasim-color-scheme">
+  (() => {
+    try {
+      var s = localStorage.getItem("color-scheme");
+      if (s === "light" || s === "dark")
+        document.documentElement.classList.add(s);
+    } catch (e) {}
+  })();
+</script>
+```
+
 ## Granular imports
 
 If you want only the design tokens and base styles (no component or chart CSS), import the theme entry directly:

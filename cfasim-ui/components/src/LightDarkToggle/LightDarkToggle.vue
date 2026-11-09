@@ -1,9 +1,8 @@
 <script lang="ts">
 import { ref } from "vue";
+import { COLOR_SCHEME_STORAGE_KEY } from "@cfasim-ui/shared/colorScheme";
 
 export type ColorScheme = "auto" | "light" | "dark";
-
-const STORAGE_KEY = "color-scheme";
 
 const ICONS: Record<ColorScheme, string> = {
   auto: "contrast",
@@ -19,7 +18,7 @@ function nextScheme(current: ColorScheme, systemDark: boolean): ColorScheme {
 
 function readStored(): ColorScheme {
   try {
-    const v = localStorage.getItem(STORAGE_KEY);
+    const v = localStorage.getItem(COLOR_SCHEME_STORAGE_KEY);
     if (v === "light" || v === "dark") return v;
   } catch {
     // localStorage may be unavailable in restricted contexts
@@ -30,9 +29,9 @@ function readStored(): ColorScheme {
 function writeStored(value: ColorScheme) {
   try {
     if (value === "auto") {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(COLOR_SCHEME_STORAGE_KEY);
     } else {
-      localStorage.setItem(STORAGE_KEY, value);
+      localStorage.setItem(COLOR_SCHEME_STORAGE_KEY, value);
     }
   } catch {
     // localStorage may be unavailable in restricted contexts

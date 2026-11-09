@@ -23,6 +23,7 @@ run = [
   "pnpm exec tsc --noEmit -p cfasim-ui/shared/tsconfig.json",
   "pnpm exec tsc --noEmit -p cfasim-ui/wasm/tsconfig.json",
   "pnpm exec tsc --noEmit -p cfasim-ui/pyodide/tsconfig.json",
+  "pnpm exec tsc --noEmit -p cfasim-ui/theme/tsconfig.json",
 ]
 git_hook = "pre-commit"
 

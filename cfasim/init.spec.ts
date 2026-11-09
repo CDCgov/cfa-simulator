@@ -260,6 +260,12 @@ test.describe("cfasim init", () => {
       await expect(page.locator("h1")).toContainText(p.name);
       await expect(page.getByLabel(p.paramLabel)).toBeVisible();
 
+      // cfasimTheme() in the template's vite.config must inject the inline
+      // color-scheme script, or a saved theme flashes on reload.
+      await expect(
+        page.locator("head > script#cfasim-color-scheme"),
+      ).toHaveCount(1);
+
       if (clickRun) {
         await page.getByRole("button", { name: "Run", exact: true }).click();
       }

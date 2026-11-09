@@ -32,6 +32,7 @@
     "./theme/all": {
       "default": "./src/theme/index.js"
     },
+    "./theme/vite": "./src/theme-vite.js",
     "./theme/base.css": {
       "default": "./src/theme/base.css"
     },
