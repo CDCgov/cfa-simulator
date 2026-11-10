@@ -591,7 +591,16 @@ function lineChart(
   const yMax = hi ?? (deco.lo <= deco.hi ? deco.hi : undefined);
   if (yMin !== undefined) props.yMin = yMin;
   if (yMax !== undefined) props.yMax = yMax;
-  if (xDef?.scale?.domain) warn("`x.scale.domain` is not supported");
+  const xDomain = xDef?.scale?.domain;
+  if (xDomain && !axis.categories) {
+    const [xMin, xMax] = xDomain.map((v) => position(v, axis.temporal));
+    if (xDomain.length === 2 && isFinite(xMin) && isFinite(xMax)) {
+      props.xMin = xMin;
+      props.xMax = xMax;
+    } else {
+      warn("`x.scale.domain` must be a `[min, max]` of numbers or dates");
+    }
+  }
   return props;
 }
 

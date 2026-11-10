@@ -554,7 +554,7 @@ type LineChartData =
 
 ### Custom axis ticks
 
-Control tick placement with `x-ticks` and `y-ticks`. Pass a **number** for a fixed interval (in data units, respecting `xMin`) or an **array** of explicit values. Use `x-tick-format` / `y-tick-format` to customize labels; to reuse a d3 or Vega-Lite format string, wrap it with [`d3Format` / `d3TimeFormat`](../shared#d3format-d3timeformat) (e.g. `:y-tick-format="d3Format('.0%')"`). On a date axis the units are milliseconds: an interval steps from the first date (`7 * 86400000` is a tick every week, on the weekday the data starts), an array holds epoch-ms values, and the default label format follows the interval (days, weeks or months).
+Control tick placement with `x-ticks` and `y-ticks`. Pass a **number** for a fixed interval (in data units, respecting `xMin`) or an **array** of explicit values. Use `x-tick-format` / `y-tick-format` to customize labels; to reuse a d3 or Vega-Lite format string, wrap it with [`d3Format` / `d3TimeFormat`](../shared#d3format-d3timeformat) (e.g. `:y-tick-format="d3Format('.0%')"`). On a date axis the units are milliseconds: an interval steps from the start of the axis (`7 * 86400000` is a tick every week, on the weekday the data or `x-min` starts), an array holds epoch-ms values, and the default label format follows the interval (days, weeks or months).
 
 <ComponentDemo>
   <LineChart
@@ -667,6 +667,43 @@ const sharedY = sharedExtent([regionA, regionB]);
 
   </template>
 </ComponentDemo>
+
+### Fixed x range
+
+`x-min` and `x-max` do the same for the x axis when the chart has explicit `x` values: the axis reaches at least from one to the other, and data outside still extends it. On a date axis they take a `Date`, a date string or epoch ms. Use them to hold a season or forecast window steady while the data fills in, or to line up charts that cover different dates. While a series has an empty `x`, or the limits are dates and nothing is plotted yet, the two together still draw the axis.
+
+<ComponentDemo>
+  <LineChart
+    :x="['2026-01-04', '2026-01-11', '2026-01-18', '2026-01-25', '2026-02-01']"
+    :y="[120, 180, 260, 310, 290]"
+    data-testid="x-range-chart"
+    x-min="2025-12-07"
+    x-max="2026-03-29"
+    :height="220"
+    x-label="Week ending"
+    y-label="Admissions"
+    x-grid
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :x="weeks"
+  :y="admissions"
+  x-min="2025-12-07"
+  x-max="2026-03-29"
+  :height="220"
+  x-label="Week ending"
+  y-label="Admissions"
+  x-grid
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+With index-based data (no `x`), `x-min` is instead the offset of the first point (`:x-min="10"` labels the points 10, 11, 12, ...), and `x-max` is read in those same displayed units.
 
 ### Logarithmic y-axis
 

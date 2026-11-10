@@ -1894,12 +1894,12 @@ describe("LineChart", () => {
       expect(dataPath(wrapper)).toBeTruthy();
     });
 
-    it("ignores xMin when explicit x is provided", () => {
+    it("does not offset explicit x by xMin", () => {
       const wrapper = mount(LineChart, {
         props: {
           x: [10, 20, 30],
           y: [1, 2, 3],
-          xMin: 1000, // should be ignored
+          xMin: 1000, // above the data, so it neither offsets nor widens
           xTicks: [10, 20, 30],
           width: 400,
           height: 100,
@@ -1911,6 +1911,110 @@ describe("LineChart", () => {
         .map((t) => t.text());
       expect(ticks).toEqual(expect.arrayContaining(["10", "20", "30"]));
       expect(ticks).not.toContain("1010");
+    });
+
+    function xTickTexts(wrapper: ReturnType<typeof mount>): string[] {
+      return wrapper.findAll('[data-testid="x-tick"]').map((t) => t.text());
+    }
+
+    function markerLineXs(wrapper: ReturnType<typeof mount>): number[] {
+      return wrapper
+        .findAll('[data-testid="marker-line"]')
+        .map((line) => Number(line.attributes("x1")));
+    }
+
+    it("extends the x axis to xMin and xMax without clipping", () => {
+      const base = {
+        x: [10, 20, 30],
+        y: [1, 2, 3],
+        xTicks: [0, 10, 30, 50],
+        width: 400,
+        height: 100,
+        menu: false,
+      };
+      const wide = mount(LineChart, {
+        props: {
+          ...base,
+          xMin: 0,
+          xMax: 50,
+          markers: [{ x: 0 }, { x: 25 }, { x: 50 }],
+        },
+      });
+      expect(xTickTexts(wide)).toEqual(["0", "10", "30", "50"]);
+      const [start, middle, end] = markerLineXs(wide);
+      expect(middle).toBeCloseTo((start + end) / 2, 5);
+
+      const inside = mount(LineChart, {
+        props: { ...base, xMin: 15, xMax: 20 },
+      });
+      expect(xTickTexts(inside)).toEqual(["10", "30"]);
+    });
+
+    it("accepts date strings and Dates as x limits on a date axis", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          x: ["2026-01-11", "2026-01-21"],
+          y: [1, 2],
+          xMin: "2026-01-01",
+          xMax: new Date("2026-01-31T00:00:00Z"),
+          markers: [
+            { x: "2026-01-01" },
+            { x: "2026-01-16" },
+            { x: "2026-01-31" },
+          ],
+          width: 400,
+          height: 100,
+          menu: false,
+        },
+      });
+      const [start, middle, end] = markerLineXs(wrapper);
+      expect(end).toBeGreaterThan(start);
+      expect(middle).toBeCloseTo((start + end) / 2, 5);
+    });
+
+    it("applies xMax in display units on an index-based axis", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1, 2, 3],
+          xMin: 10,
+          xMax: 20,
+          xTicks: [10, 12, 20],
+          width: 400,
+          height: 100,
+          menu: false,
+        },
+      });
+      expect(xTickTexts(wrapper)).toEqual(["10", "12", "20"]);
+    });
+
+    it("keeps index-based data numeric under a date limit", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          data: [1, 2, 3],
+          xMax: "2026-01-01",
+          xTicks: [0, 1, 2],
+          width: 400,
+          height: 100,
+          menu: false,
+        },
+      });
+      expect(xTickTexts(wrapper)).toEqual(["0", "1", "2"]);
+    });
+
+    it("spans xMin to xMax when there are no points", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [{ x: [], y: [] }],
+          xMin: "2026-01-01",
+          xMax: "2026-03-01",
+          xTicks: [Date.UTC(2026, 0, 1), Date.UTC(2026, 1, 1)],
+          xTickFormat: "iso",
+          width: 400,
+          height: 100,
+          menu: false,
+        },
+      });
+      expect(xTickTexts(wrapper)).toEqual(["2026-01-01", "2026-02-01"]);
     });
 
     it("skips points with non-finite x", () => {

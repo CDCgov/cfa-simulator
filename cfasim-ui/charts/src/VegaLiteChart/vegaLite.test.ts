@@ -129,7 +129,7 @@ describe("vegaLiteToChart: LineChart", () => {
     expect((props.xTickFormat as (v: number) => string)(1)).toBe("b");
   });
 
-  it("maps axis formats, titles, grids and the y scale", () => {
+  it("maps axis formats, titles, grids, the x domain and the y scale", () => {
     const { props } = line({
       data: { values: [{ t: Date.UTC(2026, 0, 4), v: 0.25 }] },
       mark: "line",
@@ -137,6 +137,7 @@ describe("vegaLiteToChart: LineChart", () => {
         x: {
           field: "t",
           type: "temporal",
+          scale: { domain: ["2026-01-01", "2026-02-01"] },
           axis: { format: "%b %d", title: null },
         },
         y: {
@@ -152,6 +153,8 @@ describe("vegaLiteToChart: LineChart", () => {
       yLabel: "Share",
       yGrid: true,
       yScaleType: "log",
+      xMin: Date.UTC(2026, 0, 1),
+      xMax: Date.UTC(2026, 1, 1),
       yMin: 0.01,
       yMax: 1,
     });
@@ -578,7 +581,12 @@ describe("vegaLiteToChart: unsupported pieces", () => {
           {
             mark: { type: "line", interpolate: "basis" },
             encoding: {
-              x: { field: "t", type: "quantitative", timeUnit: "month" },
+              x: {
+                field: "t",
+                type: "quantitative",
+                timeUnit: "month",
+                scale: { domain: [0] },
+              },
               y: { field: "n", type: "quantitative", aggregate: "mean" },
               color: {
                 field: "g",
@@ -618,6 +626,7 @@ describe("vegaLiteToChart: unsupported pieces", () => {
       "`color.scale.scheme` is not supported; use `scale.range`",
       "a `geoshape` layer needs `x` and `y` fields",
       "an `errorband` needs `y` and `y2` fields (bounds, not raw values)",
+      "`x.scale.domain` must be a `[min, max]` of numbers or dates",
     ]);
   });
 

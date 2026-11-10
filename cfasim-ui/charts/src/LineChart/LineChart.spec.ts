@@ -344,6 +344,16 @@ test("LineChart draws calibration intervals above the trajectories", async ({
   expect(order).toMatch(/^p+i{4}$/);
 });
 
+test("x-min and x-max widen a date axis past the data", async ({ page }) => {
+  await page.goto("./cfasim-ui/charts/line-chart");
+  const chart = page.locator('[data-testid="x-range-chart"]');
+  await scrollIntoSettledView(chart);
+  // The data covers January only.
+  const ticks = chart.locator('[data-testid="x-tick"]');
+  await expect(ticks.filter({ hasText: "Dec" })).not.toHaveCount(0);
+  await expect(ticks.filter({ hasText: "Mar" })).not.toHaveCount(0);
+});
+
 test("tooltip stops at every x of every series, not just the first", async ({
   page,
 }) => {

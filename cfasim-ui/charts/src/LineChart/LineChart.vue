@@ -348,17 +348,27 @@ export interface LineChartProps extends ChartCommonProps {
    */
   yScaleType?: "linear" | "log";
   /**
-   * Offset applied to index-based x values (e.g. `xMin: 10` starts the
-   * x axis at 10 instead of 0). Ignored when any series or area has
-   * explicit `x` values.
+   * Lowest value the x axis must include when any series or area has
+   * explicit `x` values. The axis still extends below it when the data
+   * does; it never clips. On a date axis, accepts a `Date`, a date
+   * string or epoch ms. With index-based x it is instead the offset of
+   * the first point (e.g. `xMin: 10` starts the x axis at 10 instead of
+   * 0).
    */
-  xMin?: number;
+  xMin?: number | string | Date;
+  /**
+   * Highest value the x axis must include, in the units the axis shows
+   * (so it respects an index-based `xMin`). The axis still extends above
+   * it when the data does; it never clips. On a date axis, accepts a
+   * `Date`, a date string or epoch ms.
+   */
+  xMax?: number | string | Date;
   /**
    * Tick placement on the x-axis. Number = interval in data units
    * (respecting `xMin`, e.g. `7` ticks every 7 days). Array = explicit tick
-   * values in data space; values outside the data range are dropped.
+   * values in data space; values outside the axis range are dropped.
    * When omitted, ticks are chosen automatically. On a date axis the
-   * units are milliseconds (an interval steps from the first date; an
+   * units are milliseconds (an interval steps from the axis start; an
    * array holds epoch-ms values) and the default label format follows the
    * interval: days, weeks, months or years.
    */
@@ -507,7 +517,7 @@ const resolvedXAxis = computed<{
   areas: ResolvedArea[];
 }>(() => {
   const z = tz.value;
-  const isDate = isDateXAxis(xInputs(props), z);
+  let isDate = isDateXAxis(xInputs(props), z);
 
   const series: ResolvedSeries[] =
     props.series && props.series.length > 0
@@ -527,6 +537,19 @@ const resolvedXAxis = computed<{
     ...a,
     x: toNumericX(a.x, isDate, z),
   }));
+
+  // With nothing plotted there are no x values to detect dates from, so
+  // a date `xMin` / `xMax` decides, and the empty chart gets a date axis.
+  if (!isDate) {
+    const empty =
+      series.every((s) => s.data.length === 0) &&
+      areas.every((a) => a.upper.length === 0 && a.lower.length === 0);
+    isDate =
+      empty &&
+      [props.xMin, props.xMax].some(
+        (limit) => typeof limit !== "number" && parseDate(limit, z) !== null,
+      );
+  }
 
   return { isDate, series, areas };
 });
@@ -638,14 +661,38 @@ function areaXAt(a: ResolvedArea, i: number): number {
   return a.x ? Number(a.x[i]) : i;
 }
 
+/** True when `xMin` is an axis limit rather than the index offset. */
+const xMinIsLimit = computed(() => hasExplicitX.value || xIsDate.value);
+
 /**
  * Display-only offset: added to tick values and tooltip x-labels so
  * `xMin: 10` with index-based data shows "10, 11, …" without changing
  * where points are drawn. Ignored when explicit `x` is provided.
  */
 const xDisplayOffset = computed(() =>
-  hasExplicitX.value ? 0 : (props.xMin ?? 0),
+  xMinIsLimit.value || typeof props.xMin !== "number" ? 0 : props.xMin,
 );
+
+/** A displayed x value in the chart's internal x coordinate space. */
+function toInternalX(x: number | string | Date): number {
+  if (xIsDate.value) {
+    return typeof x === "number" ? x : (parseDate(x, tz.value) ?? NaN);
+  }
+  return Number(x) - xDisplayOffset.value;
+}
+
+/** `xMin` / `xMax` in internal x units; undefined where unset or unusable. */
+const xLimits = computed(() => {
+  const limit = (value: number | string | Date | undefined) => {
+    if (value == null) return undefined;
+    const x = toInternalX(value);
+    return isFinite(x) ? x : undefined;
+  };
+  return {
+    min: xMinIsLimit.value ? limit(props.xMin) : undefined,
+    max: limit(props.xMax),
+  };
+});
 
 /**
  * Top-level `intervals` in internal x units (the display offset removed,
@@ -670,7 +717,8 @@ function intervalColor(iv: ChartInterval): string | undefined {
     : allSeries.value[iv.seriesIndex]?.color;
 }
 
-const xExtent = computed(() => {
+/** X extent of the plotted data alone, before `xMin` / `xMax`. */
+const xDataExtent = computed(() => {
   let min = Infinity;
   let max = -Infinity;
   for (const s of allSeries.value) {
@@ -695,7 +743,24 @@ const xExtent = computed(() => {
     if (iv.x < min) min = iv.x;
     if (iv.x > max) max = iv.x;
   }
-  if (!isFinite(min)) return { min: 0, max: 0 };
+  return isFinite(min) ? { min, max } : null;
+});
+
+/** Full x-axis range: the data's extent widened to `xMin` / `xMax`. */
+const xExtent = computed(() => {
+  const data = xDataExtent.value;
+  const limits = xLimits.value;
+  if (!data) {
+    // With nothing plotted, the two limits alone can span the axis.
+    const { min, max } = limits;
+    if (min !== undefined && max !== undefined && min <= max) {
+      return { min, max };
+    }
+    return { min: 0, max: 0 };
+  }
+  let { min, max } = data;
+  if (limits.min !== undefined && limits.min < min) min = limits.min;
+  if (limits.max !== undefined && limits.max > max) max = limits.max;
   return { min, max };
 });
 
@@ -2199,14 +2264,6 @@ interface RenderedMarker {
   ariaText: string;
 }
 
-/** Marker x resolved to the chart's internal x coordinate space. */
-function markerInternalX(m: ChartMarker): number {
-  if (xIsDate.value) {
-    return typeof m.x === "number" ? m.x : (parseDate(m.x, tz.value) ?? NaN);
-  }
-  return Number(m.x) - xDisplayOffset.value;
-}
-
 const markerDragState = ref<{ index: number; x: number } | null>(null);
 
 const markerAriaRange = computed(() => {
@@ -2230,7 +2287,7 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
   }[] = [];
   for (let i = 0; i < ms.length; i++) {
     const m = ms[i];
-    let xv = drag?.index === i ? drag.x : markerInternalX(m);
+    let xv = drag?.index === i ? drag.x : toInternalX(m.x);
     if (!isFinite(xv)) continue;
     xv = Math.min(max, Math.max(min, xv));
     // Markers outside a zoom window are hidden, not pinned to its edge.
@@ -2382,7 +2439,8 @@ function clampMarkerX(xv: number): number {
  * axis, else the axis origin (so steps land on display multiples).
  */
 function markerSnapOrigin(): number {
-  return xIsDate.value ? xExtent.value.min : -xDisplayOffset.value;
+  if (!xIsDate.value) return -xDisplayOffset.value;
+  return xDataExtent.value?.min ?? xExtent.value.min;
 }
 
 /**
@@ -2456,7 +2514,7 @@ function onMarkerPointerDown(index: number, e: PointerEvent) {
   } catch {
     // synthetic events (tests) can carry an inactive pointerId
   }
-  const start = clampMarkerX(markerInternalX(m));
+  const start = clampMarkerX(toInternalX(m.x));
   // Keep the grab point fixed under the pointer instead of snapping the
   // line to the pointer x (the hit strip is wider than the line).
   const grabOffset = start - markerPointerX(e.clientX);
@@ -2510,13 +2568,13 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
   const steps = e.shiftKey ? 10 : 1;
   let xv: number;
   if (m.snap) {
-    xv = clampMarkerX(markerInternalX(m));
+    xv = clampMarkerX(toInternalX(m.x));
     for (let i = 0; i < steps; i++) xv = snapMarkerX(m, xv, dir);
   } else {
     const { min, max } = xDomain.value;
     const base =
       !xIsDate.value && !hasExplicitX.value ? 1 : (max - min) / 100 || 1;
-    xv = clampMarkerX(markerInternalX(m) + dir * base * steps);
+    xv = clampMarkerX(toInternalX(m.x) + dir * base * steps);
   }
   emitMarkerUpdate(index, xv, true);
 }
