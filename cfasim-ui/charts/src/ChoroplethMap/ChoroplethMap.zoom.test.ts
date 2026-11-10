@@ -4,6 +4,8 @@ import ChoroplethMap from "./ChoroplethMap.vue";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import {
   autoUnmount,
+  finishZoomAnimation,
+  flushFrame,
   statesTopo,
   countyFixtureTopo,
   clickSelect,
@@ -173,7 +175,7 @@ describe("ChoroplethMap zoom, controls, and tooltip placement", () => {
       const svgEl = () => wrapper.find(".state-path").element.closest("svg")!;
       expect(svgEl().getAttribute("style") ?? "").not.toContain("will-change");
       await wrapper.find('[aria-label="Zoom in"]').trigger("click");
-      await new Promise((r) => setTimeout(r, 550));
+      await finishZoomAnimation();
       await flushPromises();
       expect(svgEl().getAttribute("style") ?? "").toContain(
         "will-change: transform",
@@ -473,7 +475,7 @@ describe("ChoroplethMap zoom, controls, and tooltip placement", () => {
           clientY: 205,
         }),
       );
-      await new Promise((r) => setTimeout(r, 50));
+      await flushFrame();
       const afterMove = parseX();
       expect(afterMove).toBeLessThan(948);
       expect(afterMove + tipW).toBeLessThanOrEqual(1000);
@@ -719,7 +721,7 @@ describe("ChoroplethMap zoom, controls, and tooltip placement", () => {
     await wrapper.find('[aria-label="Reset view"]').trigger("click");
     expect(wrapper.emitted("update:focus")![0][0]).toBeNull();
     // Wait out the zoom-out animation.
-    await new Promise((r) => setTimeout(r, 550));
+    await finishZoomAnimation();
     expect(wrapper.find("g").attributes("transform")).toContain("scale(1)");
     // Activation is sticky — home doesn't dismiss the controls.
     expect(wrapper.find(".chart-zoom-controls").exists()).toBe(true);
@@ -737,7 +739,7 @@ describe("ChoroplethMap zoom, controls, and tooltip placement", () => {
     // Any first zoom (here a focus zoom) retires the hint for good.
     await wrapper.setProps({ focus: "06" });
     await flushPromises();
-    await new Promise((r) => setTimeout(r, 550));
+    await finishZoomAnimation();
     await flushPromises();
     expect(wrapper.find(".choropleth-zoom-hint").exists()).toBe(false);
     wrapper.unmount();
@@ -792,7 +794,7 @@ describe("ChoroplethMap zoom, controls, and tooltip placement", () => {
       wrapper.find('[aria-label="Reset view"]').attributes("disabled"),
     ).toBeDefined();
     await wrapper.find('[aria-label="Zoom in"]').trigger("click");
-    await new Promise((r) => setTimeout(r, 550));
+    await finishZoomAnimation();
     await flushPromises();
     expect(wrapper.find("g").attributes("transform")).toContain("scale(2)");
     // Zoomed now — the interaction is live and −/home are enabled.
@@ -816,7 +818,7 @@ describe("ChoroplethMap zoom, controls, and tooltip placement", () => {
     // driving `focus` owns its own way back.
     await wrapper.setProps({ focus: "06" });
     await flushPromises();
-    await new Promise((r) => setTimeout(r, 550));
+    await finishZoomAnimation();
     await flushPromises();
     expect(wrapper.find(".chart-zoom-controls").exists()).toBe(false);
     wrapper.unmount();
@@ -887,10 +889,10 @@ describe("ChoroplethMap zoom, controls, and tooltip placement", () => {
     });
     await flushPromises();
     await wrapper.find('[aria-label="Zoom out"]').trigger("click");
-    await new Promise((r) => setTimeout(r, 550));
+    await finishZoomAnimation();
     expect(wrapper.find("g").attributes("transform")).toContain("scale(2)");
     await wrapper.find('[aria-label="Zoom in"]').trigger("click");
-    await new Promise((r) => setTimeout(r, 550));
+    await finishZoomAnimation();
     expect(wrapper.find("g").attributes("transform")).toContain("scale(4)");
     wrapper.unmount();
   });

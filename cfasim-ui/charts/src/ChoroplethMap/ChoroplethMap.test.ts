@@ -4,6 +4,7 @@ import { defineComponent, h, nextTick, ref } from "vue";
 import ChoroplethMap from "./ChoroplethMap.vue";
 import {
   autoUnmount,
+  finishZoomAnimation,
   statesTopo,
   countiesTopo,
   countyFixtureTopo,
@@ -1058,7 +1059,7 @@ describe("ChoroplethMap", () => {
     await wrapper.setProps({ focus: null });
     await flushPromises();
     // Wait long enough for any (unwanted) animation to have completed.
-    await new Promise((r) => setTimeout(r, 550));
+    await finishZoomAnimation();
     // Unfocus keeps the current pan/zoom — only Reset returns to identity.
     const after = wrapper.find("g").attributes("transform") ?? "";
     expect(after).toBe(before);
@@ -1108,7 +1109,7 @@ describe("ChoroplethMap", () => {
     await wrapper.setProps({ focus: "06" });
     await wrapper.setProps({ focus: "48" });
     await flushPromises();
-    await new Promise((r) => setTimeout(r, 550));
+    await finishZoomAnimation();
     const transform = wrapper.find("g").attributes("transform") ?? "";
     expect(transform).toContain("scale(3)");
     wrapper.unmount();

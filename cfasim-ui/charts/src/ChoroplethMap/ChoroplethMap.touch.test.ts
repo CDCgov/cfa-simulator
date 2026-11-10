@@ -5,6 +5,8 @@ import ChoroplethMap from "./ChoroplethMap.vue";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import {
   autoUnmount,
+  finishZoomAnimation,
+  flushFrame,
   statesTopo,
   countiesTopo,
   dispatchTouch,
@@ -152,7 +154,7 @@ describe("ChoroplethMap touch zoom", () => {
     doubleTap(california.element);
     await flushPromises();
     // Wait out the enter animation (its zoom frames clear the hover state).
-    await new Promise((r) => setTimeout(r, 550));
+    await finishZoomAnimation();
     tap(california.element);
     await flushPromises();
     const sheet = document.querySelector<HTMLElement>(".chart-tooltip-sheet")!;
@@ -180,7 +182,7 @@ describe("ChoroplethMap touch zoom", () => {
     doubleTap(el);
     await flushPromises();
     // Wait out the enter animation so a transform is definitely applied.
-    await new Promise((r) => setTimeout(r, 550));
+    await finishZoomAnimation();
     // Inside the expanded view taps select directly, no deferral.
     tap(el);
     await flushPromises();
@@ -291,7 +293,7 @@ describe("ChoroplethMap touch zoom", () => {
     expect(
       document.querySelector(".choropleth-wrapper.is-fullscreen"),
     ).toBeNull();
-    await new Promise((r) => setTimeout(r, 550));
+    await finishZoomAnimation();
     await flushPromises();
     expect(mapTransform()).toContain("scale(2)");
     // No further selection fired, and the map now owns touch gestures.
@@ -304,11 +306,11 @@ describe("ChoroplethMap touch zoom", () => {
   it("touchExpand=false: reset restores the pre-zoom mode", async () => {
     const wrapper = mountTouch({ touchExpand: false });
     doubleTap(wrapper.find(".state-path").element);
-    await new Promise((r) => setTimeout(r, 550));
+    await finishZoomAnimation();
     await flushPromises();
     expect(mapTransform()).toContain("scale(2)");
     await wrapper.find('[aria-label="Reset view"]').trigger("click");
-    await new Promise((r) => setTimeout(r, 550));
+    await finishZoomAnimation();
     await flushPromises();
     expect(mapTransform()).toContain("scale(1)");
     // Pre-zoom mode restored: one-finger gestures released, hint back.
@@ -421,7 +423,7 @@ describe("ChoroplethMap canvas renderer", () => {
     const wrapper = mountCanvas();
     expect(wrapper.find("canvas.choropleth-canvas").exists()).toBe(true);
     expect(wrapper.findAll(".state-path").length).toBe(0);
-    await new Promise((r) => setTimeout(r, 50));
+    await flushFrame();
     // One fill per feature (56 state geometries) on the first frame.
     expect(drawCtx.fill.mock.calls.length).toBeGreaterThanOrEqual(50);
     wrapper.unmount();
@@ -436,7 +438,7 @@ describe("ChoroplethMap canvas renderer", () => {
     const wrapper = mountCanvas({
       theme: { background: "#123", outline: "#0a0" },
     });
-    await new Promise((r) => setTimeout(r, 50));
+    await flushFrame();
     expect(backgrounds).toContain("#123");
     expect(strokes).toContain("#0a0");
     wrapper.unmount();
@@ -461,7 +463,7 @@ describe("ChoroplethMap canvas renderer", () => {
       tooltipTrigger: "hover",
       data: [{ id: "06", value: 42 }],
     });
-    await new Promise((r) => setTimeout(r, 50));
+    await flushFrame();
     const fillsBefore = drawCtx.fill.mock.calls.length;
     pickColor = [0, 0, 1, 255];
     mapSurface(wrapper).element.dispatchEvent(
@@ -471,7 +473,7 @@ describe("ChoroplethMap canvas renderer", () => {
         clientY: 100,
       }),
     );
-    await new Promise((r) => setTimeout(r, 50));
+    await flushFrame();
     expect(wrapper.emitted("stateHover")).toHaveLength(1);
     // Highlight triggered a repaint.
     expect(drawCtx.fill.mock.calls.length).toBeGreaterThan(fillsBefore);
@@ -500,7 +502,7 @@ describe("ChoroplethMap canvas renderer", () => {
       tooltipTrigger: "hover",
       data: [{ id: "06", value: 42 }],
     });
-    await new Promise((r) => setTimeout(r, 50));
+    await flushFrame();
     const fillsBefore = drawCtx.fill.mock.calls.length;
     const blitsBefore = drawCtx.drawImage.mock.calls.length;
     pickColor = [0, 0, 1, 255];
@@ -511,7 +513,7 @@ describe("ChoroplethMap canvas renderer", () => {
         clientY: 100,
       }),
     );
-    await new Promise((r) => setTimeout(r, 50));
+    await flushFrame();
     // Blitted the base…
     expect(drawCtx.drawImage.mock.calls.length).toBeGreaterThan(blitsBefore);
     // …and only the single hover highlight re-filled (not the whole scene).
@@ -522,7 +524,7 @@ describe("ChoroplethMap canvas renderer", () => {
   it("re-renders the full base (not a stale blit) when data changes", async () => {
     drawCtx.drawImage = vi.fn();
     const wrapper = mountCanvas({ data: [{ id: "06", value: 1 }] });
-    await new Promise((r) => setTimeout(r, 50));
+    await flushFrame();
     const fillsBefore = drawCtx.fill.mock.calls.length;
     await wrapper.setProps({
       data: [
@@ -530,7 +532,7 @@ describe("ChoroplethMap canvas renderer", () => {
         { id: "48", value: 5 },
       ],
     });
-    await new Promise((r) => setTimeout(r, 50));
+    await flushFrame();
     // markBaseDirty forced a full re-fill of every feature, not a 1-feature blit.
     expect(drawCtx.fill.mock.calls.length - fillsBefore).toBeGreaterThan(20);
     wrapper.unmount();
@@ -600,7 +602,7 @@ describe("ChoroplethMap canvas renderer", () => {
     }
     vi.stubGlobal("ResizeObserver", FakeRO);
     const wrapper = mountCanvas();
-    await new Promise((r) => setTimeout(r, 50));
+    await flushFrame();
     const svgEl = mapSurface(wrapper).element as SVGSVGElement;
     const canvas = wrapper.find("canvas.choropleth-canvas")
       .element as HTMLCanvasElement;
@@ -643,7 +645,7 @@ describe("ChoroplethMap canvas renderer", () => {
     const fillsBefore = drawCtx.fill.mock.calls.length;
     await wrapper.setProps({ focus: "06" });
     await flushPromises();
-    await new Promise((r) => setTimeout(r, 550));
+    await finishZoomAnimation();
     // The zoom transform applied (controls report a zoomed state)...
     expect(
       wrapper.find('[aria-label="Reset view"]').attributes("disabled"),
@@ -668,7 +670,7 @@ describe("ChoroplethMap canvas renderer", () => {
     svgEl.getBoundingClientRect = () =>
       ({ width: 600, height: 400, top: 0, left: 0 }) as DOMRect;
     await wrapper.setProps({ renderer: "canvas" });
-    await new Promise((r) => setTimeout(r, 50));
+    await flushFrame();
 
     // Path DOM replaced by a sized canvas (not the intrinsic 300×150)...
     expect(wrapper.findAll(".state-path").length).toBe(0);
@@ -701,7 +703,7 @@ describe("ChoroplethMap canvas renderer", () => {
     expect(wrapper.findAll(".state-path").length).toBe(0);
 
     await wrapper.setProps({ renderer: "svg" });
-    await new Promise((r) => setTimeout(r, 50));
+    await flushFrame();
     expect(wrapper.find("canvas.choropleth-canvas").exists()).toBe(false);
     expect(wrapper.findAll(".state-path").length).toBeGreaterThan(50);
     // Canvas mode never writes the zoom transform into the svg group — the
@@ -739,7 +741,7 @@ describe("ChoroplethMap canvas renderer", () => {
     expect(wrapper.find("canvas.choropleth-canvas").exists()).toBe(true);
 
     await wrapper.setProps({ geoType: "states", renderer: "svg" });
-    await new Promise((r) => setTimeout(r, 50));
+    await flushFrame();
     expect(wrapper.find("canvas.choropleth-canvas").exists()).toBe(false);
     expect(wrapper.findAll(".state-path").length).toBeGreaterThan(50);
 
@@ -748,7 +750,7 @@ describe("ChoroplethMap canvas renderer", () => {
       ({ width: 600, height: 400, top: 0, left: 0 }) as DOMRect;
     const fillsBefore = drawCtx.fill.mock.calls.length;
     await wrapper.setProps({ geoType: "counties", renderer: "canvas" });
-    await new Promise((r) => setTimeout(r, 50));
+    await flushFrame();
     expect(wrapper.findAll(".state-path").length).toBe(0);
     const canvas = wrapper.find("canvas.choropleth-canvas")
       .element as HTMLCanvasElement;

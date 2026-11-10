@@ -86,7 +86,52 @@ export function dispatchTouch(
 /** The overlay layers (cities + state labels) paint on the next rAF after
  * Vue's patch; flush both. */
 export async function flushOverlayLayout() {
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await nextFrame();
+  await flushPromises();
+}
+
+const nextFrame = () =>
+  new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+/** Canvas redraws and tooltip moves are coalesced into the next frame:
+ * flush Vue's watchers, run that frame, then flush what it scheduled. */
+export async function flushFrame() {
+  await flushPromises();
+  await nextFrame();
+  await flushPromises();
+}
+
+// d3-timer reads `performance.now()` on every frame, so a clock that can be
+// pushed forward ends a transition without waiting it out in real time. The
+// offset only grows: timers scheduled after a jump stay consistent.
+const realNow = performance.now.bind(performance);
+let clockOffset = 0;
+performance.now = () => realNow() + clockOffset;
+
+// Longer than every zoom transition, shorter than d3-timer's 1s poke window
+// (a larger gap is treated as a background-tab pause and skewed away).
+const ANIMATION_JUMP_MS = 600;
+const ANIMATION_FALLBACK_MS = 2000;
+
+/** d3-transition keeps its schedules on the node while one is pending. */
+const isAnimating = () =>
+  Array.from(document.querySelectorAll("svg")).some(
+    (svg) => (svg as { __transition?: unknown }).__transition !== undefined,
+  );
+
+/**
+ * Run any zoom transition to its end state: jump d3's clock past the
+ * duration, then let frames tick until no transition is left. Falls back to
+ * real time if the jump is lost.
+ */
+export async function finishZoomAnimation() {
+  clockOffset += ANIMATION_JUMP_MS;
+  const deadline = realNow() + ANIMATION_FALLBACK_MS;
+  let frames = 0;
+  while (frames < 2 || (isAnimating() && realNow() < deadline)) {
+    await nextFrame();
+    frames++;
+  }
   await flushPromises();
 }
 

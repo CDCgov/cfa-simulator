@@ -4,6 +4,7 @@ import { isTouchDevice } from "../_shared/touch.js";
 import ChoroplethMap from "./ChoroplethMap.vue";
 import {
   autoUnmount,
+  finishZoomAnimation,
   statesTopo,
   countyFixtureTopo,
   hsaTopo,
@@ -653,7 +654,7 @@ describe("ChoroplethMap enlargeDc", () => {
     // the group transform), so base and zoomed `d`s compare directly.
     await wrapper.setProps({ focus: "24" });
     await flushPromises();
-    await new Promise((r) => setTimeout(r, 550));
+    await finishZoomAnimation();
     await flushPromises();
     expect(dOf(wrapper, "11")).toBe(dOf(plain, "11"));
     wrapper.unmount();

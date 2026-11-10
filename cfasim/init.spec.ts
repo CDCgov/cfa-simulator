@@ -145,6 +145,8 @@ test.describe("cfasim init", () => {
   ];
 
   const procs: ChildProcess[] = [];
+  // Typecheck output per project name: null when it passed.
+  const typecheckFailures = new Map<string, string | null>();
 
   test.beforeAll(async () => {
     // Build CLI
@@ -212,14 +214,40 @@ test.describe("cfasim init", () => {
     const servers = projects.map((p) => startVite(p.name, p.template, p.port));
     procs.push(...servers.map((s) => s.proc));
     await Promise.all(servers.map((s) => waitForServer(s.url)));
+
+    // The typechecks are independent, so run them together here instead of
+    // one after another in the tests. They start only once vite is up: the
+    // wasm plugin rewrites the generated bindings during startup.
+    await Promise.all(
+      projects.map(async (p) => {
+        try {
+          await execAsync("pnpm run typecheck", {
+            cwd: resolve(TMP_DIR, p.name),
+          });
+          typecheckFailures.set(p.name, null);
+        } catch (error) {
+          const { message, stdout } = error as Error & { stdout?: string };
+          typecheckFailures.set(p.name, `${message}\n${stdout ?? ""}`);
+        }
+      }),
+    );
   });
 
   test.afterAll(async () => {
-    for (const proc of procs) {
-      proc.kill();
-    }
     // Wait for child processes to exit before removing temp dir
-    await new Promise((r) => setTimeout(r, 1000));
+    await Promise.all(
+      procs.map((proc) => {
+        if (proc.exitCode !== null || proc.signalCode !== null) return;
+        return new Promise<void>((done) => {
+          const giveUp = setTimeout(done, 5000);
+          proc.once("exit", () => {
+            clearTimeout(giveUp);
+            done();
+          });
+          proc.kill();
+        });
+      }),
+    );
     try {
       rmSync(TMP_DIR, { recursive: true, force: true });
     } catch {
@@ -244,10 +272,7 @@ test.describe("cfasim init", () => {
 
   for (const p of projects) {
     test(`${p.template} project typechecks`, () => {
-      execSync("pnpm run typecheck", {
-        cwd: resolve(TMP_DIR, p.name),
-        stdio: "pipe",
-      });
+      expect(typecheckFailures.get(p.name)).toBeNull();
     });
 
     // The server templates draw their chart only after a run is started.
