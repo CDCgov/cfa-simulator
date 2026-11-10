@@ -1,6 +1,21 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.15.5] - 2026-11-10
+
+### Bug Fixes
+
+- **theme:** Apply the stored color scheme before first paint
+
+### Features
+
+- **charts:** Add Heatmap chart and Vega-Lite rect translation
+- **charts:** Add LineChart xMax and xMin limits for explicit and date x
+
+### Tests
+
+- Drop fixed sleeps from map unit tests and the CLI e2e
+
 ## [0.15.4] - 2026-11-08
 
 ## [0.15.3] - 2026-11-08
