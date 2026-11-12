@@ -200,15 +200,31 @@ function formatPlaceholder(
   return " ".repeat(pad) + sign + body;
 }
 
+export interface FormatNumberOptions {
+  /**
+   * Text for a missing value (`NaN`, `null` or `undefined`), such as `"–"`.
+   * Without it `NaN` formats as `"NaN"` and `null` / `undefined` as `""`.
+   */
+  missing?: string;
+}
+
 /**
  * Format a number using a preset name, a printf-style format string, or a
- * custom function. Non-finite values (NaN, ±Infinity) are returned as
- * `String(value)`; if `format` is omitted, falls back to `String(value)`.
+ * custom function. Missing values follow {@link FormatNumberOptions.missing};
+ * ±Infinity is returned as `String(value)`. If `format` is omitted, falls
+ * back to `String(value)`.
  *
  * Throws if `format` is a string that's neither a recognized preset (with
  * an optional `:N` digit suffix) nor a printf string containing `%`.
  */
-export function formatNumber(value: number, format?: NumberFormat): string {
+export function formatNumber(
+  value: number | null | undefined,
+  format?: NumberFormat,
+  options?: FormatNumberOptions,
+): string {
+  if (value == null || Number.isNaN(value)) {
+    return options?.missing ?? (value == null ? "" : "NaN");
+  }
   if (!Number.isFinite(value)) return String(value);
   if (format === undefined) return String(value);
   if (typeof format === "function") return format(value);

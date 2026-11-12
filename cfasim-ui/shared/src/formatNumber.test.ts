@@ -13,6 +13,17 @@ describe("formatNumber", () => {
     expect(formatNumber(-Infinity, (v) => `x=${v}`)).toBe("-Infinity");
   });
 
+  it("formats missing values with the missing option", () => {
+    expect(formatNumber(null, "percent")).toBe("");
+    expect(formatNumber(undefined)).toBe("");
+    const dash = { missing: "–" };
+    expect(formatNumber(NaN, "percent", dash)).toBe("–");
+    expect(formatNumber(null, (v) => `x=${v}`, dash)).toBe("–");
+    expect(formatNumber(undefined, undefined, dash)).toBe("–");
+    expect(formatNumber(Infinity, "plain", dash)).toBe("Infinity");
+    expect(formatNumber(0, "plain", dash)).toBe("0");
+  });
+
   it("invokes a custom function formatter", () => {
     expect(formatNumber(3, (v) => `n=${v * 2}`)).toBe("n=6");
   });

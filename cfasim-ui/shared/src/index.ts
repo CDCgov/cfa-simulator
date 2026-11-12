@@ -31,7 +31,11 @@ export { d3Format } from "./d3Format.js";
 export { d3TimeFormat } from "./d3TimeFormat.js";
 export { binValues } from "./binValues.js";
 export type { BinOptions, Bins } from "./binValues.js";
-export type { NumberFormat, NumberFormatPreset } from "./formatNumber.js";
+export type {
+  FormatNumberOptions,
+  NumberFormat,
+  NumberFormatPreset,
+} from "./formatNumber.js";
 export {
   useUrlParams,
   serialize,
