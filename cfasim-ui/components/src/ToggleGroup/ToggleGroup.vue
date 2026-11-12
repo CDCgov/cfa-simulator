@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ToggleGroupItem, ToggleGroupRoot } from "reka-ui";
+import type { AcceptableValue } from "reka-ui";
 import { computed } from "vue";
 import FieldLabel from "../_internal/FieldLabel.vue";
 import { useField, type FieldProps } from "../_internal/field";
@@ -17,6 +18,11 @@ interface Props extends FieldProps {
   options: ToggleGroupOption[];
   multiple?: boolean;
   disabled?: boolean;
+  /**
+   * Keep a selection once one is made: clicking the pressed item (the last
+   * pressed item in multiple mode) leaves it pressed.
+   */
+  required?: boolean;
   orientation?: "horizontal" | "vertical";
   /** Same palette as `Button`: how the pressed item is painted. */
   variant?: "primary" | "secondary" | "neutral";
@@ -31,6 +37,17 @@ const { labelId, ariaProps } = useField(props);
 const type = computed<"single" | "multiple">(() =>
   props.multiple ? "multiple" : "single",
 );
+
+// reka only stays in sync with a swallowed update when it is controlled, and
+// an `undefined` model would make it uncontrolled.
+const groupValue = computed(() => model.value ?? (props.multiple ? [] : null));
+
+function onUpdate(value: AcceptableValue | AcceptableValue[]) {
+  const cleared = Array.isArray(value) ? value.length === 0 : value == null;
+  if (props.required && cleared) return;
+  // Option values are strings, so reka only ever hands those back.
+  model.value = (value ?? undefined) as string | string[] | undefined;
+}
 </script>
 
 <template>
@@ -43,13 +60,14 @@ const type = computed<"single" | "multiple">(() =>
       :hint="hint"
     />
     <ToggleGroupRoot
-      v-model="model"
+      :model-value="groupValue"
       :type="type"
       :disabled="disabled"
       :orientation="orientation"
       :class="['toggle-group', `toggle-group--${orientation}`]"
       :data-variant="variant"
       v-bind="ariaProps"
+      @update:model-value="onUpdate"
     >
       <ToggleGroupItem
         v-for="opt in options"

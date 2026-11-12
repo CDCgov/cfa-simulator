@@ -30,6 +30,7 @@ import { ref } from 'vue'
 const interval = ref('weekly')
 const days = ref(['mon', 'wed'])
 const variantValue = ref('weekly')
+const view = ref('chart')
 </script>
 
 <ComponentDemo>
@@ -61,6 +62,41 @@ const interval = ref("weekly");
     { value: 'daily', label: 'Daily' },
     { value: 'weekly', label: 'Weekly' },
     { value: 'monthly', label: 'Monthly' },
+  ]"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Required
+
+Add `required` when one item must always be pressed, as with a view switcher.
+Clicking the active item leaves it pressed. In `multiple` mode the last pressed
+item cannot be cleared.
+
+<ComponentDemo>
+  <ToggleGroup
+    v-model="view"
+    required
+    aria-label="View"
+    :options="[
+      { value: 'chart', label: 'Chart' },
+      { value: 'table', label: 'Table' },
+    ]"
+  />
+  <p>Selected: {{ view }}</p>
+
+<template #code>
+
+```vue
+<ToggleGroup
+  v-model="view"
+  required
+  aria-label="View"
+  :options="[
+    { value: 'chart', label: 'Chart' },
+    { value: 'table', label: 'Table' },
   ]"
 />
 ```
