@@ -1492,10 +1492,10 @@ const summaryLinesResolved = computed<ResolvedSummaryLine[]>(() => {
 });
 
 const DEFAULT_LINE_COLORS = [
-  "var(--color-fg-1, #111)",
+  "var(--color-text, #111)",
   "var(--color-danger, #ef4444)",
   "var(--color-success, #10b981)",
-  "var(--color-info, #6366f1)",
+  "#6366f1",
 ];
 
 function defaultLineColor(i: number): string {
