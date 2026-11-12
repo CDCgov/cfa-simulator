@@ -1,4 +1,4 @@
-import { ref, computed, watch, type Ref } from "vue";
+import { getCurrentScope, onScopeDispose, ref, watch, type Ref } from "vue";
 import { placeTooltip, type TooltipClamp } from "../tooltip-position.js";
 
 export interface ChartTooltipOptions {
@@ -23,9 +23,11 @@ export interface ChartTooltipOptions {
    * Axis a finger drags *along* to scrub the tooltip. On touch, a drag in
    * the orthogonal direction is left to the browser so the page can still
    * scroll. Defaults to `"x"` (horizontal scrub, vertical page scroll) —
-   * correct for time-series line charts and vertical bar charts.
+   * correct for time-series line charts and vertical bar charts. `"none"`
+   * leaves every drag to the browser, for a plot that scrolls itself; a
+   * touch still shows the tooltip under the finger until it moves.
    */
-  scrubAxis?: () => "x" | "y";
+  scrubAxis?: () => "x" | "y" | "none";
   /**
    * Emit hover events. The first arg is `{ index }` while hovering and
    * `null` when leaving.
@@ -100,6 +102,42 @@ export function useChartTooltip(opts: ChartTooltipOptions) {
     { flush: "post" },
   );
 
+  // Escape dismisses an open tooltip (WCAG 1.4.13) without moving focus
+  // or the pointer; the next pointer move or focus shows it again. The
+  // listener runs in the capture phase and records the event, so the
+  // chart can stay expanded on that press (`closedByEscape`, which the
+  // foundation hands to useChartFullscreen). It does not call
+  // `preventDefault`: reka's popovers ignore a prevented Escape.
+  function onKeydown(event: KeyboardEvent) {
+    if (event.key !== "Escape" || hoverIndex.value === null) return;
+    const target = event.target;
+    if (
+      target instanceof Element &&
+      target.closest('[role="menu"], [role="dialog"]')
+    ) {
+      return;
+    }
+    escapes.add(event);
+    hoverIndex.value = null;
+    opts.onHover?.(null);
+  }
+
+  const escapes = new WeakSet<Event>();
+  /** Whether `event` is an Escape press that closed this tooltip. */
+  function closedByEscape(event: Event): boolean {
+    return escapes.has(event);
+  }
+
+  let listening = false;
+  function listenForEscape(on: boolean) {
+    if (typeof document === "undefined" || on === listening) return;
+    if (on) document.addEventListener("keydown", onKeydown, true);
+    else document.removeEventListener("keydown", onKeydown, true);
+    listening = on;
+  }
+  watch(hoverIndex, (index) => listenForEscape(index !== null));
+  if (getCurrentScope()) onScopeDispose(() => listenForEscape(false));
+
   function onMouseMove(event: MouseEvent) {
     if (!opts.enabled()) return;
     updateHover(event);
@@ -155,7 +193,8 @@ export function useChartTooltip(opts: ChartTooltipOptions) {
         return;
       }
       const scrubAxis = opts.scrubAxis?.() ?? "x";
-      const isScrub = scrubAxis === "x" ? dx >= dy : dy >= dx;
+      const isScrub =
+        scrubAxis === "none" ? false : scrubAxis === "x" ? dx >= dy : dy >= dx;
       if (!isScrub) {
         // Drag is across the scrub axis — hand the gesture to the browser.
         touchMode = "scroll";
@@ -201,5 +240,6 @@ export function useChartTooltip(opts: ChartTooltipOptions) {
     tooltipRef,
     tooltipPos,
     handlers,
+    closedByEscape,
   };
 }

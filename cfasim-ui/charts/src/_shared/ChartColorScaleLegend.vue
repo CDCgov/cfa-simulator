@@ -6,7 +6,8 @@ import {
 
 /**
  * The inline legend item for a continuous color scale: title, min label,
- * gradient ramp and max label on one row. The gradient itself is defined
+ * gradient ramp and max label on one row, plus an optional middle label
+ * under the ramp. The gradient itself is defined
  * by the chart (`fill` is its `url(#id)`), since ids are per instance.
  */
 defineProps<{
@@ -41,5 +42,14 @@ defineProps<{
       :fill="fill"
     />
     <text :x="x + layout.maxX" :y="y + 4">{{ layout.max }}</text>
+    <text
+      v-if="layout.mid !== undefined"
+      data-testid="legend-color-scale-mid"
+      :x="x + layout.midX!"
+      :y="y + RAMP_HEIGHT / 2 + fontSize"
+      text-anchor="middle"
+    >
+      {{ layout.mid }}
+    </text>
   </g>
 </template>

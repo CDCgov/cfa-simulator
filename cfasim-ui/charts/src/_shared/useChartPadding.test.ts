@@ -17,6 +17,30 @@ function layout(opts: Partial<ChartPaddingOptions> = {}) {
   });
 }
 
+describe("useChartPadding legend extra height", () => {
+  it("adds room under the legend rows, top or bottom", () => {
+    const top = layout({ legendExtraHeight: () => 12 });
+    expect(top.padding.value.top).toBe(10 + INLINE_LEGEND_ROW_HEIGHT + 12);
+    expect(top.legendY.value).toBe(10 + INLINE_LEGEND_ROW_HEIGHT / 2);
+    const bottom = layout({
+      legendExtraHeight: () => 12,
+      legendPosition: () => "bottom",
+    });
+    expect(bottom.bottomLegendHeight.value).toBe(INLINE_LEGEND_ROW_HEIGHT + 12);
+    expect(bottom.legendY.value).toBe(
+      200 - INLINE_LEGEND_ROW_HEIGHT - 12 + INLINE_LEGEND_ROW_HEIGHT / 2,
+    );
+  });
+
+  it("adds nothing without a legend", () => {
+    const { padding } = layout({
+      inlineLegendLabels: () => [],
+      legendExtraHeight: () => 12,
+    });
+    expect(padding.value.top).toBe(10);
+  });
+});
+
 describe("useChartPadding legend position", () => {
   it("reserves the legend rows above the plot by default", () => {
     const { padding, legendY, bottomLegendHeight } = layout();

@@ -27,6 +27,11 @@ const DEFAULT_HEIGHT = 200;
 export interface ChartFoundationOptions {
   // Reactive getters for the shared chart props.
   width: () => number | undefined;
+  /**
+   * Narrowest the chart draws at. When it is wider than the container,
+   * the svg overflows it and the chart makes its plot scroll sideways.
+   */
+  minWidth?: () => number;
   height: () => number | undefined;
   title: () => string | undefined;
   titleStyle: () => TitleStyle | undefined;
@@ -53,6 +58,8 @@ export interface ChartFoundationOptions {
   legendPosition?: () => "top" | "bottom" | undefined;
   /** Item flow within the legend strip. Defaults to `"inline"`. */
   legendLayout?: () => LegendLayout | undefined;
+  /** Pixels added under the legend's last row (see `useChartPadding`). */
+  legendExtraHeight?: () => number;
   hasTooltipSlot: () => boolean;
   getCsv: () => string;
   pointerToIndex: (clientX: number, clientY: number) => number | null;
@@ -60,9 +67,9 @@ export interface ChartFoundationOptions {
   /**
    * Axis a finger drags along to scrub the tooltip on touch; the
    * orthogonal direction is left to the browser for page scrolling.
-   * Defaults to `"x"`.
+   * Defaults to `"x"`; `"none"` leaves every drag to the browser.
    */
-  scrubAxis?: () => "x" | "y";
+  scrubAxis?: () => "x" | "y" | "none";
   /**
    * Extra height (in px) the chart adds *below* the SVG plot area
    * (e.g. LineChart's area-section labels). Used to keep the SVG total
@@ -116,14 +123,22 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     downloadButton: opts.downloadButton,
     fullscreen: true,
     fullscreenTarget: opts.fullscreenTarget,
+    // The Escape that closes this chart's tooltip leaves it expanded.
+    skipEscape: (event) => closedByEscape(event),
   });
 
-  const width = computed(() => {
+  /** The width the chart has to show itself in. */
+  const viewportWidth = computed(() => {
     if (isFullscreen.value && measuredWidth.value > 0) {
       return measuredWidth.value;
     }
     return opts.width() ?? (measuredWidth.value || DEFAULT_WIDTH_FALLBACK);
   });
+
+  /** The width the chart draws at, past the viewport with `minWidth`. */
+  const width = computed(() =>
+    Math.max(viewportWidth.value, opts.minWidth?.() ?? 0),
+  );
 
   const height = computed(() => {
     if (isFullscreen.value && measuredHeight.value > 0) {
@@ -149,6 +164,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     inlineLegendLabels: opts.inlineLegendLabels,
     legendPosition: opts.legendPosition,
     legendLayout: opts.legendLayout,
+    legendExtraHeight: opts.legendExtraHeight,
     width: () => width.value,
     height: () => height.value,
     extraBelowHeight: opts.extraBelowHeight,
@@ -160,6 +176,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     tooltipRef,
     tooltipPos,
     handlers: tooltipHandlers,
+    closedByEscape,
   } = useChartTooltip({
     enabled: opts.hasTooltipSlot,
     trigger: opts.tooltipTrigger,
@@ -219,6 +236,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     containerRef,
     svgRef,
     width,
+    viewportWidth,
     height,
     padding,
     legendY,

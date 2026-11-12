@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, getCurrentInstance, nextTick, ref, useId } from "vue";
+import { computed, getCurrentInstance, nextTick, ref, useId, watch } from "vue";
 import { formatNumber, type NumberFormat } from "@cfasim-ui/shared";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import {
@@ -14,10 +14,12 @@ import {
   ChartColorScaleLegend,
   positionLegendItems,
   layoutColorScaleLegend,
+  RAMP_MID_LABEL_HEIGHT,
   colorScaleDomain,
   colorScaleFn,
   colorRampStops,
   pickContrastColor,
+  parseRgb,
   textWidthOrEstimate,
   useChartFontFamily,
   resolvePadding,
@@ -44,6 +46,9 @@ import {
   rotatedLabelFootprint,
   truncateLabel,
 } from "./heatmapLayout.js";
+import HeatmapRowLabels, {
+  type HeatmapRowLabelsProps,
+} from "./HeatmapRowLabels.vue";
 
 /** Styling for the values printed in the cells. */
 export interface HeatmapCellLabels {
@@ -121,6 +126,25 @@ export interface HeatmapProps extends ChartBaseProps {
    */
   missingColor?: string;
   /**
+   * Text printed on cells with a missing value, such as `"–"`, so an
+   * empty cell does not read as a low one. Drawn with `cellLabels`' style
+   * in black or white for contrast with `missingColor`, or in the text
+   * color when there is no fill. Works with or without `cellLabels`.
+   * None by default.
+   */
+  missingLabel?: string;
+  /**
+   * Accessible name of each cell's button with `interactive`, replacing
+   * the default `row, column: value`. Use it to read out what the tooltip
+   * slot shows, which assistive technology does not announce.
+   */
+  cellAriaLabel?: (cell: HeatmapCell) => string;
+  /**
+   * Accessible name of each row label's button with `interactive`,
+   * replacing the row label, e.g. to add what clicking it does.
+   */
+  rowAriaLabel?: (row: HeatmapAxisItem) => string;
+  /**
    * Row height in pixels when `height` is not set: the chart grows to fit
    * every row. Ignored with an explicit `height`, where the rows share
    * the plot. Default 28.
@@ -146,9 +170,17 @@ export interface HeatmapProps extends ChartBaseProps {
   columnLabelAngle?: number | "auto";
   /**
    * Width in pixels reserved for the row labels. Defaults to the widest
-   * label, capped at 40% of the chart width.
+   * label or `rowHeader`, capped at 40% of the chart width.
    */
   rowLabelWidth?: number;
+  /**
+   * Width in pixels each column should keep. When the columns would be
+   * narrower, the chart draws wider than its container and the plot
+   * scrolls sideways, with the row labels pinned at the left. Side
+   * padding for tilted column labels can take a few pixels of it. Unset
+   * by default: the chart always fits its container.
+   */
+  minCellWidth?: number;
   /**
    * Heading printed above the row labels, like a table's first column
    * header. In line with the column labels when they are on top.
@@ -277,16 +309,32 @@ function labelWidths(labels: readonly string[]): number[] {
   return labels.map((l) => textWidthOrEstimate(l, spec, style.fontSize));
 }
 
+/** The row header is drawn bold, so it is measured in its own font. */
+const rowHeaderWidth = computed(() => {
+  if (!props.rowHeader || props.rowAxis === "none") return 0;
+  const style = tickLabelResolved.value;
+  const spec = font({ fontSize: style.fontSize, fontWeight: 600 });
+  return textWidthOrEstimate(props.rowHeader, spec, style.fontSize);
+});
+
 const rowLabelTextWidth = computed(() =>
   props.rowAxis === "none" ? 0 : Math.max(0, ...labelWidths(props.rows)),
 );
 
-/** Pixels available for the row label text (capped at 40% of the chart). */
+/** Width of the row label column's content: the widest label or the header. */
+const rowColumnTextWidth = computed(() =>
+  Math.max(rowLabelTextWidth.value, rowHeaderWidth.value),
+);
+
+/**
+ * Pixels available for the row label text, capped at 40% of the visible
+ * width (the drawn width depends on this with `minCellWidth`).
+ */
 const rowLabelMaxWidth = computed(() =>
   props.rowAxis === "none"
     ? 0
     : (props.rowLabelWidth ??
-      Math.min(rowLabelTextWidth.value, width.value * 0.4)),
+      Math.min(rowColumnTextWidth.value, viewportWidth.value * 0.4)),
 );
 
 /** Pixels left of the plot for the row labels and their gap. */
@@ -456,6 +504,7 @@ const {
   containerRef,
   svgRef,
   width,
+  viewportWidth,
   height,
   padding,
   legendY,
@@ -481,6 +530,7 @@ const {
   exitFullscreen,
 } = useChartFoundation({
   width: () => props.width,
+  minWidth: () => minChartWidth.value,
   height: () => props.height ?? autoHeight.value,
   title: () => props.title,
   titleStyle: () => props.titleStyle,
@@ -498,10 +548,46 @@ const {
   chartPadding: () => effectiveChartPadding.value,
   inlineLegendLabels: () => inlineLegendLabels.value,
   legendPosition: () => props.legendPosition,
+  // A scrolling plot keeps horizontal drags for itself.
+  scrubAxis: () => (scrolls.value ? "none" : "x"),
+  legendExtraHeight: () =>
+    scaleLegend.value?.mid !== undefined ? RAMP_MID_LABEL_HEIGHT : 0,
   hasTooltipSlot: () => hasTooltipSlot.value,
   getCsv: toCsv,
   pointerToIndex,
   onHover: (payload) => emit("hover", payload),
+});
+
+/**
+ * Width that gives every column `minCellWidth` pixels. Side padding for
+ * tilted column labels is left out, since it depends on the drawn width.
+ */
+const minChartWidth = computed(() => {
+  const cell = props.minCellWidth;
+  if (!cell || cell <= 0) return 0;
+  return (
+    baseLeftPadding.value + columnCount.value * cell + baseRightPadding.value
+  );
+});
+
+/** The chart is wider than its container, so the plot scrolls sideways. */
+const scrolls = computed(() => width.value > viewportWidth.value + 0.5);
+
+/** Row labels stay in view over the scrolling plot. */
+const pinRowLabels = computed(() => scrolls.value && props.rowAxis !== "none");
+
+/**
+ * The pinned strip: everything left of the plot, from under the title and
+ * a top legend down to a bottom legend or the svg's bottom.
+ */
+const pinnedBand = computed(() => {
+  const top =
+    padding.value.top - resolvePadding(effectiveChartPadding.value).top;
+  return {
+    width: padding.value.left,
+    top,
+    height: height.value - bottomLegendHeight.value - top,
+  };
 });
 
 /** Height that gives every row `cellHeight` pixels, when `height` is unset. */
@@ -522,11 +608,14 @@ function legendTextWidth(text: string): number {
 const scaleLegend = computed<ColorScaleLegendLayout | null>(() => {
   const scale = colorScaleResolved.value;
   if (!scale?.legend) return null;
+  const domain = scale.domain;
   return layoutColorScaleLegend(
     scale.label,
-    scale.format(scale.domain[0]),
-    scale.format(scale.domain[scale.domain.length - 1]),
+    scale.format(domain[0]),
+    scale.format(domain[domain.length - 1]),
     legendTextWidth,
+    // A diverging scale's middle value sits at the middle of the ramp.
+    { mid: domain.length === 3 ? scale.format(domain[1]) : undefined },
   );
 });
 
@@ -554,9 +643,10 @@ const cellH = computed(() =>
   rowCount.value > 0 ? innerH.value / rowCount.value : 0,
 );
 
+/** Text style for the cell labels, also used by `missingLabel` alone. */
 const cellLabelStyle = computed(() => {
   const l = props.cellLabels;
-  if (!l) return null;
+  if (!l && !props.missingLabel) return null;
   const style = typeof l === "object" ? l : {};
   const fontSize = style.fontSize ?? 11;
   return {
@@ -632,13 +722,29 @@ const cells = computed<RenderedCell[]>(() => {
         fill: color ?? (finite ? undefined : props.missingColor),
         ...geo,
       };
-      if (labels && finite && labelsFit) {
-        const text = labels.format(value);
-        if (fits(text)) {
-          cell.label = {
-            text,
-            fill: labels.color ?? pickContrastColor(color ?? "#ffffff"),
-          };
+      if (labels && labelsFit) {
+        if (finite && props.cellLabels) {
+          const text = labels.format(value);
+          if (fits(text)) {
+            cell.label = {
+              text,
+              fill: labels.color ?? pickContrastColor(color ?? "#ffffff"),
+            };
+          }
+        } else if (!finite && props.missingLabel) {
+          const text = props.missingLabel;
+          if (fits(text)) {
+            cell.label = {
+              text,
+              fill:
+                labels.color ??
+                // A `var()` fill changes with the theme, which a picked
+                // color would not follow; the text color does.
+                (cell.fill && parseRgb(cell.fill)
+                  ? pickContrastColor(cell.fill)
+                  : "currentColor"),
+            };
+          }
         }
       }
       out.push(cell);
@@ -763,6 +869,32 @@ const columnLabelItems = computed<ColumnLabelItem[]>(() => {
 
 const rowHeaderY = computed(() => padding.value.top - COLUMN_LABEL_GAP - 2);
 
+// `clickable` is bound in the template: `hasRowClick` reads the vnode.
+const rowLabelsProps = computed<Omit<HeatmapRowLabelsProps, "clickable">>(
+  () => ({
+    items: rowLabelItems.value,
+    x: rowLabelX.value,
+    header:
+      props.rowHeader && props.rowAxis !== "none"
+        ? rowHeaderLabel.value
+        : undefined,
+    headerY: rowHeaderY.value,
+    labelStyle: tickLabelResolved.value,
+  }),
+);
+
+/** The row header, shortened with `…` past the row label column's width. */
+const rowHeaderLabel = computed(() => {
+  const header = props.rowHeader ?? "";
+  const maxW = rowLabelMaxWidth.value;
+  if (rowHeaderWidth.value <= maxW) return header;
+  const style = tickLabelResolved.value;
+  const spec = font({ fontSize: style.fontSize, fontWeight: 600 });
+  return truncateLabel(header, maxW, (s) =>
+    textWidthOrEstimate(s, spec, style.fontSize),
+  );
+});
+
 /** Baseline of the x-axis title above the column labels (`xLabelOnTop`). */
 const xLabelTopY = computed(
   () =>
@@ -797,6 +929,28 @@ function pointerToIndex(clientX: number, clientY: number): number | null {
     return null;
   }
   return r * columnCount.value + c;
+}
+
+function onRowClick(row: HeatmapAxisItem) {
+  emit("rowClick", row);
+}
+
+function rowButtonAttrs(r: number, row: string) {
+  return {
+    type: "button" as const,
+    class: "heatmap-cell-button heatmap-row-button",
+    "data-cell": `${r}:-1`,
+    tabindex: isFocusStop(r, -1) ? 0 : -1,
+    "aria-label": props.rowAriaLabel
+      ? props.rowAriaLabel({ index: r, label: row })
+      : row,
+    style: {
+      left: `${padding.value.left - rowLabelSpace.value}px`,
+      top: `${padding.value.top + r * cellH.value}px`,
+      width: `${rowLabelSpace.value - 2}px`,
+      height: `${cellH.value}px`,
+    },
+  };
 }
 
 function publicCell(cell: RenderedCell): HeatmapCell {
@@ -848,6 +1002,12 @@ function onCellKeydown(row: number, column: number, event: KeyboardEvent) {
   );
   if (!next) return;
   event.preventDefault();
+  // At the edge the move goes nowhere and no focus event follows, so
+  // bring back a tooltip that Escape dismissed.
+  if (next.row === row && next.column === column) {
+    onCellFocus(row, column);
+    return;
+  }
   focusPos.value = next;
   nextTick(() => cellButton(next.row, next.column)?.focus());
 }
@@ -877,7 +1037,54 @@ function onCellBlur() {
   }
 }
 
+const scrollerRef = ref<HTMLElement | null>(null);
+/** How far the plot is scrolled; the pinned strip paints only past 0. */
+const scrollLeft = ref(0);
+
+/**
+ * Scrolling moves the cells under the tooltip. A focused cell (focus
+ * scrolls it into view after its focus event) gets its tooltip placed
+ * again; a pointer tooltip closes until the pointer moves.
+ */
+function onPlotScroll() {
+  const scroller = scrollerRef.value;
+  if (!scroller) return;
+  scrollLeft.value = scroller.scrollLeft;
+  const focused = document.activeElement;
+  const position =
+    focused instanceof HTMLElement && scroller.contains(focused)
+      ? focused.dataset.cell?.split(":").map(Number)
+      : undefined;
+  if (position && position[1] >= 0) onCellFocus(position[0], position[1]);
+  else onCellBlur();
+}
+
+/** The pinned strip sits outside the scroller, so hand it the wheel. */
+function onPinnedWheel(event: WheelEvent) {
+  const scroller = scrollerRef.value;
+  if (scroller && event.deltaX) scroller.scrollLeft += event.deltaX;
+}
+
+function sameLabels(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+// `hoverIndex` is a position, so reordered rows or columns would put a
+// different cell under the open tooltip. New values alone keep it open.
+// Copies, so an in-place sort is seen and compared against the old order.
+watch(
+  [() => props.rows.slice(), () => props.columns.slice()],
+  ([rows, columns], [oldRows, oldColumns]) => {
+    if (!sameLabels(rows, oldRows) || !sameLabels(columns, oldColumns)) {
+      onCellBlur();
+    }
+  },
+);
+
 function cellButtonLabel(cell: RenderedCell): string {
+  if (props.cellAriaLabel) return props.cellAriaLabel(publicCell(cell));
   const v = Number.isFinite(cell.value) ? formatValue.value(cell.value) : "—";
   return `${cell.row}, ${cell.column}: ${v}`;
 }
@@ -914,7 +1121,11 @@ function toCsv(): string {
     label,
     data: props.rows.map((_, r) => valueAt(r, c)),
   }));
-  return categoricalToCsv(props.rows, series, props.yLabel || "row");
+  return categoricalToCsv(
+    props.rows,
+    series,
+    props.rowHeader || props.yLabel || "row",
+  );
 }
 </script>
 
@@ -946,232 +1157,261 @@ function toCsv(): string {
         The buttons share a wrapper with the svg so their offsets are svg
         coordinates, whatever padding or centering surrounds the chart.
       -->
-      <div class="heatmap-plot">
+      <div class="heatmap-frame">
         <div
-          v-if="interactive"
-          class="heatmap-cells"
-          role="group"
-          :aria-label="`${chartAriaLabel ?? 'Heatmap'} cells`"
+          ref="scrollerRef"
+          class="heatmap-plot"
+          :class="{ 'is-scrolling': scrolls }"
+          :style="
+            pinRowLabels
+              ? { scrollPaddingLeft: `${pinnedBand.width}px` }
+              : undefined
+          "
+          @scroll.passive="onPlotScroll"
         >
-          <template v-for="(row, r) in rows" :key="r">
+          <div
+            v-if="interactive"
+            class="heatmap-cells"
+            role="group"
+            :aria-label="`${chartAriaLabel ?? 'Heatmap'} cells`"
+          >
+            <template v-for="(row, r) in rows" :key="r">
+              <button
+                v-if="rowAxis !== 'none' && !pinRowLabels"
+                v-bind="rowButtonAttrs(r, row)"
+                @click="onRowClick({ index: r, label: row })"
+                @keydown="onCellKeydown(r, -1, $event)"
+                @focus="onCellFocus(r, -1)"
+              />
+              <button
+                v-for="(column, c) in columns"
+                :key="c"
+                type="button"
+                class="heatmap-cell-button"
+                :data-cell="`${r}:${c}`"
+                :tabindex="isFocusStop(r, c) ? 0 : -1"
+                :aria-label="cellButtonLabel(cells[r * columnCount + c])"
+                :style="{
+                  left: `${padding.left + c * cellW}px`,
+                  top: `${padding.top + r * cellH}px`,
+                  width: `${cellW}px`,
+                  height: `${cellH}px`,
+                }"
+                @click="
+                  $emit('cellClick', publicCell(cells[r * columnCount + c]))
+                "
+                @keydown="onCellKeydown(r, c, $event)"
+                @focus="onCellFocus(r, c)"
+                @blur="onCellBlur"
+              />
+            </template>
+          </div>
+          <svg
+            ref="svgRef"
+            :width="width"
+            :height="height"
+            :role="chartRole || undefined"
+            :aria-label="chartAriaLabel || undefined"
+          >
+            <defs v-if="colorScaleResolved">
+              <linearGradient :id="`${gradientId}-ramp`">
+                <stop
+                  v-for="(st, j) in rampStops"
+                  :key="j"
+                  :offset="st.offset"
+                  :stop-color="st.color"
+                />
+              </linearGradient>
+            </defs>
+            <ChartTitle
+              :title="title"
+              :title-style="titleStyle"
+              :bounds="bounds"
+            />
+            <ChartColorScaleLegend
+              v-if="positionedLegend"
+              :layout="positionedLegend.layout"
+              :x="positionedLegend.x"
+              :y="positionedLegend.y"
+              :fill="`url(#${gradientId}-ramp)`"
+              :font-size="legendResolved.fontSize"
+              :text-fill="legendResolved.fill"
+              :font-weight="legendResolved.fontWeight"
+            />
+            <HeatmapRowLabels
+              v-bind="rowLabelsProps"
+              :clickable="hasRowClick()"
+              @row-click="onRowClick"
+            />
+            <!-- column labels -->
+            <text
+              v-for="item in columnLabelItems"
+              :key="'c' + item.index"
+              data-testid="column-label"
+              class="heatmap-axis-label"
+              :class="{ 'is-clickable': hasColumnClick() }"
+              :x="item.x"
+              :y="item.y"
+              :text-anchor="item.anchor"
+              :dominant-baseline="item.baseline"
+              :transform="item.transform"
+              :font-size="tickLabelResolved.fontSize"
+              :fill="tickLabelResolved.fill"
+              :font-weight="tickLabelResolved.fontWeight"
+              :fill-opacity="tickLabelResolved.fillOpacity"
+              @click="
+                $emit('columnClick', { index: item.index, label: item.raw })
+              "
+            >
+              {{ item.label }}
+            </text>
+            <text
+              v-if="xLabelOnTop"
+              data-testid="x-label-top"
+              :x="
+                xLabelAlign === 'left'
+                  ? padding.left
+                  : padding.left + innerW / 2
+              "
+              :y="xLabelTopY"
+              :text-anchor="xLabelAlign === 'left' ? 'start' : 'middle'"
+              :font-size="axisLabelResolved.fontSize"
+              :fill="axisLabelResolved.fill"
+              :font-weight="axisLabelResolved.fontWeight"
+            >
+              {{ xLabel }}
+            </text>
+            <ChartAxisLabels
+              :x-label="xLabelOnTop ? undefined : xLabel"
+              :x-label-align="xLabelAlign"
+              :y-label="yLabel"
+              :padding="padding"
+              :inner-w="innerW"
+              :inner-h="innerH"
+              :height="height - bottomLegendHeight"
+              :label-style="axisLabelResolved"
+            />
+            <!-- cells -->
+            <g>
+              <template
+                v-for="cell in cells"
+                :key="cell.rowIndex + ':' + cell.columnIndex"
+              >
+                <rect
+                  v-if="cell.fill"
+                  data-testid="cell"
+                  :data-row="cell.rowIndex"
+                  :data-column="cell.columnIndex"
+                  :x="cell.x"
+                  :y="cell.y"
+                  :width="cell.w"
+                  :height="cell.h"
+                  :rx="cellRadius || undefined"
+                  :fill="cell.fill"
+                  :stroke="cellStroke"
+                  :stroke-width="cellStroke ? cellStrokeWidth : undefined"
+                />
+              </template>
+            </g>
+            <g v-if="cellLabelStyle" pointer-events="none">
+              <template
+                v-for="cell in cells"
+                :key="cell.rowIndex + ':' + cell.columnIndex"
+              >
+                <text
+                  v-if="cell.label"
+                  data-testid="cell-label"
+                  :x="cell.cx"
+                  :y="cell.cy"
+                  text-anchor="middle"
+                  dominant-baseline="central"
+                  :font-size="cellLabelStyle.fontSize"
+                  :font-weight="cellLabelStyle.fontWeight"
+                  :fill="cell.label.fill"
+                >
+                  {{ cell.label.text }}
+                </text>
+              </template>
+            </g>
+            <!-- hovered / focused cell outline -->
+            <rect
+              v-if="hoverCell && hasTooltipSlot"
+              data-testid="cell-highlight"
+              :x="hoverCell.x"
+              :y="hoverCell.y"
+              :width="hoverCell.w"
+              :height="hoverCell.h"
+              :rx="cellRadius || undefined"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              pointer-events="none"
+            />
+            <!-- hit-test overlay -->
+            <rect
+              data-testid="chart-overlay"
+              :x="padding.left"
+              :y="padding.top"
+              :width="Math.max(0, innerW)"
+              :height="Math.max(0, innerH)"
+              fill="transparent"
+              :style="{ touchAction: scrolls ? 'pan-x pan-y' : 'pan-y' }"
+              v-on="overlayHandlers"
+            />
+          </svg>
+        </div>
+        <!--
+        A wide chart scrolls under this copy of the row labels, which stays
+        put. The svg above keeps its own labels for image exports. With
+        `interactive`, the row buttons move here so their focus ring shows.
+      -->
+        <div
+          v-if="pinRowLabels"
+          class="heatmap-pinned"
+          :style="{ width: `${pinnedBand.width}px`, height: `${height}px` }"
+          @wheel.passive="onPinnedWheel"
+        >
+          <svg :width="pinnedBand.width" :height="height" aria-hidden="true">
+            <rect
+              v-if="scrollLeft > 0"
+              class="heatmap-pinned-bg"
+              data-testid="pinned-bg"
+              x="0"
+              :y="pinnedBand.top"
+              :width="pinnedBand.width"
+              :height="Math.max(0, pinnedBand.height)"
+            />
+            <HeatmapRowLabels
+              v-bind="rowLabelsProps"
+              :clickable="hasRowClick()"
+              test-id-prefix="pinned-"
+              @row-click="onRowClick"
+            />
+            <ChartAxisLabels
+              :y-label="yLabel"
+              :padding="padding"
+              :inner-w="innerW"
+              :inner-h="innerH"
+              :height="height - bottomLegendHeight"
+              :label-style="axisLabelResolved"
+            />
+          </svg>
+          <div
+            v-if="interactive"
+            class="heatmap-cells"
+            role="group"
+            :aria-label="`${chartAriaLabel ?? 'Heatmap'} rows`"
+          >
             <button
-              v-if="rowAxis !== 'none'"
-              type="button"
-              class="heatmap-cell-button heatmap-row-button"
-              :data-cell="`${r}:-1`"
-              :tabindex="isFocusStop(r, -1) ? 0 : -1"
-              :aria-label="row"
-              :style="{
-                left: `${padding.left - rowLabelSpace}px`,
-                top: `${padding.top + r * cellH}px`,
-                width: `${rowLabelSpace - 2}px`,
-                height: `${cellH}px`,
-              }"
-              @click="$emit('rowClick', { index: r, label: row })"
+              v-for="(row, r) in rows"
+              :key="r"
+              v-bind="rowButtonAttrs(r, row)"
+              @click="onRowClick({ index: r, label: row })"
               @keydown="onCellKeydown(r, -1, $event)"
               @focus="onCellFocus(r, -1)"
             />
-            <button
-              v-for="(column, c) in columns"
-              :key="c"
-              type="button"
-              class="heatmap-cell-button"
-              :data-cell="`${r}:${c}`"
-              :tabindex="isFocusStop(r, c) ? 0 : -1"
-              :aria-label="cellButtonLabel(cells[r * columnCount + c])"
-              :style="{
-                left: `${padding.left + c * cellW}px`,
-                top: `${padding.top + r * cellH}px`,
-                width: `${cellW}px`,
-                height: `${cellH}px`,
-              }"
-              @click="
-                $emit('cellClick', publicCell(cells[r * columnCount + c]))
-              "
-              @keydown="onCellKeydown(r, c, $event)"
-              @focus="onCellFocus(r, c)"
-              @blur="onCellBlur"
-            />
-          </template>
+          </div>
         </div>
-        <svg
-          ref="svgRef"
-          :width="width"
-          :height="height"
-          :role="chartRole || undefined"
-          :aria-label="chartAriaLabel || undefined"
-        >
-          <defs v-if="colorScaleResolved">
-            <linearGradient :id="`${gradientId}-ramp`">
-              <stop
-                v-for="(st, j) in rampStops"
-                :key="j"
-                :offset="st.offset"
-                :stop-color="st.color"
-              />
-            </linearGradient>
-          </defs>
-          <ChartTitle
-            :title="title"
-            :title-style="titleStyle"
-            :bounds="bounds"
-          />
-          <ChartColorScaleLegend
-            v-if="positionedLegend"
-            :layout="positionedLegend.layout"
-            :x="positionedLegend.x"
-            :y="positionedLegend.y"
-            :fill="`url(#${gradientId}-ramp)`"
-            :font-size="legendResolved.fontSize"
-            :text-fill="legendResolved.fill"
-            :font-weight="legendResolved.fontWeight"
-          />
-          <!-- row labels -->
-          <text
-            v-for="item in rowLabelItems"
-            :key="'r' + item.index"
-            data-testid="row-label"
-            class="heatmap-axis-label"
-            :class="{ 'is-clickable': hasRowClick() }"
-            :x="rowLabelX"
-            :y="item.y"
-            text-anchor="end"
-            dominant-baseline="middle"
-            :font-size="tickLabelResolved.fontSize"
-            :fill="tickLabelResolved.fill"
-            :font-weight="tickLabelResolved.fontWeight"
-            :fill-opacity="tickLabelResolved.fillOpacity"
-            @click="$emit('rowClick', { index: item.index, label: item.raw })"
-          >
-            {{ item.label }}
-          </text>
-          <text
-            v-if="rowHeader && rowAxis !== 'none'"
-            data-testid="row-header"
-            :x="rowLabelX"
-            :y="rowHeaderY"
-            text-anchor="end"
-            :font-size="tickLabelResolved.fontSize"
-            :fill="tickLabelResolved.fill"
-            font-weight="600"
-            :fill-opacity="tickLabelResolved.fillOpacity"
-          >
-            {{ rowHeader }}
-          </text>
-          <!-- column labels -->
-          <text
-            v-for="item in columnLabelItems"
-            :key="'c' + item.index"
-            data-testid="column-label"
-            class="heatmap-axis-label"
-            :class="{ 'is-clickable': hasColumnClick() }"
-            :x="item.x"
-            :y="item.y"
-            :text-anchor="item.anchor"
-            :dominant-baseline="item.baseline"
-            :transform="item.transform"
-            :font-size="tickLabelResolved.fontSize"
-            :fill="tickLabelResolved.fill"
-            :font-weight="tickLabelResolved.fontWeight"
-            :fill-opacity="tickLabelResolved.fillOpacity"
-            @click="
-              $emit('columnClick', { index: item.index, label: item.raw })
-            "
-          >
-            {{ item.label }}
-          </text>
-          <text
-            v-if="xLabelOnTop"
-            data-testid="x-label-top"
-            :x="
-              xLabelAlign === 'left' ? padding.left : padding.left + innerW / 2
-            "
-            :y="xLabelTopY"
-            :text-anchor="xLabelAlign === 'left' ? 'start' : 'middle'"
-            :font-size="axisLabelResolved.fontSize"
-            :fill="axisLabelResolved.fill"
-            :font-weight="axisLabelResolved.fontWeight"
-          >
-            {{ xLabel }}
-          </text>
-          <ChartAxisLabels
-            :x-label="xLabelOnTop ? undefined : xLabel"
-            :x-label-align="xLabelAlign"
-            :y-label="yLabel"
-            :padding="padding"
-            :inner-w="innerW"
-            :inner-h="innerH"
-            :height="height - bottomLegendHeight"
-            :label-style="axisLabelResolved"
-          />
-          <!-- cells -->
-          <g>
-            <template
-              v-for="cell in cells"
-              :key="cell.rowIndex + ':' + cell.columnIndex"
-            >
-              <rect
-                v-if="cell.fill"
-                data-testid="cell"
-                :data-row="cell.rowIndex"
-                :data-column="cell.columnIndex"
-                :x="cell.x"
-                :y="cell.y"
-                :width="cell.w"
-                :height="cell.h"
-                :rx="cellRadius || undefined"
-                :fill="cell.fill"
-                :stroke="cellStroke"
-                :stroke-width="cellStroke ? cellStrokeWidth : undefined"
-              />
-            </template>
-          </g>
-          <g v-if="cellLabelStyle" pointer-events="none">
-            <template
-              v-for="cell in cells"
-              :key="cell.rowIndex + ':' + cell.columnIndex"
-            >
-              <text
-                v-if="cell.label"
-                data-testid="cell-label"
-                :x="cell.cx"
-                :y="cell.cy"
-                text-anchor="middle"
-                dominant-baseline="central"
-                :font-size="cellLabelStyle.fontSize"
-                :font-weight="cellLabelStyle.fontWeight"
-                :fill="cell.label.fill"
-              >
-                {{ cell.label.text }}
-              </text>
-            </template>
-          </g>
-          <!-- hovered / focused cell outline -->
-          <rect
-            v-if="hoverCell && hasTooltipSlot"
-            data-testid="cell-highlight"
-            :x="hoverCell.x"
-            :y="hoverCell.y"
-            :width="hoverCell.w"
-            :height="hoverCell.h"
-            :rx="cellRadius || undefined"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            pointer-events="none"
-          />
-          <!-- hit-test overlay -->
-          <rect
-            data-testid="chart-overlay"
-            :x="padding.left"
-            :y="padding.top"
-            :width="Math.max(0, innerW)"
-            :height="Math.max(0, innerH)"
-            fill="transparent"
-            style="touch-action: pan-y"
-            v-on="overlayHandlers"
-          />
-        </svg>
       </div>
       <div
         v-if="hasTooltipSlot && hoverIndex !== null && hoverSlotProps"
@@ -1227,8 +1467,39 @@ function toCsv(): string {
   cursor: pointer;
 }
 
+.heatmap-frame {
+  position: relative;
+}
+
 .heatmap-plot {
   position: relative;
+}
+
+.heatmap-plot.is-scrolling {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.heatmap-pinned {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.heatmap-pinned svg {
+  display: block;
+}
+
+/* Blocks hover on the cells scrolled underneath. */
+.heatmap-pinned-bg {
+  fill: var(--heatmap-pinned-bg, var(--color-bg, Canvas));
+  pointer-events: auto;
+}
+
+.heatmap-pinned :deep(.heatmap-axis-label) {
+  pointer-events: auto;
 }
 
 .heatmap-cells {

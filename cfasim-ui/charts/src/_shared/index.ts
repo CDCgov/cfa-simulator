@@ -151,6 +151,7 @@ export {
   layoutColorScaleLegend,
   RAMP_WIDTH,
   RAMP_HEIGHT,
+  RAMP_MID_LABEL_HEIGHT,
   type ColorScaleLegendLayout,
 } from "./colorScaleLegend.js";
 export { default as ChartColorScaleLegend } from "./ChartColorScaleLegend.vue";

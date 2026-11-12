@@ -146,6 +146,8 @@ export interface ChartMenuOptions {
   fullscreen?: boolean;
   /** Forwarded to `useChartFullscreen` — see its `target` option. */
   fullscreenTarget?: () => string | HTMLElement | undefined;
+  /** Forwarded to `useChartFullscreen`: see its `skipEscape` option. */
+  skipEscape?: (event: KeyboardEvent) => boolean;
 }
 
 /**
@@ -165,7 +167,10 @@ export function useChartMenu(opts: ChartMenuOptions) {
   }
 
   const fullscreen = opts.fullscreen
-    ? useChartFullscreen({ target: opts.fullscreenTarget })
+    ? useChartFullscreen({
+        target: opts.fullscreenTarget,
+        skipEscape: opts.skipEscape,
+      })
     : null;
 
   const items = computed<ChartMenuItem[]>(() => {

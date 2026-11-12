@@ -80,14 +80,14 @@ const SCENARIOS = [
     name: "charts: LineChart only",
     pkg: "@cfasim-ui/charts",
     imports: ["LineChart"],
-    limit: 33 * KB,
+    limit: 34 * KB,
     lazyChunks: 0,
   },
   {
     name: "charts: BarChart only",
     pkg: "@cfasim-ui/charts",
     imports: ["BarChart"],
-    limit: 29 * KB,
+    limit: 30 * KB,
     lazyChunks: 0,
   },
   {
@@ -109,14 +109,14 @@ const SCENARIOS = [
     name: "charts: VegaLiteChart",
     pkg: "@cfasim-ui/charts/vega-lite",
     imports: ["VegaLiteChart"],
-    limit: 57 * KB,
+    limit: 58 * KB,
     lazyChunks: 0,
   },
   {
     name: "charts: everything",
     pkg: "@cfasim-ui/charts",
     imports: "*",
-    limit: 120 * KB,
+    limit: 122 * KB,
     lazyChunks: 0,
   },
 ];
@@ -131,7 +131,7 @@ const CSS_LIMITS = [
   {
     name: "@cfasim-ui/charts CSS",
     path: "cfasim-ui/charts/dist/index.css",
-    limit: 15 * KB,
+    limit: 16 * KB,
   },
   {
     name: "@cfasim-ui/theme (all CSS)",

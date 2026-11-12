@@ -1,12 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
-import { ref, effectScope } from "vue";
+import { ref, effectScope, nextTick } from "vue";
 import { useChartTooltip } from "./useChartTooltip.js";
 
-function setup(scrubAxis?: "x" | "y") {
+function setup(scrubAxis?: "x" | "y" | "none") {
   const containerRef = ref<HTMLElement | null>(null);
   const onHover = vi.fn();
   let api!: ReturnType<typeof useChartTooltip>;
-  effectScope().run(() => {
+  const scope = effectScope();
+  scope.run(() => {
     api = useChartTooltip({
       enabled: () => true,
       // 10 client px per data index, so a 40px drag advances 4 indices.
@@ -16,7 +17,7 @@ function setup(scrubAxis?: "x" | "y") {
       onHover,
     });
   });
-  return { ...api, onHover };
+  return { ...api, onHover, scope };
 }
 
 function touch(x: number, y: number) {
@@ -90,5 +91,65 @@ describe("useChartTooltip touch gestures", () => {
     handlers.touchmove(across);
     expect(across.preventDefault).not.toHaveBeenCalled();
     expect(hoverIndex.value).toBeNull();
+  });
+});
+
+describe("useChartTooltip scrubAxis none", () => {
+  it("leaves a drag in either direction to the browser", () => {
+    for (const [dx, dy] of [
+      [40, 5],
+      [5, 40],
+    ]) {
+      const { handlers, hoverIndex } = setup("none");
+      handlers.touchstart(touch(100, 100));
+      expect(hoverIndex.value).toBe(10);
+      const move = touch(100 + dx, 100 + dy);
+      handlers.touchmove(move);
+      expect(move.preventDefault).not.toHaveBeenCalled();
+      expect(hoverIndex.value).toBeNull();
+    }
+  });
+});
+
+describe("useChartTooltip Escape", () => {
+  function escape() {
+    const event = new KeyboardEvent("keydown", {
+      key: "Escape",
+      cancelable: true,
+    });
+    document.body.dispatchEvent(event);
+    return event;
+  }
+
+  it("dismisses an open tooltip and records the key press", async () => {
+    const { handlers, hoverIndex, onHover, scope, closedByEscape } = setup();
+    handlers.mousemove({ clientX: 30, clientY: 0 } as MouseEvent);
+    expect(hoverIndex.value).toBe(3);
+    await nextTick();
+    const event = escape();
+    expect(hoverIndex.value).toBeNull();
+    expect(onHover).toHaveBeenLastCalledWith(null);
+    // useChartFullscreen skips a recorded Escape, so the chart stays
+    // expanded. Not prevented: reka popovers ignore a prevented Escape.
+    expect(closedByEscape(event)).toBe(true);
+    expect(event.defaultPrevented).toBe(false);
+    // The next pointer move brings it back.
+    handlers.mousemove({ clientX: 30, clientY: 0 } as MouseEvent);
+    expect(hoverIndex.value).toBe(3);
+    // Disposing the scope removes the listener the open tooltip holds.
+    scope.stop();
+    expect(closedByEscape(escape())).toBe(false);
+  });
+
+  it("leaves Escape alone with no tooltip open", async () => {
+    const { handlers, onHover, scope, closedByEscape } = setup();
+    handlers.mousemove({ clientX: 30, clientY: 0 } as MouseEvent);
+    await nextTick();
+    handlers.mouseleave();
+    await nextTick();
+    onHover.mockClear();
+    expect(closedByEscape(escape())).toBe(false);
+    expect(onHover).not.toHaveBeenCalled();
+    scope.stop();
   });
 });

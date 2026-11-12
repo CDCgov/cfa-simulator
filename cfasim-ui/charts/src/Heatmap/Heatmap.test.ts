@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { nextTick } from "vue";
+import { nextTick, reactive } from "vue";
 import { mount } from "@vue/test-utils";
-import Heatmap from "./Heatmap.vue";
+import Heatmap, { type HeatmapAxisItem, type HeatmapCell } from "./Heatmap.vue";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import * as download from "../ChartMenu/download.js";
 
@@ -462,6 +462,202 @@ describe("Heatmap", () => {
     wrapper.unmount();
   });
 
+  it("widens the row label column to fit rowHeader, within the 40% cap", () => {
+    // happy-dom cannot measure text, so widths are 0.6em per character.
+    const fontSize = 10;
+    const headerWidth = "Reference date".length * fontSize * 0.6;
+    const wrapper = mount(Heatmap, {
+      props: {
+        ...base,
+        rows: ["2025-10-04", "2025-10-11"],
+        rowHeader: "Reference date",
+        tickLabelStyle: { fontSize },
+      },
+    });
+    const header = wrapper.get('[data-testid="row-header"]');
+    expect(header.text()).toBe("Reference date");
+    expect(Number(header.attributes("x"))).toBeGreaterThanOrEqual(headerWidth);
+    const capped = mount(Heatmap, {
+      props: { ...base, width: 200, rowHeader: "A very long row header" },
+    });
+    expect(capped.get('[data-testid="row-header"]').text()).toMatch(/…$/);
+    wrapper.unmount();
+    capped.unmount();
+  });
+
+  it("prints missingLabel on missing cells, in contrast with their fill", () => {
+    const filled = mount(Heatmap, {
+      props: {
+        ...base,
+        cellLabels: true,
+        missingColor: "#eeeeee",
+        missingLabel: "–",
+      },
+    });
+    const labels = filled.findAll('[data-testid="cell-label"]');
+    expect(labels.map((l) => l.text())).toContain("–");
+    expect(labels.find((l) => l.text() === "–")!.attributes("fill")).toBe(
+      "#1a1a1a",
+    );
+    // A `var()` fill follows the theme, so the text color is used.
+    const themed = mount(Heatmap, {
+      props: {
+        ...base,
+        missingColor: "var(--color-bg-subtle)",
+        missingLabel: "–",
+      },
+    });
+    expect(themed.get('[data-testid="cell-label"]').attributes("fill")).toBe(
+      "currentColor",
+    );
+    themed.unmount();
+    // Without cellLabels only the missing cell is labeled, in the text color.
+    const bare = mount(Heatmap, { props: { ...base, missingLabel: "–" } });
+    const only = bare.findAll('[data-testid="cell-label"]');
+    expect(only.map((l) => l.text())).toEqual(["–"]);
+    expect(only[0].attributes("fill")).toBe("currentColor");
+    filled.unmount();
+    bare.unmount();
+  });
+
+  it("labels the middle of a three-value domain in the legend", () => {
+    const diverging = mount(Heatmap, {
+      props: {
+        ...base,
+        valueFormat: "%.1f",
+        colorScale: { domain: [-1, 0, 1], range: ["#f00", "#fff", "#00f"] },
+      },
+    });
+    expect(diverging.get('[data-testid="legend-color-scale-mid"]').text()).toBe(
+      "0.0",
+    );
+    const sequential = mount(Heatmap, { props: { ...base, colorScale: mono } });
+    expect(
+      sequential.find('[data-testid="legend-color-scale-mid"]').exists(),
+    ).toBe(false);
+    // The middle label hangs under the legend row, so the plot moves down.
+    const plotTop = (w: typeof diverging) =>
+      Number(w.get('[data-testid="chart-overlay"]').attributes("y"));
+    expect(plotTop(diverging) - plotTop(sequential)).toBe(12);
+    diverging.unmount();
+    sequential.unmount();
+  });
+
+  it("scrolls sideways with row labels pinned when columns pass minCellWidth", async () => {
+    const columns = ["a", "b", "c", "d", "e", "f"];
+    const data = base.rows.map(() => columns.map((_, i) => i));
+    const wrapper = mount(Heatmap, {
+      props: {
+        ...base,
+        columns,
+        data,
+        width: 300,
+        minCellWidth: 100,
+        rowHeader: "State",
+        interactive: true,
+      },
+    });
+    const overlay = wrapper.get('[data-testid="chart-overlay"]').attributes();
+    expect(Number(overlay.width) / columns.length).toBeCloseTo(100);
+    expect(
+      Number(wrapper.get(".heatmap-plot > svg").attributes("width")),
+    ).toBeGreaterThan(300);
+    expect(wrapper.get(".heatmap-plot").classes()).toContain("is-scrolling");
+    const pinned = wrapper.get(".heatmap-pinned");
+    expect(
+      pinned.findAll('[data-testid="pinned-row-label"]').map((l) => l.text()),
+    ).toEqual(["AZ", "CA"]);
+    expect(pinned.find('[data-testid="pinned-row-header"]').text()).toBe(
+      "State",
+    );
+    // The row buttons move to the pinned strip, so their focus ring shows.
+    expect(pinned.findAll(".heatmap-row-button").length).toBe(2);
+    expect(
+      wrapper.get(".heatmap-plot").findAll(".heatmap-row-button").length,
+    ).toBe(0);
+    await pinned
+      .findAll('[data-testid="pinned-row-label"]')[1]
+      .trigger("click");
+    expect(wrapper.emitted("rowClick")![0][0]).toEqual({
+      index: 1,
+      label: "CA",
+    });
+    // The strip paints over the cells only once they scroll under it, so
+    // nothing of the unscrolled chart (tilted column labels) is hidden.
+    expect(pinned.find('[data-testid="pinned-bg"]').exists()).toBe(false);
+    const scroller = wrapper.get(".heatmap-plot");
+    Object.defineProperty(scroller.element, "scrollLeft", { value: 40 });
+    await scroller.trigger("scroll");
+    expect(pinned.find('[data-testid="pinned-bg"]').exists()).toBe(true);
+    // Room to spare: no scrolling, no pinned copy.
+    await wrapper.setProps({ width: 1000 });
+    expect(wrapper.get(".heatmap-plot").classes()).not.toContain(
+      "is-scrolling",
+    );
+    expect(wrapper.find(".heatmap-pinned").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("closes a pointer tooltip when the plot scrolls under it", async () => {
+    const wrapper = mount(Heatmap, {
+      props: { ...base, minCellWidth: 200, tooltipTrigger: "hover" },
+    });
+    await wrapper
+      .get('[data-testid="chart-overlay"]')
+      .trigger("mousemove", cellCenter(wrapper, 0, 0));
+    expect(wrapper.find(".chart-tooltip-content").exists()).toBe(true);
+    await wrapper.get(".heatmap-plot").trigger("scroll");
+    expect(wrapper.find(".chart-tooltip-content").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("closes the tooltip when the rows are sorted in place", async () => {
+    // A parent's reactive arrays sorted in place keep their identity.
+    const rows = reactive(["AZ", "CA"]);
+    const data = reactive([
+      [0, 0.5, 1],
+      [1, NaN, 0],
+    ]);
+    const wrapper = mount(Heatmap, {
+      props: { ...base, rows, data, tooltipTrigger: "hover" },
+    });
+    await wrapper
+      .get('[data-testid="chart-overlay"]')
+      .trigger("mousemove", cellCenter(wrapper, 0, 0));
+    expect(wrapper.find(".chart-tooltip-content").exists()).toBe(true);
+    rows.reverse();
+    data.reverse();
+    await nextTick();
+    expect(wrapper.find(".chart-tooltip-content").exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("closes the tooltip when the rows are reordered, not when values change", async () => {
+    const wrapper = mount(Heatmap, {
+      props: { ...base, tooltipTrigger: "hover" },
+    });
+    const overlay = wrapper.get('[data-testid="chart-overlay"]');
+    await overlay.trigger("mousemove", cellCenter(wrapper, 0, 0));
+    expect(wrapper.get(".chart-tooltip-label").text()).toBe("AZ");
+    await wrapper.setProps({
+      data: [
+        [9, 0.5, 1],
+        [1, NaN, 0],
+      ],
+    });
+    expect(wrapper.get(".chart-tooltip-value").text()).toBe("9");
+    await wrapper.setProps({
+      rows: ["CA", "AZ"],
+      data: [
+        [1, NaN, 0],
+        [9, 0.5, 1],
+      ],
+    });
+    expect(wrapper.find(".chart-tooltip-content").exists()).toBe(false);
+    expect(wrapper.emitted("hover")!.at(-1)![0]).toBeNull();
+    wrapper.unmount();
+  });
+
   describe("interactive", () => {
     it("renders a labeled button per cell and row with one tab stop", () => {
       const wrapper = mount(Heatmap, {
@@ -541,6 +737,48 @@ describe("Heatmap", () => {
       wrapper.unmount();
     });
 
+    it("names buttons with cellAriaLabel and rowAriaLabel", () => {
+      const wrapper = mount(Heatmap, {
+        props: {
+          ...base,
+          interactive: true,
+          cellAriaLabel: (cell: HeatmapCell) =>
+            `${cell.row} with ${cell.column}: score ${cell.value}`,
+          rowAriaLabel: (row: HeatmapAxisItem) =>
+            `${row.label}. Open detail (row ${row.index + 1})`,
+        },
+      });
+      expect(wrapper.get('[data-cell="0:1"]').attributes("aria-label")).toBe(
+        "AZ with b: score 0.5",
+      );
+      expect(wrapper.get('[data-cell="1:-1"]').attributes("aria-label")).toBe(
+        "CA. Open detail (row 2)",
+      );
+      wrapper.unmount();
+    });
+
+    it("hides the tooltip on Escape and shows it again on the next arrow key", async () => {
+      const wrapper = mount(Heatmap, {
+        props: { ...base, interactive: true, tooltipTrigger: "hover" },
+        attachTo: document.body,
+      });
+      const cell = wrapper.get('[data-cell="0:2"]');
+      (cell.element as HTMLButtonElement).focus();
+      await nextTick();
+      expect(wrapper.find(".chart-tooltip-content").exists()).toBe(true);
+      cell.element.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+      await nextTick();
+      expect(wrapper.find(".chart-tooltip-content").exists()).toBe(false);
+      expect(document.activeElement).toBe(cell.element);
+      // Already in the last column: the move goes nowhere, the tooltip returns.
+      await cell.trigger("keydown", { key: "ArrowRight" });
+      expect(wrapper.find(".chart-tooltip-content").exists()).toBe(true);
+      expect(document.activeElement).toBe(cell.element);
+      wrapper.unmount();
+    });
+
     it("lays the buttons over the svg in a shared wrapper", () => {
       const wrapper = mount(Heatmap, {
         props: { ...base, interactive: true },
@@ -550,6 +788,18 @@ describe("Heatmap", () => {
       expect(plot.find("svg").exists()).toBe(true);
       wrapper.unmount();
     });
+  });
+
+  it("heads the CSV row column with rowHeader before yLabel", () => {
+    const spy = vi.spyOn(download, "downloadCsv").mockImplementation(() => {});
+    const wrapper = mount(Heatmap, {
+      props: { ...base, menu: true, yLabel: "State", rowHeader: "Location" },
+    });
+    const items = wrapper.findComponent(ChartMenu).props("items");
+    items.find((i) => i.label === "Download CSV")!.action();
+    expect(spy.mock.calls[0][0]).toMatch(/^Location,a,b,c\n/);
+    spy.mockRestore();
+    wrapper.unmount();
   });
 
   it("downloads the matrix as CSV with the row header from yLabel", () => {

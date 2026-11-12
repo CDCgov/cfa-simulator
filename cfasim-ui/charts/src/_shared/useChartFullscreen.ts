@@ -82,6 +82,11 @@ export interface ChartFullscreenOptions {
    * inside it.
    */
   target?: () => string | HTMLElement | undefined;
+  /**
+   * Escape presses to leave alone, such as the one that just closed this
+   * chart's tooltip, so the chart stays expanded on that press.
+   */
+  skipEscape?: (event: KeyboardEvent) => boolean;
 }
 
 /**
@@ -162,6 +167,7 @@ export function useChartFullscreen(opts: ChartFullscreenOptions = {}) {
 
   function onKey(e: KeyboardEvent) {
     if (e.key !== "Escape" || !isFullscreen.value) return;
+    if (opts.skipEscape?.(e)) return;
     // Skip when Esc is closing a menu/dialog layered on top of us so we
     // don't collapse the chart at the same time. Reka's dropdown menu
     // uses a document-level Esc listener and doesn't call preventDefault,

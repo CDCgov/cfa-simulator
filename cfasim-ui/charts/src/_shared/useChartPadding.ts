@@ -89,6 +89,11 @@ export interface ChartPaddingOptions {
   legendPosition?: () => "top" | "bottom" | undefined;
   /** Item flow within the strip. Defaults to `"inline"`. */
   legendLayout?: () => LegendLayout | undefined;
+  /**
+   * Pixels added under the legend's last row for an item that hangs
+   * below it (a color scale's middle label). 0 without a legend.
+   */
+  legendExtraHeight?: () => number;
   width: () => number;
   height: () => number;
   /**
@@ -264,9 +269,11 @@ export function useChartPadding(opts: ChartPaddingOptions) {
   });
 
   const legendAtBottom = computed(() => opts.legendPosition?.() === "bottom");
-  const legendHeight = computed(
-    () => inlineLegendLayout.value.rowCount * INLINE_LEGEND_ROW_HEIGHT,
-  );
+  const legendHeight = computed(() => {
+    const rows = inlineLegendLayout.value.rowCount;
+    if (rows === 0) return 0;
+    return rows * INLINE_LEGEND_ROW_HEIGHT + (opts.legendExtraHeight?.() ?? 0);
+  });
   /**
    * Height of the legend strip when it sits under the plot, else 0. The
    * x-axis label and anything else drawn against the svg's bottom edge

@@ -94,3 +94,108 @@ test("keyboard users reach cells through the interactive buttons", async ({
   await page.keyboard.press("Enter");
   await expect(page.getByText("Clicked: Colorado")).toBeVisible();
 });
+
+test("Escape hides a focused cell's tooltip until the next arrow key", async ({
+  page,
+}) => {
+  await page.goto("./cfasim-ui/charts/heatmap");
+  const chart = page.locator('[data-testid="scores-heatmap"]');
+  await chart.scrollIntoViewIfNeeded();
+  const tooltip = chart.locator(".chart-tooltip-content");
+  await chart.locator('[data-cell="0:3"]').focus();
+  await expect(tooltip).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(tooltip).toHaveCount(0);
+  await expect(chart.locator('[data-cell="0:3"]')).toBeFocused();
+  // Last column: ArrowRight stays put and brings the tooltip back.
+  await page.keyboard.press("ArrowRight");
+  await expect(tooltip).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("ArrowDown");
+  await expect(tooltip.locator(".chart-tooltip-label")).toHaveText("Colorado");
+});
+
+test("a wide chart scrolls under its pinned row labels", async ({ page }) => {
+  await page.goto("./cfasim-ui/charts/heatmap");
+  const chart = page.locator('[data-testid="scrolling-heatmap"]');
+  await scrollIntoSettledView(chart);
+  const scroller = chart.locator(".heatmap-plot");
+  const [clientWidth, scrollWidth] = await scroller.evaluate((el) => [
+    el.clientWidth,
+    el.scrollWidth,
+  ]);
+  expect(scrollWidth).toBeGreaterThan(clientWidth);
+  // Every value stays printed: no column is too narrow for its label.
+  await expect(chart.locator('[data-testid="cell-label"]')).toHaveCount(24);
+
+  const pinnedLabel = chart.locator('[data-testid="pinned-row-label"]').first();
+  const before = (await pinnedLabel.boundingBox())!;
+  const pinned = (await chart.locator(".heatmap-pinned").boundingBox())!;
+
+  // Keyboard focus on the last column scrolls it into view, clear of the
+  // pinned strip.
+  await chart.locator('[data-cell="0:5"]').focus();
+  await expect
+    .poll(() => scroller.evaluate((el) => el.scrollLeft))
+    .toBeGreaterThan(0);
+  const lastCell = chart.locator(
+    '[data-testid="cell"][data-row="0"][data-column="5"]',
+  );
+  const cellBox = (await lastCell.boundingBox())!;
+  expect(cellBox.x).toBeGreaterThanOrEqual(pinned.x + pinned.width - 1);
+  expect((await pinnedLabel.boundingBox())!.x).toBeCloseTo(before.x, 0);
+  await expect(chart.locator('[data-testid="pinned-bg"]')).toBeVisible();
+  // The tooltip follows the cell to where focus scrolled it.
+  const tooltip = chart.locator(".chart-tooltip-content");
+  await expect(tooltip.locator(".chart-tooltip-label")).toHaveText("Alabama");
+  await expect
+    .poll(async () => {
+      const box = (await tooltip.boundingBox())!;
+      return (
+        box.x <= cellBox.x + cellBox.width && box.x + box.width >= cellBox.x
+      );
+    })
+    .toBe(true);
+
+  // The pinned strip hides the cells scrolled under it from the pointer.
+  await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+  await page.mouse.move(cellBox.x + 4, cellBox.y + 4);
+  await expect(chart.locator(".chart-tooltip-name")).toHaveText(
+    "Gradient boosting",
+  );
+  await page.mouse.move(pinned.x + pinned.width / 2, cellBox.y + 4);
+  await expect(chart.locator(".chart-tooltip-content")).toHaveCount(0);
+
+  // A wheel over the pinned strip scrolls the plot.
+  const scrolled = await scroller.evaluate((el) => el.scrollLeft);
+  await page.mouse.wheel(-80, 0);
+  await expect
+    .poll(() => scroller.evaluate((el) => el.scrollLeft))
+    .toBeLessThan(scrolled);
+});
+
+test("a wide chart in a min-width: 0 grid track scrolls inside it", async ({
+  page,
+}) => {
+  await page.goto("./cfasim-ui/charts/heatmap");
+  const chart = page.locator('[data-testid="scrolling-heatmap"]');
+  await scrollIntoSettledView(chart);
+  // Put the demo in the first of two equal grid columns. Like any wide
+  // content, the chart widens its track unless the item has min-width: 0.
+  await chart.evaluate((el) => {
+    const host = el.parentElement!;
+    host.style.cssText =
+      "display: grid; grid-template-columns: 1fr 1fr; width: 600px";
+    el.style.minWidth = "0";
+    host.append(document.createElement("div"));
+  });
+  const scroller = chart.locator(".heatmap-plot");
+  await expect
+    .poll(() => chart.evaluate((el) => el.getBoundingClientRect().width))
+    .toBeLessThanOrEqual(300);
+  const [clientWidth, scrollWidth] = await scroller.evaluate((el) => [
+    el.clientWidth,
+    el.scrollWidth,
+  ]);
+  expect(scrollWidth).toBeGreaterThan(clientWidth);
+});

@@ -129,7 +129,9 @@ colors are mixed in JS; `var()` colors go through CSS `color-mix()` and so
 follow the theme.
 
 A three-value `domain` with three colors makes a diverging scale with the
-middle color at the middle value:
+middle color at the middle value. The legend then labels the middle value
+too, under the middle of the ramp, so readers can see where the neutral
+point sits:
 
 <ComponentDemo>
   <Heatmap
@@ -142,6 +144,7 @@ middle color at the middle value:
     :cell-gap="2"
     :cell-radius="3"
     missing-color="var(--color-bg-subtle)"
+    missing-label="–"
     :cell-height="36"
     :width="420"
     tooltip-trigger="hover"
@@ -163,6 +166,7 @@ middle color at the middle value:
   :cell-gap="2"
   :cell-radius="3"
   missing-color="var(--color-bg-subtle)"
+  missing-label="–"
   :cell-height="36"
   :width="420"
   tooltip-trigger="hover"
@@ -190,8 +194,8 @@ function.
 
 Column labels sit under the plot by default (`columnAxis: "bottom"`), above
 it with `"top"`, or not at all with `"none"`; `rowAxis: "none"` drops the
-row labels. Row labels take the width of the widest one (capped at 40% of
-the chart, or `rowLabelWidth`). Column labels turn diagonal or vertical on
+row labels. Row labels take the width of the widest one or of `rowHeader`,
+whichever is wider (capped at 40% of the chart, or `rowLabelWidth`). Column labels turn diagonal or vertical on
 their own when they would collide (`columnLabelAngle: "auto"`); pass a
 number of degrees between -90 and 90 to fix the angle. `xLabel` and `yLabel` title the axes
 and `rowHeader` heads the row labels like a table's first column.
@@ -266,11 +270,67 @@ when the labels would take more than 40% of an explicit `height`.
   </template>
 </ComponentDemo>
 
+### Wide tables
+
+The chart fits its container by default, so with many columns or a narrow
+screen the cell labels that no longer fit drop out. `minCellWidth` keeps
+every column at least that many pixels wide instead: when they would be
+narrower, the chart draws wider than its container and the plot scrolls
+sideways, with the row labels and `rowHeader` pinned at the left. The title
+and legend scroll with the plot. The pinned strip is painted with
+`--heatmap-pinned-bg` (default the theme background), so set it when the
+chart sits on another color. In a grid or flex item, set `min-width: 0` on
+the item, as for any wide content, or the drawn width widens the track
+instead of scrolling.
+
+<ComponentDemo>
+  <div style="max-width: 420px">
+    <Heatmap
+      data-testid="scrolling-heatmap"
+      :rows="locations.slice(0, 4)"
+      :columns="modelNames"
+      :data="modelScores"
+      :min-cell-width="120"
+      column-axis="top"
+      row-header="Location"
+      cell-labels
+      value-format="%.2f"
+      :color-scale="{ label: 'WIS' }"
+      tooltip-trigger="hover"
+      interactive
+    />
+  </div>
+
+<template #code>
+
+```vue
+<Heatmap
+  :rows="locations"
+  :columns="modelNames"
+  :data="modelScores"
+  :min-cell-width="120"
+  column-axis="top"
+  row-header="Location"
+  cell-labels
+  value-format="%.2f"
+  :color-scale="{ label: 'WIS' }"
+  tooltip-trigger="hover"
+  interactive
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ## Missing values
 
 A `NaN`, `null` or absent entry draws no cell. `missingColor` fills those
 cells instead (the diverging demo above uses the theme's subtle background),
-and they read as `—` in the tooltip and the keyboard labels.
+and they read as `—` in the tooltip and the keyboard labels. A pale missing
+fill is easy to mistake for a low value, so `missingLabel` prints text such
+as `"–"` on missing cells, in black or white against `missingColor` (or in
+the text color without one). It uses the `cellLabels` style, and works
+without `cellLabels` too.
 
 ## Tooltip and events
 
@@ -279,9 +339,11 @@ title and its column and value as the row, with a swatch of the cell color.
 `tooltipTitle` rewrites the title. The `tooltip` slot gets the shared chart
 props (`index`, `values`, `title`, `format`, `data` from `tooltipData`) plus
 the cell itself: `row`, `column`, `rowIndex`, `columnIndex`, `value` and
-`color`. `index` is the cell's row-major position (`rowIndex * columns.length
-
-- columnIndex`), which is also what `tooltipData` is indexed by.
+`color`. `index` is the cell's row-major position (`rowIndex *
+columns.length + columnIndex`), which is also what `tooltipData` is indexed
+by. The tooltip closes when `rows` or `columns` change (re-sorting, say),
+since the cell under it is then a different one; new `data` alone keeps it
+open with the new value.
 
 ```vue
 <Heatmap :rows :columns :data tooltip-trigger="hover">
@@ -295,6 +357,9 @@ Events: `hover` with `{ index }` (or `null`), `cell-click` with the cell,
 `row-click` and `column-click` with `{ index, label }` from a click on a
 label.
 
+The CSV download heads the row column with `rowHeader`, else `yLabel`,
+else `row`.
+
 ## Accessibility
 
 The `<svg>` is exposed as one labeled image (`role="img"` with the `title`
@@ -303,9 +368,30 @@ or `ariaLabel`), as on the other charts. `interactive` adds a real
 grid is one <kbd>Tab</kbd> stop, the arrow keys move between cells
 (<kbd>Home</kbd> reaches the row label, <kbd>End</kbd> the last column), a
 focused cell shows the tooltip and <kbd>Enter</kbd> or <kbd>Space</kbd>
-emits `cell-click` / `row-click`. Each button is named `row, column:
-value`. Pointer events pass through to the plot, so hover and click work the
-same with or without it.
+emits `cell-click` / `row-click`. <kbd>Escape</kbd> hides the tooltip (on
+every chart, for hover too) and leaves focus where it is; the next arrow key
+or pointer move shows it again. Pointer events pass through to the plot, so
+hover and click work the same with or without it.
+
+Each cell button is named `row, column: value` and each row button by its
+label. Screen readers do not announce the tooltip, so when the tooltip slot
+shows more than the value, say the same in `cellAriaLabel`; `rowAriaLabel`
+does the same for the row buttons, for example to say what clicking does:
+
+```vue
+<Heatmap
+  :rows
+  :columns
+  :data
+  interactive
+  :cell-aria-label="
+    (cell) =>
+      `${cell.row}, ${cell.column}. Mean CRPS: ${cell.value.toFixed(3)}. ` +
+      `Change vs baseline: ${change(cell)}. Open forecast detail.`
+  "
+  :row-aria-label="(row) => `${row.label}. Open forecast detail.`"
+/>
+```
 
 ## Examples
 
