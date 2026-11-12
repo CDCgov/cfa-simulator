@@ -230,10 +230,18 @@ export interface Area {
 export interface AreaSection {
   /** Index into the series array. When omitted, fills the full chart height with no line. */
   seriesIndex?: number;
-  /** Start x-index (inclusive) */
-  startIndex: number;
-  /** End x-index (inclusive) */
-  endIndex: number;
+  /** Start x-index (inclusive). Defaults to the first point. */
+  startIndex?: number;
+  /** End x-index (inclusive). Defaults to the last point. */
+  endIndex?: number;
+  /**
+   * Start of the section as an x value, in place of `startIndex`: a number,
+   * or a date on a date axis. A section on a series covers its points from
+   * here on; one without a series starts exactly here.
+   */
+  startX?: number | string | Date;
+  /** End of the section as an x value, in place of `endIndex`. */
+  endX?: number | string | Date;
   /** Fill color; defaults to referenced series color */
   color?: string;
   /** Fill opacity; defaults to 0.15 */
@@ -1124,38 +1132,90 @@ function toAreaPath(a: ResolvedArea): string {
 }
 
 /**
- * Pixel x of a section boundary. Maps through the referenced series'
- * `x` array when available, then falls back to series 0, then to the
- * raw index (index-mode).
+ * A section's inclusive point range on a series: `startX` / `endX` pick the
+ * points inside those x values, else the indices apply.
  */
-function sectionXPixel(section: AreaSection, which: "start" | "end"): number {
-  const idx = which === "start" ? section.startIndex : section.endIndex;
-  const s =
-    (section.seriesIndex != null && allSeries.value[section.seriesIndex]) ||
-    allSeries.value[0];
-  if (s) return xPixel(seriesXAt(s, idx));
-  return xPixel(idx);
+function sectionIndexRange(
+  section: AreaSection,
+  s: { x?: LineChartData; data: ArrayLike<number> },
+): { start: number; end: number } {
+  const last = s.data.length - 1;
+  let start = Math.max(0, section.startIndex ?? 0);
+  let end = Math.min(last, section.endIndex ?? last);
+  if (section.startX != null) {
+    const from = toInternalX(section.startX);
+    start = 0;
+    while (start <= last && !(seriesXAt(s, start) >= from)) start++;
+  }
+  if (section.endX != null) {
+    const to = toInternalX(section.endX);
+    end = last;
+    while (end >= 0 && !(seriesXAt(s, end) <= to)) end--;
+  }
+  return { start, end };
+}
+
+interface SectionSpan {
+  /** Pixel x of the section's two edges. */
+  startPx: number;
+  endPx: number;
+  /** Point range on the referenced series, for a section that has one. */
+  range?: { start: number; end: number };
+}
+
+/**
+ * Where a section sits, or null when it has nothing to draw: an empty or
+ * unparseable range, a missing series, or x values wholly off the axis.
+ */
+function sectionSpan(section: AreaSection): SectionSpan | null {
+  if (section.seriesIndex != null) {
+    const s = allSeries.value[section.seriesIndex];
+    if (!s) return null;
+    const range = sectionIndexRange(section, s);
+    if (range.start > range.end) return null;
+    return {
+      startPx: xPixel(seriesXAt(s, range.start)),
+      endPx: xPixel(seriesXAt(s, range.end)),
+      range,
+    };
+  }
+  // Full height: an index maps through series 0's x values, an x value is
+  // used as given and kept on the axis.
+  const first = allSeries.value[0];
+  const { min, max } = xExtent.value;
+  const edge = (
+    x: AreaSection["startX"],
+    index: number,
+  ): { value: number; byX: boolean } =>
+    x != null
+      ? { value: toInternalX(x), byX: true }
+      : { value: first ? seriesXAt(first, index) : index, byX: false };
+  const start = edge(section.startX, section.startIndex ?? 0);
+  const end = edge(section.endX, section.endIndex ?? maxLen.value - 1);
+  if (!isFinite(start.value) || !isFinite(end.value)) return null;
+  if ((start.byX && start.value > max) || (end.byX && end.value < min)) {
+    return null;
+  }
+  if (start.byX) start.value = Math.max(min, start.value);
+  if (end.byX) end.value = Math.min(max, end.value);
+  const startPx = xPixel(start.value);
+  const endPx = xPixel(end.value);
+  return startPx > endPx ? null : { startPx, endPx };
 }
 
 function toSectionPath(
   section: AreaSection,
+  span: SectionSpan,
   closed = true,
   py = padding.value.top + innerH.value,
 ): string {
-  // No seriesIndex: full-height rectangle spanning the range
-  if (section.seriesIndex == null) {
-    const sx = sectionXPixel(section, "start");
-    const ex = sectionXPixel(section, "end");
-    if (sx > ex) return "";
+  // No series: full-height rectangle spanning the range
+  if (!span.range || section.seriesIndex == null) {
+    const { startPx: sx, endPx: ex } = span;
     return `M${sx},${padding.value.top}L${ex},${padding.value.top}L${ex},${py}L${sx},${py}Z`;
   }
-
   const s = allSeries.value[section.seriesIndex];
-  if (!s) return "";
-
-  const start = Math.max(0, section.startIndex);
-  const end = Math.min(s.data.length - 1, section.endIndex);
-  if (start > end) return "";
+  const { start, end } = span.range;
 
   // Follow the series line exactly: break at its gaps, and give each run
   // its neighbors just outside the section so a monotone curve keeps the
@@ -1283,30 +1343,36 @@ const sectionBarY = computed(
  * with a below-chart label extend their fill through the x axis to the
  * label bar.
  */
-const sectionRender = computed(() =>
-  (props.areaSections ?? [])
-    .filter(
-      (sec) =>
-        sec.seriesIndex == null ||
-        !isHidden(allSeries.value[sec.seriesIndex]?.legend),
-    )
-    .map((sec) => {
-      const extended = hasBelowLabel(sec);
-      const bottomY = extended
-        ? sectionBarY.value
-        : padding.value.top + innerH.value;
-      return {
-        sec,
-        extended,
-        bottomY,
-        fillPath: toSectionPath(sec, true, bottomY),
-        linePath: sec.seriesIndex != null ? toSectionPath(sec, false) : "",
-        startX: snap(sectionXPixel(sec, "start")),
-        endX: snap(sectionXPixel(sec, "end")),
-        color: sectionColor(sec),
-      };
-    }),
-);
+const sectionRender = computed(() => {
+  const rendered = [];
+  for (const sec of props.areaSections ?? []) {
+    if (
+      sec.seriesIndex != null &&
+      isHidden(allSeries.value[sec.seriesIndex]?.legend)
+    ) {
+      continue;
+    }
+    const span = sectionSpan(sec);
+    if (!span) continue;
+    const extended = hasBelowLabel(sec);
+    const bottomY = extended
+      ? sectionBarY.value
+      : padding.value.top + innerH.value;
+    rendered.push({
+      sec,
+      extended,
+      bottomY,
+      fillPath: toSectionPath(sec, span, true, bottomY),
+      linePath: span.range ? toSectionPath(sec, span, false) : "",
+      startPx: span.startPx,
+      endPx: span.endPx,
+      startX: snap(span.startPx),
+      endX: snap(span.endPx),
+      color: sectionColor(sec),
+    });
+  }
+  return rendered;
+});
 
 interface PositionedSectionLabel {
   /** Left edge of the label text. */
@@ -1337,12 +1403,11 @@ const sectionLabels = computed<{
   const chartRight = padding.value.left + innerW.value;
   // Walk the rendered sections so a section hidden with its series loses
   // its label and bar along with its fill.
-  for (const { sec, extended, color } of sectionRender.value) {
+  for (const rendered of sectionRender.value) {
+    const { sec, extended, color, startPx, endPx } = rendered;
     if (!extended) continue;
     const labelText = sec.label ?? "";
     const descText = sec.description ?? "";
-    const startPx = sectionXPixel(sec, "start");
-    const endPx = sectionXPixel(sec, "end");
     // Zoomed past this section entirely: drop its label.
     if (isZoomed.value && (startPx > chartRight || endPx < chartLeft)) continue;
     const barX1 = snap(Math.max(startPx, chartLeft));

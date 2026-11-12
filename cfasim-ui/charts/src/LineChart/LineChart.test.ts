@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { nextTick } from "vue";
 import { mount } from "@vue/test-utils";
 import LineChart from "./LineChart.vue";
+import type { AreaSection } from "./LineChart.vue";
 import { stackAreas } from "./stackAreas.js";
 import type { ChartAnnotation } from "../_shared/annotations.js";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
@@ -2091,6 +2092,93 @@ describe("LineChart", () => {
       const linePath = paths[2];
       expect(linePath.attributes("fill")).toBe("none");
       expect(linePath.attributes("stroke")).toBeTruthy();
+    });
+
+    it("places sections by x value with startX and endX", () => {
+      const sectionPath = (x: number[] | string[], section: AreaSection) =>
+        mount(LineChart, {
+          props: {
+            series: [{ x, data: [0, 10, 20, 30] }],
+            areaSections: [section],
+            height: 200,
+            width: 400,
+            menu: false,
+          },
+        })
+          .findAll("path")[1]
+          .attributes("d")!;
+      const x = [10, 20, 30, 40];
+      const dates = ["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"];
+
+      // On a series: the points inside the x range.
+      expect(sectionPath(x, { seriesIndex: 0, startX: 15, endX: 30 })).toBe(
+        sectionPath(x, { seriesIndex: 0, startIndex: 1, endIndex: 2 }),
+      );
+      expect(sectionPath(dates, { seriesIndex: 0, startX: dates[2] })).toBe(
+        sectionPath(dates, { seriesIndex: 0, startIndex: 2, endIndex: 3 }),
+      );
+
+      // Without a series: the exact x values, between points too.
+      expect(sectionPath(x, { startX: 20, endX: 30 })).toBe(
+        sectionPath(x, { startIndex: 1, endIndex: 2 }),
+      );
+      const leftEdge = (d: string) => Number(d.slice(1, d.indexOf(",")));
+      const at20 = leftEdge(sectionPath(x, { startX: 20, endX: 40 }));
+      const at25 = leftEdge(sectionPath(x, { startX: 25, endX: 40 }));
+      const at30 = leftEdge(sectionPath(x, { startX: 30, endX: 40 }));
+      expect(at25).toBeCloseTo((at20 + at30) / 2);
+      // X values past the axis stop at its ends.
+      expect(sectionPath(x, { startX: -50, endX: 100 })).toBe(
+        sectionPath(x, { startX: 10, endX: 40 }),
+      );
+    });
+
+    it("draws nothing for a section with no range on the axis", () => {
+      const x = ["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"];
+      const empty: AreaSection[] = [
+        { startX: "2025-01-01", endX: "2025-06-01", label: "Before" },
+        { startX: "not a date", endX: x[1], label: "Unparseable" },
+        {
+          seriesIndex: 0,
+          startX: "2025-01-01",
+          endX: "2025-06-01",
+          label: "No points",
+        },
+      ];
+      for (const section of empty) {
+        const wrapper = mount(LineChart, {
+          props: {
+            series: [{ x, data: [0, 10, 20, 30] }],
+            areaSections: [section],
+            height: 200,
+            width: 400,
+            menu: false,
+          },
+        });
+        // Only the series line: no fill, edge lines, bar or label.
+        expect(wrapper.findAll("path").length).toBe(1);
+        expect(wrapper.text()).not.toContain(section.label);
+        expect(wrapper.html()).not.toContain("NaN");
+      }
+    });
+
+    it("places a full-height index section past a shorter first series", () => {
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [
+            { data: [0, 1, 2, 3, 4] },
+            { data: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] },
+          ],
+          areaSections: [{ startIndex: 6, endIndex: 9 }],
+          height: 200,
+          width: 400,
+          menu: false,
+        },
+      });
+      // 2 series lines + the section fill.
+      const paths = wrapper.findAll("path");
+      expect(paths.length).toBe(3);
+      expect(paths[2].attributes("d")).toMatch(/^M\d/);
     });
 
     it("uses explicit section color", () => {

@@ -1974,6 +1974,59 @@ the fill stays inside the plot and nothing is drawn under the axis.
   </template>
 </ComponentDemo>
 
+Sections can also be addressed by x value, with `startX` and `endX` in place
+of the indices: numbers, or dates on a date axis. A section without a
+`seriesIndex` spans exactly those x values, so it need not start on a data
+point; x values past the ends of the axis stop there. One on a series
+covers the points inside the range.
+
+<ComponentDemo>
+  <LineChart
+    :series="[
+      { x: ['2026-01-05', '2026-01-12', '2026-01-19', '2026-01-26', '2026-02-02', '2026-02-09'], data: [4, 9, 21, 30, 24, 12], legend: 'Cases' },
+    ]"
+    :area-sections="[
+      { startX: '2026-01-15', endX: '2026-01-29', color: '#6366f1', label: 'School closure' },
+    ]"
+    :height="250"
+    y-label="Weekly cases"
+    :menu="false"
+  />
+
+<template #code>
+
+```vue
+<LineChart
+  :series="[
+    {
+      x: [
+        '2026-01-05',
+        '2026-01-12',
+        '2026-01-19',
+        '2026-01-26',
+        '2026-02-02',
+        '2026-02-09',
+      ],
+      data: [4, 9, 21, 30, 24, 12],
+      legend: 'Cases',
+    },
+  ]"
+  :area-sections="[
+    {
+      startX: '2026-01-15',
+      endX: '2026-01-29',
+      color: '#6366f1',
+      label: 'School closure',
+    },
+  ]"
+  :height="250"
+  y-label="Weekly cases"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Annotations
 
 Pin callouts to data points with `annotations`. Each annotation anchors at
@@ -2750,8 +2803,10 @@ interface Area {
 ```ts
 interface AreaSection {
   seriesIndex?: number; // omit for full-height fill
-  startIndex: number;
-  endIndex: number;
+  startIndex?: number; // default: first point
+  endIndex?: number; // default: last point
+  startX?: number | string | Date; // x value, in place of startIndex
+  endX?: number | string | Date; // x value, in place of endIndex
   color?: string;
   opacity?: number; // default: 0.15
   label?: string;
