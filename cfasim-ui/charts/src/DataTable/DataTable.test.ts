@@ -62,6 +62,39 @@ describe("Table", () => {
     expect(cells).toEqual(["2026-01-05", ""]);
   });
 
+  it("shows missingLabel for missing cells, but not in the CSV", () => {
+    const output = new ModelOutput(
+      2,
+      [
+        { name: "when", type: "date" },
+        { name: "rate", type: "f64" },
+      ],
+      [new Uint32Array([0xffffffff, 20458]), new Float64Array([NaN, 0.5])],
+    );
+    const wrapper = mount(DataTable, {
+      props: {
+        data: output,
+        missingLabel: "–",
+        columnConfig: { rate: { format: "percent" } },
+        downloadLink: true,
+      },
+    });
+    const cells = wrapper.findAll("tbody td").map((td) => td.text());
+    expect(cells).toEqual(["–", "–", "2026-01-05", "50%"]);
+    const text = mount(DataTable, {
+      props: { data: { name: ["a", "", null] }, missingLabel: "–" },
+    });
+    expect(text.findAll("tbody td").map((td) => td.text())).toEqual([
+      "a",
+      "–",
+      "–",
+    ]);
+    const href = wrapper.find(".data-table-download-link").attributes("href")!;
+    expect(decodeURIComponent(href.split(",")[1])).toBe(
+      "when,rate\n,NaN\n2026-01-05,50%",
+    );
+  });
+
   it("renders enum labels from ModelOutput", () => {
     const output = new ModelOutput(
       2,

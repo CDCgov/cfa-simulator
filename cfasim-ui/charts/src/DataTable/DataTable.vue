@@ -13,7 +13,11 @@ import type { ChartMenuItem } from "../ChartMenu/ChartMenu.vue";
 import { downloadCsv } from "../ChartMenu/download.js";
 import { escapeCsvField } from "../_shared/seriesCsv.js";
 
-export type TableRecord = Record<string, ArrayLike<number | string | boolean>>;
+/** Columns by name. A `null` or `undefined` cell is a missing value. */
+export type TableRecord = Record<
+  string,
+  ArrayLike<number | string | boolean | null | undefined>
+>;
 export type TableData = TableRecord | ModelOutput;
 export type ColumnWidth = "small" | "medium" | "large";
 export type ColumnAlign = "left" | "center" | "right";
@@ -140,6 +144,12 @@ const props = withDefaults(
      * default `--color-bg-subtle`, or set `--data-table-stripe-color`.
      */
     striped?: boolean | string;
+    /**
+     * Text shown in cells with a missing value (`null`, `NaN`, an empty
+     * string or a missing date), such as `"–"`. It replaces the column's `format`. Display
+     * only: CSV exports keep the raw value. None by default.
+     */
+    missingLabel?: string;
     /** Tighter cell padding and smaller text, for dense tables. */
     compact?: boolean;
     /**
@@ -178,7 +188,7 @@ function cellSlotProps(col: Column, row: number): CellSlotProps {
   const v = col.values[row];
   return {
     value: v ?? undefined,
-    text: cellValue(col, row),
+    text: cellText(col, row),
     row,
     column: col.name,
   };
@@ -228,7 +238,7 @@ function isModelOutput(d: TableData): d is ModelOutput {
 
 interface Column {
   name: string;
-  values: ArrayLike<number | string | boolean>;
+  values: ArrayLike<number | string | boolean | null | undefined>;
   enumLabels?: string[];
   /** `date` columns hold days since 1970-01-01. */
   isDate?: boolean;
@@ -318,6 +328,15 @@ function toggleSort(name: string) {
   if (!dir) sort.value = { column: name, direction: "asc" };
   else if (dir === "asc") sort.value = { column: name, direction: "desc" };
   else sort.value = null;
+}
+
+/** Cell text as displayed: `missingLabel` stands in for a missing value. */
+function cellText(col: Column, row: number): string {
+  // The same cells that sort last as missing.
+  if (props.missingLabel !== undefined && sortKey(col, row) === null) {
+    return props.missingLabel;
+  }
+  return cellValue(col, row);
 }
 
 function cellValue(col: Column, row: number): string {
@@ -472,7 +491,7 @@ const showMenu = computed(
                 :name="cellSlotName(col, row)!"
                 v-bind="cellSlotProps(col, row)"
               />
-              <template v-else>{{ cellValue(col, row) }}</template>
+              <template v-else>{{ cellText(col, row) }}</template>
             </td>
           </tr>
         </tbody>

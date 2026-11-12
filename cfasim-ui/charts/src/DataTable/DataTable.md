@@ -93,6 +93,36 @@ e.g. `"percent:1"`), a printf-style format string, or a function
   </template>
 </ComponentDemo>
 
+### Missing values
+
+Set `missingLabel` to mark cells that have no value (`null`, `NaN`, an
+empty string or a missing date). It takes the place of the column's `format`, and CSV exports
+keep the raw value.
+
+<ComponentDemo>
+  <DataTable
+    missing-label="–"
+    :data="{ week: [1, 2, 3], rate: [0.012, NaN, 0.467], cases: [14, null, 56] }"
+    :column-config="{ rate: { label: 'Attack rate', format: 'percent:1' } }"
+  />
+
+<template #code>
+
+```vue
+<DataTable
+  missing-label="–"
+  :data="{
+    week: [1, 2, 3],
+    rate: [0.012, NaN, 0.467],
+    cases: [14, null, 56],
+  }"
+  :column-config="{ rate: { label: 'Attack rate', format: 'percent:1' } }"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
 ### Cell class and max rows
 
 <ComponentDemo>
