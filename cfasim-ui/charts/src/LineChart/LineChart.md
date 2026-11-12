@@ -2478,7 +2478,13 @@ axis (it respects `xMin`). `snap: true` snaps a dragged marker to the
 series' x positions (whole days below) and a number snaps to multiples
 of that step (`7 * 86400000` for weeks on a date axis, `5` for every
 fifth unit on a numeric one); arrow keys then step between snap
-positions.
+positions. `min` and `max` bound how far a drag or arrow key can move a
+marker, in the same space as `x`. A snapping marker stops on the last
+snap position inside them.
+
+To update your state once per drag, bind `:markers` without `v-model` and
+set the new position in a `@marker-drag-end` handler: the chart moves the
+line itself while it is dragged.
 
 <ComponentDemo>
   <LineChart
@@ -2528,6 +2534,8 @@ interface ChartMarker {
   labelPadding?: number | { x?: number; y?: number }; // pill padding (default: { x: 6, y: 5 })
   draggable?: boolean; // default: true
   snap?: boolean | number; // true = series x positions; number = step in axis units
+  min?: number | string | Date; // lowest x a drag or arrow key can reach (default: axis start)
+  max?: number | string | Date; // highest x a drag or arrow key can reach (default: axis end)
   showValueOnDrag?: boolean; // current x above the x axis while dragging (default: true)
   valueFormat?: (x: number | Date) => string; // formats that value (default: like the x axis)
   valueStyle?: LabelStyle; // drag value text style (defaults: label font size / currentColor / 400)

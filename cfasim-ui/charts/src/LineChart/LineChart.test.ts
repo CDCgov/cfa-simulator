@@ -4449,6 +4449,50 @@ describe("LineChart", () => {
       wrapper.unmount();
     });
 
+    it("keeps drags and arrow keys inside the marker's min and max", async () => {
+      const wrapper = mount(LineChart, {
+        props: { ...baseProps, markers: [{ x: 5, min: 3, max: 6 }] },
+        attachTo: document.body,
+      });
+      const lastX = () =>
+        (wrapper.emitted("update:markers")!.at(-1)![0] as { x: number }[])[0].x;
+      const hit = wrapper.find('[data-testid="marker-hit"]');
+      expect(hit.attributes("aria-valuemin")).toBe("3");
+      expect(hit.attributes("aria-valuemax")).toBe("6");
+      // 54px per unit from 50: x 5 is at 320.
+      await hit.trigger("pointerdown", { clientX: 320, pointerId: 1 });
+      window.dispatchEvent(new MouseEvent("pointerup", { clientX: 500 }));
+      expect(lastX()).toBe(6);
+      await wrapper.setProps({ markers: [{ x: 6, min: 3, max: 6 }] });
+      await hit.trigger("keydown", { key: "ArrowRight" });
+      expect(lastX()).toBe(6);
+      await hit.trigger("pointerdown", { clientX: 374, pointerId: 1 });
+      window.dispatchEvent(new MouseEvent("pointerup", { clientX: 60 }));
+      expect(lastX()).toBe(3);
+      wrapper.unmount();
+    });
+
+    it("snaps to the last step inside a bound that is off the grid", async () => {
+      for (const snap of [true, 1]) {
+        const marker = { x: 6, snap, min: 2.5, max: 6.6 };
+        const wrapper = mount(LineChart, {
+          props: { ...baseProps, markers: [marker] },
+          attachTo: document.body,
+        });
+        const lastX = () =>
+          (wrapper.emitted("update:markers")!.at(-1)![0] as { x: number }[])[0]
+            .x;
+        const hit = wrapper.find('[data-testid="marker-hit"]');
+        await hit.trigger("keydown", { key: "ArrowRight" });
+        expect(lastX()).toBe(6);
+        // 54px per unit from 50: x 6 is at 374.
+        await hit.trigger("pointerdown", { clientX: 374, pointerId: 1 });
+        window.dispatchEvent(new MouseEvent("pointerup", { clientX: 60 }));
+        expect(lastX()).toBe(3);
+        wrapper.unmount();
+      }
+    });
+
     it("snaps to a numeric step from the axis origin", async () => {
       const wrapper = mount(LineChart, {
         props: {

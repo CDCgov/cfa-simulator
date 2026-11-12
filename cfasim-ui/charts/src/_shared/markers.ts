@@ -74,6 +74,13 @@ export interface ChartMarker {
   /** Whether the marker can be dragged along the x-axis. Default: true. */
   draggable?: boolean;
   /**
+   * Lowest x a drag or arrow key can move the marker to, in the same
+   * space as `x`. Default: the start of the axis.
+   */
+  min?: number | string | Date;
+  /** Highest x a drag or arrow key can move the marker to. Default: the end of the axis. */
+  max?: number | string | Date;
+  /**
    * Snap the marker while dragging. `true` snaps to the x positions of
    * the chart's series (indices, explicit `x` values, or dates), and a
    * number snaps to multiples of that step in axis units (data units

@@ -2325,17 +2325,13 @@ interface RenderedMarker {
   draggable: boolean;
   hitTop: number;
   ariaLabel: string;
+  ariaMin: number;
+  ariaMax: number;
   ariaNow: number;
   ariaText: string;
 }
 
 const markerDragState = ref<{ index: number; x: number } | null>(null);
-
-const markerAriaRange = computed(() => {
-  const { min, max } = xExtent.value;
-  const off = xIsDate.value ? 0 : xDisplayOffset.value;
-  return { min: min + off, max: max + off };
-});
 
 const renderedMarkers = computed<RenderedMarker[]>(() => {
   const ms = props.markers ?? [];
@@ -2355,6 +2351,7 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
     let xv = drag?.index === i ? drag.x : toInternalX(m.x);
     if (!isFinite(xv)) continue;
     xv = Math.min(max, Math.max(min, xv));
+    const bounds = markerBounds(m);
     // Markers outside a zoom window are hidden, not pinned to its edge.
     if (xv < view.min || xv > view.max) continue;
     const style = resolveLabelStyle(m.labelStyle, {
@@ -2412,6 +2409,8 @@ const renderedMarkers = computed<RenderedMarker[]>(() => {
       draggable: m.draggable !== false,
       hitTop: padding.value.top,
       ariaLabel: m.label ?? `Marker ${i + 1}`,
+      ariaMin: Math.max(min, bounds.min) + off,
+      ariaMax: Math.min(max, bounds.max) + off,
       ariaNow: xv + off,
       ariaText: xText,
     };
@@ -2494,8 +2493,22 @@ function markerPointerX(clientX: number): number {
   );
 }
 
-function clampMarkerX(xv: number): number {
-  const { min, max } = xDomain.value;
+/** The marker's own `min` / `max` in internal x; infinite where unset. */
+function markerBounds(m: ChartMarker): { min: number; max: number } {
+  const bound = (value: ChartMarker["min"], fallback: number) => {
+    if (value == null) return fallback;
+    const x = toInternalX(value);
+    return isFinite(x) ? x : fallback;
+  };
+  return { min: bound(m.min, -Infinity), max: bound(m.max, Infinity) };
+}
+
+/** Clamp to the visible x range, and to `m`'s own bounds when given. */
+function clampMarkerX(xv: number, m?: ChartMarker): number {
+  const domain = xDomain.value;
+  const own = m ? markerBounds(m) : { min: -Infinity, max: Infinity };
+  const min = Math.max(domain.min, own.min);
+  const max = Math.min(domain.max, own.max);
   return Math.min(max, Math.max(min, xv));
 }
 
@@ -2512,20 +2525,33 @@ function markerSnapOrigin(): number {
  * Snap an internal x to the marker's grid. With `dir` set, move to the
  * next grid position in that direction instead of the nearest one.
  */
+/** Slack for float error when counting snap steps up to a bound. */
+const SNAP_EPSILON = 1e-9;
+
 function snapMarkerX(m: ChartMarker, xv: number, dir: -1 | 0 | 1 = 0): number {
   const snap = m.snap;
   if (!snap) return xv;
+  const bounds = markerBounds(m);
   if (typeof snap === "number") {
     if (!(snap > 0)) return xv;
     const origin = markerSnapOrigin();
-    const n = Math.round((xv - origin) / snap) + dir;
-    return clampMarkerX(origin + n * snap);
+    // Stay on the steps inside the marker's own bounds: clamping a step
+    // to a bound would leave the marker between steps.
+    const stepOf = (x: number) => (x - origin) / snap;
+    const lowest = Math.ceil(stepOf(bounds.min) - SNAP_EPSILON);
+    const highest = Math.floor(stepOf(bounds.max) + SNAP_EPSILON);
+    if (lowest > highest) return clampMarkerX(xv, m);
+    const n = Math.round(stepOf(xv)) + dir;
+    return clampMarkerX(origin + Math.min(highest, Math.max(lowest, n)) * snap);
   }
   const grid = allSeriesXs.value;
   const nearest = nearestSortedIndex(grid, xv);
   if (nearest === null) return xv;
-  const idx = Math.min(grid.length - 1, Math.max(0, nearest + dir));
-  return clampMarkerX(grid[idx]);
+  let idx = Math.min(grid.length - 1, Math.max(0, nearest + dir));
+  while (idx > 0 && grid[idx] > bounds.max) idx--;
+  while (idx < grid.length - 1 && grid[idx] < bounds.min) idx++;
+  // No series x inside the bounds: fall back to the bounds themselves.
+  return clampMarkerX(grid[idx], m);
 }
 
 /** Internal x converted back to the marker's own coordinate space. */
@@ -2595,7 +2621,7 @@ function onMarkerPointerDown(index: number, e: PointerEvent) {
     markerDragCleanup = null;
   };
   const pointerTarget = (ev: PointerEvent) =>
-    snapMarkerX(m, clampMarkerX(markerPointerX(ev.clientX) + grabOffset));
+    snapMarkerX(m, clampMarkerX(markerPointerX(ev.clientX) + grabOffset, m));
   const move = (ev: PointerEvent) => {
     const xv = pointerTarget(ev);
     markerDragState.value = { index, x: xv };
@@ -2633,13 +2659,13 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
   const steps = e.shiftKey ? 10 : 1;
   let xv: number;
   if (m.snap) {
-    xv = clampMarkerX(toInternalX(m.x));
+    xv = clampMarkerX(toInternalX(m.x), m);
     for (let i = 0; i < steps; i++) xv = snapMarkerX(m, xv, dir);
   } else {
     const { min, max } = xDomain.value;
     const base =
       !xIsDate.value && !hasExplicitX.value ? 1 : (max - min) / 100 || 1;
-    xv = clampMarkerX(toInternalX(m.x) + dir * base * steps);
+    xv = clampMarkerX(toInternalX(m.x) + dir * base * steps, m);
   }
   emitMarkerUpdate(index, xv, true);
 }
@@ -3161,8 +3187,8 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
             tabindex="0"
             aria-orientation="horizontal"
             :aria-label="m.ariaLabel"
-            :aria-valuemin="markerAriaRange.min"
-            :aria-valuemax="markerAriaRange.max"
+            :aria-valuemin="m.ariaMin"
+            :aria-valuemax="m.ariaMax"
             :aria-valuenow="m.ariaNow"
             :aria-valuetext="m.ariaText"
             style="cursor: ew-resize; touch-action: none"
