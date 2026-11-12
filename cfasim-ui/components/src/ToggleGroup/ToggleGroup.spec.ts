@@ -15,6 +15,15 @@ test("ToggleGroup page renders demos", async ({ page }) => {
   await monthly.click();
   await expect(monthly).toHaveAttribute("aria-pressed", "true");
   await expect(weekly).toHaveAttribute("aria-pressed", "false");
+
+  // Required: clicking the pressed item leaves it pressed.
+  const chart = demos
+    .nth(1)
+    .getByRole("button", { name: "Chart", exact: true });
+  await expect(chart).toHaveAttribute("aria-pressed", "true");
+  await chart.click();
+  await expect(chart).toHaveAttribute("aria-pressed", "true");
+  await expect(demos.nth(1)).toContainText("Selected: chart");
 });
 
 // FieldLabel renders a span, not a for-less <label>, so the label text is
