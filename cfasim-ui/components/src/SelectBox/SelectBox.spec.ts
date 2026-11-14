@@ -8,6 +8,20 @@ test("SelectBox page renders demos", async ({ page }) => {
   await expect(demos.first().getByText("Interval")).toBeVisible();
 });
 
+test("SelectBox selects an option whose value is empty", async ({ page }) => {
+  await page.goto("./cfasim-ui/components/select-box");
+  const demo = page.locator(".demo-preview", { hasText: "Region" });
+  const trigger = demo.locator(".select-trigger");
+  await expect(trigger).toContainText("All regions");
+  await trigger.click();
+  await page.getByRole("option", { name: "North" }).click();
+  await expect(demo).toContainText('Selected: "north"');
+  await trigger.click();
+  await page.getByRole("option", { name: "All regions" }).click();
+  await expect(trigger).toContainText("All regions");
+  await expect(demo).toContainText('Selected: ""');
+});
+
 test("SelectBox autocomplete filters and selects an option", async ({
   page,
 }) => {

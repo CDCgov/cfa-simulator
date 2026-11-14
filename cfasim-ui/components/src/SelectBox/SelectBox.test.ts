@@ -1,3 +1,4 @@
+import { nextTick } from "vue";
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import SelectBox from "./SelectBox.vue";
@@ -53,6 +54,20 @@ describe("SelectBox", () => {
     const trigger = wrapper.find(".select-trigger");
     expect(trigger.attributes("role")).toBe("combobox");
     expect(trigger.attributes("aria-labelledby")).toBeDefined();
+  });
+
+  it("shows an option whose value is empty as the selection", async () => {
+    const withAll = [{ value: "", label: "All" }, ...options];
+    const selected = mount(SelectBox, {
+      props: { options: withAll, modelValue: "", placeholder: "Pick one" },
+    });
+    // The trigger reads its label from the items once they have mounted.
+    await nextTick();
+    expect(selected.find(".select-trigger").text()).toBe("All");
+    const unset = mount(SelectBox, {
+      props: { options: withAll, placeholder: "Pick one" },
+    });
+    expect(unset.find(".select-trigger").text()).toBe("Pick one");
   });
 
   describe("autocomplete", () => {

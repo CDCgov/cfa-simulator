@@ -21,7 +21,7 @@ import {
   SelectValue,
   SelectViewport,
 } from "reka-ui";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import Icon from "../Icon/Icon.vue";
 import FieldLabel from "../_internal/FieldLabel.vue";
 import { useField, type FieldProps } from "../_internal/field";
@@ -29,6 +29,10 @@ import "../_internal/input.css";
 import "../_internal/listbox.css";
 
 export interface SelectOption {
+  /**
+   * The model value for this option. `""` is allowed outside autocomplete
+   * mode, for an "All" or "None" choice.
+   */
   value: string;
   label: string;
 }
@@ -50,6 +54,21 @@ interface Props extends FieldProps {
 const props = defineProps<Props>();
 
 const { id, labelId, ariaProps } = useField(props);
+
+// reka's Select keeps `""` for "nothing selected" and throws on an item with
+// that value, so an option whose value is `""` travels as this stand-in.
+const EMPTY_VALUE = "\u0000empty";
+const toItemValue = (value: string) => (value === "" ? EMPTY_VALUE : value);
+const hasEmptyOption = computed(() =>
+  props.options.some((o) => o.value === ""),
+);
+const selectValue = computed({
+  get: () =>
+    model.value === "" && hasEmptyOption.value ? EMPTY_VALUE : model.value,
+  set: (value) => {
+    model.value = value === EMPTY_VALUE ? "" : value;
+  },
+});
 
 // Shows the selected option's label in the combobox input when not filtering.
 function displayValue(value: string) {
@@ -152,7 +171,7 @@ function clear() {
       </ComboboxPortal>
     </ComboboxRoot>
 
-    <SelectRoot v-else v-model="model">
+    <SelectRoot v-else v-model="selectValue">
       <SelectTrigger
         class="select-trigger"
         :aria-required="required || undefined"
@@ -174,7 +193,7 @@ function clear() {
             <SelectItem
               v-for="opt in options"
               :key="opt.value"
-              :value="opt.value"
+              :value="toItemValue(opt.value)"
               class="cfasim-listbox-item"
             >
               <SelectItemText>{{ opt.label }}</SelectItemText>

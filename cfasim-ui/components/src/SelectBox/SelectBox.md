@@ -15,6 +15,7 @@ import { ref } from 'vue'
 const interval = ref('weekly')
 const state = ref('')
 const frequency = ref('daily')
+const region = ref('')
 </script>
 
 <ComponentDemo>
@@ -84,6 +85,47 @@ DOM.
     { value: 'daily', label: 'Daily' },
     { value: 'weekly', label: 'Weekly' },
     { value: 'monthly', label: 'Monthly' },
+  ]"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### An "All" or "None" option
+
+An option's `value` can be `""`, for a choice that stands for no filter.
+Without such an option, `""` shows the placeholder.
+
+<ComponentDemo>
+  <div style="width: 200px">
+    <SelectBox
+      v-model="region"
+      label="Region"
+      :options="[
+        { value: '', label: 'All regions' },
+        { value: 'north', label: 'North' },
+        { value: 'south', label: 'South' },
+      ]"
+    />
+  </div>
+  <p>Selected: "{{ region }}"</p>
+
+<template #code>
+
+```vue
+<script setup>
+import { ref } from "vue";
+const region = ref("");
+</script>
+
+<SelectBox
+  v-model="region"
+  label="Region"
+  :options="[
+    { value: '', label: 'All regions' },
+    { value: 'north', label: 'North' },
+    { value: 'south', label: 'South' },
   ]"
 />
 ```
