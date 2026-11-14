@@ -57,7 +57,7 @@ function runLabel(r: RunSummary) {
     </template>
     <LineChart
       v-if="current.outputs.value?.series"
-      :data="Array.from(current.outputs.value.series.column('values'))"
+      :data="current.outputs.value.series.column('values')"
       :height="300"
       x-label="time"
       y-label="value"

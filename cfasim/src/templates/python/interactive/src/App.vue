@@ -25,7 +25,7 @@ const { outputs, loading, error } = useOutputs("simulate", params);
     <p v-else-if="error" class="text-error" v-text="error" />
     <LineChart
       v-else-if="outputs?.series"
-      :data="Array.from(outputs.series.column('values'))"
+      :data="outputs.series.column('values')"
       :height="300"
       x-label="time"
       y-label="value"
