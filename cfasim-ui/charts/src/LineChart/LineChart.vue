@@ -440,6 +440,8 @@ const {
   tickLabelResolved,
   legendResolved,
   hasTooltipSlot,
+  chartTitleStyle,
+  chartTooltipTrigger,
 } = useChartCommon(props);
 
 const xGridStyle = computed(() =>
@@ -2176,12 +2178,12 @@ const {
   width: () => props.width,
   height: () => props.height,
   title: () => props.title,
-  titleStyle: () => props.titleStyle,
+  titleStyle: () => chartTitleStyle.value,
   xLabel: () => props.xLabel,
   yLabel: () => props.yLabel,
   debounce: () => props.debounce,
   menu: () => props.menu,
-  tooltipTrigger: () => props.tooltipTrigger,
+  tooltipTrigger: () => chartTooltipTrigger.value,
   tooltipClamp: () => props.tooltipClamp,
   filename: () => props.filename,
   menuItems: () => props.menuItems,
@@ -2725,7 +2727,11 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
           :inner-h="innerH + sectionLayout.barOffset"
           :open="{ left: clipOpen.left, right: clipOpen.right }"
         />
-        <ChartTitle :title="title" :title-style="titleStyle" :bounds="bounds" />
+        <ChartTitle
+          :title="title"
+          :title-style="chartTitleStyle"
+          :bounds="bounds"
+        />
         <!-- inline legend -->
         <defs v-if="colorScaleResolved">
           <linearGradient :id="`${gradientId}-ramp`">

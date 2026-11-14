@@ -55,6 +55,7 @@ import {
   useCopyFeedback,
 } from "../_shared/useChartMenu.js";
 import type { ChartMenuItemKey } from "../_shared/chartProps.js";
+import { useChartDefaults } from "../_shared/chartDefaults.js";
 import {
   buildScene,
   buildPicking,
@@ -410,8 +411,11 @@ const props = withDefaults(
      * when `zoom` is off.
      */
     zoomHint?: boolean;
-    /** Tooltip activation mode */
-    tooltipTrigger?: "hover" | "click";
+    /**
+     * Tooltip activation mode. `"none"` keeps the tooltip off where
+     * `provideChartDefaults` sets a trigger.
+     */
+    tooltipTrigger?: "hover" | "click" | "none";
     /**
      * @deprecated Use the `#tooltip` slot instead, which gives you full Vue
      * rendering (components, scoped styles, reactivity). This HTML-string
@@ -706,8 +710,12 @@ const hasTooltipSlot = ref(!!slots.tooltip);
 onBeforeUpdate(() => {
   hasTooltipSlot.value = !!slots.tooltip;
 });
+const chartDefaults = useChartDefaults(props);
 const hasInteractiveTooltip = computed(
-  () => !!props.tooltipTrigger || !!props.tooltipFormat || hasTooltipSlot.value,
+  () =>
+    !!chartDefaults.tooltipTrigger.value ||
+    !!props.tooltipFormat ||
+    hasTooltipSlot.value,
 );
 
 /**
@@ -715,7 +723,7 @@ const hasInteractiveTooltip = computed(
  * children (legend title, swatch labels, continuous-scale ticks).
  */
 const legendInlineStyle = computed(() => {
-  const s = props.legendStyle;
+  const s = chartDefaults.legendStyle.value;
   const style: Record<string, string> = {};
   if (s?.fontSize != null) style["font-size"] = `${s.fontSize}px`;
   if (s?.fontWeight != null) style["font-weight"] = String(s.fontWeight);
@@ -725,7 +733,7 @@ const legendInlineStyle = computed(() => {
 
 /** Inline style for the title element, applying TitleStyle overrides. */
 const titleInlineStyle = computed(() => {
-  const s = props.titleStyle;
+  const s = chartDefaults.titleStyle.value;
   const style: Record<string, string> = {
     "font-size": `${s?.fontSize ?? TITLE_FONT_SIZE}px`,
     "line-height": `${s?.lineHeight ?? TITLE_LINE_HEIGHT}px`,

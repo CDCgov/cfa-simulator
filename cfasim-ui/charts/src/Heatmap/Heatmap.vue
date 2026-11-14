@@ -234,6 +234,8 @@ const {
   tickLabelResolved,
   legendResolved,
   hasTooltipSlot,
+  chartTitleStyle,
+  chartTooltipTrigger,
 } = useChartCommon(props);
 
 const rowCount = computed(() => props.rows.length);
@@ -533,12 +535,12 @@ const {
   minWidth: () => minChartWidth.value,
   height: () => props.height ?? autoHeight.value,
   title: () => props.title,
-  titleStyle: () => props.titleStyle,
+  titleStyle: () => chartTitleStyle.value,
   xLabel: () => props.xLabel,
   yLabel: () => props.yLabel,
   debounce: () => props.debounce,
   menu: () => props.menu,
-  tooltipTrigger: () => props.tooltipTrigger,
+  tooltipTrigger: () => chartTooltipTrigger.value,
   tooltipClamp: () => props.tooltipClamp,
   filename: () => props.filename,
   menuItems: () => props.menuItems,
@@ -1225,7 +1227,7 @@ function toCsv(): string {
             </defs>
             <ChartTitle
               :title="title"
-              :title-style="titleStyle"
+              :title-style="chartTitleStyle"
               :bounds="bounds"
             />
             <ChartColorScaleLegend

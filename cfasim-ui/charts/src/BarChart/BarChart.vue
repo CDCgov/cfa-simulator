@@ -38,7 +38,6 @@ import {
   useLegendHighlight,
   positionLegendItems,
   INLINE_LEGEND_ROW_HEIGHT,
-  TICK_LABEL_FONT_SIZE,
   pickContrastColor,
   parseDate,
   isAllDates,
@@ -447,6 +446,8 @@ const {
   tickLabelResolved,
   legendResolved,
   hasTooltipSlot,
+  chartTitleStyle,
+  chartTooltipTrigger,
 } = useChartCommon(props);
 
 const valueGridStyle = computed(() =>
@@ -1692,7 +1693,7 @@ const categoryTickItems = computed<CategoryTickItem[]>(() => {
   // without overlap. Vertical orientation measures horizontal label
   // width (≈ chars × fontSize × 0.6); horizontal orientation just
   // measures stacked line height (≈ fontSize × 1.2).
-  const fontSize = props.tickLabelStyle?.fontSize ?? TICK_LABEL_FONT_SIZE;
+  const fontSize = tickLabelResolved.value.fontSize;
   const minGap = 8;
   const needPerLabel = isVertical.value
     ? maxLen * fontSize * 0.6 + minGap
@@ -1872,12 +1873,12 @@ const {
   width: () => props.width,
   height: () => props.height,
   title: () => props.title,
-  titleStyle: () => props.titleStyle,
+  titleStyle: () => chartTitleStyle.value,
   xLabel: () => props.xLabel,
   yLabel: () => props.yLabel,
   debounce: () => props.debounce,
   menu: () => props.menu,
-  tooltipTrigger: () => props.tooltipTrigger,
+  tooltipTrigger: () => chartTooltipTrigger.value,
   tooltipClamp: () => props.tooltipClamp,
   filename: () => props.filename,
   menuItems: () => props.menuItems,
@@ -2389,7 +2390,7 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
         />
         <ChartTitle
           :title="title"
-          :title-style="titleStyle"
+          :title-style="chartTitleStyle"
           :bounds="bounds"
           :left-x="headerLeftX"
         />

@@ -875,6 +875,32 @@ Every text element on the chart has its own style prop and default size (in px).
   </template>
 </ComponentDemo>
 
+### Defaults for every chart
+
+To give every chart in an app the same text styles or tooltip trigger, call
+`provideChartDefaults` once in a parent component's `setup` in place of
+repeating the props. It applies to `LineChart`, `BarChart`, `Heatmap` and
+`ChoroplethMap` below that component. A chart's own prop wins, and a style
+prop is merged over the default key by key.
+
+```vue
+<script setup>
+import { provideChartDefaults } from "@cfasim-ui/charts";
+
+provideChartDefaults({
+  tooltipTrigger: "hover",
+  tickLabelStyle: { fontSize: 13 },
+  axisLabelStyle: { fontSize: 13 },
+  legendStyle: { fontSize: 13 },
+});
+</script>
+```
+
+The defaults are `tooltipTrigger`, `titleStyle`, `axisLabelStyle`,
+`tickLabelStyle` and `legendStyle`. Pass a ref or a getter to change them
+after setup. A nested call layers over the defaults above it, and a chart
+opts out of a provided trigger with `tooltip-trigger="none"`.
+
 ## Line styles
 
 ### Dashed baseline

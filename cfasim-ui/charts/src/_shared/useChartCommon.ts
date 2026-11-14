@@ -1,5 +1,6 @@
 import { computed } from "vue";
 import type { ChartBaseProps } from "./chartProps.js";
+import { useChartDefaults } from "./chartDefaults.js";
 import {
   resolveLabelStyle,
   AXIS_LABEL_FONT_SIZE,
@@ -14,6 +15,8 @@ import {
  * property reads inside the computeds track as usual.
  */
 export function useChartCommon(props: ChartBaseProps) {
+  // Style and tooltip props, falling back to `provideChartDefaults`.
+  const chartDefaults = useChartDefaults(props);
   // Accessible name for the chart; falls back to the visible title.
   const chartAriaLabel = computed(() => props.ariaLabel ?? props.title);
   // Expose the <svg> as a single labeled image so screen readers announce
@@ -26,22 +29,26 @@ export function useChartCommon(props: ChartBaseProps) {
 
   /** Resolved style for the x/y axis labels. */
   const axisLabelResolved = computed(() =>
-    resolveLabelStyle(props.axisLabelStyle, { fontSize: AXIS_LABEL_FONT_SIZE }),
+    resolveLabelStyle(chartDefaults.axisLabelStyle.value, {
+      fontSize: AXIS_LABEL_FONT_SIZE,
+    }),
   );
   /** Resolved style for the axis tick labels. */
   const tickLabelResolved = computed(() =>
-    resolveLabelStyle(props.tickLabelStyle, {
+    resolveLabelStyle(chartDefaults.tickLabelStyle.value, {
       fontSize: TICK_LABEL_FONT_SIZE,
       fillOpacity: TICK_LABEL_OPACITY,
     }),
   );
   /** Resolved style for inline legend item labels. */
   const legendResolved = computed(() =>
-    resolveLabelStyle(props.legendStyle, { fontSize: LEGEND_FONT_SIZE }),
+    resolveLabelStyle(chartDefaults.legendStyle.value, {
+      fontSize: LEGEND_FONT_SIZE,
+    }),
   );
 
   const hasTooltipSlot = computed(
-    () => !!props.tooltipData || !!props.tooltipTrigger,
+    () => !!props.tooltipData || !!chartDefaults.tooltipTrigger.value,
   );
 
   return {
@@ -51,5 +58,7 @@ export function useChartCommon(props: ChartBaseProps) {
     tickLabelResolved,
     legendResolved,
     hasTooltipSlot,
+    chartTitleStyle: chartDefaults.titleStyle,
+    chartTooltipTrigger: chartDefaults.tooltipTrigger,
   };
 }

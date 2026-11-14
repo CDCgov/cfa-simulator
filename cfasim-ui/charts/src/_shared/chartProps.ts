@@ -162,8 +162,11 @@ export interface ChartBaseProps {
    * plain array or any `ArrayLike` (e.g. a typed-array column).
    */
   tooltipData?: ArrayLike<unknown>;
-  /** Tooltip activation mode. */
-  tooltipTrigger?: "hover" | "click";
+  /**
+   * Tooltip activation mode. `"none"` keeps the tooltip off where
+   * `provideChartDefaults` sets a trigger.
+   */
+  tooltipTrigger?: "hover" | "click" | "none";
   /** Boundary for tooltip flip/clamp. Default: `"window"`. */
   tooltipClamp?: "none" | "chart" | "window";
   /**

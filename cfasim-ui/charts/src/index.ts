@@ -100,6 +100,10 @@ export type {
   ChartTooltipBaseProps,
 } from "./_shared/chartProps.js";
 export { CHART_MENU_ITEM_KEYS } from "./_shared/chartProps.js";
+export {
+  provideChartDefaults,
+  type ChartDefaults,
+} from "./_shared/chartDefaults.js";
 export type { ChartMarker, ChartMarkerDragPayload } from "./_shared/markers.js";
 export type {
   BlendMode,
