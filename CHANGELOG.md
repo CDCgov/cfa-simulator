@@ -1,6 +1,31 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.15.6] - 2026-11-16
+
+### Bug Fixes
+
+- **charts:** Drop undefined theme tokens from the default colors
+
+### Features
+
+- **charts:** Add Heatmap minCellWidth, missingLabel and aria labels
+- **components:** Add required to ToggleGroup to keep a selection
+- **shared:** Add a missing option to formatNumber
+- **charts:** Add DataTable missingLabel and allow null cells
+- **charts:** Address LineChart area sections by x value
+- **charts:** Add min and max bounds to LineChart markers
+- **components:** Allow an empty-string option value in SelectBox
+- **charts:** Add provideChartDefaults for app-wide chart props
+
+### Refactor
+
+- **cli:** Pass typed arrays straight to LineChart in templates
+
+### Tests
+
+- **components:** Cover ToggleGroup required in the docs e2e
+
 ## [0.15.5] - 2026-11-10
 
 ### Bug Fixes
