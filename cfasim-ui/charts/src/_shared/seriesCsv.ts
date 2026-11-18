@@ -14,6 +14,8 @@ export function resolveCsvOverride(
 
 export interface CsvSeries {
   data: ChartData;
+  /** Column header for this series. Falls back to `value` / `series_N`. */
+  label?: string;
   /** Optional parallel x-values; when all series share the same x, an `x` column is used. */
   x?: ChartData;
   /** Optional interval bounds; together they add `_lower` / `_upper` columns after the value. */
@@ -27,7 +29,10 @@ function boundHeaders(
   s: { lower?: ChartData; upper?: ChartData },
 ) {
   // Both bounds or nothing, matching when a chart draws a whisker.
-  return hasBounds(s) ? [name, `${name}_lower`, `${name}_upper`] : [name];
+  const names = hasBounds(s)
+    ? [name, `${name}_lower`, `${name}_upper`]
+    : [name];
+  return names.map(escapeCsvField);
 }
 
 function hasBounds(s: { lower?: ChartData; upper?: ChartData }): boolean {
@@ -54,7 +59,10 @@ export function seriesToCsv(series: CsvSeries[]): string {
   const headers = [
     xHeader,
     ...series.flatMap((s, i) =>
-      boundHeaders(series.length === 1 ? "value" : `series_${i}`, s),
+      boundHeaders(
+        s.label || (series.length === 1 ? "value" : `series_${i}`),
+        s,
+      ),
     ),
   ];
   const rows = [headers.join(",")];

@@ -2651,8 +2651,9 @@ establishes a stacking context. If your app doesn't mount at the document root
 
 ### Custom CSV download
 
-By default, the Download CSV menu item exports the chart series as CSV. Use
-the `csv` prop to supply your own content (for example, to include original
+By default, the Download CSV menu item exports the chart series as CSV, one
+column per series headed by its `legend` (or `value` / `series_N` when it
+has none). Use the `csv` prop to supply your own content (for example, to include original
 dates, categorical labels, or extra columns that aren't plotted). Use
 `filename` to control the download filename (shared by SVG, PNG and CSV).
 

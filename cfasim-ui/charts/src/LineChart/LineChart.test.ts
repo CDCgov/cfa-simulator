@@ -508,6 +508,25 @@ describe("LineChart", () => {
       expect(fname).toBe("chart");
     });
 
+    it("heads CSV columns with each series legend", () => {
+      const spy = vi
+        .spyOn(download, "downloadCsv")
+        .mockImplementation(() => {});
+      const wrapper = mount(LineChart, {
+        props: {
+          series: [
+            { data: [1, 2], legend: "Baseline" },
+            { data: [3, 4], legend: "Scenario" },
+          ],
+          height: 100,
+        },
+      });
+      getMenuItem(wrapper, "Download CSV").action();
+      expect(spy.mock.calls[0][0]).toBe(
+        "index,Baseline,Scenario\n0,1,3\n1,2,4",
+      );
+    });
+
     it("uses custom csv string when provided", () => {
       const spy = vi
         .spyOn(download, "downloadCsv")

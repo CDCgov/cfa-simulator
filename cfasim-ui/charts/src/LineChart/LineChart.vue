@@ -1785,6 +1785,7 @@ function toCsv(): string {
     seriesToCsv(
       allSeries.value.map((s) => ({
         data: s.data,
+        label: s.legend,
         x: s.x,
         lower: s.lower,
         upper: s.upper,

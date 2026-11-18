@@ -18,6 +18,25 @@ describe("seriesToCsv", () => {
     );
   });
 
+  it("uses series labels as headers, falling back to series_N", () => {
+    expect(
+      seriesToCsv([{ data: [1, 2], label: "Cases" }, { data: [3, 4] }]),
+    ).toBe("index,Cases,series_1\n0,1,3\n1,2,4");
+    expect(seriesToCsv([{ data: [1], label: "Cases" }])).toBe(
+      "index,Cases\n0,1",
+    );
+  });
+
+  it("escapes labels containing commas", () => {
+    expect(
+      seriesToCsv([
+        { data: [1], label: "Cases, weekly", lower: [0], upper: [2] },
+      ]),
+    ).toBe(
+      'index,"Cases, weekly","Cases, weekly_lower","Cases, weekly_upper"\n0,1,0,2',
+    );
+  });
+
   it("uses an x column when all series share the same x reference", () => {
     const x = [10, 20, 30];
     expect(
