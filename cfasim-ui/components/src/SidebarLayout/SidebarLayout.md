@@ -74,19 +74,11 @@ Buttons, selects and text fields placed in the three header slots take the heade
 | `maxWidth`    | `string \| number` | `1024px`    | Max width of the main content: a CSS length (`"none"` for full width) or pixels |
 | `v-model:tab` | `string`           | `undefined` | The active tab value (two-way binding)                                          |
 
-### Tab type
-
-```ts
-interface Tab {
-  value: string; // unique identifier
-  label: string; // display text
-  to?: string; // optional route path for vue-router integration
-}
-```
+`Tab` is the [`Tabs`](./tabs#tab-type) component's tab type.
 
 ## Tabs
 
-When the `tabs` prop is provided, a tab bar renders at the top of the main content area. Tabs support two modes:
+When the `tabs` prop is provided, a [`Tabs`](./tabs) strip renders in the header of the main content area. If the tabs do not fit beside the header's other controls, the tab list scrolls sideways. When the main area is narrower than 480px (a phone), the tabs move to their own row under the header controls, so the controls stay on screen. Tabs support two modes:
 
 ### Local mode
 

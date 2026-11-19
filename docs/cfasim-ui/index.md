@@ -38,6 +38,7 @@ cfasim-ui is the shared component and theming library you use to make simulators
 - [SelectBox](./components/select-box) — dropdown select
 - [SidebarLayout](./components/sidebar-layout) — two-panel layout with a collapsible sidebar
 - [Spinner](./components/spinner) — loading indicator
+- [Tabs](./components/tabs) — tab strip that scrolls sideways when the tabs do not fit, with optional vue-router navigation
 - [TextArea](./components/text-area) — multi-line text field
 - [TextInput](./components/text-input) — text field
 - [Toggle](./components/toggle) — boolean switch

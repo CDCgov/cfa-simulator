@@ -23,22 +23,6 @@ describe("SidebarLayout tabs", () => {
     expect(wrapper.find("[role='tablist']").exists()).toBe(false);
   });
 
-  it("renders tab triggers when tabs prop is provided", () => {
-    const wrapper = mount(SidebarLayout, { props: { tabs } });
-    const triggers = wrapper.findAll("[role='tab']");
-    expect(triggers).toHaveLength(3);
-    expect(triggers[0].text()).toBe("Chart");
-    expect(triggers[1].text()).toBe("Data");
-    expect(triggers[2].text()).toBe("Table");
-  });
-
-  it("defaults to first tab as active", () => {
-    const wrapper = mount(SidebarLayout, { props: { tabs } });
-    const triggers = wrapper.findAll("[role='tab']");
-    expect(triggers[0].attributes("data-state")).toBe("active");
-    expect(triggers[1].attributes("data-state")).toBe("inactive");
-  });
-
   it("activates tab matching v-model:tab", () => {
     const wrapper = mount(SidebarLayout, {
       props: { tabs, tab: "data" },
@@ -65,6 +49,23 @@ describe("SidebarLayout tabs", () => {
     await triggers[2].trigger("mouseup");
     await triggers[2].trigger("click");
     expect(updated).toBe("table");
+  });
+
+  it("shows the current route's tab on the first render", () => {
+    const routedTabs = tabs.map((tab) => ({ ...tab, to: `/${tab.value}` }));
+    const wrapper = mount(SidebarLayout, {
+      props: { tabs: routedTabs },
+      global: {
+        config: {
+          globalProperties: {
+            $router: { push: () => {} },
+            $route: { path: "/data" },
+          } as never,
+        },
+      },
+    });
+    const triggers = wrapper.findAll("[role='tab']");
+    expect(triggers[1].attributes("data-state")).toBe("active");
   });
 
   it("renders default slot content inside tabbed layout", () => {
@@ -100,6 +101,13 @@ describe("SidebarLayout header slots", () => {
     expect(wrapper.find(".TopbarStart").exists()).toBe(false);
   });
 
+  it("drops the empty end of the tabs bar when the topbar is hidden", () => {
+    const wrapper = mount(SidebarLayout, {
+      props: { tabs, hideTopbar: true },
+    });
+    expect(wrapper.find(".TabsBarEnd").exists()).toBe(false);
+  });
+
   it("lays the sidebar header out as start, end, collapse button", () => {
     const wrapper = mount(SidebarLayout, { slots });
     const header = wrapper.find(".SidebarHeader");
@@ -131,7 +139,7 @@ describe("SidebarLayout header slots", () => {
     const bar = wrapper.find(".TabsBar");
     const order = Array.from(bar.element.children).map((el) => el.className);
     expect(order.indexOf("TopbarStart")).toBeLessThan(
-      order.findIndex((c) => c.includes("TabsList")),
+      order.findIndex((c) => c.includes("BarTabs")),
     );
     expect(bar.find(".TopbarStart .start").exists()).toBe(true);
     expect(bar.find(".TabsBarEnd .export").exists()).toBe(true);

@@ -30,6 +30,38 @@ test.describe("SidebarLayout full-window demo", () => {
   });
 });
 
+test.describe("SidebarLayout tabs on a phone", () => {
+  test.use({ viewport: { width: 375, height: 600 } });
+
+  test("the tabs take their own row and the bar fits the screen", async ({
+    page,
+  }) => {
+    await page.goto("./demos/sidebar-tabs/index.html");
+    await expect(page.locator("h1")).toHaveText("Chart");
+
+    const boxes = await page.evaluate(() => {
+      const box = (selector: string) =>
+        document.querySelector(selector)!.getBoundingClientRect().toJSON();
+      return {
+        bar: box(".TabsBar"),
+        tabs: box(".BarTabs"),
+        expand: box(".TabsBar > .Toggle"),
+        end: box(".TabsBarEnd"),
+      };
+    });
+    expect(boxes.end.right).toBeLessThanOrEqual(375);
+    expect(boxes.tabs.top).toBeGreaterThanOrEqual(boxes.expand.bottom);
+    expect(boxes.tabs.top).toBeGreaterThanOrEqual(boxes.end.bottom);
+    expect(boxes.tabs.width).toBeCloseTo(boxes.bar.width - 32, 0);
+    await expect(
+      page.getByRole("button", { name: /Switch to (dark|light) mode/ }),
+    ).toBeInViewport({ ratio: 1 });
+
+    await page.getByRole("tab", { name: "Settings" }).click();
+    await expect(page.locator("h1")).toHaveText("Settings");
+  });
+});
+
 test.describe("SidebarLayout print", () => {
   // Roughly the printable width of a Letter page, which is under the mobile
   // breakpoint: the screen-only mobile rules must not shift the printout.

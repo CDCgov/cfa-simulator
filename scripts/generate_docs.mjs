@@ -66,6 +66,7 @@ const COMPONENT_NAMES = [
   "SelectBox",
   "SidebarLayout",
   "Spinner",
+  "Tabs",
   "TextArea",
   "TextInput",
   "Toggle",

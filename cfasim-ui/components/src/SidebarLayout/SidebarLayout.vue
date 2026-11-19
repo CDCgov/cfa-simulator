@@ -1,29 +1,9 @@
 <script setup lang="ts">
-import {
-  ref,
-  computed,
-  watch,
-  onMounted,
-  onUnmounted,
-  getCurrentInstance,
-} from "vue";
-import { TabsRoot, TabsList, TabsTrigger, TabsIndicator } from "reka-ui";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import Icon from "../Icon/Icon.vue";
 import LightDarkToggle from "../LightDarkToggle/LightDarkToggle.vue";
-
-// Optional vue-router integration (no hard dependency).
-// $router/$route on globalProperties is vue-router's stable public API.
-// $route is defined as a getter that returns the current route, so we
-// must re-read it from globalProperties on each access to track changes.
-const instance = getCurrentInstance();
-const globals = instance?.appContext.config.globalProperties;
-const router = globals?.$router;
-
-export interface Tab {
-  value: string;
-  label: string;
-  to?: string;
-}
+import Tabs from "../Tabs/Tabs.vue";
+import type { Tab } from "../Tabs/Tabs.vue";
 
 const props = defineProps<{
   hideTopbar?: boolean;
@@ -62,35 +42,6 @@ const mainContentStyle = computed(() => {
     "--main-content-max-width": typeof w === "number" ? `${w}px` : w,
   };
 });
-
-const isRouterMode = computed(() => !!router && props.tabs?.some((t) => t.to));
-
-const activeTab = computed({
-  get() {
-    return tab.value ?? props.tabs?.[0]?.value;
-  },
-  set(value: string | undefined) {
-    if (!value) return;
-    tab.value = value;
-    if (isRouterMode.value && router) {
-      const target = props.tabs?.find((t) => t.value === value);
-      if (target?.to) router.push(target.to);
-    }
-  },
-});
-
-// Sync active tab from route changes in router mode
-if (globals) {
-  watch(
-    () => globals.$route?.path,
-    (path) => {
-      if (!path || !isRouterMode.value) return;
-      const match = props.tabs?.find((t) => t.to === path);
-      if (match) tab.value = match.value;
-    },
-    { immediate: true },
-  );
-}
 </script>
 
 <template>
@@ -133,12 +84,7 @@ if (globals) {
       </button>
     </div>
     <main class="Main">
-      <TabsRoot
-        v-if="tabs?.length"
-        :model-value="activeTab"
-        class="TabsLayout"
-        @update:model-value="activeTab = $event as string"
-      >
+      <div v-if="tabs?.length" class="TabsLayout">
         <div class="TabsBar">
           <button
             v-if="isMobile && collapsed"
@@ -153,24 +99,11 @@ if (globals) {
           <div v-if="$slots['topbar-start']" class="TopbarStart">
             <slot name="topbar-start" />
           </div>
-          <TabsList class="TabsList" aria-label="Tabs">
-            <TabsTrigger
-              v-for="t in tabs"
-              :key="t.value"
-              :value="t.value"
-              class="TabsTrigger"
-            >
-              {{ t.label }}
-            </TabsTrigger>
-            <TabsIndicator
-              class="TabsIndicator"
-              :style="{
-                width: 'var(--reka-tabs-indicator-size)',
-                left: 'var(--reka-tabs-indicator-position)',
-              }"
-            />
-          </TabsList>
-          <div class="TabsBarEnd">
+          <Tabs v-model="tab" :tabs="tabs" class="BarTabs" />
+          <div
+            v-if="$slots['topbar-end'] || $slots.topbar || !hideTopbar"
+            class="TabsBarEnd"
+          >
             <slot name="topbar-end" />
             <!-- `topbar` is the pre-slot-split name of topbar-end. -->
             <slot name="topbar" />
@@ -182,7 +115,7 @@ if (globals) {
             <slot />
           </div>
         </div>
-      </TabsRoot>
+      </div>
       <template v-else>
         <div class="Topbar">
           <button
@@ -482,51 +415,33 @@ if (globals) {
   padding: 0 var(--space-4);
 }
 
-.TabsList {
-  display: flex;
-  gap: var(--space-1);
-  position: relative;
+/* The tabs give way (and scroll) before the end controls do. */
+.TabsBar .BarTabs {
+  flex: 0 1 auto;
   align-self: stretch;
+  border-bottom: 0;
 }
 
-.TabsTrigger {
-  position: relative;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  font-family: inherit;
-  color: var(--color-text-secondary);
-  background: none;
-  border: none;
-  cursor: pointer;
-  transition:
-    color var(--transition-fast),
-    background-color var(--transition-fast);
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
+.TabsBarEnd {
+  flex-shrink: 0;
 }
 
-.TabsTrigger:hover {
-  color: var(--color-text);
-  background-color: var(--color-bg-1);
-}
+/* Narrow: the tabs take their own row under the other bar controls. */
+@container (max-width: 480px) {
+  .TabsBar {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
 
-.TabsTrigger[data-state="active"] {
-  color: var(--color-text);
-}
+  .TabsBar > :not(.BarTabs) {
+    margin-block: calc((var(--bar-height) - var(--bar-control-size)) / 2);
+  }
 
-.TabsTrigger:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus);
-}
-
-.TabsIndicator {
-  position: absolute;
-  bottom: 0;
-  height: 2px;
-  background-color: var(--color-text);
-  transition:
-    width var(--transition-fast),
-    left var(--transition-fast);
+  .TabsBar .BarTabs {
+    order: 1;
+    flex-basis: 100%;
+    height: var(--bar-height);
+  }
 }
 
 /* Print: the layout is a viewport-high flex box whose main pane scrolls, so a
