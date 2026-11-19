@@ -2653,7 +2653,8 @@ establishes a stacking context. If your app doesn't mount at the document root
 
 By default, the Download CSV menu item exports the chart series as CSV, one
 column per series headed by its `legend` (or `value` / `series_N` when it
-has none). Use the `csv` prop to supply your own content (for example, to include original
+has none). A legend that repeats an earlier column name gets a `_2`, `_3`, ... suffix
+so every header is unique. Use the `csv` prop to supply your own content (for example, to include original
 dates, categorical labels, or extra columns that aren't plotted). Use
 `filename` to control the download filename (shared by SVG, PNG and CSV).
 

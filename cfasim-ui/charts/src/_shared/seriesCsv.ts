@@ -23,16 +23,41 @@ export interface CsvSeries {
   upper?: ChartData;
 }
 
-/** Column headers for one series: its value plus any interval bounds. */
-function boundHeaders(
-  name: string,
-  s: { lower?: ChartData; upper?: ChartData },
-) {
+type HeaderSeries = { label?: string; lower?: ChartData; upper?: ChartData };
+
+/** Column names for one series: its value plus any interval bounds. */
+function columnNames(name: string, s: HeaderSeries): string[] {
   // Both bounds or nothing, matching when a chart draws a whisker.
-  const names = hasBounds(s)
-    ? [name, `${name}_lower`, `${name}_upper`]
-    : [name];
-  return names.map(escapeCsvField);
+  return hasBounds(s) ? [name, `${name}_lower`, `${name}_upper`] : [name];
+}
+
+/**
+ * Escaped headers for the series columns. A blank label falls back to
+ * `value` / `series_N`, and a name already used by an earlier column (one of
+ * `leadingHeaders` or another series) gets a `_2`, `_3`, ... suffix.
+ */
+function seriesHeaders(
+  series: readonly HeaderSeries[],
+  leadingHeaders: readonly string[],
+): string[] {
+  const used = new Set(leadingHeaders);
+  const headers: string[] = [];
+  for (let i = 0; i < series.length; i++) {
+    const s = series[i];
+    const fallback = series.length === 1 ? "value" : `series_${i}`;
+    const base = s.label?.trim() || fallback;
+    let columns = columnNames(base, s);
+    let copy = 2;
+    while (columns.some((column) => used.has(column))) {
+      columns = columnNames(`${base}_${copy}`, s);
+      copy++;
+    }
+    for (const column of columns) {
+      used.add(column);
+      headers.push(escapeCsvField(column));
+    }
+  }
+  return headers;
 }
 
 function hasBounds(s: { lower?: ChartData; upper?: ChartData }): boolean {
@@ -56,15 +81,7 @@ export function seriesToCsv(series: CsvSeries[]): string {
     ? series[0].x
     : undefined;
   const xHeader = sharedX ? "x" : "index";
-  const headers = [
-    xHeader,
-    ...series.flatMap((s, i) =>
-      boundHeaders(
-        s.label || (series.length === 1 ? "value" : `series_${i}`),
-        s,
-      ),
-    ),
-  ];
+  const headers = [xHeader, ...seriesHeaders(series, [xHeader])];
   const rows = [headers.join(",")];
   for (let r = 0; r < maxLen; r++) {
     const xCell = sharedX ? String(sharedX[r]) : r.toString();
@@ -95,15 +112,10 @@ export function categoricalToCsv(
   extraColumns: readonly { header: string; values: readonly string[] }[] = [],
 ): string {
   if (series.length === 0 || categories.length === 0) return "";
+  const leadingHeaders = [categoryHeader, ...extraColumns.map((c) => c.header)];
   const headers = [
-    categoryHeader,
-    ...extraColumns.map((c) => c.header),
-    ...series.flatMap((s, i) =>
-      boundHeaders(
-        s.label || (series.length === 1 ? "value" : `series_${i}`),
-        s,
-      ),
-    ),
+    ...leadingHeaders.map(escapeCsvField),
+    ...seriesHeaders(series, leadingHeaders),
   ];
   const rows = [headers.join(",")];
   for (let r = 0; r < categories.length; r++) {
@@ -121,7 +133,7 @@ export function categoricalToCsv(
 }
 
 export function escapeCsvField(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+  if (/[",\r\n]/.test(value)) {
     return `"${value.replace(/"/g, '""')}"`;
   }
   return value;

@@ -37,6 +37,33 @@ describe("seriesToCsv", () => {
     );
   });
 
+  it("suffixes a label that repeats or collides with the first column", () => {
+    expect(
+      seriesToCsv([
+        { data: [1], label: "Scenario" },
+        { data: [2], label: "Scenario" },
+        { data: [3], label: "index" },
+      ]),
+    ).toBe("index,Scenario,Scenario_2,index_2\n0,1,2,3");
+    const x = [10];
+    expect(seriesToCsv([{ data: [1], x, label: "x" }])).toBe("x,x_2\n10,1");
+  });
+
+  it("keeps bound columns unique when labels repeat", () => {
+    expect(
+      seriesToCsv([
+        { data: [1], label: "Cases", lower: [0], upper: [2] },
+        { data: [5], label: "Cases", lower: [4], upper: [6] },
+      ]),
+    ).toBe(
+      "index,Cases,Cases_lower,Cases_upper,Cases_2,Cases_2_lower,Cases_2_upper\n0,1,0,2,5,4,6",
+    );
+  });
+
+  it("falls back for a whitespace-only label", () => {
+    expect(seriesToCsv([{ data: [1], label: " " }])).toBe("index,value\n0,1");
+  });
+
   it("uses an x column when all series share the same x reference", () => {
     const x = [10, 20, 30];
     expect(
@@ -85,6 +112,20 @@ describe("categoricalToCsv", () => {
     expect(
       categoricalToCsv(["A", "B"], [{ data: [10, 20], label: "cases" }]),
     ).toBe("category,cases\nA,10\nB,20");
+  });
+
+  it("escapes the category and extra column headers", () => {
+    expect(
+      categoricalToCsv(["A"], [{ data: [1] }], "Age group, years", [
+        { header: "x_end\r", values: ["B"] },
+      ]),
+    ).toBe('"Age group, years","x_end\r",value\nA,B,1');
+  });
+
+  it("suffixes a series label that collides with the category header", () => {
+    expect(categoricalToCsv(["A"], [{ data: [1], label: "category" }])).toBe(
+      "category,category_2\nA,1",
+    );
   });
 
   it("emits multi-series CSV with labels or series_N fallback", () => {
