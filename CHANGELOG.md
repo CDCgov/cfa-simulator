@@ -1,6 +1,17 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.15.7] - 2026-11-19
+
+### Bug Fixes
+
+- **charts:** Keep CSV column headers unique, non-blank and escaped
+
+### Features
+
+- **charts:** Use series legends as LineChart CSV headers
+- **components:** Add Tabs and make SidebarLayout tabs mobile friendly
+
 ## [0.15.6] - 2026-11-16
 
 ### Bug Fixes
