@@ -1,20 +1,31 @@
 //! Model output types for cfasim simulations.
 //!
 //! [`ModelOutput`] is one table of typed columns and [`Outputs`] a set of named
-//! tables. In the browser they cross into JavaScript with [`ModelOutput::into_js`]
-//! / [`model_outputs`]; with the `tasks` feature they are written to a
-//! `.cfasim` outputs file by the [`tasks`] worker that `cfasim serve` runs.
+//! tables. In the browser a model exports functions with `export!`, which
+//! take named inputs from the page and return `Outputs`; with the `tasks`
+//! feature they are written to a `.cfasim` outputs file by the [`tasks`]
+//! worker that `cfasim serve` runs.
 
 #[cfg(feature = "wasm")]
 use js_sys::{Array, Float64Array, Int32Array, Object, Reflect, Uint32Array, Uint8Array};
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
+#[cfg(feature = "wasm")]
+mod export;
 #[cfg(feature = "tasks")]
 pub mod outputs_file;
 pub mod panic_hook;
 #[cfg(feature = "tasks")]
 pub mod tasks;
+
+/// Support for `export!`; not part of the public API.
+#[cfg(feature = "wasm")]
+#[doc(hidden)]
+pub mod __private {
+    pub use crate::export::{call, IntoOutputs};
+    pub use wasm_bindgen;
+}
 
 /// Sentinel for a missing value in a `date` column (days since 1970-01-01).
 pub const DATE_MISSING: u32 = u32::MAX;

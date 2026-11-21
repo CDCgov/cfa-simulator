@@ -11,10 +11,9 @@ import {
   describeWasmInitTrap,
   isWasmTrap,
 } from "@cfasim-ui/shared/workerError";
+import { callModelFunction } from "./dispatch.js";
+import type { WasmModule } from "./dispatch.js";
 import type { WorkerMessage } from "./messages.js";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type WasmModule = Record<string, any>;
 
 const modulePromises = new Map<string, Promise<WasmModule>>();
 
@@ -58,12 +57,13 @@ function ensureModule(model: string): Promise<WasmModule> {
 }
 
 self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
-  const { id, model, fn, args } = event.data;
+  const { id, model, fn } = event.data;
   let mod: WasmModule | undefined;
   try {
     const t0 = performance.now();
     mod = await ensureModule(model);
-    const result = mod[fn](...args);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = callModelFunction(mod, event.data) as any;
     const elapsed = Math.round((performance.now() - t0) * 10) / 10;
     console.log(`[wasm-worker] ${model}.${fn} ${elapsed}ms`);
 

@@ -1,12 +1,11 @@
-use cfasim_model::{model_outputs, ModelOutput};
-use wasm_bindgen::prelude::*;
+use cfasim_model::{export, ModelOutput, Outputs};
+use serde::Deserialize;
 
 fn step(state: f64, rate: f64) -> f64 {
     state + rate
 }
 
-// Pure helper so the numerical logic is testable natively.
-// wasm-bindgen functions that return `JsValue` can't run under `cargo test`.
+// The numerical logic, apart from the inputs and outputs that wrap it.
 fn compute(steps: u32, rate: f64) -> (Vec<f64>, Vec<f64>) {
     let n = steps as usize;
     let mut time = Vec::with_capacity(n);
@@ -20,16 +19,26 @@ fn compute(steps: u32, rate: f64) -> (Vec<f64>, Vec<f64>) {
     (time, values)
 }
 
-#[wasm_bindgen]
-pub fn simulate(steps: u32, rate: f64) -> JsValue {
-    let (time, values) = compute(steps, rate);
+/// Inputs of `simulate`, matched by name to the params object in `App.vue`.
+#[derive(Deserialize)]
+struct SimulateInputs {
+    steps: u32,
+    rate: f64,
+}
 
-    let series = ModelOutput::new(steps as usize)
+fn simulate(inputs: SimulateInputs) -> Outputs {
+    let (time, values) = compute(inputs.steps, inputs.rate);
+
+    let series = ModelOutput::new(time.len())
         .add_f64("time", time)
         .add_f64("values", values);
 
-    model_outputs([("series", series)])
+    Outputs::new().add("series", series)
 }
+
+// Makes `simulate` callable from the page: `useOutputs("simulate", params)`.
+// List every exported function here, e.g. `export!(simulate, summarize)`.
+export!(simulate);
 
 #[cfg(test)]
 mod tests {
@@ -46,6 +55,16 @@ mod tests {
         let (time, values) = compute(5, 2.0);
         assert_eq!(time.len(), 5);
         assert_eq!(values.len(), 5);
+    }
+
+    #[test]
+    fn test_simulate_outputs() {
+        let outputs = simulate(SimulateInputs {
+            steps: 5,
+            rate: 2.0,
+        });
+        assert_eq!(outputs.names(), ["series"]);
+        assert_eq!(outputs.tables()[0].1.len(), 5);
     }
 
     #[test]

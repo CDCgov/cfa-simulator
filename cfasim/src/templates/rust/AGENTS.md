@@ -12,7 +12,7 @@ The JSON output gives every component's `name`, `slug`, `keywords`, and absolute
 
 `{{ project_name }}` is a [cfasim](https://cdcgov.github.io/cfa-simulator/docs/) simulation. cfasim is a framework for interactive simulations built with Rust, Vue 3, and WebAssembly. The Rust model code compiles to WASM via [wasm-pack](https://rustwasm.github.io/wasm-pack/) and runs in the browser.
 
-- Rust model: `src/lib.rs` — `#[wasm_bindgen]` functions (e.g. `simulate`) called from the frontend
+- Rust model: `src/lib.rs`, with functions (e.g. `simulate`) that take an inputs struct and return `Outputs`, made callable from the frontend by `cfasim_model::export!`
 - Vue frontend: `interactive/src/App.vue` — wires UI components to the model via `useModel` from `cfasim-ui/wasm`
 - UI library: [`cfasim-ui`](https://cdcgov.github.io/cfa-simulator/docs/cfasim-ui/) — Vue components, charts, and composables
 
@@ -22,14 +22,15 @@ The JSON output gives every component's `name`, `slug`, `keywords`, and absolute
 - `pnpm build`: production build
 - `pnpm typecheck`: vue-tsc type checking
 - `pnpm test:e2e`: Playwright integration test (boots the dev server, loads the app). If Chromium is missing, run `cfasim tools` to install it.
-- `cargo test`: run Rust model unit tests (extract pure helpers from `#[wasm_bindgen]` functions so they're testable natively)
+- `cargo test`: run Rust model unit tests (exported functions are plain Rust, so tests can call them directly)
 
 ## Conventions
 
 - Import UI components from `cfasim-ui/components`, charts from `cfasim-ui/charts`, the model hook from `cfasim-ui/wasm`, and utilities from `cfasim-ui/shared`.
 - Icons: render Material Symbols with `<Icon icon="..." />` from `cfasim-ui/components`. A base set (e.g. `help`, `dark_mode`) works out of the box; to use any other icon you must register it — see [Registering icons](https://cdcgov.github.io/cfa-simulator/docs/cfasim-ui/components/icon#registering-icons). No icon webfont is loaded.
 - Use `useUrlParams` (from `cfasim-ui/shared`) to sync reactive parameters to the URL query string.
-- Model functions should return types that implement `Serialize`; the `useModel` composable handles transfer between the WASM worker and the main thread.
+- `useOutputs("simulate", params)` passes the params object to the model, where its keys are matched by name to the fields of the `SimulateInputs` struct (`#[derive(Deserialize)]`); order does not matter, and values can be numbers, booleans, strings, arrays or nested objects. Types are checked: a fractional or negative number for a `u32` field fails the call, so give integer params `number-type="integer"` on their `NumberInput`. When adding a param, update both the JS `defaults` object and the struct. Add `#[serde(rename_all = "camelCase")]` to the struct to use camelCase keys in JS.
+- Model functions return `Outputs` (named `ModelOutput` tables), or a `Result` of them to report an error to the page; the `useModel` composable handles transfer between the WASM worker and the main thread. List every exported function in the one `export!(...)` call at the end of `src/lib.rs`.
 
 ## After making changes
 

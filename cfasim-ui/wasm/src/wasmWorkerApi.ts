@@ -78,12 +78,31 @@ function restartWorker(): void {
   worker = newWorker();
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+/** Structural equality of call arguments or inputs. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== "object" || typeof b !== "object") return false;
+  if (a === null || b === null) return false;
+  if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = Object.keys(left);
+  if (keys.length !== Object.keys(right).length) return false;
+  return keys.every((key) => key in right && sameValue(left[key], right[key]));
+}
+
 function sameCall(a: WorkerMessage, b: WorkerMessage): boolean {
   return (
     a.model === b.model &&
     a.fn === b.fn &&
-    a.args.length === b.args.length &&
-    a.args.every((arg, i) => arg === b.args[i])
+    sameValue(a.args, b.args) &&
+    sameValue(a.inputs, b.inputs)
   );
 }
 
@@ -118,11 +137,7 @@ function replaceWorker(
   }
 }
 
-export function runWasm(
-  model: string,
-  fn: string,
-  ...args: string[]
-): Promise<unknown> {
+function post(call: Omit<WorkerMessage, "id">): Promise<unknown> {
   if (workerDeadError) {
     // The worker's module failed to load or it posted something unreadable.
     // That can be transient (a dev server restart), so try a fresh one
@@ -132,23 +147,69 @@ export function runWasm(
     }
     restartWorker();
   }
-  const initTrap = initTraps.get(model);
+  const initTrap = initTraps.get(call.model);
   if (initTrap) {
     if (Date.now() - initTrap.at < WORKER_RETRY_MS) {
       return Promise.reject(initTrap.error);
     }
-    initTraps.delete(model);
+    initTraps.delete(call.model);
   }
   return new Promise((resolve, reject) => {
-    const id = ++lastId;
-    const message: WorkerMessage = { id, model, fn, args };
-    pending.set(id, { message, resolve, reject });
-    worker.postMessage(message);
+    const message: WorkerMessage = { id: ++lastId, ...call };
+    pending.set(message.id, { message, resolve, reject });
+    try {
+      worker.postMessage(message);
+    } catch (error) {
+      // A value that cannot be cloned, such as a function.
+      pending.delete(message.id);
+      reject(error);
+    }
   });
 }
 
 /**
- * Terminate the worker and reject any in-flight `runWasm` promises with
+ * A copy made of plain objects and arrays. Vue's reactive proxies cannot be
+ * posted to a worker; typed arrays are kept as they are.
+ */
+function plainCopy(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => plainCopy(item));
+  if (!isPlainObject(value)) return value;
+  const copy: Record<string, unknown> = {};
+  for (const key of Object.keys(value)) {
+    copy[key] = plainCopy(value[key]);
+  }
+  return copy;
+}
+
+/**
+ * Call a model function with named inputs. A function exported with
+ * `cfasim_model::export!` receives them as one object, matched to its inputs
+ * struct by name; they can hold numbers, booleans, strings, arrays, typed
+ * arrays and nested objects. A function exported with plain `#[wasm_bindgen]`
+ * still gets the values positionally, in key order, as strings.
+ *
+ * Inputs that cannot be sent to the worker reject the returned promise.
+ */
+export async function callWasm(
+  model: string,
+  fn: string,
+  inputs: Record<string, unknown>,
+): Promise<unknown> {
+  const copy = plainCopy(inputs) as Record<string, unknown>;
+  return post({ model, fn, inputs: copy });
+}
+
+/** Call a model function with positional string arguments. */
+export function runWasm(
+  model: string,
+  fn: string,
+  ...args: string[]
+): Promise<unknown> {
+  return post({ model, fn, args });
+}
+
+/**
+ * Terminate the worker and reject any in-flight calls with
  * `Error("cancelled")`. A fresh worker is spawned for subsequent calls,
  * which means the wasm module cache is lost and the next call pays the
  * one-time module init cost. Use only when the running computation is

@@ -14,10 +14,8 @@ const defaults = {
 const params = reactive({ ...defaults });
 const { reset } = useUrlParams(params, defaults);
 const { useOutputs } = useModel("{{ module_name }}");
-// Bundle params as a JSON string so Rust deserializes a single `SimulateArgs`
-// struct (see `src/lib.rs`) instead of receiving each field positionally.
-const simArgs = computed(() => ({ json: JSON.stringify(params) }));
-const { outputs, loading, error } = useOutputs("simulate", simArgs);
+// The params are matched by name to the `SimulateArgs` struct in `src/lib.rs`.
+const { outputs, loading, error } = useOutputs("simulate", params);
 
 // One translucent series per realization; the overlap reads as a fan.
 const series = computed(() => {
@@ -43,11 +41,17 @@ const series = computed(() => {
         label="Infection rate"
         :step="0.05"
       />
-      <NumberInput v-model="params.population" label="Population" />
+      <NumberInput
+        v-model="params.population"
+        label="Population"
+        number-type="integer"
+        :min="1"
+      />
       <NumberInput v-model="params.maxTime" label="Max time" />
       <NumberInput
         v-model="params.nSimulations"
         label="Number of simulations"
+        number-type="integer"
         :min="1"
         :max="100"
       />

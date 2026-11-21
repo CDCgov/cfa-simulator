@@ -2,15 +2,14 @@ mod model;
 mod parameters;
 mod stats;
 
-use cfasim_model::{model_outputs, ModelOutput};
+use cfasim_model::{export, ModelOutput, Outputs};
 use serde::Deserialize;
-use wasm_bindgen::prelude::*;
 
 use crate::parameters::Parameters;
 
-/// Arguments accepted by `simulate`. JS passes these as a single JSON string
-/// (see `Page.vue`); `serde(rename_all = "camelCase")` bridges the JS field
-/// names to the snake_case Rust ones.
+/// Inputs of `simulate`, matched by name to the page's params object (see
+/// `Page.vue`); `serde(rename_all = "camelCase")` bridges the JS field names
+/// to the snake_case Rust ones.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SimulateArgs {
@@ -108,9 +107,7 @@ fn expected_outputs(
 /// column per run, plus a single `cumulative_infections_expected` curve
 /// from the deterministic SIR ODE. The summary's observed R₀ and attack
 /// rate are medians over the ensemble.
-#[wasm_bindgen]
-pub fn simulate(args: &str) -> JsValue {
-    let args: SimulateArgs = serde_json::from_str(args).expect("invalid simulate args");
+fn simulate(args: SimulateArgs) -> Outputs {
     let base_params = Parameters {
         infection_rate: args.infection_rate,
         infectious_period: args.infectious_period,
@@ -154,7 +151,7 @@ pub fn simulate(args: &str) -> JsValue {
         .add_f64("attack_rate_observed_median", vec![ar_median])
         .add_f64("attack_rate_expected", vec![ar_expected]);
 
-    model_outputs([("series", series), ("summary", summary)])
+    Outputs::from([("series", series), ("summary", summary)])
 }
 
 /// Streaming-friendly variant of `simulate`. Runs a slice of the ensemble
@@ -162,9 +159,7 @@ pub fn simulate(args: &str) -> JsValue {
 /// returns the raw per-run data so JS can accumulate across batches and
 /// re-render progressively. Aggregate statistics (median, observed summary)
 /// are NOT computed here — the caller does that across all batches.
-#[wasm_bindgen]
-pub fn simulate_batch(args: &str) -> JsValue {
-    let args: SimulateBatchArgs = serde_json::from_str(args).expect("invalid simulate_batch args");
+fn simulate_batch(args: SimulateBatchArgs) -> Outputs {
     let base_params = Parameters {
         infection_rate: args.infection_rate,
         infectious_period: args.infectious_period,
@@ -204,9 +199,11 @@ pub fn simulate_batch(args: &str) -> JsValue {
         .add_f64("r0_expected", vec![r0_expected])
         .add_f64("attack_rate_expected", vec![ar_expected]);
 
-    model_outputs([
+    Outputs::from([
         ("series", series),
         ("per_run", per_run),
         ("expected_summary", expected_summary),
     ])
 }
+
+export!(simulate, simulate_batch);

@@ -57,7 +57,7 @@ The steps below walk through adding a new `interactive/` directory inside your p
 
 ### Prepare your Rust crate
 
-Make sure your crate builds as a `cdylib` and depends on `wasm-bindgen` and `cfasim-model`. The `cfasim-model` crate provides the `ModelOutput` and `model_outputs` helpers that the UI uses to read your simulation results.
+Make sure your crate builds as a `cdylib` and depends on `wasm-bindgen`, `serde` and `cfasim-model`. The `cfasim-model` crate provides the `ModelOutput` and `Outputs` types that the UI uses to read your simulation results, and the `export!` macro that makes your functions callable from the page.
 
 **`Cargo.toml`** (minimum required):
 
@@ -72,17 +72,24 @@ crate-type = ["cdylib"]
 
 [dependencies]
 wasm-bindgen = "0.2"
-cfasim-model = "0.1"
+serde = { version = "1", features = ["derive"] }
+cfasim-model = "0.16"
 ```
 
 **`src/lib.rs`**:
 
 ```rust
-use cfasim_model::{model_outputs, ModelOutput};
-use wasm_bindgen::prelude::*;
+use cfasim_model::{export, ModelOutput, Outputs};
+use serde::Deserialize;
 
-#[wasm_bindgen]
-pub fn simulate(steps: u32, rate: f64) -> JsValue {
+#[derive(Deserialize)]
+struct SimulateInputs {
+    steps: u32,
+    rate: f64,
+}
+
+fn simulate(inputs: SimulateInputs) -> Outputs {
+    let SimulateInputs { steps, rate } = inputs;
     let time: Vec<f64> = (0..steps).map(|i| i as f64).collect();
     let values: Vec<f64> = (0..steps).map(|i| rate * i as f64).collect();
 
@@ -90,11 +97,13 @@ pub fn simulate(steps: u32, rate: f64) -> JsValue {
         .add_f64("time", time)
         .add_f64("values", values);
 
-    model_outputs([("series", series)])
+    Outputs::new().add("series", series)
 }
+
+export!(simulate);
 ```
 
-Each `#[wasm_bindgen]`-exported function becomes a callable entry point from the UI side.
+Each function listed in `export!` becomes a callable entry point from the UI side. It takes one inputs struct, whose fields are matched by name to the params object the page passes, so the page and the model never depend on argument order. See [Model inputs](../cfasim-ui/wasm#model-inputs) for nested values, defaults and errors.
 
 ### Set up the frontend
 
