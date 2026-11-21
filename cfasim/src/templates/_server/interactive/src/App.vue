@@ -23,8 +23,10 @@ function runLabel(r: RunSummary) {
 
 <template>
   <SidebarLayout>
-    <template #sidebar>
+    <template #sidebar-header-start>
       <h2>{{ project_name }}</h2>
+    </template>
+    <template #sidebar>
       <Button variant="secondary" @click="() => reset()">Reset</Button>
       <NumberInput v-model="params.steps" label="Steps" />
       <NumberInput v-model="params.rate" label="Rate" />

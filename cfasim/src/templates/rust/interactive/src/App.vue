@@ -14,8 +14,10 @@ const { outputs, loading, error } = useOutputs("simulate", params);
 
 <template>
   <SidebarLayout>
-    <template #sidebar>
+    <template #sidebar-header-start>
       <h2>{{ project_name }}</h2>
+    </template>
+    <template #sidebar>
       <Button variant="secondary" @click="() => reset()">Reset</Button>
       <NumberInput
         v-model="params.steps"
