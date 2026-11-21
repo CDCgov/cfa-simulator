@@ -6,9 +6,11 @@ import { useModel } from "cfasim-ui/wasm";
 import { useUrlParams } from "cfasim-ui/shared";
 
 const defaults = {
-  infectionRate: 0.5,
+  infectiousness: 0.4,
+  infectiousPeriod: 5,
   population: 1000,
-  maxTime: 50,
+  initialInfections: 5,
+  maxTime: 100,
   nSimulations: 20,
 };
 const params = reactive({ ...defaults });
@@ -37,9 +39,15 @@ const series = computed(() => {
       <h2>{{ project_name }}</h2>
       <Button variant="secondary" @click="() => reset()">Reset</Button>
       <NumberInput
-        v-model="params.infectionRate"
-        label="Infection rate"
+        v-model="params.infectiousness"
+        label="Infectiousness (attempts per day)"
         :step="0.05"
+        :min="0"
+      />
+      <NumberInput
+        v-model="params.infectiousPeriod"
+        label="Mean infectious period (days)"
+        :step="0.5"
       />
       <NumberInput
         v-model="params.population"
@@ -47,7 +55,13 @@ const series = computed(() => {
         number-type="integer"
         :min="1"
       />
-      <NumberInput v-model="params.maxTime" label="Max time" />
+      <NumberInput
+        v-model="params.initialInfections"
+        label="Initial infections"
+        number-type="integer"
+        :min="0"
+      />
+      <NumberInput v-model="params.maxTime" label="Max time (days)" :min="0" />
       <NumberInput
         v-model="params.nSimulations"
         label="Number of simulations"
@@ -63,7 +77,7 @@ const series = computed(() => {
       v-else-if="series.length"
       :series="series"
       :height="300"
-      x-label="time"
+      x-label="day"
       y-label="cumulative infections"
       tooltip-trigger="hover"
     />

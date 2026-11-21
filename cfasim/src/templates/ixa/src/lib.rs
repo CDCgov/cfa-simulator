@@ -16,8 +16,10 @@ use crate::model::Parameters;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SimulateArgs {
-    infection_rate: f64,
+    infectiousness: f64,
+    infectious_period: f64,
     population: u32,
+    initial_infections: u32,
     max_time: f64,
     n_simulations: u32,
 }
@@ -26,18 +28,21 @@ struct SimulateArgs {
 /// and returns one `time` column plus one `values_{i}` column per run, so
 /// the frontend can spaghetti-plot them. A missing or mistyped input reaches
 /// the page as the `error` from `useOutputs`; a panic does too, with its file
-/// and line. Return a `Result<Outputs, String>` to report errors of your own.
-fn simulate(args: SimulateArgs) -> Outputs {
+/// and line. An `Err` returned here (such as an invalid parameter) is shown
+/// the same way.
+fn simulate(args: SimulateArgs) -> Result<Outputs, String> {
     let params = Parameters {
-        infection_rate: args.infection_rate,
         population: args.population as usize,
+        initial_infections: args.initial_infections as usize,
+        infectiousness: args.infectiousness,
+        infectious_period: args.infectious_period,
         max_time: args.max_time,
     };
 
     let mut time: Vec<f64> = Vec::new();
     let mut trajectories: Vec<Vec<f64>> = Vec::with_capacity(args.n_simulations as usize);
     for i in 0..args.n_simulations {
-        let (t, values) = model::run(params.clone(), i as u64);
+        let (t, values) = model::run(params.clone(), i as u64)?;
         if i == 0 {
             time = t;
         }
@@ -49,7 +54,7 @@ fn simulate(args: SimulateArgs) -> Outputs {
         series = series.add_f64(&format!("values_{i}"), values);
     }
 
-    Outputs::new().add("series", series)
+    Ok(Outputs::new().add("series", series))
 }
 
 // Makes `simulate` callable from the page. List every exported function
