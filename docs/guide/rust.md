@@ -73,7 +73,7 @@ crate-type = ["cdylib"]
 [dependencies]
 wasm-bindgen = "0.2"
 serde = { version = "1", features = ["derive"] }
-cfasim-model = "0.15"
+cfasim-model = "0.16"
 ```
 
 **`src/lib.rs`**:
