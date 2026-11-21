@@ -52,7 +52,7 @@ macro_rules! export {
 
             $(
                 #[wasm_bindgen]
-                pub fn $name(inputs: &str) -> Result<JsValue, JsError> {
+                pub fn $name(inputs: JsValue) -> Result<JsValue, JsError> {
                     $crate::__private::call(stringify!($name), inputs, super::$name)
                 }
             )+
@@ -83,27 +83,24 @@ impl<T: Into<Outputs>, E: Display> IntoOutputs for Result<T, E> {
     }
 }
 
-/// Deserialize the page's inputs object for the function `name`.
-pub fn parse_inputs<I: DeserializeOwned>(name: &str, json: &str) -> Result<I, String> {
-    serde_json::from_str(json).map_err(|e| {
-        let mut message = format!("invalid inputs for {name}: {e}");
-        if !json.trim_start().starts_with('{') {
-            // An older page spreads its params as positional arguments.
-            message.push_str(
-                " (expected a JSON object of named inputs; \
-                 update @cfasim-ui/wasm if the page still calls positionally)",
-            );
-        }
-        message
-    })
-}
-
-pub fn call<I, R>(name: &str, json: &str, run: impl FnOnce(I) -> R) -> Result<JsValue, JsError>
+pub fn call<I, R>(name: &str, inputs: JsValue, run: impl FnOnce(I) -> R) -> Result<JsValue, JsError>
 where
     I: DeserializeOwned,
     R: IntoOutputs,
 {
-    let inputs = parse_inputs(name, json).map_err(|e| JsError::new(&e))?;
+    // An older page spreads its params as positional string arguments.
+    let hint = if inputs.is_object() {
+        ""
+    } else {
+        " (expected an object of named inputs; update @cfasim-ui/wasm if the page still calls \
+         positionally)"
+    };
+    let inputs: I = serde_wasm_bindgen::from_value(inputs).map_err(|e| {
+        // The error is a JS `Error`, which prints with its class name.
+        let text = e.to_string();
+        let reason = text.strip_prefix("Error: ").unwrap_or(&text);
+        JsError::new(&format!("invalid inputs for {name}: {reason}{hint}"))
+    })?;
     let outputs = run(inputs).into_outputs().map_err(|e| JsError::new(&e))?;
     Ok(outputs.into_js())
 }
@@ -114,67 +111,12 @@ mod tests {
     use crate::ModelOutput;
     use serde::Deserialize;
 
-    #[derive(Deserialize, Debug, PartialEq)]
-    struct Group {
-        label: String,
-        size: u32,
-    }
-
-    #[derive(Deserialize, Debug, PartialEq)]
+    // Deserializing needs a JS engine, so that half is covered by the models
+    // and CLI e2e tests.
+    #[derive(Deserialize)]
     struct Inputs {
         steps: u32,
         rate: f64,
-        #[serde(default)]
-        stochastic: bool,
-        #[serde(default)]
-        contacts: Vec<Vec<f64>>,
-        #[serde(default)]
-        groups: Vec<Group>,
-    }
-
-    #[test]
-    fn fields_match_by_name_in_any_order() {
-        let inputs: Inputs = parse_inputs("simulate", r#"{"rate": 2.5, "steps": 10}"#).unwrap();
-        assert_eq!(inputs.steps, 10);
-        assert_eq!(inputs.rate, 2.5);
-    }
-
-    #[test]
-    fn carries_booleans_arrays_and_nested_values() {
-        let json = r#"{
-            "steps": 1,
-            "rate": 0.5,
-            "stochastic": true,
-            "contacts": [[1.0, 0.2], [0.2, 1.0]],
-            "groups": [{"label": "adults", "size": 80}],
-            "uiOnly": "ignored"
-        }"#;
-        let inputs: Inputs = parse_inputs("simulate", json).unwrap();
-        assert!(inputs.stochastic);
-        assert_eq!(inputs.contacts, vec![vec![1.0, 0.2], vec![0.2, 1.0]]);
-        assert_eq!(
-            inputs.groups,
-            vec![Group {
-                label: "adults".into(),
-                size: 80
-            }]
-        );
-    }
-
-    #[test]
-    fn a_missing_field_is_named() {
-        let error = parse_inputs::<Inputs>("simulate", r#"{"steps": 10}"#).unwrap_err();
-        assert!(
-            error.starts_with("invalid inputs for simulate: missing field `rate`"),
-            "{error}"
-        );
-        assert!(!error.contains("positionally"), "{error}");
-    }
-
-    #[test]
-    fn a_positional_call_gets_a_hint() {
-        let error = parse_inputs::<Inputs>("simulate", "10").unwrap_err();
-        assert!(error.contains("expected a JSON object"), "{error}");
     }
 
     fn simulate(inputs: Inputs) -> Outputs {
@@ -200,7 +142,10 @@ mod tests {
 
     #[test]
     fn return_values_convert_to_outputs() {
-        let inputs = || parse_inputs::<Inputs>("simulate", r#"{"steps": 3, "rate": -1}"#).unwrap();
+        let inputs = || Inputs {
+            steps: 3,
+            rate: -1.0,
+        };
         assert_eq!(
             simulate(inputs()).into_outputs().unwrap().names(),
             ["series"]

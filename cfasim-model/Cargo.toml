@@ -12,13 +12,14 @@ categories = ["wasm"]
 [dependencies]
 wasm-bindgen = { version = "0.2.126", optional = true }
 js-sys = { version = "0.3.103", optional = true }
+serde-wasm-bindgen = { version = "0.6.5", optional = true }
 serde = { version = "1.0.229", features = ["derive"], optional = true }
 serde_json = { version = "1.0.150", optional = true }
 
 [features]
 default = ["wasm"]
 # Browser models: `export!` and `into_js` / `model_outputs` through wasm-bindgen.
-wasm = ["dep:wasm-bindgen", "dep:js-sys", "dep:serde", "dep:serde_json"]
+wasm = ["dep:wasm-bindgen", "dep:js-sys", "dep:serde", "dep:serde-wasm-bindgen"]
 # Native task worker for `cfasim serve`: the `tasks` and `outputs_file` modules.
 tasks = ["dep:serde", "dep:serde_json"]
 

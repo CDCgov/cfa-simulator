@@ -23,7 +23,7 @@ pub mod tasks;
 #[cfg(feature = "wasm")]
 #[doc(hidden)]
 pub mod __private {
-    pub use crate::export::{call, parse_inputs, IntoOutputs};
+    pub use crate::export::{call, IntoOutputs};
     pub use wasm_bindgen;
 }
 

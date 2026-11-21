@@ -24,7 +24,7 @@ describe("callModelFunction", () => {
       args: ["2.5", "10"],
       inputs: INPUTS,
     };
-    expect(callModelFunction(mod, message)).toEqual([INPUTS]);
+    expect(callModelFunction(mod, message)).toEqual([{ rate: 2.5, steps: 10 }]);
     callModelFunction(mod, message);
     expect(mod.__cfasim_named_inputs).toHaveBeenCalledTimes(1);
     expect(warn).not.toHaveBeenCalled();

@@ -30,7 +30,7 @@ export function callModelFunction(
     throw new Error(`Model ${model} has no function ${fn}`);
   }
   if (inputs === undefined) return mod[fn](...args);
-  if (takesNamedInputs(mod, fn)) return mod[fn](inputs);
+  if (takesNamedInputs(mod, fn)) return mod[fn](JSON.parse(inputs));
 
   const key = `${model}.${fn}`;
   if (!warnedPositional.has(key)) {
