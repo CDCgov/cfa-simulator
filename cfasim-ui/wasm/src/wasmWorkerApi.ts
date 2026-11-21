@@ -82,6 +82,7 @@ function sameCall(a: WorkerMessage, b: WorkerMessage): boolean {
   return (
     a.model === b.model &&
     a.fn === b.fn &&
+    a.inputs === b.inputs &&
     a.args.length === b.args.length &&
     a.args.every((arg, i) => arg === b.args[i])
   );
@@ -118,10 +119,11 @@ function replaceWorker(
   }
 }
 
-export function runWasm(
+function post(
   model: string,
   fn: string,
-  ...args: string[]
+  args: string[],
+  inputs?: string,
 ): Promise<unknown> {
   if (workerDeadError) {
     // The worker's module failed to load or it posted something unreadable.
@@ -142,9 +144,45 @@ export function runWasm(
   return new Promise((resolve, reject) => {
     const id = ++lastId;
     const message: WorkerMessage = { id, model, fn, args };
+    if (inputs !== undefined) message.inputs = inputs;
     pending.set(id, { message, resolve, reject });
     worker.postMessage(message);
   });
+}
+
+// Typed arrays would serialize as `{"0": 1, ...}` objects.
+function stringifyInputs(inputs: Record<string, unknown>): string {
+  return JSON.stringify(inputs, (_key, value) => {
+    if (ArrayBuffer.isView(value) && !(value instanceof DataView)) {
+      return Array.from(value as unknown as ArrayLike<number>);
+    }
+    return value;
+  });
+}
+
+/**
+ * Call a model function with named inputs. A function exported with
+ * `cfasim_model::export!` receives them as one object, matched to its inputs
+ * struct by name; they can hold anything JSON can, and typed arrays are sent
+ * as arrays. A function exported with plain `#[wasm_bindgen]` still gets the
+ * values positionally, in key order, as strings.
+ */
+export function callWasm(
+  model: string,
+  fn: string,
+  inputs: Record<string, unknown>,
+): Promise<unknown> {
+  const args = Object.values(inputs).map(String);
+  return post(model, fn, args, stringifyInputs(inputs));
+}
+
+/** Call a model function with positional string arguments. */
+export function runWasm(
+  model: string,
+  fn: string,
+  ...args: string[]
+): Promise<unknown> {
+  return post(model, fn, args);
 }
 
 /**

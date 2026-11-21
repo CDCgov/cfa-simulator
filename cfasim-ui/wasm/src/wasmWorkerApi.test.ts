@@ -35,11 +35,12 @@ class FakeWorker extends EventTarget {
 }
 
 let runWasm: typeof import("./wasmWorkerApi.js").runWasm;
+let callWasm: typeof import("./wasmWorkerApi.js").callWasm;
 let cancelWasm: typeof import("./wasmWorkerApi.js").cancelWasm;
 
 beforeAll(async () => {
   vi.stubGlobal("Worker", FakeWorker);
-  ({ runWasm, cancelWasm } = await import("./wasmWorkerApi.js"));
+  ({ runWasm, callWasm, cancelWasm } = await import("./wasmWorkerApi.js"));
 });
 
 function lastPosted(w: FakeWorker): WorkerMessage {
@@ -185,5 +186,54 @@ describe("runWasm", () => {
     await expect(p).rejects.toThrow("cancelled");
     expect(w.terminated).toBe(true);
     expect(FakeWorker.current()).not.toBe(w);
+  });
+
+  it("callWasm sends named inputs, and the same values positionally", async () => {
+    const w = FakeWorker.current();
+    const p = callWasm("m", "simulate", {
+      rate: 2.5,
+      stochastic: false,
+      contacts: [new Float64Array([1, 0.5]), [0.5, 1]],
+      group: { label: "adults" },
+    });
+    const { id, inputs, args } = lastPosted(w);
+    expect(JSON.parse(inputs!)).toEqual({
+      rate: 2.5,
+      stochastic: false,
+      contacts: [
+        [1, 0.5],
+        [0.5, 1],
+      ],
+      group: { label: "adults" },
+    });
+    expect(args.slice(0, 2)).toEqual(["2.5", "false"]);
+    w.reply({ id, result: "ok" });
+    await expect(p).resolves.toBe("ok");
+  });
+
+  it("re-sends a named call with other inputs after a trap", async () => {
+    const old = FakeWorker.current();
+    const trapped = callWasm("m", "simulate", { rate: 9 });
+    const repeat = callWasm("m", "simulate", { rate: 9 });
+    const other = callWasm("m", "simulate", { rate: 1 });
+    const trappedId = old.posted[old.posted.length - 3].id;
+    const otherId = lastPosted(old).id;
+
+    old.reply({ id: trappedId, error: PANIC, trap: "call" });
+    await expect(trapped).rejects.toThrow(PANIC);
+    await expect(repeat).rejects.toThrow(PANIC);
+
+    const fresh = FakeWorker.current();
+    expect(fresh.posted).toEqual([
+      {
+        id: otherId,
+        model: "m",
+        fn: "simulate",
+        args: ["1"],
+        inputs: '{"rate":1}',
+      },
+    ]);
+    fresh.reply({ id: otherId, result: 1 });
+    await expect(other).resolves.toBe(1);
   });
 });
