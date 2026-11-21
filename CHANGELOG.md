@@ -1,6 +1,18 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.16.0] - 2026-11-21
+
+### Bug Fixes
+
+- **cli:** Ignore target and wasm build output in the ixa template
+
+### Features
+
+- Add export! for wasm functions
+- **cli:** Build the ixa template on ixa 5 and core_epi
+- **cli:** Put the template title in the sidebar header
+
 ## [0.15.7] - 2026-11-19
 
 ### Bug Fixes
