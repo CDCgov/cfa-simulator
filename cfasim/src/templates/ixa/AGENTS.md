@@ -14,7 +14,7 @@ The JSON output gives every component's `name`, `slug`, `keywords`, and absolute
 
 - ixa model: `src/model.rs` — a minimal SI epidemic. `Parameters` struct plus `define_entity!`, `define_property!`, `define_global_property!`, and `define_rng!`; a subscription to `Status` changes drives each newly-infected person to schedule their own next exponential transmission attempt. The `run` function takes `Parameters` and returns `(time, cumulative_infections)`.
 - Stats sink: `src/stats.rs` — wraps `define_data_plugin!` so the model just calls `record_infection(ctx, time)` per event and `cumulative_timeseries(ctx, max_time)` at the end. In-memory replacement for ixa's CSV-on-disk reports, which don't work in WASM.
-- WASM entry: `src/lib.rs` — `#[wasm_bindgen] simulate(args: &str)` deserializes a `SimulateArgs` struct from the JSON sent by `App.vue`, builds `Parameters`, calls `model::run`, and returns the timeseries via `cfasim-model`'s `ModelOutput`.
+- WASM entry: `src/lib.rs` — `simulate(args: SimulateArgs)` receives the params object from `App.vue` as a struct, builds `Parameters`, calls `model::run`, and returns the timeseries via `cfasim-model`'s `ModelOutput`. `cfasim_model::export!(simulate)` makes it callable from the page.
 - Vue frontend: `interactive/src/App.vue` — wires UI components to the model via `useModel` from `cfasim-ui/wasm`
 - UI library: [`cfasim-ui`](https://cdcgov.github.io/cfa-simulator/docs/cfasim-ui/) — Vue components, charts, and composables
 
@@ -24,14 +24,14 @@ The JSON output gives every component's `name`, `slug`, `keywords`, and absolute
 - `pnpm build`: production build
 - `pnpm typecheck`: vue-tsc type checking
 - `pnpm test:e2e`: Playwright integration test (boots the dev server, loads the app). If Chromium is missing, run `cfasim tools` to install it.
-- `cargo test`: run Rust model unit tests. Extract pure helpers from `#[wasm_bindgen]` functions so they're testable natively.
+- `cargo test`: run Rust model unit tests. Exported functions are plain Rust, so tests can call them directly.
 
 ## Conventions
 
 - Import UI components from `cfasim-ui/components`, charts from `cfasim-ui/charts`, the model hook from `cfasim-ui/wasm`, and utilities from `cfasim-ui/shared`.
 - Icons: render Material Symbols with `<Icon icon="..." />` from `cfasim-ui/components`. A base set (e.g. `help`, `dark_mode`) works out of the box; to use any other icon you must register it — see [Registering icons](https://cdcgov.github.io/cfa-simulator/docs/cfasim-ui/components/icon#registering-icons). No icon webfont is loaded.
 - Use `useUrlParams` (from `cfasim-ui/shared`) to sync reactive parameters to the URL query string.
-- `App.vue` passes params to `simulate` as a JSON string (`{ json: JSON.stringify(params) }`); the Rust side deserializes into `SimulateArgs`, whose `#[serde(rename_all = "camelCase")]` maps the JS keys (`infectionRate`, `nSimulations`, ...) to snake_case fields. When adding a param, update both the JS `defaults` object and the `SimulateArgs` struct.
+- `App.vue` passes its params object to `simulate` with `useOutputs("simulate", params)`; the keys are matched by name to the fields of `SimulateArgs` (order does not matter), whose `#[serde(rename_all = "camelCase")]` maps the JS keys (`infectionRate`, `nSimulations`, ...) to snake_case fields. Values can be numbers, booleans, strings, arrays or nested objects. When adding a param, update both the JS `defaults` object and the `SimulateArgs` struct, and list any new exported function in the `export!(...)` call.
 - For in-browser ixa runs, never use `context.report_options().directory(...)` — disk I/O fails in the browser. Collect data in an in-memory plugin (see `src/stats.rs` + `define_data_plugin!` in `src/sir.rs`) and serialize through `ModelOutput`.
 - `.cargo/config.toml` sets `--cfg getrandom_backend="wasm_js"` for the `wasm32-unknown-unknown` target, which is required for `getrandom` (transitively used by `rand` / `rand_distr`) to work in the browser.
 

@@ -14,10 +14,8 @@ const defaults = {
 const params = reactive({ ...defaults });
 const { reset } = useUrlParams(params, defaults);
 const { useOutputs } = useModel("{{ module_name }}");
-// Bundle params as a JSON string so Rust deserializes a single `SimulateArgs`
-// struct (see `src/lib.rs`) instead of receiving each field positionally.
-const simArgs = computed(() => ({ json: JSON.stringify(params) }));
-const { outputs, loading, error } = useOutputs("simulate", simArgs);
+// The params are matched by name to the `SimulateArgs` struct in `src/lib.rs`.
+const { outputs, loading, error } = useOutputs("simulate", params);
 
 // One translucent series per realization; the overlap reads as a fan.
 const series = computed(() => {
