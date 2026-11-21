@@ -4,16 +4,15 @@
 
 ## useModel
 
-A Vue composable that returns a `run` function for calling WASM functions, and a `useOutputs` hook for reactive structured model outputs.
+A Vue composable that returns a `useOutputs` hook for reactive structured model outputs, and a `run` function for calling a model function yourself.
 
 ```ts
-import { ref, watch } from "vue";
+import { reactive } from "vue";
 import { useModel } from "@cfasim-ui/wasm";
 
-const n = ref(5);
-const { run, result, error, loading } = useModel<number>("my-model");
-
-watch(n, (val) => run("double", val), { immediate: true });
+const params = reactive({ steps: 100, rate: 0.5 });
+const { useOutputs } = useModel("my-model");
+const { outputs, loading, error } = useOutputs("simulate", params);
 ```
 
 ### Parameters
@@ -24,17 +23,17 @@ watch(n, (val) => run("double", val), { immediate: true });
 
 ### Returns
 
-| Property     | Type                                                     | Description                                        |
-| ------------ | -------------------------------------------------------- | -------------------------------------------------- |
-| `run`        | `(fn: string, ...args: (string \| number)[]) => Promise` | Call an exported WASM function                     |
-| `result`     | `Ref<T>`                                                 | Return value from the last call                    |
-| `error`      | `Ref<string>`                                            | Error message if the call failed                   |
-| `loading`    | `Ref<boolean>`                                           | `true` while a call is running                     |
-| `useOutputs` | `(fn, params) => { outputs, error, loading }`            | Reactive hook for structured `ModelOutput` results |
+| Property     | Type                                                  | Description                                                                                              |
+| ------------ | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `run`        | `(fn, inputs) => Promise`, `(fn, ...args) => Promise` | Call a model function with named inputs, or a plain `#[wasm_bindgen]` function with positional arguments |
+| `result`     | `Ref<T>`                                              | Return value from the last call                                                                          |
+| `error`      | `Ref<string>`                                         | Error message if the call failed                                                                         |
+| `loading`    | `Ref<boolean>`                                        | `true` while a call is running                                                                           |
+| `useOutputs` | `(fn, params) => { outputs, error, loading }`         | Reactive hook for structured `ModelOutput` results                                                       |
 
 ## useOutputs
 
-Returned from `useModel`. Watches a reactive params object and calls the model function whenever params change. The model function should return a `Record<string, ModelOutput>` via the `cfasim-model` crate's `model_outputs()` helper.
+Returned from `useModel`. Watches a reactive params object and calls the model function whenever params change, passing the params as its [named inputs](#model-inputs). The model function returns `Outputs`, which arrive as a `Record<string, ModelOutput>`.
 
 ```ts
 import { reactive } from "vue";
@@ -50,10 +49,10 @@ const { outputs, loading } = useOutputs("simulate", params);
 
 ### Parameters
 
-| Param    | Type                                | Description                    |
-| -------- | ----------------------------------- | ------------------------------ |
-| `fn`     | `string`                            | WASM function to call          |
-| `params` | `MaybeRef<Record<string, unknown>>` | Reactive params (deep-watched) |
+| Param    | Type                                | Description                                      |
+| -------- | ----------------------------------- | ------------------------------------------------ |
+| `fn`     | `string`                            | Model function to call                           |
+| `params` | `MaybeRef<Record<string, unknown>>` | Reactive params (deep-watched), its named inputs |
 
 ### Returns
 
@@ -63,19 +62,69 @@ const { outputs, loading } = useOutputs("simulate", params);
 | `error`   | `Ref<string>`                      | Error message if the call failed   |
 | `loading` | `Ref<boolean>`                     | `true` while running               |
 
+## Model inputs
+
+A model function takes one inputs struct and is exported with `export!` from the `cfasim-model` crate:
+
+```rust
+use cfasim_model::{export, ModelOutput, Outputs};
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct SimulateInputs {
+    steps: u32,
+    rate: f64,
+}
+
+fn simulate(inputs: SimulateInputs) -> Outputs {
+    let values: Vec<f64> = (0..inputs.steps).map(|t| t as f64 * inputs.rate).collect();
+    let series = ModelOutput::new(values.len()).add_f64("values", values);
+    Outputs::new().add("series", series)
+}
+
+export!(simulate);
+```
+
+The keys of the params object are matched to the struct's fields by name, so their order does not matter. Values can be numbers, booleans, strings, arrays (typed arrays included) and nested objects, for anything serde can deserialize:
+
+```rust
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SimulateInputs {
+    infection_rate: f64,       // { infectionRate: 0.5, ... }
+    stochastic: bool,
+    contacts: Vec<Vec<f64>>,   // [[1, 0.2], [0.2, 1]]
+    groups: Vec<Group>,        // [{ label: "adults", size: 80 }]
+    #[serde(default)]
+    seed: u64,                 // optional, 0 when the page leaves it out
+}
+```
+
+- Keys the struct does not declare are ignored, so UI-only state can live in the same params object. Add `#[serde(deny_unknown_fields)]` to reject them.
+- A missing or mistyped value fails the call with an error naming the field, such as ``invalid inputs for simulate: missing field `rate` ``. A cleared `NumberInput` is `undefined`, which counts as missing: use `Option<f64>` or `#[serde(default)]` for inputs that may be empty.
+- The function may return `Result<Outputs, E>` for any `E` that implements `Display`. The `Err` text becomes the `error` on the page.
+- Exported functions stay plain Rust, so `cargo test` can call them directly.
+- Call `export!` once, at the crate root, listing every exported function: `export!(simulate, summarize);`.
+
+### Positional functions
+
+A function exported with plain `#[wasm_bindgen]` still works with `useOutputs`: the params' values are passed as positional string arguments in key order, as in cfasim-ui 0.15 and earlier. The order of the keys then has to match the Rust signature, and only numbers and strings survive the trip, so the worker logs a warning once per function suggesting `export!`. Models built against a `cfasim-model` release without `export!` keep working this way.
+
+`run(fn, ...args)` and [`runWasm`](#runwasm) call positional functions on purpose and never warn. Use them for exports that do not return `Outputs`, such as a function returning a single number.
+
 ## Errors and panics
 
 Both `run` and `useOutputs` set `error` to a string when a call fails, and the worker logs the same text with `console.error` as `[wasm-worker] <model>.<fn> failed: ...`, followed by the thrown error for its stack.
 
-For failures the model expects, return a `Result` and let wasm-bindgen throw it. The `Err` message is what the page sees:
+For failures the model expects, return a `Result`. The `Err` message is what the page sees:
 
 ```rust
-#[wasm_bindgen]
-pub fn simulate(args: &str) -> Result<JsValue, JsError> {
-    let args: SimulateArgs = serde_json::from_str(args)
-        .map_err(|e| JsError::new(&format!("invalid simulate args: {e}")))?;
+fn simulate(inputs: SimulateInputs) -> Result<Outputs, String> {
+    if inputs.rate > 5.0 {
+        return Err(format!("rate must be <= 5, got {}", inputs.rate));
+    }
     // ...
-    Ok(model_outputs([("series", series)]))
+    Ok(Outputs::new().add("series", series))
 }
 ```
 
@@ -139,17 +188,35 @@ cfasimWasm({
 
 ## Lower-level API
 
-For more control, use the worker API directly:
+For more control (your own scheduling, batching or cancellation), use the worker API directly:
 
 ```ts
-import { runWasm } from "@cfasim-ui/wasm";
+import { callWasm, runWasm, cancelWasm } from "@cfasim-ui/wasm";
 
-const result = await runWasm("my-model", "hello", "arg1", "arg2");
+const outputs = await callWasm("my-model", "simulate", {
+  steps: 100,
+  rate: 0.5,
+});
+const doubled = await runWasm("my-model", "double", "4");
+```
+
+Modules load in a Web Worker and are cached after the first call.
+
+### callWasm
+
+Calls a model function with [named inputs](#model-inputs), like `useOutputs` does.
+
+```ts
+function callWasm(
+  model: string,
+  fn: string,
+  inputs: Record<string, unknown>,
+): Promise<unknown>;
 ```
 
 ### runWasm
 
-Calls a function on a dynamically-loaded WASM module in a Web Worker. Modules are cached after first load.
+Calls a plain `#[wasm_bindgen]` function with positional string arguments.
 
 ```ts
 function runWasm(
@@ -158,3 +225,7 @@ function runWasm(
   ...args: string[]
 ): Promise<unknown>;
 ```
+
+### cancelWasm
+
+Terminates the worker and rejects the calls in flight with `Error("cancelled")`. The next call starts a fresh worker and pays the module init cost again.
