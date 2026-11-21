@@ -1,7 +1,7 @@
 //! Model output types for cfasim simulations.
 //!
 //! [`ModelOutput`] is one table of typed columns and [`Outputs`] a set of named
-//! tables. In the browser a model exports functions with [`export!`], which
+//! tables. In the browser a model exports functions with `export!`, which
 //! take named inputs from the page and return `Outputs`; with the `tasks`
 //! feature they are written to a `.cfasim` outputs file by the [`tasks`]
 //! worker that `cfasim serve` runs.
@@ -19,7 +19,7 @@ pub mod panic_hook;
 #[cfg(feature = "tasks")]
 pub mod tasks;
 
-/// Support for [`export!`]; not part of the public API.
+/// Support for `export!`; not part of the public API.
 #[cfg(feature = "wasm")]
 #[doc(hidden)]
 pub mod __private {

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
+import { reactive } from "vue";
 import type { WorkerMessage } from "./messages.js";
 
 class FakeWorker extends EventTarget {
@@ -12,7 +13,8 @@ class FakeWorker extends EventTarget {
   }
 
   postMessage(message: WorkerMessage) {
-    this.posted.push(message);
+    // Throws for values a real worker could not receive.
+    this.posted.push(structuredClone(message));
   }
 
   terminate() {
@@ -188,34 +190,56 @@ describe("runWasm", () => {
     expect(FakeWorker.current()).not.toBe(w);
   });
 
-  it("callWasm sends named inputs, and the same values positionally", async () => {
+  it("callWasm posts the inputs as a plain object, values intact", async () => {
     const w = FakeWorker.current();
-    const p = callWasm("m", "simulate", {
+    // Reactive proxies cannot be cloned to a worker, nested ones included.
+    const params = reactive({
       rate: 2.5,
+      horizon: Infinity,
       stochastic: false,
+      cleared: undefined,
       contacts: [new Float64Array([1, 0.5]), [0.5, 1]],
       group: { label: "adults" },
     });
+    const p = callWasm("m", "simulate", { ...params, extra: 1 });
     const { id, inputs, args } = lastPosted(w);
-    expect(JSON.parse(inputs!)).toEqual({
+    expect(args).toBeUndefined();
+    expect(inputs).toEqual({
       rate: 2.5,
+      horizon: Infinity,
       stochastic: false,
-      contacts: [
-        [1, 0.5],
-        [0.5, 1],
-      ],
+      cleared: undefined,
+      contacts: [new Float64Array([1, 0.5]), [0.5, 1]],
       group: { label: "adults" },
+      extra: 1,
     });
-    expect(args.slice(0, 2)).toEqual(["2.5", "false"]);
+    expect(Object.keys(inputs!)).toContain("cleared");
     w.reply({ id, result: "ok" });
     await expect(p).resolves.toBe("ok");
   });
 
+  it("callWasm rejects inputs that cannot be sent to the worker", async () => {
+    const w = FakeWorker.current();
+    const before = w.posted.length;
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    await expect(callWasm("m", "simulate", circular)).rejects.toThrow();
+    await expect(
+      callWasm("m", "simulate", { callback: () => 1 }),
+    ).rejects.toThrow();
+    expect(w.posted).toHaveLength(before);
+
+    // Nothing is left pending: a later trap has no stale call to re-send.
+    const next = callWasm("m", "simulate", { rate: 1 });
+    w.reply({ id: lastPosted(w).id, result: 1 });
+    await expect(next).resolves.toBe(1);
+  });
+
   it("re-sends a named call with other inputs after a trap", async () => {
     const old = FakeWorker.current();
-    const trapped = callWasm("m", "simulate", { rate: 9 });
-    const repeat = callWasm("m", "simulate", { rate: 9 });
-    const other = callWasm("m", "simulate", { rate: 1 });
+    const trapped = callWasm("m", "simulate", { rate: 9, sizes: [1, 2] });
+    const repeat = callWasm("m", "simulate", { sizes: [1, 2], rate: 9 });
+    const other = callWasm("m", "simulate", { rate: 9, sizes: [1, 3] });
     const trappedId = old.posted[old.posted.length - 3].id;
     const otherId = lastPosted(old).id;
 
@@ -229,8 +253,7 @@ describe("runWasm", () => {
         id: otherId,
         model: "m",
         fn: "simulate",
-        args: ["1"],
-        inputs: '{"rate":1}',
+        inputs: { rate: 9, sizes: [1, 3] },
       },
     ]);
     fresh.reply({ id: otherId, result: 1 });

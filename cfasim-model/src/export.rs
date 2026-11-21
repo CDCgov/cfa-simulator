@@ -88,12 +88,13 @@ where
     I: DeserializeOwned,
     R: IntoOutputs,
 {
-    // An older page spreads its params as positional string arguments.
+    // Positional arguments: `run(fn, ...args)` or `runWasm`, or a page on a
+    // cfasim-ui release from before named inputs.
     let hint = if inputs.is_object() {
         ""
     } else {
-        " (expected an object of named inputs; update @cfasim-ui/wasm if the page still calls \
-         positionally)"
+        " (expected an object of named inputs: call it with useOutputs or callWasm, from \
+         @cfasim-ui/wasm 0.16 or newer)"
     };
     let inputs: I = serde_wasm_bindgen::from_value(inputs).map_err(|e| {
         // The error is a JS `Error`, which prints with its class name.

@@ -1,13 +1,14 @@
+/** A call into a model: positional `args` or named `inputs`, never both. */
 export interface WorkerMessage {
   id: number;
   model: string;
   fn: string;
-  /** Positional arguments, for functions exported with plain `#[wasm_bindgen]`. */
-  args: string[];
+  /** Positional arguments for a plain `#[wasm_bindgen]` function. */
+  args?: string[];
   /**
-   * Named inputs as a JSON object, for functions exported with
-   * `cfasim_model::export!`. Sent together with the same values in `args`,
-   * since only the worker knows which convention the function uses.
+   * Named inputs for a function exported with `cfasim_model::export!`. Only
+   * the worker knows how a function was exported, so for a plain
+   * `#[wasm_bindgen]` one it passes the values positionally instead.
    */
-  inputs?: string;
+  inputs?: Record<string, unknown>;
 }
