@@ -1,4 +1,5 @@
-use cfasim_model::{model_outputs, ModelOutput};
+use cfasim_model::{export, ModelOutput, Outputs};
+use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 mod model;
 
@@ -7,17 +8,27 @@ pub fn pmf(s_inf: usize, s: usize, i: usize, p: f64) -> f64 {
     model::pmf(s_inf, s, i, p)
 }
 
-/// Reed-Frost epidemic simulation.
-/// Runs `n_trajectories` stochastic simulations and returns cumulative
-/// infections over generations for each trajectory.
-#[wasm_bindgen]
-pub fn simulate(
+/// Inputs of `simulate`, matched by name to the page's params object.
+#[derive(Deserialize)]
+struct SimulateInputs {
     population: u32,
     initial_infected: u32,
     p: f64,
     generations: u32,
     n_trajectories: u32,
-) -> JsValue {
+}
+
+/// Reed-Frost epidemic simulation.
+/// Runs `n_trajectories` stochastic simulations and returns cumulative
+/// infections over generations for each trajectory.
+fn simulate(inputs: SimulateInputs) -> Outputs {
+    let SimulateInputs {
+        population,
+        initial_infected,
+        p,
+        generations,
+        n_trajectories,
+    } = inputs;
     let gen = generations as usize;
 
     let row_len = gen + 1;
@@ -50,5 +61,7 @@ pub fn simulate(
         .add_u32("trajectory", trajectory_col)
         .add_u32("cumulative_infections", cumulative_infections);
 
-    model_outputs([("data", data)])
+    Outputs::new().add("data", data)
 }
+
+export!(simulate);

@@ -9,7 +9,7 @@ import {
 import type { ParamEditorValue } from "@cfasim-ui/components";
 import { LineChart, DataTable } from "@cfasim-ui/charts";
 import type { ChartAnnotation } from "@cfasim-ui/charts";
-import { runWasm, cancelWasm } from "@cfasim-ui/wasm";
+import { callWasm, cancelWasm } from "@cfasim-ui/wasm";
 import { ModelOutput } from "@cfasim-ui/shared";
 import type { ColumnDescriptor, TypedColumn } from "@cfasim-ui/shared";
 import { useModelParams } from "../useModelParams";
@@ -180,16 +180,11 @@ async function drain() {
   try {
     while (done < p.nSimulations) {
       const thisBatch = Math.min(batchSize, p.nSimulations - done);
-      const batchArgs = JSON.stringify({
+      const res = (await callWasm("ixa_example", "simulate_batch", {
         ...p,
         batchSize: thisBatch,
         seedOffset: done,
-      });
-      const res = (await runWasm(
-        "ixa_example",
-        "simulate_batch",
-        batchArgs,
-      )) as Record<string, ModelOutput>;
+      })) as Record<string, ModelOutput>;
       if (myId !== currentRunId) {
         console.log(
           `[ixa] run #${myId} cancelled (${done}/${p.nSimulations} sims completed)`,
@@ -263,7 +258,7 @@ watch(() => JSON.stringify(params), scheduleRun, { immediate: true });
 
 onScopeDispose(() => {
   // Drop any queued args first so `drain`'s finally doesn't re-enter on
-  // a dead component after `cancelWasm` rejects the in-flight runWasm.
+  // a dead component after `cancelWasm` rejects the in-flight callWasm.
   pendingArgs = null;
   if (loading.value) cancelWasm();
 });
