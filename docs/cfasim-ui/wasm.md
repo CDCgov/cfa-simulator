@@ -101,6 +101,7 @@ struct SimulateInputs {
 ```
 
 - Keys the struct does not declare are ignored, so UI-only state can live in the same params object. Add `#[serde(deny_unknown_fields)]` to reject them.
+- Types are checked, where a positional function would coerce: a fractional or negative number for a `u32` field fails the call. Give integer params `number-type="integer"` on their `NumberInput`, or take an `f64` and round it in the model.
 - A missing or mistyped value fails the call with an error naming the field, such as ``invalid inputs for simulate: missing field `rate` ``. A cleared `NumberInput` is `undefined`, which counts as missing: use `Option<f64>` or `#[serde(default)]` for inputs that may be empty.
 - The function may return `Result<Outputs, E>` for any `E` that implements `Display`. The `Err` text becomes the `error` on the page.
 - Exported functions stay plain Rust, so `cargo test` can call them directly.
@@ -204,7 +205,7 @@ Modules load in a Web Worker and are cached after the first call.
 
 ### callWasm
 
-Calls a model function with [named inputs](#model-inputs), like `useOutputs` does.
+Calls a model function with [named inputs](#model-inputs), like `useOutputs` does. The inputs are copied to the worker, typed arrays as they are, so `NaN` and `Infinity` arrive intact. The promise rejects when they hold something that cannot be copied, such as a function.
 
 ```ts
 function callWasm(

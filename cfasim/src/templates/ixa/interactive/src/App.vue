@@ -41,11 +41,17 @@ const series = computed(() => {
         label="Infection rate"
         :step="0.05"
       />
-      <NumberInput v-model="params.population" label="Population" />
+      <NumberInput
+        v-model="params.population"
+        label="Population"
+        number-type="integer"
+        :min="1"
+      />
       <NumberInput v-model="params.maxTime" label="Max time" />
       <NumberInput
         v-model="params.nSimulations"
         label="Number of simulations"
+        number-type="integer"
         :min="1"
         :max="100"
       />
