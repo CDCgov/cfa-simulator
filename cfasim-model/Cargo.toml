@@ -17,8 +17,8 @@ serde_json = { version = "1.0.150", optional = true }
 
 [features]
 default = ["wasm"]
-# Browser models: `into_js` / `model_outputs` through wasm-bindgen.
-wasm = ["dep:wasm-bindgen", "dep:js-sys"]
+# Browser models: `export!` and `into_js` / `model_outputs` through wasm-bindgen.
+wasm = ["dep:wasm-bindgen", "dep:js-sys", "dep:serde", "dep:serde_json"]
 # Native task worker for `cfasim serve`: the `tasks` and `outputs_file` modules.
 tasks = ["dep:serde", "dep:serde_json"]
 
