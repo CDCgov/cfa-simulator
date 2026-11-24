@@ -219,7 +219,7 @@ impl RunStore {
             .flatten()
             .filter(|e| e.path().is_dir())
             .filter_map(|e| self.read_status(&e.file_name().to_string_lossy()))
-            .filter(|s| task.map_or(true, |t| status_str(s, "task") == t))
+            .filter(|s| task.is_none_or(|t| status_str(s, "task") == t))
             .collect();
         statuses.sort_by(|a, b| status_str(b, "created_at").cmp(status_str(a, "created_at")));
         statuses.truncate(limit);
