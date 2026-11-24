@@ -111,6 +111,7 @@ run = "cargo test && cargo test -p cfasim-model --all-features"
 # Lint Rust code
 [taskgroup.cli.lint]
 run = "cargo clippy --workspace --all-features --all-targets -- -D warnings"
+git_hook = "pre-push"
 
 # Integration tests for the CLI (scaffolds projects + Playwright)
 [taskgroup.cli.e2e]
