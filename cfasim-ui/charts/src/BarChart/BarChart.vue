@@ -47,7 +47,11 @@ import {
   isDateXAxis,
   toNumericX,
   tickLabelsFit,
+  textWidthOrEstimate,
+  truncateLabel,
   useChartFontFamily,
+  resolvePadding,
+  CARTESIAN_LEFT_PADDING,
   type ChartData,
   type ChartXInput,
   type DateFormat,
@@ -1546,11 +1550,57 @@ const valueTickItems = computed(() => {
 
 interface CategoryTickItem {
   label: string;
+  /** The whole label, set when `label` is shortened to fit. */
+  full?: string;
   pos: number;
   anchor: "start" | "middle" | "end";
 }
 
 const chartFontFamily = useChartFontFamily(() => svgRef.value);
+
+/**
+ * CSS font of the tick labels, for measuring them. Not a computed: callers
+ * must rerun when a web font loads, which leaves this string unchanged.
+ */
+function tickLabelFont(): string {
+  const { fontSize, fontWeight } = tickLabelResolved.value;
+  return `${fontWeight ?? 400} ${fontSize}px ${chartFontFamily.value}`;
+}
+
+/** Small inset from the chart's left edge for start-aligned category labels. */
+const CATEGORY_LABEL_INSET = 2;
+/** Gap between the category labels' right edge and horizontal bars. */
+const CATEGORY_LABEL_GAP = 6;
+/** Share of the chart width the category labels may take before shortening. */
+const CATEGORY_LABEL_MAX_SHARE = 0.4;
+/** Room the rotated `yLabel` and its gap take at the chart's left edge. */
+const Y_LABEL_SPACE = 22;
+
+function formatCategory(i: number): string {
+  const label = categoryLabels.value[i];
+  return props.categoryFormat ? props.categoryFormat(label, i) : label;
+}
+
+/** Left edge of the room the category labels of horizontal bars have. */
+const categoryLabelLeft = computed(() =>
+  props.yLabel ? Y_LABEL_SPACE : CATEGORY_LABEL_INSET,
+);
+
+/**
+ * Measured width of every category label beside horizontal bars, which the
+ * left padding grows to fit. Empty for vertical bars and for continuous
+ * and date axes: their label text follows ticks picked from the plot size.
+ */
+const categoryLabelWidths = computed<number[]>(() => {
+  if (isVertical.value || continuous.value || categoryDatesMs.value) return [];
+  const font = tickLabelFont();
+  const { fontSize } = tickLabelResolved.value;
+  const widths = new Array<number>(categoryCount.value);
+  for (let i = 0; i < widths.length; i++) {
+    widths[i] = textWidthOrEstimate(formatCategory(i), font, fontSize);
+  }
+  return widths;
+});
 
 /** Smallest gap kept between neighboring x tick labels. */
 const X_TICK_LABEL_GAP = 8;
@@ -1596,12 +1646,11 @@ const xTickValues = computed<{ values: number[]; unit?: DateTickUnit }>(() => {
             tz.value,
             vertical
               ? (values, unit) => {
-                  const { fontSize, fontWeight } = tickLabelResolved.value;
                   return tickLabelsFit(values, {
                     min,
                     max,
                     size,
-                    font: `${fontWeight ?? 400} ${fontSize}px ${chartFontFamily.value}`,
+                    font: tickLabelFont(),
                     gap: X_TICK_LABEL_GAP,
                     label: (v, i) => formatXTick(v, i, unit),
                   });
@@ -1681,12 +1730,10 @@ const categoryTickItems = computed<CategoryTickItem[]>(() => {
   }
 
   const out: CategoryTickItem[] = [];
-  const fmt = (label: string, i: number) =>
-    props.categoryFormat ? props.categoryFormat(label, i) : label;
   const formatted = new Array<string>(n);
   let maxLen = 0;
   for (let i = start; i <= end; i++) {
-    formatted[i] = fmt(categoryLabels.value[i], i);
+    formatted[i] = formatCategory(i);
     if (formatted[i].length > maxLen) maxLen = formatted[i].length;
   }
   // Skip labels when slots are too narrow (or short) to fit them
@@ -1702,10 +1749,20 @@ const categoryTickItems = computed<CategoryTickItem[]>(() => {
     slotSize.value > 0
       ? Math.max(1, Math.ceil(needPerLabel / slotSize.value))
       : 1;
+  // Labels wider than the padding could grow to fit are shortened.
+  const widths = categoryLabelWidths.value;
+  const maxWidth =
+    padding.value.left - CATEGORY_LABEL_GAP - categoryLabelLeft.value;
+  const measure = (text: string) =>
+    textWidthOrEstimate(text, tickLabelFont(), fontSize);
   for (let i = start; i <= end; i += stride) {
     const center = slotStart(i) + slotSize.value / 2;
+    const tooWide = widths.length > 0 && widths[i] > maxWidth + 0.5;
     out.push({
-      label: formatted[i],
+      label: tooWide
+        ? truncateLabel(formatted[i], maxWidth, measure)
+        : formatted[i],
+      full: tooWide ? formatted[i] : undefined,
       pos: center,
       anchor: "middle",
     });
@@ -1827,17 +1884,43 @@ const hasHeaders = computed(
 );
 
 /**
- * `chartPadding` with extra top room reserved for the column headers when
- * either is set, so they don't overlap the legend or the plot.
+ * Left padding added to the standard amount so the widest category label
+ * and the `categoryHeader` fit beside horizontal bars. The text may take up
+ * to `CATEGORY_LABEL_MAX_SHARE` of the chart width; past that the labels
+ * are shortened instead.
+ */
+const categoryLabelExtraLeft = computed(() => {
+  if (isVertical.value) return 0;
+  let textWidth = Math.max(0, ...categoryLabelWidths.value);
+  if (props.categoryHeader) {
+    const { fontSize } = axisLabelResolved.value;
+    const font = `600 ${fontSize}px ${chartFontFamily.value}`;
+    textWidth = Math.max(
+      textWidth,
+      textWidthOrEstimate(props.categoryHeader, font, fontSize),
+    );
+  }
+  const fitted = Math.min(textWidth, width.value * CATEGORY_LABEL_MAX_SHARE);
+  const needed =
+    categoryLabelLeft.value + Math.ceil(fitted) + CATEGORY_LABEL_GAP;
+  const standard =
+    (props.yLabel
+      ? CARTESIAN_LEFT_PADDING.withYLabel
+      : CARTESIAN_LEFT_PADDING.plain) + resolvePadding(props.chartPadding).left;
+  return Math.max(0, needed - standard);
+});
+
+/**
+ * `chartPadding` plus the room the chart reserves itself: a top row for
+ * the column headers when either is set, so they don't overlap the legend
+ * or the plot, and left room for long category labels.
  */
 const effectiveChartPadding = computed<ChartPadding | undefined>(() => {
   const extraTop = hasHeaders.value ? HEADER_ROW_HEIGHT : 0;
-  const base = props.chartPadding;
-  if (!extraTop) return base;
-  if (base == null) return { top: extraTop };
-  if (typeof base === "number")
-    return { top: base + extraTop, right: base, bottom: base, left: base };
-  return { ...base, top: (base.top ?? 0) + extraTop };
+  const extraLeft = categoryLabelExtraLeft.value;
+  if (!extraTop && !extraLeft) return props.chartPadding;
+  const base = resolvePadding(props.chartPadding);
+  return { ...base, top: base.top + extraTop, left: base.left + extraLeft };
 });
 
 const {
@@ -1905,9 +1988,6 @@ const {
     onReset: resetZoom,
   },
 });
-
-/** Small inset from the chart's left edge for start-aligned category labels. */
-const CATEGORY_LABEL_INSET = 2;
 
 /**
  * Left x-anchor for the title and inline legend. When the category labels
@@ -2292,7 +2372,7 @@ const categoryLabelLayout = computed<{
   anchor: "start" | "middle" | "end";
   x: number;
 }>(() => {
-  const right = padding.value.left - 6;
+  const right = padding.value.left - CATEGORY_LABEL_GAP;
   switch (props.categoryAlign ?? "end") {
     case "start":
       return { anchor: "start", x: CATEGORY_LABEL_INSET };
@@ -2585,6 +2665,7 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
             :fill-opacity="tickLabelResolved.fillOpacity"
           >
             {{ tick.label }}
+            <title v-if="tick.full">{{ tick.full }}</title>
           </text>
         </template>
         <!-- plot marks, clipped to the plot while zoomed -->

@@ -189,6 +189,7 @@ export {
   measureText,
   textWidthOrEstimate,
   tickLabelsFit,
+  truncateLabel,
   useChartFontFamily,
   type ChartXInput,
 } from "./xAxis.js";

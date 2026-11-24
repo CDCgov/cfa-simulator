@@ -21,6 +21,7 @@ import {
   pickContrastColor,
   parseRgb,
   textWidthOrEstimate,
+  truncateLabel,
   useChartFontFamily,
   resolvePadding,
   CARTESIAN_LEFT_PADDING,
@@ -44,7 +45,6 @@ import {
   pickLabelAngle,
   rotatedLabelExtent,
   rotatedLabelFootprint,
-  truncateLabel,
 } from "./heatmapLayout.js";
 import HeatmapRowLabels, {
   type HeatmapRowLabelsProps,

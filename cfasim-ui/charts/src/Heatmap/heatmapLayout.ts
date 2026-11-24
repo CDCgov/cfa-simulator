@@ -227,25 +227,6 @@ export function columnLabelSidePadding(opts: ColumnLabelSidePaddingOptions): {
 }
 
 /**
- * Shorten `text` with `…` so its measured width fits `maxWidth`.
- */
-export function truncateLabel(
-  text: string,
-  maxWidth: number,
-  measure: (s: string) => number,
-): string {
-  if (maxWidth <= 0 || measure(text) <= maxWidth) return text;
-  let lo = 0;
-  let hi = text.length;
-  while (lo < hi) {
-    const mid = Math.ceil((lo + hi) / 2);
-    if (measure(`${text.slice(0, mid)}…`) <= maxWidth) lo = mid;
-    else hi = mid - 1;
-  }
-  return lo > 0 ? `${text.slice(0, lo)}…` : "…";
-}
-
-/**
  * A keyboard move over the cell grid plus the row-label column, which sits
  * at column `-1` when `rowLabels` is set. Returns the new position, or
  * null when the key is not a navigation key. Moves clamp at the edges.

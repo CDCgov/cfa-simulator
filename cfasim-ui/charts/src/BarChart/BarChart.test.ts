@@ -2309,6 +2309,67 @@ describe("BarChart", () => {
     });
   });
 
+  // happy-dom cannot measure text, so a label is 6px per character here.
+  describe("horizontal category label room", () => {
+    const longLabel = "A much longer category label";
+    const longLabelWidth = longLabel.length * 6;
+
+    function mountHorizontal(extra: Record<string, unknown>) {
+      return mount(BarChart, {
+        props: {
+          data: [10, 20],
+          categories: ["Short", longLabel],
+          orientation: "horizontal" as const,
+          width: 600,
+          height: 200,
+          menu: false,
+          ...extra,
+        },
+      });
+    }
+
+    function labelRightEdge(wrapper: ReturnType<typeof mount>) {
+      const tick = wrapper.find('[data-testid="category-tick"]');
+      expect(tick.attributes("text-anchor")).toBe("end");
+      return Number(tick.attributes("x"));
+    }
+
+    it("widens the left padding to fit the longest label", () => {
+      const short = mountHorizontal({ categories: ["A", "B"] });
+      expect(labelRightEdge(short)).toBe(44);
+
+      const long = mountHorizontal({});
+      expect(labelRightEdge(long) - longLabelWidth).toBeGreaterThanOrEqual(0);
+      expect(Number(bars(long)[0].attributes("x"))).toBe(
+        labelRightEdge(long) + 6,
+      );
+      expect(long.find('[data-testid="category-tick"] title').exists()).toBe(
+        false,
+      );
+    });
+
+    it("keeps the labels clear of a yLabel", () => {
+      const wrapper = mountHorizontal({ yLabel: "Setting" });
+      expect(labelRightEdge(wrapper) - longLabelWidth).toBe(22);
+    });
+
+    it("leaves a chartPadding that already fits the labels alone", () => {
+      const wrapper = mountHorizontal({ chartPadding: { left: 150 } });
+      expect(labelRightEdge(wrapper)).toBe(50 + 150 - 6);
+    });
+
+    it("shortens labels past 40% of the width and keeps the whole text in a title", () => {
+      const wrapper = mountHorizontal({ width: 300 });
+      expect(labelRightEdge(wrapper)).toBe(2 + 300 * 0.4);
+      const ticks = wrapper.findAll('[data-testid="category-tick"]');
+      expect(ticks[0].text()).toBe("Short");
+      expect(ticks[1].find("title").text()).toBe(longLabel);
+      const drawn = ticks[1].element.firstChild?.textContent?.trim() ?? "";
+      expect(drawn.endsWith("…")).toBe(true);
+      expect(drawn.length * 6).toBeLessThanOrEqual(300 * 0.4);
+    });
+  });
+
   describe("accessibility", () => {
     const base = { data: [10, 20, 30], categories: ["A", "B", "C"] };
 

@@ -1,4 +1,4 @@
-import { onMounted, ref, type Ref } from "vue";
+import { onBeforeUnmount, onMounted, ref, triggerRef, type Ref } from "vue";
 import type { ChartData } from "./axes.js";
 import { isAllDates, parseDate, type DateTimezone } from "./dateAxis.js";
 
@@ -70,6 +70,25 @@ export function textWidthOrEstimate(
 }
 
 /**
+ * Shorten `text` with `…` so its measured width fits `maxWidth`.
+ */
+export function truncateLabel(
+  text: string,
+  maxWidth: number,
+  measure: (s: string) => number,
+): string {
+  if (maxWidth <= 0 || measure(text) <= maxWidth) return text;
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (measure(`${text.slice(0, mid)}…`) <= maxWidth) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo > 0 ? `${text.slice(0, lo)}…` : "…";
+}
+
+/**
  * Whether tick labels fit between their ticks along an axis of `size`
  * pixels spanning `[min, max]`, measured in `font`. Trusts the caller's
  * density budget where text cannot be measured.
@@ -101,21 +120,26 @@ export function tickLabelsFit(
 }
 
 /**
- * Font the chart's text renders in, read from the svg once mounted and
- * again when web fonts finish loading, so measured label widths match
- * the painted glyphs rather than a fallback face.
+ * Font the chart's text renders in, read from the svg once mounted.
+ * Dependents are notified again whenever a web font finishes loading:
+ * the family string stays the same then, but widths measured in the
+ * fallback face no longer match the painted glyphs.
  */
 export function useChartFontFamily(
   svg: () => SVGSVGElement | null | undefined,
 ): Ref<string> {
   const family = ref("sans-serif");
+  const read = () => {
+    const el = svg();
+    if (el) family.value = getComputedStyle(el).fontFamily || "sans-serif";
+    triggerRef(family);
+  };
   onMounted(() => {
-    const read = () => {
-      const el = svg();
-      if (el) family.value = getComputedStyle(el).fontFamily || "sans-serif";
-    };
     read();
-    document.fonts?.ready.then(read);
+    document.fonts?.addEventListener?.("loadingdone", read);
+  });
+  onBeforeUnmount(() => {
+    document.fonts?.removeEventListener?.("loadingdone", read);
   });
   return family;
 }

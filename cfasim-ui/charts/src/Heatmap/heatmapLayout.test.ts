@@ -10,7 +10,6 @@ import {
   pivotCells,
   rotatedLabelExtent,
   rotatedLabelFootprint,
-  truncateLabel,
 } from "./heatmapLayout.js";
 
 describe("pivotCells", () => {
@@ -170,15 +169,6 @@ describe("columnLabelSidePadding", () => {
     });
     expect(flat.left).toBeCloseTo(20 / 0.75);
     expect(flat.right).toBeCloseTo(30 / 0.75);
-  });
-});
-
-describe("truncateLabel", () => {
-  const measure = (s: string) => s.length * 6;
-  it("keeps labels that fit and shortens wider ones with an ellipsis", () => {
-    expect(truncateLabel("Arizona", 50, measure)).toBe("Arizona");
-    expect(truncateLabel("North Carolina", 36, measure)).toBe("North…");
-    expect(truncateLabel("North Carolina", 4, measure)).toBe("…");
   });
 });
 

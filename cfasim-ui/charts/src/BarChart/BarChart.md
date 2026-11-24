@@ -233,14 +233,27 @@ Set `orientation="horizontal"` to lay the categories down the side and
 run the bars left to right, which suits long category names. Every
 layout works in either orientation; `x-label` then titles the value axis.
 
+The left padding widens to fit the longest category label, up to 40% of
+the chart width; labels longer than that are shortened with an ellipsis
+and keep their whole text as a hover title. `chart-padding.left` counts
+toward that room instead of adding to it. Date and continuous axes keep
+the standard padding.
+
 <ComponentDemo>
   <BarChart
     :data="[42, 31, 18, 12, 7]"
-    :categories="['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon']"
+    :categories="[
+      'Long-term care facilities',
+      'Schools and childcare',
+      'Workplaces',
+      'Households',
+      'Correctional facilities',
+    ]"
     orientation="horizontal"
     :height="220"
     x-label="Cases"
     tooltip-trigger="hover"
+    data-testid="horizontal-bar-chart"
   />
 
 <template #code>
@@ -248,7 +261,13 @@ layout works in either orientation; `x-label` then titles the value axis.
 ```vue
 <BarChart
   :data="[42, 31, 18, 12, 7]"
-  :categories="['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon']"
+  :categories="[
+    'Long-term care facilities',
+    'Schools and childcare',
+    'Workplaces',
+    'Households',
+    'Correctional facilities',
+  ]"
   orientation="horizontal"
   :height="220"
   x-label="Cases"
