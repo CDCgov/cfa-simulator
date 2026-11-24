@@ -8,32 +8,32 @@ license = "Apache-2.0"
 repository = "https://github.com/CDCgov/cfa-simulator"
 
 [dependencies]
-anyhow = "1.0.104"
-axoupdater = { version = "0.10.0", features = ["blocking"] }
+anyhow = "1.0.105"
+axoupdater = { version = "0.10.3", features = ["blocking"] }
 axum = "0.8.9"
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
-clap = { version = "4.6.2", features = ["derive"] }
-cliclack = "0.5.5"
-flate2 = "1.1.9"
+clap = { version = "4.6.9", features = ["derive"] }
+cliclack = "0.5.7"
+flate2 = "1.1.11"
 home = "0.5.12"
 include_dir = "0.7.4"
 is_ci = "1.2.0"
 mime_guess = "2.0.5"
-minijinja = "2.21.0"
+minijinja = "3.1.0"
 semver = "1.0.28"
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.150"
-sha2 = "0.10.9"
+serde_json = "1.0.154"
+sha2 = "0.11.1"
 tar = "0.4.46"
-tokio = { version = "1.53.0", features = ["rt-multi-thread", "macros", "process", "io-util", "signal", "sync", "fs", "time", "net"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "process", "io-util", "signal", "sync", "fs", "time", "net"] }
 tokio-stream = "0.1.19"
-tokio-util = { version = "0.7.19", features = ["io"] }
-toml_edit = "0.25.13"
+tokio-util = { version = "0.7.20", features = ["io"] }
+toml_edit = "0.25.20"
 tower-http = { version = "0.6.11", features = ["fs", "cors"] }
-ureq = "3.3.0"
+ureq = "3.5.2"
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2.186"
+libc = "0.2.191"
 
 [dev-dependencies]
 tempfile = "3.27.0"

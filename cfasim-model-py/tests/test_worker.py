@@ -5,10 +5,9 @@ import subprocess
 import sys
 
 import pytest
+from conftest import DEMO_TASKS
 
 from cfasim_model.outputs_file import read_outputs
-
-from conftest import DEMO_TASKS
 
 
 class Worker:

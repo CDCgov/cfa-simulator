@@ -7,7 +7,8 @@ without them and they are never a dependency of ``cfasim-model``.
 from __future__ import annotations
 
 import inspect
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 import numpy as np
 
@@ -47,7 +48,7 @@ def to_distribution(spec: Mapping[str, Any]):
     # Classes and factory functions alike (TruncatedNormal, Bernoulli, ...).
     factory = getattr(dist, family, None)
     if not callable(factory):
-        raise ValueError(f"unknown numpyro distribution {family!r}")
+        raise ValueError(f"unknown numpyro distribution {family!r}")  # noqa: TRY004
 
     try:
         sig = inspect.signature(factory)
@@ -65,7 +66,7 @@ def to_distribution(spec: Mapping[str, Any]):
             )
     result = factory(*args, **params)
     if not isinstance(result, dist.Distribution):
-        raise ValueError(f"{family} is not a numpyro distribution")
+        raise TypeError(f"{family} is not a numpyro distribution")
     return result
 
 
@@ -102,7 +103,7 @@ def _grouped_samples(samples_or_mcmc, group_by_chain: bool) -> dict[str, np.ndar
 
         to_host = jax.device_get
     except ImportError:  # pragma: no cover
-        to_host = lambda x: x  # noqa: E731
+        to_host = lambda x: x
     grouped = {}
     for name, value in samples.items():
         arr = np.asarray(to_host(value), dtype=np.float64)

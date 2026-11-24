@@ -7,10 +7,16 @@ packages:
 # (>=3.2.13) otherwise resolves a second copy, which breaks reka-ui at runtime
 # (duplicate @vue/runtime-core).
 overrides:
-  vue: "3.5.44"
+  vue: "3.5.46"
   # vitepress 1.6.4 asks for vite ^5.4.14, and no 5.x release carries the
   # dev-server fixes in 6.4.4+. Drop this once vitepress ships on vite >= 6.
-  "vitepress>vite": "6.4.5"
+  "vitepress>vite": "6.4.6"
+  # js-beautify 2.0.3 (pulled in by @vue/test-utils) asks for glob ^13 and,
+  # through editorconfig, minimatch ~10.2, which carry GHSA-3g3m-2fjr-6pw4 and
+  # GHSA-g3hv-75wg-m249. Only its CLI loads them, which nothing here runs.
+  # Drop these once js-beautify depends on the patched majors.
+  "js-beautify>glob": "14.0.6"
+  "editorconfig>minimatch": "11.0.9"
 
 # Supply-chain policy: refuse versions published less than 24h ago, so a
 # compromised release has time to be pulled from the registry. This matches

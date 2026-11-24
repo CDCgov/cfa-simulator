@@ -10,11 +10,11 @@ keywords = ["wasm", "simulation"]
 categories = ["wasm"]
 
 [dependencies]
-wasm-bindgen = { version = "0.2.126", optional = true }
-js-sys = { version = "0.3.103", optional = true }
+wasm-bindgen = { version = "0.2.130", optional = true }
+js-sys = { version = "0.3.107", optional = true }
 serde-wasm-bindgen = { version = "0.6.5", optional = true }
 serde = { version = "1.0.229", features = ["derive"], optional = true }
-serde_json = { version = "1.0.150", optional = true }
+serde_json = { version = "1.0.154", optional = true }
 
 [features]
 default = ["wasm"]

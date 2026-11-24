@@ -9,8 +9,8 @@ crate-type = ["cdylib"]
 [dependencies]
 # The default features are `logging` and `core_epi` (the transmission loop
 # used in `src/model.rs`); both build for wasm32.
-ixa = "5.0.0"
-wasm-bindgen = "0.2.126"
+ixa = "5.1.0"
+wasm-bindgen = "0.2.130"
 cfasim-model = "{{ cfasim_version }}"
 serde = { version = "1.0.229", features = ["derive"] }
 # rand_distr must pair with ixa's rand (0.10), or the sampling traits

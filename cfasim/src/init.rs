@@ -1,4 +1,5 @@
 use include_dir::{include_dir, Dir};
+use minijinja::syntax::SyntaxConfig;
 use minijinja::{context, Environment};
 use std::collections::HashMap;
 use std::fmt;
@@ -171,7 +172,12 @@ fn build_env() -> Environment<'static> {
     // Don't auto-escape — these aren't HTML, they're source files.
     env.set_auto_escape_callback(|_| minijinja::AutoEscape::None);
     // Preserve any final newline in the source file.
-    env.set_keep_trailing_newline(true);
+    env.set_syntax(
+        SyntaxConfig::builder()
+            .keep_trailing_newline(true)
+            .build()
+            .expect("default delimiters are valid"),
+    );
     env
 }
 

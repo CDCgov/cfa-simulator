@@ -29,7 +29,9 @@ def test_to_distribution_aliases(fake_numpyro):
 def test_to_distribution_errors(fake_numpyro):
     with pytest.raises(ValueError, match="unknown numpyro distribution 'Nope'"):
         to_distribution({"family": "Nope"})
-    with pytest.raises(ValueError, match="is not a numpyro distribution"):
+    with pytest.raises(ValueError, match="unknown numpyro distribution 'constraints'"):
+        to_distribution({"family": "constraints"})
+    with pytest.raises(TypeError, match="is not a numpyro distribution"):
         to_distribution({"family": "NotADistribution"})
     truncated = to_distribution(
         {"family": "Truncated", "params": {"loc": 1.0, "low": 0.0}}

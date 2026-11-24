@@ -46,6 +46,7 @@ def fake_numpyro(monkeypatch):
     dist.Gamma = Gamma
     dist.NotADistribution = NotADistribution
     dist.Truncated = Truncated
+    dist.constraints = types.ModuleType("numpyro.distributions.constraints")
 
     diagnostics = types.ModuleType("numpyro.diagnostics")
 

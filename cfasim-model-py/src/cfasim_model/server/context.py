@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import math
 import warnings
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from .. import outputs_file
 from . import events
