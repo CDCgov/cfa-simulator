@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { nextTick } from "vue";
 import { mount } from "@vue/test-utils";
+import type { VueWrapper } from "@vue/test-utils";
 import SidebarLayout from "./SidebarLayout.vue";
 
 beforeEach(() => {
@@ -160,6 +162,167 @@ describe("SidebarLayout collapse accessibility", () => {
     // Collapsed: sidebar is visually hidden, expand button is shown.
     expect(wrapper.find(".Sidebar").attributes("inert")).toBe("");
     expect(wrapper.find(".Toggle--expand").attributes("inert")).toBeUndefined();
+  });
+});
+
+describe("SidebarLayout right sidebar", () => {
+  type ChangeListener = (event: { matches: boolean }) => void;
+
+  // Answers the layout's width queries for a viewport of this width, and no
+  // to anything else (LightDarkToggle asks for the color scheme). Returns a
+  // function that resizes the viewport and notifies the queries that changed.
+  function mockViewportWidth(width: number) {
+    const updates: ((newWidth: number) => void)[] = [];
+    window.matchMedia = vi.fn((query: string) => {
+      const listeners = new Set<ChangeListener>();
+      const list = {
+        matches: false,
+        addEventListener: (_type: string, listener: ChangeListener) =>
+          listeners.add(listener),
+        removeEventListener: (_type: string, listener: ChangeListener) =>
+          listeners.delete(listener),
+      };
+      const widthQuery = query.match(/\((min|max)-width: (\d+)px\)/);
+      if (widthQuery) {
+        const pixels = Number(widthQuery[2]);
+        const matchesAt = (candidate: number) =>
+          widthQuery[1] === "min" ? candidate >= pixels : candidate <= pixels;
+        list.matches = matchesAt(width);
+        updates.push((newWidth) => {
+          const matches = matchesAt(newWidth);
+          if (matches === list.matches) return;
+          list.matches = matches;
+          for (const listener of listeners) listener({ matches });
+        });
+      }
+      return list;
+    }) as never;
+
+    return async function resize(newWidth: number) {
+      for (const update of updates) update(newWidth);
+      await nextTick();
+    };
+  }
+
+  function openSidebars(wrapper: VueWrapper) {
+    return {
+      left: wrapper.attributes("data-collapsed") === "false",
+      right: wrapper.attributes("data-right-collapsed") === "false",
+    };
+  }
+
+  const slots = {
+    "sidebar-right": '<div class="right-content">Summary</div>',
+    "sidebar-right-header-start": '<h2 class="title">Summary</h2>',
+    "sidebar-right-header-end": '<button class="clear">Clear</button>',
+  };
+  const leftSidebar = ".SidebarRail:not(.SidebarRail--right) .Sidebar";
+  const rightSidebar = ".SidebarRail--right .Sidebar";
+
+  it("renders no right rail without the sidebar-right slot", () => {
+    const wrapper = mount(SidebarLayout);
+    expect(wrapper.find(".SidebarRail--right").exists()).toBe(false);
+    expect(wrapper.attributes("data-right-collapsed")).toBeUndefined();
+    expect(wrapper.find("aside").attributes("aria-label")).toBeUndefined();
+  });
+
+  it("lays the right header out as collapse button, start, end", () => {
+    const wrapper = mount(SidebarLayout, { slots });
+    const rail = wrapper.find(".SidebarRail--right");
+    const header = rail.find(".SidebarHeader");
+    const order = Array.from(header.element.children).map(
+      (el) => el.className.split(" ")[0],
+    );
+    expect(order).toEqual(["Toggle", "SidebarHeaderStart", "SidebarHeaderEnd"]);
+    expect(header.find(".SidebarHeaderStart .title").exists()).toBe(true);
+    expect(header.find(".SidebarHeaderEnd .clear").exists()).toBe(true);
+    expect(rail.find(".right-content").text()).toBe("Summary");
+    expect(rail.find("aside").attributes("aria-label")).toBe("Right sidebar");
+    expect(wrapper.find(leftSidebar).attributes("aria-label")).toBe(
+      "Left sidebar",
+    );
+  });
+
+  it("opens both sidebars on a wide window and collapses them separately", async () => {
+    mockViewportWidth(1440);
+    const wrapper = mount(SidebarLayout, { slots });
+    expect(wrapper.find(leftSidebar).attributes("inert")).toBeUndefined();
+    expect(wrapper.find(rightSidebar).attributes("inert")).toBeUndefined();
+
+    await wrapper
+      .find(".SidebarRail--right .SidebarHeader .Toggle")
+      .trigger("click");
+    expect(wrapper.find(rightSidebar).attributes("inert")).toBe("");
+    expect(wrapper.find(leftSidebar).attributes("inert")).toBeUndefined();
+
+    await wrapper.find(".SidebarRail--right .Toggle--expand").trigger("click");
+    expect(wrapper.find(rightSidebar).attributes("inert")).toBeUndefined();
+    expect(wrapper.find(leftSidebar).attributes("inert")).toBeUndefined();
+  });
+
+  it("keeps one sidebar open at a time on a narrower window", async () => {
+    mockViewportWidth(1000);
+    const wrapper = mount(SidebarLayout, { slots });
+    expect(wrapper.find(leftSidebar).attributes("inert")).toBeUndefined();
+    expect(wrapper.find(rightSidebar).attributes("inert")).toBe("");
+
+    await wrapper.find(".SidebarRail--right .Toggle--expand").trigger("click");
+    expect(wrapper.find(rightSidebar).attributes("inert")).toBeUndefined();
+    expect(wrapper.find(leftSidebar).attributes("inert")).toBe("");
+
+    await wrapper.find(".SidebarRail .Toggle--expand").trigger("click");
+    expect(wrapper.find(leftSidebar).attributes("inert")).toBeUndefined();
+    expect(wrapper.find(rightSidebar).attributes("inert")).toBe("");
+  });
+
+  it("closes the right sidebar for a narrower window and reopens it after", async () => {
+    const resize = mockViewportWidth(1440);
+    const wrapper = mount(SidebarLayout, { slots });
+    await resize(1000);
+    expect(openSidebars(wrapper)).toEqual({ left: true, right: false });
+    await resize(1440);
+    expect(openSidebars(wrapper)).toEqual({ left: true, right: true });
+  });
+
+  it("leaves the right sidebar as the user set it across a resize", async () => {
+    const resize = mockViewportWidth(1440);
+    const wrapper = mount(SidebarLayout, { slots });
+    // Open alone, it fits the narrower window.
+    await wrapper.find(".SidebarHeader .Toggle").trigger("click");
+    await resize(1000);
+    expect(openSidebars(wrapper)).toEqual({ left: false, right: true });
+    // Collapsed by hand, it stays collapsed when the room comes back.
+    await wrapper
+      .find(".SidebarRail--right .SidebarHeader .Toggle")
+      .trigger("click");
+    await resize(1440);
+    expect(openSidebars(wrapper)).toEqual({ left: false, right: false });
+  });
+
+  it("makes room for the left sidebar when a phone with the right one open widens", async () => {
+    const resize = mockViewportWidth(430);
+    const wrapper = mount(SidebarLayout, { slots });
+    await wrapper.find(".Toggle--end").trigger("click");
+    expect(openSidebars(wrapper)).toEqual({ left: false, right: true });
+    await resize(800);
+    expect(openSidebars(wrapper)).toEqual({ left: true, right: false });
+    await resize(1440);
+    expect(openSidebars(wrapper)).toEqual({ left: true, right: true });
+  });
+
+  it.each([
+    { bar: ".Topbar", barTabs: undefined },
+    { bar: ".TabsBar", barTabs: tabs },
+  ])("opens from the far end of $bar on a phone", async ({ bar, barTabs }) => {
+    mockViewportWidth(375);
+    const wrapper = mount(SidebarLayout, { props: { tabs: barTabs }, slots });
+    expect(wrapper.attributes("data-right-collapsed")).toBe("true");
+    const children = wrapper.find(bar).element.children;
+    expect(children[children.length - 1].className).toContain("Toggle--end");
+
+    await wrapper.find(`${bar} .Toggle--end`).trigger("click");
+    expect(wrapper.attributes("data-right-collapsed")).toBe("false");
+    expect(wrapper.find(`${bar} .Toggle--end`).exists()).toBe(false);
   });
 });
 

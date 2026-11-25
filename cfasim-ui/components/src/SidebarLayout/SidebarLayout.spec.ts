@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 test.describe("SidebarLayout full-window demo", () => {
   test.use({ viewport: { width: 900, height: 480 } });
@@ -27,6 +28,49 @@ test.describe("SidebarLayout full-window demo", () => {
     await page.mouse.wheel(0, 5000);
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
     await expect(page.getByRole("combobox", { name: "Metric" })).toBeVisible();
+  });
+});
+
+test.describe("SidebarLayout sidebar on a small phone", () => {
+  // Narrower than the 400px sidebar.
+  test.use({ viewport: { width: 360, height: 600 } });
+
+  test("the open sidebar fits the screen and the page does not scroll sideways", async ({
+    page,
+  }) => {
+    await page.goto("./demos/sidebar-layout/index.html");
+    await expect(page.locator("h1")).toHaveText("SidebarLayout Demo");
+    const panes = () =>
+      page.evaluate(() => ({
+        rail: document
+          .querySelector(".SidebarRail")!
+          .getBoundingClientRect()
+          .toJSON(),
+        main: document.querySelector(".Main")!.getBoundingClientRect().toJSON(),
+        documentWidth: document.documentElement.scrollWidth,
+      }));
+
+    await page.getByRole("button", { name: "Expand sidebar" }).click();
+    await expect
+      .poll(panes)
+      .toMatchObject({ rail: { x: 0, width: 360 }, documentWidth: 360 });
+    await expect(
+      page.getByRole("button", { name: "Collapse sidebar" }),
+    ).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole("button", { name: "Reset" })).toBeInViewport({
+      ratio: 1,
+    });
+
+    // Tabbing past the end of the sidebar into the main pane, now off screen,
+    // brings it back.
+    await page.getByPlaceholder("Notes").click();
+    await page.keyboard.press("Tab");
+    await expect
+      .poll(panes)
+      .toMatchObject({ main: { x: 0, width: 360 }, documentWidth: 360 });
+    await expect(
+      page.getByRole("button", { name: /Switch to (dark|light) mode/ }),
+    ).toBeFocused();
   });
 });
 
@@ -59,6 +103,79 @@ test.describe("SidebarLayout tabs on a phone", () => {
 
     await page.getByRole("tab", { name: "Settings" }).click();
     await expect(page.locator("h1")).toHaveText("Settings");
+  });
+});
+
+test.describe("SidebarLayout right sidebar", () => {
+  const boxes = (page: Page) =>
+    page.evaluate(() => {
+      const box = (selector: string) =>
+        document.querySelector(selector)!.getBoundingClientRect().toJSON();
+      return {
+        left: box(".SidebarRail"),
+        main: box(".Main"),
+        right: box(".SidebarRail--right"),
+        documentWidth: document.documentElement.scrollWidth,
+      };
+    });
+  // Polls, since the rails animate to their new place.
+  const expectBoxes = (page: Page) => expect.poll(() => boxes(page));
+  const button = (page: Page, name: string) =>
+    page.getByRole("button", { name, exact: true });
+
+  test("sits across the main pane from the left one and collapses to a strip", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 600 });
+    await page.goto("./demos/sidebar-right/index.html");
+    await expect(page.locator("h1")).toHaveText("Two Sidebars Demo");
+    await expectBoxes(page).toMatchObject({
+      left: { x: 0, width: 400 },
+      main: { x: 400, width: 720 },
+      right: { x: 1120, width: 320 },
+    });
+
+    await button(page, "Collapse right sidebar").click();
+    await expectBoxes(page).toMatchObject({
+      left: { x: 0, width: 400 },
+      main: { x: 400, width: 1000 },
+      right: { x: 1400, width: 40 },
+    });
+    await expect(page.getByText("Estimated infections")).not.toBeInViewport();
+
+    // Too narrow for both: the open left sidebar keeps its place.
+    await button(page, "Expand right sidebar").click();
+    await page.setViewportSize({ width: 1000, height: 600 });
+    await expectBoxes(page).toMatchObject({
+      left: { x: 0, width: 400 },
+      right: { x: 960, width: 40 },
+    });
+  });
+
+  test("slides over the main pane on a phone without a sideways scroll", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 600 });
+    await page.goto("./demos/sidebar-right/index.html");
+    await expect(page.locator("h1")).toHaveText("Two Sidebars Demo");
+    const closed = {
+      main: { x: 0, width: 375 },
+      right: { width: 0 },
+      documentWidth: 375,
+    };
+    await expectBoxes(page).toMatchObject(closed);
+
+    await button(page, "Expand right sidebar").click();
+    await expectBoxes(page).toMatchObject({
+      right: { x: 55, width: 320 },
+      documentWidth: 375,
+    });
+    await expect(page.getByText("Estimated infections")).toBeInViewport({
+      ratio: 1,
+    });
+
+    await button(page, "Collapse right sidebar").click();
+    await expectBoxes(page).toMatchObject(closed);
   });
 });
 

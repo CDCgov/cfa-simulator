@@ -123,5 +123,6 @@
   --button-height: 2.5em;
   --button-padding-x: 1em;
   --sidebar-width: 400px;
+  --sidebar-right-width: 320px;
   --toggle-size: 2.5rem;
 }
