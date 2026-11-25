@@ -1,8 +1,10 @@
 # SidebarLayout
 
-A responsive two-panel layout with a collapsible sidebar and main content area. On mobile, the sidebar becomes an overlay.
+A responsive two-panel layout with a collapsible sidebar and main content area. On mobile, the sidebar becomes an overlay. A [second sidebar](#right-sidebar) can sit on the right.
 
 When the sidebar is collapsed it is marked [`inert`](https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/inert), so its contents (including the collapse button) are removed from the tab order and the accessibility tree while visually hidden. The expand button is likewise `inert` while the sidebar is open. This keeps keyboard and screen-reader focus on whichever control is actually visible.
+
+On a phone the sidebar is never wider than the screen, and the main content it pushes aside is clipped rather than left to scroll the page sideways. If keyboard focus moves into that hidden main content, the sidebar collapses so the focused control is on screen.
 
 ## Printing
 
@@ -24,6 +26,14 @@ The layout prints as a plain document: the sidebar, header bands and tabs bar ar
   <iframe src="/cfa-simulator/docs/demos/sidebar-tabs/index.html" style="width: 100%; height: 100%; border: none;" />
 </div>
 
+## Two Sidebars Demo
+
+<a href="/cfa-simulator/docs/demos/sidebar-right/index.html" target="_blank">Open in full window ↗</a>
+
+<div style="border: 1px solid var(--vp-c-border); border-radius: 8px; overflow: hidden; height: 500px;">
+  <iframe src="/cfa-simulator/docs/demos/sidebar-right/index.html" style="width: 100%; height: 100%; border: none;" />
+</div>
+
 ## Usage
 
 ```vue
@@ -39,16 +49,19 @@ The layout prints as a plain document: the sidebar, header bands and tabs bar ar
 
 ## Slots
 
-| Slot                   | Description                                                                                        |
-| ---------------------- | -------------------------------------------------------------------------------------------------- |
-| `sidebar`              | Content rendered in the left sidebar panel                                                         |
-| `sidebar-header-start` | Left side of the sidebar's header band, e.g. a pane title                                          |
-| `sidebar-header-end`   | Right side of the sidebar's header band, beside the collapse button                                |
-| `topbar-start`         | Left side of the main header: before the tabs, or alone without them                               |
-| `topbar-end`           | Right side of the main header, beside the light/dark toggle (`topbar` still works as the old name) |
-| `default`              | Main content area                                                                                  |
+| Slot                         | Description                                                                                        |
+| ---------------------------- | -------------------------------------------------------------------------------------------------- |
+| `sidebar`                    | Content rendered in the left sidebar panel                                                         |
+| `sidebar-header-start`       | Left side of the sidebar's header band, e.g. a pane title                                          |
+| `sidebar-header-end`         | Right side of the sidebar's header band, beside the collapse button                                |
+| `sidebar-right`              | Content of the right sidebar panel. The panel only exists when this slot is given                  |
+| `sidebar-right-header-start` | Left side of the right sidebar's header band, after its collapse button                            |
+| `sidebar-right-header-end`   | Right side of the right sidebar's header band                                                      |
+| `topbar-start`               | Left side of the main header: before the tabs, or alone without them                               |
+| `topbar-end`                 | Right side of the main header, beside the light/dark toggle (`topbar` still works as the old name) |
+| `default`                    | Main content area                                                                                  |
 
-Buttons, selects and text fields placed in the three header slots take the header's control height (28px), so they line up with the collapse and light/dark toggles:
+Buttons, selects and text fields placed in the header slots take the header's control height (28px), so they line up with the collapse and light/dark toggles:
 
 ```vue
 <SidebarLayout :tabs="tabs">
@@ -75,6 +88,31 @@ Buttons, selects and text fields placed in the three header slots take the heade
 | `v-model:tab` | `string`           | `undefined` | The active tab value (two-way binding)                                          |
 
 `Tab` is the [`Tabs`](./tabs#tab-type) component's tab type.
+
+## Right sidebar
+
+Give the `sidebar-right` slot to add a second sidebar on the right of the main content, for example a summary or details panel beside the parameters on the left. It has a separate collapse button and header slots, and is styled like the left one.
+
+```vue
+<SidebarLayout>
+  <template #sidebar>
+    <NumberInput v-model="population" label="Population" slider live />
+  </template>
+  <template #sidebar-right-header-start>
+    <h2>Summary</h2>
+  </template>
+  <template #sidebar-right>
+    <p>Estimated infections: {{ infections }}</p>
+  </template>
+  <h1>Main Content</h1>
+</SidebarLayout>
+```
+
+The right sidebar is `320px` wide; set the `--sidebar-right-width` theme token to change it (the left one reads `--sidebar-width`).
+
+Both sidebars start open when the window is at least 1200px wide. On a narrower window the right one starts collapsed and only one sidebar is open at a time: expanding one collapses the other. The 1200px is fixed and sized for the default widths (400px, 320px and a 480px main pane), so it does not follow the width tokens. On a phone the right sidebar slides in over the main content from a button at the end of the main header.
+
+With a right sidebar the two `<aside>` panels are labelled "Left sidebar" and "Right sidebar", and the right one's buttons are named "Collapse right sidebar" and "Expand right sidebar", so assistive technology can tell the two apart.
 
 ## Tabs
 

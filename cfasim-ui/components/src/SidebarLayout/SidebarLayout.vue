@@ -15,24 +15,69 @@ const props = defineProps<{
 const tab = defineModel<string>("tab");
 
 const mql = window.matchMedia("(max-width: 767px)");
+// Room for both sidebars at their default widths beside a 480px main pane.
+// Below it only one sidebar is open at a time.
+const bothFitQuery = window.matchMedia("(min-width: 1200px)");
 const isMobile = ref(mql.matches);
 const collapsed = ref(mql.matches);
+const rightCollapsed = ref(!bothFitQuery.matches);
+// False once the user collapses the right sidebar where it had room. A
+// window with no room closes it too, and that must not stick.
+let rightWanted = true;
 
 function onMediaChange(e: MediaQueryListEvent) {
   isMobile.value = e.matches;
   collapsed.value = e.matches;
+  if (!bothFitQuery.matches) rightCollapsed.value = true;
+}
+
+function onBothFitChange(e: MediaQueryListEvent) {
+  if (e.matches) {
+    if (rightWanted) rightCollapsed.value = false;
+  } else if (!collapsed.value) {
+    rightCollapsed.value = true;
+  }
 }
 
 onMounted(() => {
   mql.addEventListener("change", onMediaChange);
+  bothFitQuery.addEventListener("change", onBothFitChange);
 });
 
 onUnmounted(() => {
   mql.removeEventListener("change", onMediaChange);
+  bothFitQuery.removeEventListener("change", onBothFitChange);
 });
 
 function toggle() {
   collapsed.value = !collapsed.value;
+  if (!collapsed.value && !bothFitQuery.matches) rightCollapsed.value = true;
+}
+
+function toggleRight() {
+  rightCollapsed.value = !rightCollapsed.value;
+  if (!rightCollapsed.value) {
+    rightWanted = true;
+    if (!bothFitQuery.matches) collapsed.value = true;
+  } else if (!isMobile.value) {
+    // On a phone collapsing is the only way back to the main pane.
+    rightWanted = false;
+  }
+}
+
+// On a phone an open sidebar pushes the main pane off screen, where the
+// layout clips it. Keyboard focus landing there would be invisible, so bring
+// the main pane back. Not for a pointer: the control would slide out from
+// under it before the click lands.
+function onMainFocusIn(event: FocusEvent) {
+  if (!isMobile.value || (collapsed.value && rightCollapsed.value)) return;
+  const target = event.target as Element;
+  const focused = target.getBoundingClientRect();
+  const clipped = focused.left < 0 || focused.right > window.innerWidth;
+  if (clipped && target.matches(":focus-visible")) {
+    collapsed.value = true;
+    rightCollapsed.value = true;
+  }
 }
 
 const mainContentStyle = computed(() => {
@@ -45,9 +90,17 @@ const mainContentStyle = computed(() => {
 </script>
 
 <template>
-  <div class="SidebarLayout" :data-collapsed="collapsed">
-    <div class="SidebarRail">
-      <aside class="Sidebar" :inert="collapsed">
+  <div
+    class="SidebarLayout"
+    :data-collapsed="collapsed"
+    :data-right-collapsed="$slots['sidebar-right'] ? rightCollapsed : undefined"
+  >
+    <div class="SidebarRail" :data-collapsed="collapsed">
+      <aside
+        class="Sidebar"
+        :aria-label="$slots['sidebar-right'] ? 'Left sidebar' : undefined"
+        :inert="collapsed"
+      >
         <div class="SidebarScroll">
           <div class="SidebarHeader">
             <div
@@ -83,7 +136,7 @@ const mainContentStyle = computed(() => {
         <Icon icon="keyboard_double_arrow_right" size="sm" />
       </button>
     </div>
-    <main class="Main">
+    <main class="Main" @focusin="onMainFocusIn">
       <div v-if="tabs?.length" class="TabsLayout">
         <div class="TabsBar">
           <button
@@ -109,6 +162,16 @@ const mainContentStyle = computed(() => {
             <slot name="topbar" />
             <LightDarkToggle v-if="!hideTopbar" />
           </div>
+          <button
+            v-if="isMobile && $slots['sidebar-right'] && rightCollapsed"
+            type="button"
+            class="Toggle Toggle--end"
+            aria-label="Expand right sidebar"
+            title="Expand right sidebar"
+            @click="toggleRight"
+          >
+            <Icon icon="keyboard_double_arrow_left" size="sm" />
+          </button>
         </div>
         <div class="MainScroll">
           <div class="MainContent" :style="mainContentStyle">
@@ -137,6 +200,16 @@ const mainContentStyle = computed(() => {
             <slot name="topbar" />
             <LightDarkToggle v-if="!hideTopbar" />
           </div>
+          <button
+            v-if="isMobile && $slots['sidebar-right'] && rightCollapsed"
+            type="button"
+            class="Toggle Toggle--end"
+            aria-label="Expand right sidebar"
+            title="Expand right sidebar"
+            @click="toggleRight"
+          >
+            <Icon icon="keyboard_double_arrow_left" size="sm" />
+          </button>
         </div>
         <div class="MainScroll">
           <div class="MainContent" :style="mainContentStyle">
@@ -145,6 +218,50 @@ const mainContentStyle = computed(() => {
         </div>
       </template>
     </main>
+    <div
+      v-if="$slots['sidebar-right']"
+      class="SidebarRail SidebarRail--right"
+      :data-collapsed="rightCollapsed"
+    >
+      <aside class="Sidebar" aria-label="Right sidebar" :inert="rightCollapsed">
+        <div class="SidebarScroll">
+          <div class="SidebarHeader">
+            <button
+              type="button"
+              class="Toggle"
+              aria-label="Collapse right sidebar"
+              title="Collapse right sidebar"
+              @click="toggleRight"
+            >
+              <Icon icon="keyboard_double_arrow_right" size="sm" />
+            </button>
+            <div
+              v-if="$slots['sidebar-right-header-start']"
+              class="SidebarHeaderStart"
+            >
+              <slot name="sidebar-right-header-start" />
+            </div>
+            <div
+              v-if="$slots['sidebar-right-header-end']"
+              class="SidebarHeaderEnd"
+            >
+              <slot name="sidebar-right-header-end" />
+            </div>
+          </div>
+          <slot name="sidebar-right" />
+        </div>
+      </aside>
+      <button
+        type="button"
+        class="Toggle Toggle--expand"
+        :inert="!rightCollapsed"
+        aria-label="Expand right sidebar"
+        title="Expand right sidebar"
+        @click="toggleRight"
+      >
+        <Icon icon="keyboard_double_arrow_left" size="sm" />
+      </button>
+    </div>
   </div>
 </template>
 
@@ -170,12 +287,21 @@ const mainContentStyle = computed(() => {
   position: relative;
 }
 
+.SidebarRail--right {
+  width: var(--sidebar-right-width);
+}
+
 @media (min-width: 768px) {
-  .SidebarLayout[data-collapsed="true"] .SidebarRail {
+  .SidebarRail[data-collapsed="true"] {
     width: var(--toggle-size);
     background-color: var(--color-bg-1);
     border-right: 1px solid var(--color-border);
     box-shadow: var(--shadow-sm);
+  }
+
+  .SidebarRail--right[data-collapsed="true"] {
+    border-right: 0;
+    border-left: 1px solid var(--color-border);
   }
 }
 
@@ -188,11 +314,19 @@ const mainContentStyle = computed(() => {
   transition: transform var(--transition-normal);
 }
 
-.SidebarLayout[data-collapsed="true"] .Sidebar {
+.SidebarRail--right .Sidebar {
+  width: var(--sidebar-right-width);
+}
+
+.SidebarRail[data-collapsed="true"] .Sidebar {
   transform: translateX(-100%);
 }
 
-/* Both scroll panes are positioned so absolute descendants (visually-hidden
+.SidebarRail--right[data-collapsed="true"] .Sidebar {
+  transform: translateX(100%);
+}
+
+/* The scroll panes are positioned so absolute descendants (visually-hidden
    labels) are contained by the pane instead of the page. */
 .SidebarScroll {
   flex: 1;
@@ -212,6 +346,11 @@ const mainContentStyle = computed(() => {
 
 .SidebarScroll:hover {
   scrollbar-color: var(--color-border) transparent;
+}
+
+.SidebarRail--right .SidebarScroll {
+  border-right: 0;
+  border-left: 1px solid var(--color-border);
 }
 
 .SidebarScroll :deep(h2) {
@@ -272,6 +411,12 @@ const mainContentStyle = computed(() => {
   margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-2)) 0 0;
 }
 
+/* Mirrored: the collapse button leads, on the edge next to the main pane. */
+.SidebarRail--right .SidebarHeader {
+  justify-content: flex-start;
+  margin: calc(-1 * var(--space-4)) 0 0 calc(-1 * var(--space-2));
+}
+
 /* Controls slotted into any header band size to the toggles. */
 .SidebarHeader,
 .Topbar,
@@ -312,9 +457,20 @@ const mainContentStyle = computed(() => {
   transition: opacity var(--transition-fast);
 }
 
-.SidebarLayout[data-collapsed="true"] .Toggle--expand {
+.SidebarRail[data-collapsed="true"] .Toggle--expand {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* The phone's right expand button takes the far end of the bar, after the
+   end group when there is one. */
+.Toggle--end {
+  margin-left: auto;
+}
+
+.TopbarEnd + .Toggle--end,
+.TabsBarEnd + .Toggle--end {
+  margin-left: 0;
 }
 
 .Main {
@@ -369,27 +525,67 @@ const mainContentStyle = computed(() => {
   }
 }
 
-/* Mobile: use transform instead of width resize. Screen only: a printed
-   page is narrower than the breakpoint too. */
+/* Phone: the panes sit side by side, wider than the screen, and shift
+   together to bring one into view. The layout clips whatever is off screen,
+   so the page itself never scrolls sideways. Screen only: a printed page is
+   narrower than the breakpoint too. */
 @media screen and (max-width: 767px) {
   .SidebarLayout {
-    transition: transform var(--transition-normal);
+    --sidebar-shown-width: min(var(--sidebar-width), 100vw);
+    --sidebar-right-shown-width: min(var(--sidebar-right-width), 100vw);
+    --pane-shift: 0px;
+    overflow-x: clip;
   }
 
   .SidebarLayout[data-collapsed="true"] {
-    transform: translateX(calc(-1 * var(--sidebar-width)));
+    --pane-shift: calc(-1 * var(--sidebar-shown-width));
   }
 
-  .SidebarLayout[data-collapsed="true"] .Sidebar {
-    transform: translateX(0);
+  .SidebarLayout[data-right-collapsed="false"] {
+    --pane-shift: calc(
+      -1 * (var(--sidebar-shown-width) + var(--sidebar-right-shown-width))
+    );
+  }
+
+  .SidebarRail,
+  .Main {
+    transform: translateX(var(--pane-shift));
   }
 
   .SidebarRail {
-    min-width: var(--sidebar-width);
+    min-width: var(--sidebar-shown-width);
+    width: var(--sidebar-shown-width);
+    transition:
+      transform var(--transition-normal),
+      width var(--transition-normal);
   }
 
   .Main {
     min-width: 100vw;
+    transition: transform var(--transition-normal);
+  }
+
+  .Sidebar {
+    width: var(--sidebar-shown-width);
+  }
+
+  .SidebarRail[data-collapsed="true"] .Sidebar {
+    transform: translateX(0);
+  }
+
+  /* The right rail opens by growing from nothing as the panes shift by the
+     same amount, so it slides in from the edge of the screen. */
+  .SidebarRail--right {
+    min-width: 0;
+    width: var(--sidebar-right-shown-width);
+  }
+
+  .SidebarRail--right[data-collapsed="true"] {
+    width: 0;
+  }
+
+  .SidebarRail--right .Sidebar {
+    width: var(--sidebar-right-shown-width);
   }
 
   .Toggle--expand {

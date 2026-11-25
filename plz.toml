@@ -149,7 +149,8 @@ run = "node scripts/generate_docs.mjs"
 [taskgroup.docs.demos]
 run = """
 pnpm exec vite build --config demos/sidebar-layout/vite.config.ts && \
-pnpm exec vite build --config demos/sidebar-tabs/vite.config.ts
+pnpm exec vite build --config demos/sidebar-tabs/vite.config.ts && \
+pnpm exec vite build --config demos/sidebar-right/vite.config.ts
 """
 
 # Serve docs locally. No `build` dep: the VitePress config aliases
