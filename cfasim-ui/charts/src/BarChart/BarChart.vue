@@ -1925,6 +1925,7 @@ const effectiveChartPadding = computed<ChartPadding | undefined>(() => {
 
 const {
   containerRef,
+  widthProbeRef,
   svgRef,
   width,
   height,
@@ -2432,6 +2433,7 @@ const columnHeaders = computed<ColumnHeader[]>(() => {
       :class="{ 'is-fullscreen': isFullscreen }"
       :style="fullscreenStyle"
     >
+      <div ref="widthProbeRef" />
       <ChartMenu
         v-if="menu"
         :items="menuItems"

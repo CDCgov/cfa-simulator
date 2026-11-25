@@ -96,10 +96,6 @@ export interface ChartFoundationOptions {
  * consumes.
  */
 export function useChartFoundation(opts: ChartFoundationOptions) {
-  const { containerRef, measuredWidth, measuredHeight } = useChartSize({
-    debounce: opts.debounce,
-  });
-
   const {
     svgRef,
     items: menuItems,
@@ -126,6 +122,12 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     // The Escape that closes this chart's tooltip leaves it expanded.
     skipEscape: (event) => closedByEscape(event),
   });
+
+  const { containerRef, widthProbeRef, measuredWidth, measuredHeight } =
+    useChartSize({
+      debounce: opts.debounce,
+      isFullscreen: () => isFullscreen.value,
+    });
 
   /** The width the chart has to show itself in. */
   const viewportWidth = computed(() => {
@@ -234,6 +236,7 @@ export function useChartFoundation(opts: ChartFoundationOptions) {
     overlayHandlers,
     brushRect,
     containerRef,
+    widthProbeRef,
     svgRef,
     width,
     viewportWidth,

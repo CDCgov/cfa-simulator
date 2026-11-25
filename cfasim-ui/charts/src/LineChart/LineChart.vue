@@ -2148,6 +2148,7 @@ const markerChartPadding = computed<ChartPadding | undefined>(() => {
 
 const {
   containerRef,
+  widthProbeRef,
   svgRef,
   width,
   height,
@@ -2683,6 +2684,7 @@ function onMarkerKeydown(index: number, e: KeyboardEvent) {
       :class="{ 'is-fullscreen': isFullscreen }"
       :style="fullscreenStyle"
     >
+      <div ref="widthProbeRef" />
       <ChartMenu
         v-if="menu"
         :items="menuItems"

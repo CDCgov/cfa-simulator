@@ -504,6 +504,7 @@ const effectiveChartPadding = computed<ChartPadding>(() => {
 
 const {
   containerRef,
+  widthProbeRef,
   svgRef,
   width,
   viewportWidth,
@@ -1140,6 +1141,7 @@ function toCsv(): string {
       :class="{ 'is-fullscreen': isFullscreen, 'is-interactive': interactive }"
       :style="fullscreenStyle"
     >
+      <div ref="widthProbeRef" />
       <ChartMenu
         v-if="menu"
         :items="menuItems"
