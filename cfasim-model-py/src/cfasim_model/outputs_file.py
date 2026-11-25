@@ -19,6 +19,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 import os
 from pathlib import Path
 
@@ -207,7 +208,7 @@ def output_to_csv(output: dict) -> str:
             cols.append(["true" if v else "false" for v in arr])
         elif col["type"] == "f64":
             # "NaN", not Python's "nan": R reads the former as a number.
-            cols.append(["NaN" if v != v else v for v in arr.tolist()])
+            cols.append(["NaN" if math.isnan(v) else v for v in arr.tolist()])
         else:
             cols.append(arr.tolist())
     for row in zip(*cols, strict=True):

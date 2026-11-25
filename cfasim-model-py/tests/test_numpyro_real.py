@@ -8,7 +8,7 @@ from cfasim_model.outputs_file import normalize_outputs
 numpyro = pytest.importorskip("numpyro")
 jax = pytest.importorskip("jax")
 
-from cfasim_model.numpyro import run_mcmc  # noqa: E402
+from cfasim_model.numpyro import run_mcmc
 
 
 class Ctx:

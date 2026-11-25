@@ -1,5 +1,4 @@
 import numpy as np
-
 from cfasim_model import ModelOutput, model_outputs
 
 

@@ -85,10 +85,7 @@ describe("List", () => {
     const itemButtons = wrapper.findAll("li .ListAction");
     expect(itemButtons[1].attributes("aria-label")).toBe("More actions: Beta");
     await itemButtons[1].trigger("click");
-    const [item, index] = wrapper.emitted("item-action")![0] as [
-      ListOption,
-      number,
-    ];
+    const [item, index] = wrapper.emitted("item-action")![0];
     expect(item.value).toBe("b");
     expect(index).toBe(1);
     expect(itemButtons[2].attributes("disabled")).toBeDefined();
@@ -228,10 +225,7 @@ describe("List", () => {
     });
     expect(wrapper.find("[data-selected]").exists()).toBe(false);
     await wrapper.findAll("button.ListMain")[1].trigger("click");
-    const [item, index] = wrapper.emitted("item-click")![0] as [
-      ListOption,
-      number,
-    ];
+    const [item, index] = wrapper.emitted("item-click")![0];
     expect([item.value, index]).toEqual(["b", 1]);
     expect(wrapper.emitted("update:selected")).toBeUndefined();
   });

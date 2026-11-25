@@ -45,7 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: k88hudson/setup-plz@v1
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: cfasim-model-py/uv.lock
@@ -68,7 +68,7 @@ jobs:
       - uses: k88hudson/setup-plz@v1
       - uses: ./.github/actions/setup-node
       - uses: ./.github/actions/setup-rust
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@v10.4.0
       - uses: ./.github/actions/setup-playwright
       - run: cargo build -p cfasim
       - run: plz cli e2e
@@ -79,7 +79,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: k88hudson/setup-plz@v1
       - uses: ./.github/actions/setup-node
-      - uses: astral-sh/setup-uv@v10.3.3
+      - uses: astral-sh/setup-uv@v10.4.0
       - uses: ./.github/actions/setup-rust
       # The demo models are excluded from the cargo workspace and build into
       # their own target dirs, which setup-rust's cache does not cover.

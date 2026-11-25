@@ -4,7 +4,7 @@ exclude = ["models/src/reed-frost/model", "models/src/ixa-example/model"]
 resolver = "2"
 
 [workspace.package]
-rust-version = "1.80"
+rust-version = "1.90"
 
 # Minimum versions of tooling checked by `cfasim tools`.
 # Kept here so bumps sit next to rust-version for contributors to find.

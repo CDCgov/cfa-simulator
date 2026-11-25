@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 
 
@@ -126,7 +128,7 @@ def _is_missing(value):
     # NA, which raises in a boolean context), so match those by type name.
     if value is None or type(value).__name__ in ("NAType", "NaTType"):
         return True
-    return isinstance(value, float) and value != value
+    return isinstance(value, float) and math.isnan(value)
 
 
 def _all_bool(values):

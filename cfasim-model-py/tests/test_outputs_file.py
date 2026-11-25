@@ -1,7 +1,9 @@
 import json
 
+import make_fixtures
 import numpy as np
 import pytest
+from make_fixtures import sample_outputs
 
 from cfasim_model import ModelOutput
 from cfasim_model.outputs_file import (
@@ -12,9 +14,6 @@ from cfasim_model.outputs_file import (
     write_csvs,
     write_outputs,
 )
-
-import make_fixtures
-from make_fixtures import sample_outputs
 
 
 def header_of(blob: bytes) -> tuple[int, dict]:

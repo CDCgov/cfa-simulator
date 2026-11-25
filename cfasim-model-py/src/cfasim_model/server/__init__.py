@@ -10,4 +10,4 @@ standard library and numpy.
 from .context import SchemaChangeWarning, TaskContext
 from .tasks import task
 
-__all__ = ["task", "TaskContext", "SchemaChangeWarning"]
+__all__ = ["SchemaChangeWarning", "TaskContext", "task"]
