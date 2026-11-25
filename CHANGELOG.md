@@ -1,6 +1,20 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.16.1] - 2026-11-25
+
+### Bug Fixes
+
+- **charts:** Fit long category labels on horizontal bars (#117)
+
+### Chores
+
+- Upgrade dependencies and raise the Rust floor to 1.90 (#118)
+
+### Features
+
+- **components:** Add a right sidebar to SidebarLayout (#119)
+
 ## [0.16.0] - 2026-11-21
 
 ### Bug Fixes
