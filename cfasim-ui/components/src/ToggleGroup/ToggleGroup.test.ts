@@ -26,6 +26,13 @@ describe("ToggleGroup", () => {
     expect(group("neutral").attributes("data-variant")).toBe("neutral");
   });
 
+  it("is borderless unless given borders", () => {
+    const group = (borders?: boolean) =>
+      mount(ToggleGroup, { props: { options, borders } }).find(".toggle-group");
+    expect(group().attributes("data-borders")).toBeUndefined();
+    expect(group(true).attributes("data-borders")).toBeDefined();
+  });
+
   it("marks the selected value as pressed (single mode)", () => {
     const wrapper = mount(ToggleGroup, {
       props: { options, modelValue: "center" },

@@ -13,9 +13,10 @@ keywords:
 
 # ToggleGroup
 
-A segmented control that looks like a [`ButtonGroup`](./button-group) but tracks
-which item(s) are pressed. By default it is single-select (like a radio group);
-add `multiple` to let several items be pressed at once. Built on
+A group of toggle buttons that tracks which item(s) are pressed. By default it
+is single-select (like a radio group); add `multiple` to let several items be
+pressed at once. Add `borders` for a framed segmented control that looks like
+a [`ButtonGroup`](./button-group). Built on
 [reka-ui's ToggleGroup](https://reka-ui.com/docs/components/toggle-group).
 
 ## Examples
@@ -30,6 +31,7 @@ import { ref } from 'vue'
 const interval = ref('weekly')
 const days = ref(['mon', 'wed'])
 const variantValue = ref('weekly')
+const bordersValue = ref('weekly')
 const view = ref('chart')
 </script>
 
@@ -152,8 +154,8 @@ const days = ref(["mon", "wed"]);
 ### Variants
 
 `variant` paints the pressed item with the same palette as
-[`Button`](./button): `primary` (default), `secondary` (a primary tint and
-border) or `neutral` (a grey tint).
+[`Button`](./button): `primary` (default, a solid primary fill), `secondary`
+(a primary outline) or `neutral` (a light grey fill).
 
 <ComponentDemo>
   <div style="display: flex; flex-wrap: wrap; gap: 1rem">
@@ -202,6 +204,76 @@ border) or `neutral` (a grey tint).
   v-model="value"
   variant="neutral"
   aria-label="Neutral"
+  :options="options"
+/>
+```
+
+  </template>
+</ComponentDemo>
+
+### Borders
+
+`borders` frames the group and draws dividers between the items. The pressed
+item is a solid primary fill for `primary`, a primary tint for `secondary` and
+the lighter, outlined item for `neutral`.
+
+<ComponentDemo>
+  <div style="display: flex; flex-wrap: wrap; gap: 1rem">
+    <ToggleGroup
+      v-model="bordersValue"
+      borders
+      aria-label="Bordered primary"
+      :options="[
+        { value: 'daily', label: 'Daily' },
+        { value: 'weekly', label: 'Weekly' },
+        { value: 'monthly', label: 'Monthly' },
+      ]"
+    />
+    <ToggleGroup
+      v-model="bordersValue"
+      variant="secondary"
+      borders
+      aria-label="Bordered secondary"
+      :options="[
+        { value: 'daily', label: 'Daily' },
+        { value: 'weekly', label: 'Weekly' },
+        { value: 'monthly', label: 'Monthly' },
+      ]"
+    />
+    <ToggleGroup
+      v-model="bordersValue"
+      variant="neutral"
+      borders
+      aria-label="Bordered neutral"
+      :options="[
+        { value: 'daily', label: 'Daily' },
+        { value: 'weekly', label: 'Weekly' },
+        { value: 'monthly', label: 'Monthly' },
+      ]"
+    />
+  </div>
+
+<template #code>
+
+```vue
+<ToggleGroup
+  v-model="value"
+  borders
+  aria-label="Bordered primary"
+  :options="options"
+/>
+<ToggleGroup
+  v-model="value"
+  variant="secondary"
+  borders
+  aria-label="Bordered secondary"
+  :options="options"
+/>
+<ToggleGroup
+  v-model="value"
+  variant="neutral"
+  borders
+  aria-label="Bordered neutral"
   :options="options"
 />
 ```
