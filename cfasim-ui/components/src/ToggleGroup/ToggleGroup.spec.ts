@@ -39,3 +39,28 @@ test("clicking the label text leaves the hint closed", async ({ page }) => {
   await expect(hint).not.toBeFocused();
   await expect(page.locator(".HintContent")).toHaveCount(0);
 });
+
+// The inset focus outline is the primary color, which the primary pressed
+// fill would hide.
+test("keyboard focus shows on a pressed primary item with borders", async ({
+  page,
+}) => {
+  await page.goto("./cfasim-ui/components/toggle-group");
+  const pressed = page
+    .getByRole("group", { name: "Bordered primary" })
+    .getByRole("button", { pressed: true });
+  await pressed.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(pressed).toBeFocused();
+  const colors = await pressed.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      outlineWidth: style.outlineWidth,
+      outline: style.outlineColor,
+      fill: style.backgroundColor,
+    };
+  });
+  expect(colors.outlineWidth).toBe("2px");
+  expect(colors.outline).not.toBe(colors.fill);
+});

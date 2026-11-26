@@ -251,6 +251,13 @@ function onUpdate(value: AcceptableValue | AcceptableValue[]) {
   outline-offset: -2px;
 }
 
+/* The inset primary outline would vanish on the primary pressed fill, so it
+ * takes the label color there. */
+.toggle-group[data-borders][data-variant="primary"]
+  > .toggle-group-item[data-state="on"]:focus-visible {
+  outline-color: var(--toggle-on-color);
+}
+
 /* A ring around the pressed item, drawn on the group border and the dividers
  * next to it. Secondary needs none: its border and dividers are already the
  * primary color. The ring repeats the item's fill behind the label, because
