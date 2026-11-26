@@ -1,6 +1,22 @@
 # Changelog
 
 All notable changes to this project are documented here. Generated from conventional commits.
+## [0.17.0] - 2026-11-26
+
+### Bug Fixes
+
+- **charts:** Stop the ResizeObserver loop error when a chart resizes
+- **components:** Show keyboard focus on a pressed primary ToggleGroup item
+- **components:** Tighten the space under the sidebar header
+
+### Features
+
+- **components:** Make ToggleGroup borderless, add borders prop
+
+### Tests
+
+- **cfasim-ui:** Reduce and consolidate unit and e2e tests
+
 ## [0.16.1] - 2026-11-25
 
 ### Bug Fixes
