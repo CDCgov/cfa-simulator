@@ -100,6 +100,9 @@ describe("SidebarLayout header slots", () => {
     const wrapper = mount(SidebarLayout, { props: { tabs } });
     expect(wrapper.find(".SidebarHeaderStart").exists()).toBe(false);
     expect(wrapper.find(".SidebarHeaderEnd").exists()).toBe(false);
+    expect(wrapper.find(".SidebarHeader").classes()).toContain(
+      "SidebarHeader--bare",
+    );
     expect(wrapper.find(".TopbarStart").exists()).toBe(false);
   });
 
@@ -117,6 +120,7 @@ describe("SidebarLayout header slots", () => {
       (el) => el.className.split(" ")[0],
     );
     expect(order).toEqual(["SidebarHeaderStart", "SidebarHeaderEnd", "Toggle"]);
+    expect(header.classes()).not.toContain("SidebarHeader--bare");
     expect(header.find(".SidebarHeaderStart .title").exists()).toBe(true);
     expect(header.find(".SidebarHeaderEnd .reset").exists()).toBe(true);
   });
@@ -234,6 +238,10 @@ describe("SidebarLayout right sidebar", () => {
       (el) => el.className.split(" ")[0],
     );
     expect(order).toEqual(["Toggle", "SidebarHeaderStart", "SidebarHeaderEnd"]);
+    expect(header.classes()).not.toContain("SidebarHeader--bare");
+    expect(wrapper.find(".SidebarHeader").classes()).toContain(
+      "SidebarHeader--bare",
+    );
     expect(header.find(".SidebarHeaderStart .title").exists()).toBe(true);
     expect(header.find(".SidebarHeaderEnd .clear").exists()).toBe(true);
     expect(rail.find(".right-content").text()).toBe("Summary");

@@ -102,7 +102,14 @@ const mainContentStyle = computed(() => {
         :inert="collapsed"
       >
         <div class="SidebarScroll">
-          <div class="SidebarHeader">
+          <div
+            class="SidebarHeader"
+            :class="{
+              'SidebarHeader--bare':
+                !$slots['sidebar-header-start'] &&
+                !$slots['sidebar-header-end'],
+            }"
+          >
             <div
               v-if="$slots['sidebar-header-start']"
               class="SidebarHeaderStart"
@@ -225,7 +232,14 @@ const mainContentStyle = computed(() => {
     >
       <aside class="Sidebar" aria-label="Right sidebar" :inert="rightCollapsed">
         <div class="SidebarScroll">
-          <div class="SidebarHeader">
+          <div
+            class="SidebarHeader"
+            :class="{
+              'SidebarHeader--bare':
+                !$slots['sidebar-right-header-start'] &&
+                !$slots['sidebar-right-header-end'],
+            }"
+          >
             <button
               type="button"
               class="Toggle"
@@ -400,7 +414,8 @@ const mainContentStyle = computed(() => {
 }
 
 /* Pulled into the pane's padding so the band starts at the top edge and
-   the button sits a half step in from the corner. */
+   the button sits a half step in from the corner. The bottom margin trims
+   the pane's gap under the band to --space-2. */
 .SidebarHeader {
   display: flex;
   align-items: center;
@@ -408,13 +423,22 @@ const mainContentStyle = computed(() => {
   gap: var(--space-2);
   flex-shrink: 0;
   height: var(--bar-height);
-  margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-2)) 0 0;
+  margin-top: calc(-1 * var(--space-4));
+  margin-right: calc(-1 * var(--space-2));
+  margin-bottom: calc(var(--space-2) - var(--space-3));
 }
 
 /* Mirrored: the collapse button leads, on the edge next to the main pane. */
 .SidebarRail--right .SidebarHeader {
   justify-content: flex-start;
-  margin: calc(-1 * var(--space-4)) 0 0 calc(-1 * var(--space-2));
+  margin-right: 0;
+  margin-left: calc(-1 * var(--space-2));
+}
+
+/* With only the collapse button in the band, the content needs no gap
+   under it. */
+.SidebarHeader--bare {
+  margin-bottom: calc(-1 * var(--space-3));
 }
 
 /* Controls slotted into any header band size to the toggles. */
