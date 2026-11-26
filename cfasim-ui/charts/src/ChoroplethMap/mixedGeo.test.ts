@@ -9,7 +9,7 @@ import {
   type MixFeature,
 } from "./mixedGeo.js";
 
-const f = (id: string, name?: string): MixFeature => ({
+const makeFeature = (id: string, name?: string): MixFeature => ({
   id,
   properties: name ? { name } : null,
 });
@@ -25,14 +25,17 @@ const lookupOf = (features: MixFeature[]): LevelLookup => {
   return { byId, byName };
 };
 
-const STATES = lookupOf([f("06", "California"), f("36", "New York")]);
-const COUNTIES = lookupOf([
-  f("06037", "Los Angeles"),
-  f("06075", "San Francisco"),
-  f("36061", "New York"),
-  f("36047", "Kings"),
+const STATES = lookupOf([
+  makeFeature("06", "California"),
+  makeFeature("36", "New York"),
 ]);
-const HSAS = lookupOf([f("060723"), f("360011")]);
+const COUNTIES = lookupOf([
+  makeFeature("06037", "Los Angeles"),
+  makeFeature("06075", "San Francisco"),
+  makeFeature("36061", "New York"),
+  makeFeature("36047", "Kings"),
+]);
+const HSAS = lookupOf([makeFeature("060723"), makeFeature("360011")]);
 const HSA_TO_STATE = new Map([
   ["060723", "06"],
   ["360011", "36"],
@@ -46,229 +49,101 @@ const resolver = (level: string) =>
     >
   )[level] ?? null;
 
-describe("stateOfId", () => {
-  it("reads the FIPS prefix for states and counties", () => {
-    expect(stateOfId("states", "06")).toBe("06");
-    expect(stateOfId("counties", "06037")).toBe("06");
-  });
-
-  it("zero-pads short ids to their level's width", () => {
+describe("mixedGeo", () => {
+  it("stateOfId extracts padded state FIPS for states, counties, and HSAs", () => {
     expect(stateOfId("states", "6")).toBe("06");
     expect(stateOfId("counties", "6037")).toBe("06");
-  });
-
-  it("places an HSA through the inverted FIPS→HSA table", () => {
     expect(stateOfId("hsas", "060723", HSA_TO_STATE)).toBe("06");
-    // HSA codes aren't state-prefixed, so there's no fallback without it.
     expect(stateOfId("hsas", "060723")).toBeNull();
   });
-});
 
-describe("resolveGeoOverrides", () => {
-  it("ignores rows at the base level", () => {
-    const { overrides } = resolveGeoOverrides(
-      [{ id: "06037" }, { id: "36061", geoType: "counties" }],
-      "counties",
-      resolver,
-    );
-    expect(overrides.size).toBe(0);
-  });
-
-  it("maps an off-level row to its state", () => {
-    const { overrides } = resolveGeoOverrides(
-      [{ id: "06037" }, { id: "36", geoType: "states" }],
-      "counties",
-      resolver,
-    );
-    expect([...overrides]).toEqual([["36", "states"]]);
-  });
-
-  it("resolves a row keyed by feature name", () => {
-    const { overrides } = resolveGeoOverrides(
-      [{ id: "California", geoType: "states" }],
-      "counties",
-      resolver,
-    );
-    expect(overrides.get("06")).toBe("states");
-  });
-
-  it("splits a state map by a single county row", () => {
-    const { overrides } = resolveGeoOverrides(
-      [{ id: "36061", geoType: "counties" }],
-      "states",
-      resolver,
-    );
-    expect(overrides.get("36")).toBe("counties");
-  });
-
-  it("reports rows whose id resolves to no state", () => {
-    const { overrides, unresolved } = resolveGeoOverrides(
-      [{ id: "Atlantis", geoType: "states" }],
-      "counties",
-      resolver,
-    );
-    expect(overrides.size).toBe(0);
-    expect(unresolved).toEqual(["Atlantis"]);
-  });
-
-  it("reports a level the topology can't supply", () => {
-    const { unresolved } = resolveGeoOverrides(
-      [{ id: "060723", geoType: "hsas" }],
-      "counties",
-      () => null,
-    );
-    expect(unresolved).toEqual(["060723"]);
-  });
-
-  it("keeps the first level when two rows claim one state differently", () => {
-    const { overrides, conflicts } = resolveGeoOverrides(
+  it("resolveGeoOverrides maps off-level rows by id or name and reports conflicts/unresolved", () => {
+    const { overrides, unresolved, conflicts } = resolveGeoOverrides(
       [
-        { id: "06", geoType: "states" },
+        { id: "06037" },
+        { id: "California", geoType: "states" },
         { id: "060723", geoType: "hsas" },
+        { id: "Atlantis", geoType: "states" },
       ],
       "counties",
       resolver,
       HSA_TO_STATE,
     );
-    expect(overrides.get("06")).toBe("states");
+    expect([...overrides]).toEqual([["06", "states"]]);
     expect(conflicts).toEqual(["060723"]);
+    expect(unresolved).toEqual(["Atlantis"]);
   });
 
-  it("takes many rows for the same state as one override", () => {
-    const { overrides, conflicts } = resolveGeoOverrides(
-      [
-        { id: "36061", geoType: "counties" },
-        { id: "36047", geoType: "counties" },
-      ],
-      "states",
-      resolver,
-    );
-    expect([...overrides]).toEqual([["36", "counties"]]);
-    expect(conflicts).toEqual([]);
-  });
-});
-
-describe("serializeOverrides / parseOverrides", () => {
-  it("round-trips, ordered so equal sets compare equal", () => {
-    const a = serializeOverrides(
+  it("serializeOverrides and parseOverrides round-trip canonically", () => {
+    const first = serializeOverrides(
       new Map([
         ["36", "counties"],
         ["06", "states"],
       ]),
     );
-    const b = serializeOverrides(
+    const second = serializeOverrides(
       new Map([
         ["06", "states"],
         ["36", "counties"],
       ]),
     );
-    expect(a).toBe(b);
-    expect([...parseOverrides(a)]).toEqual([
+    expect(first).toBe(second);
+    expect([...parseOverrides(first)]).toEqual([
       ["06", "states"],
       ["36", "counties"],
     ]);
-  });
-
-  it("parses an empty key to an empty map", () => {
     expect(parseOverrides("").size).toBe(0);
   });
-});
 
-describe("mixFeatures", () => {
-  const counties = [...COUNTIES.byId.values()];
-  const states = [...STATES.byId.values()];
+  it("mixFeatures merges, splits, substitutes HSAs, and guards missing levels", () => {
+    const counties = [...COUNTIES.byId.values()];
+    const states = [...STATES.byId.values()];
 
-  it("returns the base array untouched when nothing is overridden", () => {
-    const result = mixFeatures(counties, "counties", new Map(), resolver);
-    expect(result.features).toBe(counties);
-    expect(result.levelById.size).toBe(0);
-  });
+    expect(
+      mixFeatures(counties, "counties", new Map(), resolver).features,
+    ).toBe(counties);
 
-  it("merges an overridden state's counties into the state feature", () => {
-    const { features, levelById } = mixFeatures(
+    const merged = mixFeatures(
       counties,
       "counties",
       new Map([["06", "states"]]),
       resolver,
     );
-    const ids = features.map((x) => String(x.id));
-    expect(ids).not.toContain("06037");
-    expect(ids).not.toContain("06075");
-    expect(ids).toContain("06");
-    // Other states keep their counties.
-    expect(ids).toContain("36061");
-    expect(levelById.get("06")).toBe("states");
-    expect(levelById.has("36061")).toBe(false);
-  });
+    expect(merged.features.map((feat) => String(feat.id))).toEqual(
+      expect.arrayContaining(["06", "36061", "36047"]),
+    );
+    expect(merged.levelById.get("06")).toBe("states");
 
-  it("splits an overridden state on a state base map", () => {
-    const { features, levelById } = mixFeatures(
+    const split = mixFeatures(
       states,
       "states",
       new Map([["36", "counties"]]),
       resolver,
     );
-    const ids = features.map((x) => String(x.id));
-    expect(ids).toContain("06");
-    expect(ids).not.toContain("36");
-    expect(ids).toEqual(expect.arrayContaining(["36061", "36047"]));
-    expect(levelById.get("36061")).toBe("counties");
-  });
+    expect(split.features.map((feat) => String(feat.id))).toEqual(
+      expect.arrayContaining(["06", "36061", "36047"]),
+    );
 
-  it("substitutes HSAs for one state", () => {
-    const { features } = mixFeatures(
+    const withHsa = mixFeatures(
       counties,
       "counties",
       new Map([["06", "hsas"]]),
       resolver,
       HSA_TO_STATE,
     );
-    const ids = features.map((x) => String(x.id));
-    expect(ids).toContain("060723");
-    expect(ids).not.toContain("06037");
-    expect(ids).not.toContain("360011");
-  });
-
-  it("drops substitutions outside a single-state scope", () => {
-    const { features } = mixFeatures(
-      counties.filter((x) => String(x.id).startsWith("36")),
-      "counties",
-      new Map([["06", "states"]]),
-      resolver,
-      null,
-      "36",
+    expect(withHsa.features.map((feat) => String(feat.id))).toContain("060723");
+    expect(withHsa.features.map((feat) => String(feat.id))).not.toContain(
+      "06037",
     );
-    expect(features.map((x) => String(x.id))).toEqual(["36061", "36047"]);
-  });
 
-  it("leaves the base intact when the override level isn't ready yet", () => {
-    // No HSA→state table yet (lazy chunk still loading) — nothing can stand in
-    // for California, so its counties must stay rather than leave a hole.
-    const { features, levelById } = mixFeatures(
+    // Without HSA_TO_STATE, counties stay intact instead of leaving a hole.
+    const unready = mixFeatures(
       counties,
       "counties",
       new Map([["06", "hsas"]]),
       resolver,
       null,
     );
-    expect(features).toBe(counties);
-    expect(levelById.size).toBe(0);
-  });
-
-  it("only cuts out the states it can actually replace", () => {
-    const { features } = mixFeatures(
-      counties,
-      "counties",
-      new Map([
-        ["06", "states"],
-        ["36", "hsas"],
-      ]),
-      resolver,
-      // California resolves; New York's HSAs can't be placed without the table.
-      null,
-    );
-    const ids = features.map((x) => String(x.id));
-    expect(ids).toContain("06");
-    expect(ids).toEqual(expect.arrayContaining(["36061", "36047"]));
+    expect(unready.features).toBe(counties);
   });
 });

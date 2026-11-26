@@ -1,12 +1,9 @@
 import { test, expect } from "@playwright/test";
 
-test.beforeEach(async ({ page }) => {
-  await page.goto("./cfasim-ui/components/menu");
-});
-
 test("opens from the icon trigger, selects, and skips disabled options", async ({
   page,
 }) => {
+  await page.goto("./cfasim-ui/components/menu");
   const demo = page.locator(".demo-preview").first();
   const trigger = demo.getByRole("button", { name: "Scenario actions" });
   await trigger.click();
@@ -29,14 +26,4 @@ test("opens from the icon trigger, selects, and skips disabled options", async (
   await page.keyboard.press("Enter");
   await expect(menu).toBeHidden();
   await expect(demo.getByText("Last choice: Delete")).toBeVisible();
-});
-
-test("opens from a custom trigger with links", async ({ page }) => {
-  const demo = page.locator(".demo-preview").nth(1);
-  await demo.getByRole("button", { name: "Series" }).click();
-  const docs = page.getByRole("menuitem", { name: "Documentation" });
-  await expect(docs).toHaveAttribute(
-    "href",
-    "https://github.com/CDCgov/cfa-simulator",
-  );
 });

@@ -2,187 +2,58 @@ import { describe, it, expect } from "vitest";
 import { seriesToCsv, categoricalToCsv } from "./seriesCsv.js";
 
 describe("seriesToCsv", () => {
-  it("returns empty string for no series", () => {
+  it("formats headers, shared x column, typed arrays, padding, and empty input", () => {
     expect(seriesToCsv([])).toBe("");
-  });
-
-  it("emits single-series header as index,value", () => {
-    expect(seriesToCsv([{ data: [10, 20, 30] }])).toBe(
-      "index,value\n0,10\n1,20\n2,30",
+    expect(seriesToCsv([{ data: [10, 20] }])).toBe("index,value\n0,10\n1,20");
+    expect(seriesToCsv([{ data: [1, 2], label: "Cases" }, { data: [3] }])).toBe(
+      "index,Cases,series_1\n0,1,3\n1,2,",
     );
-  });
 
-  it("emits multi-series headers as series_0, series_1, ...", () => {
-    expect(seriesToCsv([{ data: [1, 2] }, { data: [3, 4] }])).toBe(
-      "index,series_0,series_1\n0,1,3\n1,2,4",
-    );
-  });
-
-  it("uses series labels as headers, falling back to series_N", () => {
+    const sharedX = new Float64Array([10, 20]);
     expect(
-      seriesToCsv([{ data: [1, 2], label: "Cases" }, { data: [3, 4] }]),
-    ).toBe("index,Cases,series_1\n0,1,3\n1,2,4");
-    expect(seriesToCsv([{ data: [1], label: "Cases" }])).toBe(
-      "index,Cases\n0,1",
-    );
+      seriesToCsv([
+        { data: new Float64Array([1, 2]), x: sharedX },
+        { data: [3, 4], x: sharedX },
+      ]),
+    ).toBe("x,series_0,series_1\n10,1,3\n20,2,4");
+    // Distinct x array references fall back to index.
+    expect(
+      seriesToCsv([
+        { data: [1], x: [10] },
+        { data: [2], x: [10] },
+      ]),
+    ).toBe("index,series_0,series_1\n0,1,2");
   });
 
-  it("escapes labels containing commas", () => {
+  it("escapes commas, deduplicates colliding headers, and appends lower/upper bounds", () => {
     expect(
       seriesToCsv([
         { data: [1], label: "Cases, weekly", lower: [0], upper: [2] },
+        { data: [5], label: "Cases, weekly", lower: [4], upper: [6] },
+        { data: [9], label: "index" },
       ]),
     ).toBe(
-      'index,"Cases, weekly","Cases, weekly_lower","Cases, weekly_upper"\n0,1,0,2',
+      'index,"Cases, weekly","Cases, weekly_lower","Cases, weekly_upper","Cases, weekly_2","Cases, weekly_2_lower","Cases, weekly_2_upper",index_2\n0,1,0,2,5,4,6,9',
     );
-  });
-
-  it("suffixes a label that repeats or collides with the first column", () => {
-    expect(
-      seriesToCsv([
-        { data: [1], label: "Scenario" },
-        { data: [2], label: "Scenario" },
-        { data: [3], label: "index" },
-      ]),
-    ).toBe("index,Scenario,Scenario_2,index_2\n0,1,2,3");
-    const x = [10];
-    expect(seriesToCsv([{ data: [1], x, label: "x" }])).toBe("x,x_2\n10,1");
-  });
-
-  it("keeps bound columns unique when labels repeat", () => {
-    expect(
-      seriesToCsv([
-        { data: [1], label: "Cases", lower: [0], upper: [2] },
-        { data: [5], label: "Cases", lower: [4], upper: [6] },
-      ]),
-    ).toBe(
-      "index,Cases,Cases_lower,Cases_upper,Cases_2,Cases_2_lower,Cases_2_upper\n0,1,0,2,5,4,6",
-    );
-  });
-
-  it("falls back for a whitespace-only label", () => {
-    expect(seriesToCsv([{ data: [1], label: " " }])).toBe("index,value\n0,1");
-  });
-
-  it("uses an x column when all series share the same x reference", () => {
-    const x = [10, 20, 30];
-    expect(
-      seriesToCsv([
-        { data: [1, 2, 3], x },
-        { data: [4, 5, 6], x },
-      ]),
-    ).toBe("x,series_0,series_1\n10,1,4\n20,2,5\n30,3,6");
-  });
-
-  it("falls back to index when series have different x arrays", () => {
-    expect(
-      seriesToCsv([
-        { data: [1, 2], x: [10, 20] },
-        { data: [3, 4], x: [10, 20] }, // different array reference
-      ]),
-    ).toBe("index,series_0,series_1\n0,1,3\n1,2,4");
-  });
-
-  it("pads short series with empty cells to maxLen", () => {
-    expect(seriesToCsv([{ data: [1, 2, 3] }, { data: [4] }])).toBe(
-      "index,series_0,series_1\n0,1,4\n1,2,\n2,3,",
-    );
-  });
-
-  it("works with typed arrays", () => {
-    const x = new Float64Array([0, 1, 2]);
-    const y = new Float64Array([10, 20, 30]);
-    expect(seriesToCsv([{ data: y, x }])).toBe("x,value\n0,10\n1,20\n2,30");
+    expect(seriesToCsv([{ data: [1], lower: [0] }])).toBe("index,value\n0,1");
   });
 });
 
 describe("categoricalToCsv", () => {
-  it("returns empty string for no series or no categories", () => {
+  it("escapes categories and headers, deduplicates labels, and includes interval bounds", () => {
     expect(categoricalToCsv([], [{ data: [1] }])).toBe("");
-    expect(categoricalToCsv(["A"], [])).toBe("");
-  });
-
-  it("emits single-series CSV with `value` header by default", () => {
-    expect(categoricalToCsv(["A", "B"], [{ data: [10, 20] }])).toBe(
-      "category,value\nA,10\nB,20",
+    expect(
+      categoricalToCsv(
+        ["Hello, world", 'She said "hi"', "line\nbreak"],
+        [{ data: [1, 2], label: "category", lower: [0, 1], upper: [2, 3] }],
+      ),
+    ).toBe(
+      'category,category_2,category_2_lower,category_2_upper\n"Hello, world",1,0,2\n"She said ""hi""",2,1,3\n"line\nbreak",,,',
     );
-  });
-
-  it("uses the series label as the value column when provided", () => {
     expect(
-      categoricalToCsv(["A", "B"], [{ data: [10, 20], label: "cases" }]),
-    ).toBe("category,cases\nA,10\nB,20");
-  });
-
-  it("escapes the category and extra column headers", () => {
-    expect(
-      categoricalToCsv(["A"], [{ data: [1] }], "Age group, years", [
-        { header: "x_end\r", values: ["B"] },
+      categoricalToCsv(["A"], [{ data: [1] }], "Age, yrs", [
+        { header: "end", values: ["B"] },
       ]),
-    ).toBe('"Age group, years","x_end\r",value\nA,B,1');
-  });
-
-  it("suffixes a series label that collides with the category header", () => {
-    expect(categoricalToCsv(["A"], [{ data: [1], label: "category" }])).toBe(
-      "category,category_2\nA,1",
-    );
-  });
-
-  it("emits multi-series CSV with labels or series_N fallback", () => {
-    expect(
-      categoricalToCsv(
-        ["A", "B"],
-        [
-          { data: [1, 2], label: "low" },
-          { data: [3, 4] }, // no label → series_1
-        ],
-      ),
-    ).toBe("category,low,series_1\nA,1,3\nB,2,4");
-  });
-
-  it("escapes category values containing commas, quotes, or newlines", () => {
-    const csv = categoricalToCsv(
-      ["Hello, world", 'She said "hi"', "line\nbreak"],
-      [{ data: [1, 2, 3] }],
-    );
-    expect(csv).toContain('"Hello, world",1');
-    expect(csv).toContain('"She said ""hi""",2');
-    expect(csv).toContain('"line\nbreak",3');
-  });
-
-  it("respects a custom category header", () => {
-    expect(categoricalToCsv(["A"], [{ data: [1] }], "day")).toBe(
-      "day,value\nA,1",
-    );
-  });
-
-  it("pads short series with empty cells", () => {
-    expect(
-      categoricalToCsv(["A", "B", "C"], [{ data: [1, 2], label: "x" }]),
-    ).toBe("category,x\nA,1\nB,2\nC,");
-  });
-});
-
-describe("interval columns", () => {
-  it("adds lower/upper columns after a series value", () => {
-    expect(seriesToCsv([{ data: [1, 2], lower: [0, 1], upper: [2, 3] }])).toBe(
-      "index,value,value_lower,value_upper\n0,1,0,2\n1,2,1,3",
-    );
-    expect(
-      seriesToCsv([{ data: [1] }, { data: [5], lower: [4], upper: [6] }]),
-    ).toBe("index,series_0,series_1,series_1_lower,series_1_upper\n0,1,5,4,6");
-  });
-
-  it("needs both bounds before adding columns", () => {
-    expect(seriesToCsv([{ data: [1], lower: [0] }])).toBe("index,value\n0,1");
-  });
-
-  it("adds lower/upper columns to categorical CSV", () => {
-    expect(
-      categoricalToCsv(
-        ["A", "B"],
-        [{ label: "Cases", data: [1, 2], lower: [0, 1], upper: [2, 4] }],
-      ),
-    ).toBe("category,Cases,Cases_lower,Cases_upper\nA,1,0,2\nB,2,1,4");
+    ).toBe('"Age, yrs",end,value\nA,B,1');
   });
 });

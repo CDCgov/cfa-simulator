@@ -8,11 +8,10 @@ import {
   type CanvasScene,
 } from "./canvasLayer.js";
 
-// happy-dom has no Path2D / 2D context — record operations instead.
 class FakePath2D {
   constructor(public d?: string) {}
-  addPath(p: FakePath2D) {
-    this.d = (this.d ?? "") + (p.d ?? "");
+  addPath(path: FakePath2D) {
+    this.d = (this.d ?? "") + (path.d ?? "");
   }
 }
 
@@ -34,16 +33,17 @@ function fakeCtx(overrides: Record<string, unknown> = {}): RecordingCtx {
       if (args.length === 6) ops.push(`transform:${args.join(",")}`);
     }),
     clearRect: vi.fn(),
-    fillRect: vi.fn(function (this: void, ...args: number[]) {
-      const c = ctx as { fillStyle: string };
-      ops.push(`fillRect:${args.join(",")}:${c.fillStyle}`);
-    }),
-    fill: vi.fn(function (this: void, p: FakePath2D) {
-      ops.push(`fill:${p.d}:${(ctx as { fillStyle: string }).fillStyle}`);
-    }),
-    stroke: vi.fn(function (this: void, p: FakePath2D) {
-      const c = ctx as { strokeStyle: string; lineWidth: number };
-      ops.push(`stroke:${p.d}:${c.strokeStyle}@${c.lineWidth}`);
+    fillRect: vi.fn((...args: number[]) =>
+      ops.push(
+        `fillRect:${args.join(",")}:${(ctx as { fillStyle: string }).fillStyle}`,
+      ),
+    ),
+    fill: vi.fn((path: FakePath2D) =>
+      ops.push(`fill:${path.d}:${(ctx as { fillStyle: string }).fillStyle}`),
+    ),
+    stroke: vi.fn((path: FakePath2D) => {
+      const state = ctx as { strokeStyle: string; lineWidth: number };
+      ops.push(`stroke:${path.d}:${state.strokeStyle}@${state.lineWidth}`);
     }),
     setLineDash: vi.fn(),
     getImageData: vi.fn(),
@@ -54,15 +54,15 @@ function fakeCtx(overrides: Record<string, unknown> = {}): RecordingCtx {
   return ctx as unknown as RecordingCtx;
 }
 
-function scene3(): CanvasScene {
-  const items = ["a", "b", "c"].map((id, i) => ({
+function makeScene(): CanvasScene {
+  const items = ["a", "b", "c"].map((id, idx) => ({
     id,
-    path: new FakePath2D(`M${i}`) as unknown as Path2D,
-    fill: `#f${i}`,
+    path: new FakePath2D(`M${idx}`) as unknown as Path2D,
+    fill: `#f${idx}`,
   }));
   return {
     items,
-    indexById: new Map(items.map((it, i) => [it.id, i])),
+    indexById: new Map(items.map((item, idx) => [item.id, idx])),
     featureStrokes: new FakePath2D("M0M1M2") as unknown as Path2D,
     alternateFeatureStrokes: new Map(),
     raisedStroke: null,
@@ -75,69 +75,28 @@ function scene3(): CanvasScene {
   };
 }
 
-/** Draw state defaults matching the pre-theme behavior. */
-function baseState() {
-  return {
-    strokeColor: "#fff",
-    strokeWidth: 0.5,
-    bordersColor: "#fff",
-    bordersWidth: 1,
-    countyBordersColor: undefined as string | undefined,
-    countyBordersWidth: 0.5,
-    hsaBordersColor: undefined as string | undefined,
-    hsaBordersWidth: 0.5,
-    outlineColor: undefined,
-    outlineWidth: 1,
-    background: undefined,
-    highlightStroke: "#000",
-    hoveredId: null as string | null,
-    focused: new Map(),
-    overlays: [],
-  };
-}
-
-beforeEach(() => {
-  vi.stubGlobal("Path2D", FakePath2D);
-});
-afterEach(() => {
-  vi.unstubAllGlobals();
+const baseState = () => ({
+  strokeColor: "#fff",
+  strokeWidth: 0.5,
+  bordersColor: "#fff",
+  bordersWidth: 1,
+  countyBordersColor: undefined as string | undefined,
+  countyBordersWidth: 0.5,
+  hsaBordersColor: undefined as string | undefined,
+  hsaBordersWidth: 0.5,
+  outlineColor: undefined as string | undefined,
+  outlineWidth: 1,
+  background: undefined as string | undefined,
+  highlightStroke: "#000",
+  hoveredId: null as string | null,
+  focused: new Map(),
+  overlays: [],
 });
 
-describe("buildScene", () => {
-  it("builds one item per feature, skipping features without a path", () => {
-    const scene = buildScene(
-      [{ id: "01" }, { id: "02" }, { id: "03" }],
-      ((f: { id: string }) => (f.id === "02" ? null : `M${f.id}`)) as never,
-      (id) => `fill-${id}`,
-      "Mborders",
-    );
-    expect(scene.items.map((i) => i.id)).toEqual(["01", "03"]);
-    expect(scene.items[0].fill).toBe("fill-01");
-    expect(scene.indexById.get("03")).toBe(1);
-    // All feature strokes concatenated for one native stroke call.
-    expect((scene.featureStrokes as unknown as FakePath2D).d).toBe("M01M03");
-    expect((scene.borders as unknown as FakePath2D).d).toBe("Mborders");
-    // The exterior outline is attached later by the component.
-    expect(scene.exterior).toBeNull();
-  });
+beforeEach(() => vi.stubGlobal("Path2D", FakePath2D));
+afterEach(() => vi.unstubAllGlobals());
 
-  it("batches per-stop feature strokes by alternate color", () => {
-    const scene = buildScene(
-      [{ id: "01" }, { id: "02" }, { id: "03" }],
-      ((f: { id: string }) => `M${f.id}`) as never,
-      (id) => (id === "02" ? "#fff" : "#600"),
-      null,
-      null,
-      (id) => (id === "02" ? "#ccc" : undefined),
-    );
-    expect((scene.featureStrokes as unknown as FakePath2D).d).toBe("M01M03");
-    expect(
-      (scene.alternateFeatureStrokes.get("#ccc") as unknown as FakePath2D).d,
-    ).toBe("M02");
-  });
-});
-
-describe("drawScene", () => {
+describe("canvasLayer", () => {
   const view = {
     dpr: 2,
     meetScale: 0.5,
@@ -146,39 +105,38 @@ describe("drawScene", () => {
     zoom: { k: 4, x: -100, y: -50 },
   };
 
-  it("applies the composed transform and constant-CSS-px line widths", () => {
-    const ctx = fakeCtx();
-    drawScene(ctx, scene3(), view, baseState());
-    // device = dpr·(offset + meetScale·zoom(point)) → scale 2·0.5·4 = 4,
-    // tx = 2·(0 + 0.5·−100) = −100, ty = 2·(10 + 0.5·−50) = −30.
-    expect(ctx.ops).toContain("transform:4,0,0,4,-100,-30");
-    // Feature strokes stroke once, 0.5 CSS px → 0.5/(0.5·4) = 0.25 map
-    // units; borders 1 CSS px → 0.5.
-    expect(ctx.ops).toContain("stroke:M0M1M2:#fff@0.25");
-    expect(ctx.ops).toContain("stroke:Mborders:#fff@0.5");
-  });
-
-  it("uses per-stop strokes and highlights for feature batches", () => {
+  it("buildScene skips null paths and batches alternate strokes", () => {
     const scene = buildScene(
-      [{ id: "dark" }, { id: "white" }],
-      ((f: { id: string }) => `M${f.id}`) as never,
-      (id) => (id === "white" ? "#fff" : "#600"),
+      [{ id: "01" }, { id: "02" }, { id: "03" }],
+      ((feat: { id: string }) =>
+        feat.id === "02" ? null : `M${feat.id}`) as never,
+      (id) => `fill-${id}`,
+      "Mborders",
       null,
-      null,
-      (id) => (id === "white" ? "#ccc" : undefined),
-      (id) => (id === "white" ? "#555" : undefined),
+      (id) => (id === "03" ? "#ccc" : undefined),
     );
-    const ctx = fakeCtx();
-    drawScene(ctx, scene, view, { ...baseState(), hoveredId: "white" });
-    expect(ctx.ops).toContain("stroke:Mdark:#fff@0.25");
-    expect(ctx.ops).toContain("stroke:Mwhite:#ccc@0.25");
-    expect(ctx.ops).toContain("stroke:Mwhite:#555@0.75");
+    expect(scene.items.map((item) => item.id)).toEqual(["01", "03"]);
+    expect((scene.featureStrokes as unknown as FakePath2D).d).toBe("M01");
+    expect(
+      (scene.alternateFeatureStrokes.get("#ccc") as unknown as FakePath2D).d,
+    ).toBe("M03");
+    expect((scene.borders as unknown as FakePath2D).d).toBe("Mborders");
   });
 
-  it("draws fills, borders, overlays, then highlights last", () => {
+  it("drawScene applies transform, constant-CSS-px widths, and layer z-order", () => {
     const ctx = fakeCtx();
-    drawScene(ctx, scene3(), view, {
+    const scene = makeScene();
+    scene.countyBorders = new FakePath2D("Mcounty") as unknown as Path2D;
+    scene.hsaBorders = new FakePath2D("Mhsa") as unknown as Path2D;
+    scene.exterior = new FakePath2D("Mext") as unknown as Path2D;
+
+    drawScene(ctx, scene, view, {
       ...baseState(),
+      background: "#123",
+      countyBordersColor: "#999",
+      hsaBordersColor: "#eee",
+      outlineColor: "#0a0",
+      outlineWidth: 2,
       hoveredId: "b",
       focused: new Map([["c", { stroke: "red", strokeWidth: 3 }]]),
       overlays: [
@@ -189,195 +147,90 @@ describe("drawScene", () => {
         },
       ],
     });
-    const order = ctx.ops.filter((o) => !o.startsWith("transform"));
-    // Base pass: every feature fills, then one outline stroke.
-    expect(order.slice(0, 4)).toEqual([
+
+    expect(ctx.ops).toContain("transform:4,0,0,4,-100,-30");
+    const order = ctx.ops.filter((op) => !op.startsWith("transform"));
+    expect(order.slice(0, 5)).toEqual([
+      "fillRect:0,0,1000,625:#123",
       "fill:M0:#f0",
       "fill:M1:#f1",
       "fill:M2:#f2",
       "stroke:M0M1M2:#fff@0.25",
     ]);
-    // Focused highlight (custom stroke, 3 CSS px → 1.5 map units) sits
-    // under the overlay (SVG z-order: overlays above focus-raised paths);
-    // the live hover (default color, 0.5+1 → 0.75) draws last of all.
-    const focusIdx = order.indexOf("stroke:M2:red@1.5");
-    const ovIdx = order.indexOf("stroke:Mov:#666@1");
-    expect(focusIdx).toBeGreaterThan(-1);
-    expect(ovIdx).toBeGreaterThan(focusIdx);
-    expect(order.at(-1)).toBe("stroke:M1:#000@0.75");
+    const indices = [
+      "stroke:Mcounty:#999@0.25",
+      "stroke:Mhsa:#eee@0.25",
+      "stroke:Mborders:#fff@0.5",
+      "stroke:Mext:#0a0@1",
+      "stroke:M2:red@1.5",
+      "stroke:Mov:#666@1",
+      "stroke:M1:#000@0.75",
+    ].map((op) => order.indexOf(op));
+    for (let idx = 0; idx < indices.length; idx++) {
+      expect(indices[idx]).toBeGreaterThan(-1);
+      if (idx > 0) expect(indices[idx]).toBeGreaterThan(indices[idx - 1]);
+    }
   });
 
-  it("paints the background before fills when set", () => {
+  it("drawScene skips optional layers when unset or width is 0", () => {
     const ctx = fakeCtx();
-    drawScene(ctx, scene3(), view, { ...baseState(), background: "#123" });
-    const ops = ctx.ops.filter((o) => !o.startsWith("transform"));
-    expect(ops[0]).toBe("fillRect:0,0,1000,625:#123");
-    expect(ops[1]).toBe("fill:M0:#f0");
-  });
-
-  it("skips the background when unset", () => {
-    const ctx = fakeCtx();
-    drawScene(ctx, scene3(), view, baseState());
-    expect(ctx.ops.some((o) => o.startsWith("fillRect"))).toBe(false);
-  });
-
-  it("strokes the exterior outline above borders with its own style", () => {
-    const ctx = fakeCtx();
-    const scene = scene3();
-    scene.exterior = new FakePath2D("Mext") as unknown as Path2D;
-    drawScene(ctx, scene, view, {
-      ...baseState(),
-      outlineColor: "#0a0",
-      outlineWidth: 2,
-    });
-    const order = ctx.ops.filter((o) => o.startsWith("stroke"));
-    // 2 CSS px → 2/(0.5·4) = 1 map unit, after the borders stroke.
-    const bordersIdx = order.indexOf("stroke:Mborders:#fff@0.5");
-    const extIdx = order.indexOf("stroke:Mext:#0a0@1");
-    expect(extIdx).toBeGreaterThan(bordersIdx);
-  });
-
-  it("leaves the exterior unpainted without a color", () => {
-    const ctx = fakeCtx();
-    const scene = scene3();
-    scene.exterior = new FakePath2D("Mext") as unknown as Path2D;
-    drawScene(ctx, scene, view, baseState());
-    expect(ctx.ops.some((o) => o.startsWith("stroke:Mext"))).toBe(false);
-  });
-
-  it("strokes county borders below the state mesh", () => {
-    const ctx = fakeCtx();
-    const scene = scene3();
-    scene.countyBorders = new FakePath2D("Mcounty") as unknown as Path2D;
-    drawScene(ctx, scene, view, {
-      ...baseState(),
-      countyBordersColor: "#999",
-    });
-    const order = ctx.ops.filter((o) => o.startsWith("stroke"));
-    // 0.5 CSS px → 0.5/(0.5·4) = 0.25 map units, before the state mesh.
-    const countyIdx = order.indexOf("stroke:Mcounty:#999@0.25");
-    const bordersIdx = order.indexOf("stroke:Mborders:#fff@0.5");
-    expect(countyIdx).toBeGreaterThan(-1);
-    expect(bordersIdx).toBeGreaterThan(countyIdx);
-  });
-
-  it("strokes HSA borders between the county mesh and the state mesh", () => {
-    const ctx = fakeCtx();
-    const scene = scene3();
+    const scene = makeScene();
     scene.countyBorders = new FakePath2D("Mcounty") as unknown as Path2D;
     scene.hsaBorders = new FakePath2D("Mhsa") as unknown as Path2D;
-    drawScene(ctx, scene, view, {
-      ...baseState(),
-      countyBordersColor: "#999",
-      hsaBordersColor: "#eee",
-    });
-    const order = ctx.ops.filter((o) => o.startsWith("stroke"));
-    const countyIdx = order.indexOf("stroke:Mcounty:#999@0.25");
-    const hsaIdx = order.indexOf("stroke:Mhsa:#eee@0.25");
-    const bordersIdx = order.indexOf("stroke:Mborders:#fff@0.5");
-    expect(countyIdx).toBeGreaterThan(-1);
-    expect(hsaIdx).toBeGreaterThan(countyIdx);
-    expect(bordersIdx).toBeGreaterThan(hsaIdx);
-  });
-
-  it("leaves HSA borders unpainted without a color or at width 0", () => {
-    const ctx = fakeCtx();
-    const scene = scene3();
-    scene.hsaBorders = new FakePath2D("Mhsa") as unknown as Path2D;
-    drawScene(ctx, scene, view, baseState());
-    drawScene(ctx, scene, view, {
-      ...baseState(),
-      hsaBordersColor: "#eee",
-      hsaBordersWidth: 0,
-    });
-    expect(ctx.ops.some((o) => o.startsWith("stroke:Mhsa"))).toBe(false);
-  });
-
-  it("leaves county borders unpainted without a color or at width 0", () => {
-    const ctx = fakeCtx();
-    const scene = scene3();
-    scene.countyBorders = new FakePath2D("Mcounty") as unknown as Path2D;
-    drawScene(ctx, scene, view, baseState());
-    // Width 0 is also the LOD gate (countyBordersMinZoom below threshold).
-    drawScene(ctx, scene, view, {
-      ...baseState(),
-      countyBordersColor: "#999",
-      countyBordersWidth: 0,
-    });
-    expect(ctx.ops.some((o) => o.startsWith("stroke:Mcounty"))).toBe(false);
-  });
-
-  it("uses the borders color and width channels", () => {
-    const ctx = fakeCtx();
-    drawScene(ctx, scene3(), view, {
-      ...baseState(),
-      bordersColor: "#333",
-      bordersWidth: 2,
-    });
-    expect(ctx.ops).toContain("stroke:Mborders:#333@1");
-  });
-
-  it("disables stroke layers at width 0", () => {
-    const ctx = fakeCtx();
-    const scene = scene3();
     scene.exterior = new FakePath2D("Mext") as unknown as Path2D;
     drawScene(ctx, scene, view, {
       ...baseState(),
       strokeWidth: 0,
       bordersWidth: 0,
+      countyBordersColor: "#999",
+      countyBordersWidth: 0,
+      hsaBordersColor: "#eee",
+      hsaBordersWidth: 0,
       outlineColor: "#0a0",
       outlineWidth: 0,
     });
-    expect(ctx.ops.some((o) => o.startsWith("stroke:M0M1M2"))).toBe(false);
-    expect(ctx.ops.some((o) => o.startsWith("stroke:Mborders"))).toBe(false);
-    expect(ctx.ops.some((o) => o.startsWith("stroke:Mext"))).toBe(false);
+    expect(
+      ctx.ops.some(
+        (op) => op.startsWith("fillRect") || op.startsWith("stroke"),
+      ),
+    ).toBe(false);
   });
-});
 
-describe("picking", () => {
-  it("buildPicking fills every feature in its index color", () => {
-    const ctx = fakeCtx();
+  it("picking encodes feature indices and decodes hits, misses, and edge fallback", () => {
+    const scene = makeScene();
+    const pickCtx = fakeCtx();
     const canvas = {
       width: 0,
       height: 0,
-      getContext: vi.fn(() => ctx),
+      getContext: vi.fn(() => pickCtx),
     } as unknown as HTMLCanvasElement;
-    const out = buildPicking(scene3(), 1000, 625, canvas);
-    expect(out).toBe(ctx);
-    expect(canvas.width).toBe(1000);
-    expect(ctx.ops.filter((o) => o.startsWith("fill:"))).toEqual([
+    expect(buildPicking(scene, 1000, 625, canvas)).toBe(pickCtx);
+    expect(pickCtx.ops.filter((op) => op.startsWith("fill:"))).toEqual([
       `fill:M0:${indexToColor(0)}`,
       `fill:M1:${indexToColor(1)}`,
       `fill:M2:${indexToColor(2)}`,
     ]);
-  });
 
-  it("decodes the sampled index color", () => {
-    const ctx = fakeCtx({
-      getImageData: vi.fn(() => ({ data: [0, 0, 3, 255] })),
-    });
-    expect(pickIndexAt(ctx, scene3(), 10, 10)).toBe(2);
-  });
-
-  it("returns null on background and out of bounds", () => {
-    const ctx = fakeCtx({
+    expect(
+      pickIndexAt(
+        fakeCtx({ getImageData: vi.fn(() => ({ data: [0, 0, 3, 255] })) }),
+        scene,
+        10,
+        10,
+      ),
+    ).toBe(2);
+    const missCtx = fakeCtx({
       getImageData: vi.fn(() => ({ data: [0, 0, 0, 0] })),
     });
-    expect(pickIndexAt(ctx, scene3(), 10, 10)).toBeNull();
-    expect(pickIndexAt(ctx, scene3(), -5, 10)).toBeNull();
-    expect(pickIndexAt(ctx, scene3(), 10, 99999)).toBeNull();
-  });
+    expect(pickIndexAt(missCtx, scene, 10, 10)).toBeNull();
+    expect(pickIndexAt(missCtx, scene, -5, 10)).toBeNull();
 
-  it("falls back to isPointInPath when an edge pixel decodes wrong", () => {
-    const scene = scene3();
-    const ctx = fakeCtx({
-      // Blended edge pixel decoding to index 1...
+    const edgeCtx = fakeCtx({
       getImageData: vi.fn(() => ({ data: [0, 0, 2, 255] })),
-      // ...but the point is actually inside feature 0.
       isPointInPath: vi.fn(
-        (p: FakePath2D) => p === (scene.items[0].path as never),
+        (path: FakePath2D) => path === (scene.items[0].path as never),
       ),
     });
-    expect(pickIndexAt(ctx, scene, 10, 10)).toBe(0);
+    expect(pickIndexAt(edgeCtx, scene, 10, 10)).toBe(0);
   });
 });

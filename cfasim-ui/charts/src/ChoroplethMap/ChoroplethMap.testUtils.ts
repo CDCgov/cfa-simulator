@@ -10,7 +10,7 @@ import { usHsaTopology } from "../us-hsa-topology/index.js";
 import { fipsToHsa, hsaNames } from "./hsaMapping.js";
 
 export const statesTopo = usStates as unknown as Topology;
-export const countiesTopo = usCounties as unknown as Topology;
+const countiesTopo = usCounties as unknown as Topology;
 
 /** States the county tests refer to. Each mounted county is a path in
  * happy-dom, so a smaller map is what keeps these tests under the timeout. */

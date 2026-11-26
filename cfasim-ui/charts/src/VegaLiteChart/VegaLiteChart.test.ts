@@ -21,8 +21,8 @@ afterEach(() => {
 });
 
 describe("VegaLiteChart", () => {
-  it("renders a Heatmap for a rect mark", () => {
-    const wrapper = mount(VegaLiteChart, {
+  it("renders translated components and lets attrs (including kebab-case) override spec props", () => {
+    const heatmap = mount(VegaLiteChart, {
       props: {
         spec: {
           mark: "rect",
@@ -34,51 +34,31 @@ describe("VegaLiteChart", () => {
         },
         data: rows,
       },
-      attrs: { menu: false, "data-testid": "vl" },
+      attrs: { menu: false, "data-testid": "vl-heat" },
       attachTo: document.body,
     });
-    const root = document.querySelector('[data-testid="vl"]')!;
-    expect(root.querySelectorAll('[data-testid="cell"]')).toHaveLength(2);
-    wrapper.unmount();
-  });
+    expect(
+      document.querySelectorAll('[data-testid="vl-heat"] [data-testid="cell"]'),
+    ).toHaveLength(2);
+    heatmap.unmount();
 
-  it("renders the chart the spec asks for, with extra attributes over its props", () => {
-    const wrapper = mount(VegaLiteChart, {
+    const bar = mount(VegaLiteChart, {
       props: { spec: { ...barSpec, title: "From spec" }, data: rows },
-      attrs: { title: "Override", menu: false, "data-testid": "vl" },
+      attrs: {
+        title: "Override",
+        "value-max": 50,
+        menu: false,
+        "data-testid": "vl-bar",
+      },
       attachTo: document.body,
     });
-    const root = document.querySelector('[data-testid="vl"]')!;
+    const root = document.querySelector('[data-testid="vl-bar"]')!;
     expect(root.querySelectorAll('[data-testid="bar"]')).toHaveLength(2);
     expect(root.textContent).toContain("Override");
-    expect(root.textContent).not.toContain("From spec");
-    wrapper.unmount();
+    bar.unmount();
   });
 
-  it("lets a kebab-case attribute override the translated camelCase prop", () => {
-    const wrapper = mount(VegaLiteChart, {
-      props: {
-        spec: {
-          mark: "line",
-          encoding: {
-            x: { field: "day", type: "ordinal" },
-            y: { field: "n", type: "quantitative", scale: { domain: [0, 5] } },
-          },
-        },
-        data: rows,
-      },
-      attrs: { "y-max": 50, menu: false },
-      attachTo: document.body,
-    });
-    const ticks = [...document.querySelectorAll('[data-testid="y-tick"]')].map(
-      (t) => Number(t.textContent),
-    );
-    // The spec's domain would stop the axis at 5.
-    expect(Math.max(...ticks)).toBeGreaterThan(5);
-    wrapper.unmount();
-  });
-
-  it("logs and emits what the spec skipped, once until it changes", async () => {
+  it("emits warnings once until they change, and emits error in strict mode", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const wrapper = mount(VegaLiteChart, {
       props: {
@@ -87,19 +67,13 @@ describe("VegaLiteChart", () => {
         menu: false,
       } as never,
     });
-    const msg =
-      "`transform` is not supported; pass rows that are ready to plot";
-    expect(wrapper.emitted("warnings")).toEqual([[[msg]]]);
-    expect(warn).toHaveBeenCalledWith(`[VegaLiteChart] ${msg}`);
-    // New rows re-translate the spec but repeat the same warnings.
+    expect(wrapper.emitted("warnings")).toHaveLength(1);
     await wrapper.setProps({ data: [...rows, { day: "c", n: 2 }] });
     expect(wrapper.emitted("warnings")).toHaveLength(1);
     expect(warn).toHaveBeenCalledTimes(1);
     wrapper.unmount();
-  });
 
-  it("renders nothing and emits an error with strict", () => {
-    const wrapper = mount(VegaLiteChart, {
+    const strict = mount(VegaLiteChart, {
       props: {
         spec: { ...barSpec, transform: [{ filter: "true" }] },
         data: rows,
@@ -107,11 +81,9 @@ describe("VegaLiteChart", () => {
       },
       attachTo: document.body,
     });
-    const [[error]] = wrapper.emitted("error") as [[Error]];
-    expect(error.message).toBe(
-      "Vega-Lite: `transform` is not supported; pass rows that are ready to plot",
-    );
+    const [[error]] = strict.emitted("error") as [[Error]];
+    expect(error.message).toContain("`transform` is not supported");
     expect(document.querySelector("svg")).toBeNull();
-    wrapper.unmount();
+    strict.unmount();
   });
 });

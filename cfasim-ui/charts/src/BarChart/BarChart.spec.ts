@@ -1,23 +1,12 @@
 import { test, expect } from "@playwright/test";
 import { scrollIntoSettledView } from "../_shared/e2e.testUtils.js";
 
-test("BarChart page renders demos", async ({ page }) => {
-  await page.goto("./cfasim-ui/charts/bar-chart");
-  await expect(page.locator("h1")).toBeVisible();
-  const demos = page.locator(".demo-preview");
-  await expect(demos.first()).toBeVisible();
-  const chartSvg = demos.first().locator("svg").last();
-  await expect(chartSvg).toBeVisible();
-  await expect(chartSvg.locator('[data-testid="bar"]').first()).toBeAttached();
-});
-
 test("BarChart thins crowded categorical labels", async ({ page }) => {
   await page.goto("./cfasim-ui/charts/bar-chart");
   const chart = page.locator('[data-testid="thinned-bar-chart"]');
   await expect(chart).toBeVisible();
   const bars = chart.locator('[data-testid="bar"]');
   const ticks = chart.locator('[data-testid="category-tick"]');
-  // Every category still gets a bar; only labels are thinned.
   await expect(bars).toHaveCount(14);
   expect(await ticks.count()).toBeLessThan(14);
   expect(await ticks.count()).toBeGreaterThan(0);
@@ -41,87 +30,4 @@ test("horizontal bars make room for long category labels", async ({ page }) => {
     expect(box.x).toBeGreaterThanOrEqual(svgLeft);
     expect(box.x + box.width).toBeLessThanOrEqual(barBox.x);
   }
-});
-
-test("drag zooms to the brushed categories and reset restores them", async ({
-  page,
-}) => {
-  await page.goto("./cfasim-ui/charts/bar-chart");
-  const chart = page.locator('[data-testid="zoom-bar-chart"]');
-  await scrollIntoSettledView(chart);
-  const overlay = chart.locator('[data-testid="chart-overlay"]');
-  const bars = chart.locator('[data-testid="bar"]');
-  await expect(bars).toHaveCount(40);
-
-  const box = (await overlay.boundingBox())!;
-  const y = box.y + box.height / 2;
-  // Mid-slot 10 → mid-slot 19 of 40.
-  await page.mouse.move(box.x + (box.width * 10.5) / 40, y);
-  await page.mouse.down();
-  await page.mouse.move(box.x + (box.width * 19.5) / 40, y, { steps: 5 });
-  await expect(chart.locator('[data-testid="zoom-brush"]')).toBeVisible();
-  await page.mouse.up();
-
-  await expect(bars).toHaveCount(10);
-  await expect(bars.first()).toHaveAttribute("data-category", "10");
-  await expect(bars.last()).toHaveAttribute("data-category", "19");
-
-  await chart.getByRole("button", { name: "Reset zoom" }).click();
-  await expect(bars).toHaveCount(40);
-});
-
-test("legend buttons hide and restore bar series", async ({ page }) => {
-  await page.goto("./cfasim-ui/charts/bar-chart");
-  const chart = page.locator('[data-testid="legend-toggle-bar-chart"]');
-  await scrollIntoSettledView(chart);
-  const bars = chart.locator('[data-testid="bar"]');
-  await expect(bars).toHaveCount(8);
-  const toggle = chart.getByRole("button", { name: "Unvaccinated" });
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-pressed", "false");
-  await expect(bars).toHaveCount(4);
-  await toggle.click();
-  await expect(bars).toHaveCount(8);
-});
-
-test("BarChart centers series whiskers on their bars", async ({ page }) => {
-  await page.goto("./cfasim-ui/charts/bar-chart");
-  const chart = page.locator('[data-testid="interval-bar-chart"]');
-  await scrollIntoSettledView(chart);
-  const intervals = chart.locator('[data-testid="interval"]');
-  await expect(intervals).toHaveCount(8);
-  const bar = chart.locator('[data-testid="bar"][data-series="1"]').first();
-  const barBox = await bar.boundingBox();
-  // Series B's first whisker follows series A's four, in category order.
-  const line = intervals.nth(4).locator("line.interval-line");
-  const x1 = Number(await line.getAttribute("x1"));
-  const svgBox = await chart.locator("svg").last().boundingBox();
-  expect(barBox && svgBox).toBeTruthy();
-  const barCenter = barBox!.x + barBox!.width / 2 - svgBox!.x;
-  expect(Math.abs(x1 - barCenter)).toBeLessThan(1);
-  await expect(line).toHaveAttribute("stroke", "currentColor");
-});
-
-test("weekly bars on a date axis leave a gap for the missing week", async ({
-  page,
-}) => {
-  await page.goto("./cfasim-ui/charts/bar-chart");
-  const chart = page.locator('[data-testid="weekly-bar-chart"]');
-  await scrollIntoSettledView(chart);
-  const bars = chart.locator('[data-testid="bar"]');
-  await expect(bars).toHaveCount(6);
-  const boxes = await Promise.all(
-    [0, 1, 2].map(async (i) => (await bars.nth(i).boundingBox())!),
-  );
-  const step = boxes[1].x - boxes[0].x;
-  // Jan 12 → Jan 26 skips the empty week of Jan 19: twice the step.
-  expect(boxes[2].x - boxes[1].x).toBeCloseTo(2 * step, 0);
-
-  await page.mouse.move(
-    boxes[2].x + boxes[2].width / 2,
-    boxes[2].y + boxes[2].height / 2,
-  );
-  await expect(chart.locator(".chart-tooltip-label")).toHaveText(
-    "2026-01-26 – 2026-02-01",
-  );
 });

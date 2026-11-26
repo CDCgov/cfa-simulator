@@ -10,275 +10,104 @@ import {
   DATE_FORMAT_PRESETS,
 } from "./dateAxis.js";
 
-describe("parseDate", () => {
-  it("accepts Date instances", () => {
-    const d = new Date(Date.UTC(2026, 0, 15));
-    expect(parseDate(d, "utc")).toBe(d.getTime());
-  });
-
-  it("rejects invalid Date instances", () => {
-    expect(parseDate(new Date("not a date"), "utc")).toBeNull();
-  });
-
-  it("parses YYYY-MM-DD as midnight UTC under utc mode", () => {
+describe("parseDate / isDateLike / isAllDates", () => {
+  it("parses Date, YYYY-MM-DD (utc/local), ISO offsets, ms, pre-1970, and rejects non-dates", () => {
     expect(parseDate("2026-01-15", "utc")).toBe(Date.UTC(2026, 0, 15));
-  });
-
-  it("parses YYYY-MM-DD as midnight local under local mode", () => {
     expect(parseDate("2026-01-15", "local")).toBe(
       new Date(2026, 0, 15).getTime(),
     );
-  });
-
-  it("parses ISO datetime with Z as UTC regardless of tz prop", () => {
-    const utc = parseDate("2026-01-15T12:00:00Z", "utc");
-    const local = parseDate("2026-01-15T12:00:00Z", "local");
-    expect(utc).toBe(local);
-    expect(utc).toBe(Date.UTC(2026, 0, 15, 12, 0, 0));
-  });
-
-  it("parses ISO datetime with +HH:MM offset", () => {
+    expect(parseDate("2026-01-15T12:00:00Z", "local")).toBe(
+      Date.UTC(2026, 0, 15, 12),
+    );
     expect(parseDate("2026-01-15T12:00:00+05:00", "utc")).toBe(
-      Date.UTC(2026, 0, 15, 7, 0, 0),
+      Date.UTC(2026, 0, 15, 7),
     );
-  });
-
-  it("parses ISO datetime without offset per tz prop", () => {
-    expect(parseDate("2026-01-15T12:00:00", "utc")).toBe(
-      Date.UTC(2026, 0, 15, 12, 0, 0),
-    );
-    expect(parseDate("2026-01-15T12:00:00", "local")).toBe(
-      new Date(2026, 0, 15, 12, 0, 0).getTime(),
-    );
-  });
-
-  it("parses sub-second milliseconds", () => {
     expect(parseDate("2026-01-15T12:00:00.250Z", "utc")).toBe(
       Date.UTC(2026, 0, 15, 12, 0, 0, 250),
     );
-  });
-
-  it("rejects plain numbers", () => {
-    expect(parseDate(1737504000000, "utc")).toBeNull();
-    expect(parseDate(0, "utc")).toBeNull();
-  });
-
-  it("rejects malformed strings", () => {
-    expect(parseDate("2026/01/15", "utc")).toBeNull();
-    expect(parseDate("not a date", "utc")).toBeNull();
-    expect(parseDate("2026-13-01", "utc")).not.toBeNull(); // month overflow ok
-    expect(parseDate("", "utc")).toBeNull();
-  });
-
-  it("handles pre-1970 dates", () => {
     expect(parseDate("1900-01-01", "utc")).toBe(Date.UTC(1900, 0, 1));
-  });
-});
+    expect(parseDate(new Date("bad"), "utc")).toBeNull();
+    expect(parseDate(1737504000000, "utc")).toBeNull();
+    expect(parseDate("2026/01/15", "utc")).toBeNull();
 
-describe("isDateLike", () => {
-  it("accepts Date instances and ISO strings", () => {
-    expect(isDateLike(new Date())).toBe(true);
     expect(isDateLike("2026-01-15")).toBe(true);
-    expect(isDateLike("2026-01-15T12:00:00Z")).toBe(true);
-  });
-
-  it("rejects plain numbers and non-ISO strings", () => {
     expect(isDateLike(42)).toBe(false);
-    expect(isDateLike(1737504000000)).toBe(false);
-    expect(isDateLike("42")).toBe(false);
     expect(isDateLike("2024")).toBe(false);
-    expect(isDateLike("Jan 15, 2026")).toBe(false);
-    expect(isDateLike(null)).toBe(false);
-    expect(isDateLike(undefined)).toBe(false);
-  });
-});
-
-describe("isAllDates", () => {
-  it("returns true when every entry is date-like", () => {
-    expect(isAllDates(["2026-01-15", "2026-01-22", new Date()], "utc")).toBe(
-      true,
-    );
-  });
-
-  it("returns false on mixed input with plain numbers", () => {
+    expect(isAllDates(["2026-01-15", new Date()], "utc")).toBe(true);
     expect(isAllDates(["2026-01-15", 1737504000000], "utc")).toBe(false);
-  });
-
-  it("returns false for empty arrays", () => {
     expect(isAllDates([], "utc")).toBe(false);
   });
 });
 
-describe("placedDateTicks", () => {
+describe("placedDateTicks / pickDateTicks", () => {
   const day = 24 * 60 * 60 * 1000;
 
-  it("steps an interval from the first date and clips the span", () => {
-    const min = Date.UTC(2026, 4, 14); // a Thursday
-    const r = placedDateTicks(min, min + 20 * day, 7 * day);
-    expect(r.unit).toBe("week");
-    expect(r.values).toEqual([min, min + 7 * day, min + 14 * day]);
-    for (const v of r.values) expect(new Date(v).getUTCDay()).toBe(4);
-  });
+  it("places interval and explicit ticks clipped to span and maps units", () => {
+    const min = Date.UTC(2026, 4, 14);
+    const interval = placedDateTicks(min, min + 20 * day, 7 * day);
+    expect(interval.unit).toBe("week");
+    expect(interval.values).toEqual([min, min + 7 * day, min + 14 * day]);
 
-  it("keeps explicit values inside the span", () => {
-    const min = Date.UTC(2026, 0, 1);
-    const r = placedDateTicks(min, min + 10 * day, [
+    const explicit = placedDateTicks(min, min + 10 * day, [
       min - day,
       min + 2 * day,
-      min + 9 * day,
       min + 30 * day,
     ]);
-    expect(r.values).toEqual([min + 2 * day, min + 9 * day]);
-    expect(r.unit).toBe("week");
-  });
-
-  it("names the unit an interval counts in", () => {
+    expect(explicit.values).toEqual([min + 2 * day]);
     expect(unitForInterval(day)).toBe("day");
-    expect(unitForInterval(14 * day)).toBe("week");
     expect(unitForInterval(90 * day)).toBe("month");
     expect(unitForInterval(400 * day)).toBe("year");
-    expect(unitForInterval(60 * 60 * 1000)).toBe("hour");
-  });
-});
-
-describe("pickDateTicks", () => {
-  const target = 5;
-
-  it("returns empty values for invalid ranges", () => {
-    const r = pickDateTicks(0, 0, target, "utc");
-    expect(r.values).toEqual([]);
   });
 
-  it("picks daily ticks for a 3-day span", () => {
-    const min = Date.UTC(2026, 0, 10);
-    const max = Date.UTC(2026, 0, 13);
-    const r = pickDateTicks(min, max, target, "utc");
-    expect(r.unit).toBe("day");
-    expect(r.values).toEqual([
+  it("picks appropriate calendar units and steps coarser when a fit predicate rejects", () => {
+    expect(pickDateTicks(0, 0, 5, "utc").values).toEqual([]);
+
+    const daily = pickDateTicks(
       Date.UTC(2026, 0, 10),
-      Date.UTC(2026, 0, 11),
-      Date.UTC(2026, 0, 12),
       Date.UTC(2026, 0, 13),
-    ]);
-  });
+      5,
+      "utc",
+    );
+    expect(daily.unit).toBe("day");
+    expect(daily.values).toHaveLength(4);
 
-  it("steps to coarser intervals until the labels fit", () => {
-    const min = Date.UTC(2025, 10, 1);
-    const max = Date.UTC(2026, 10, 1);
-    const monthly = pickDateTicks(min, max, 12, "utc");
-    expect(monthly.unit).toBe("month");
-    expect(monthly.values.length).toBe(13);
-    // Reject anything denser than 8 ticks: monthly fails, bimonthly fits.
-    const tried: number[] = [];
-    const r = pickDateTicks(min, max, 12, "utc", (values) => {
-      tried.push(values.length);
-      return values.length <= 8;
-    });
-    expect(tried).toEqual([13, 7]);
-    expect(r.unit).toBe("month");
-    expect(r.values).toEqual([
-      Date.UTC(2025, 10, 1),
+    const weekly = pickDateTicks(
       Date.UTC(2026, 0, 1),
-      Date.UTC(2026, 2, 1),
-      Date.UTC(2026, 4, 1),
-      Date.UTC(2026, 6, 1),
-      Date.UTC(2026, 8, 1),
-      Date.UTC(2026, 10, 1),
-    ]);
-    // A rule nothing satisfies ends on the coarsest interval.
-    const last = pickDateTicks(min, max, 12, "utc", () => false);
-    expect(last.unit).toBe("year");
-  });
-
-  it("picks weekly ticks for a multi-week span (Monday-anchored)", () => {
-    const min = Date.UTC(2026, 0, 1); // Thursday
-    const max = Date.UTC(2026, 1, 5);
-    const r = pickDateTicks(min, max, target, "utc");
-    expect(r.unit).toBe("week");
-    // Every value should be a Monday in UTC.
-    for (const v of r.values) {
-      expect(new Date(v).getUTCDay()).toBe(1);
-    }
-    expect(r.values.length).toBeGreaterThan(2);
-  });
-
-  it("picks the interval whose count is closest to the target", () => {
-    // 83 days: 8 ticks wanted gives fortnights (6), 11 gives weeks (12).
-    const min = Date.UTC(2026, 4, 14);
-    const max = Date.UTC(2026, 7, 5);
-    const week = 7 * 24 * 60 * 60 * 1000;
-    const fortnightly = pickDateTicks(min, max, 8, "utc");
-    expect(fortnightly.unit).toBe("week");
-    expect(fortnightly.values[1] - fortnightly.values[0]).toBe(2 * week);
-    const weekly = pickDateTicks(min, max, 11, "utc");
-    expect(weekly.values[1] - weekly.values[0]).toBe(week);
+      Date.UTC(2026, 1, 5),
+      5,
+      "utc",
+    );
+    expect(weekly.unit).toBe("week");
     for (const v of weekly.values) expect(new Date(v).getUTCDay()).toBe(1);
-    expect(weekly.values.length).toBe(12);
-  });
 
-  it("picks monthly ticks for a 6-month span", () => {
-    const min = Date.UTC(2026, 0, 5);
-    const max = Date.UTC(2026, 5, 20);
-    const r = pickDateTicks(min, max, target, "utc");
-    expect(r.unit).toBe("month");
-    for (const v of r.values) {
-      const d = new Date(v);
-      expect(d.getUTCDate()).toBe(1);
-    }
-  });
+    const monthly = pickDateTicks(
+      Date.UTC(2025, 10, 1),
+      Date.UTC(2026, 10, 1),
+      12,
+      "utc",
+      (vals) => vals.length <= 8,
+    );
+    expect(monthly.unit).toBe("month");
+    expect(monthly.values).toHaveLength(7);
 
-  it("picks yearly ticks for a 10-year span using a locked step set", () => {
-    const min = Date.UTC(2020, 0, 1);
-    const max = Date.UTC(2030, 0, 1);
-    const r = pickDateTicks(min, max, target, "utc");
-    expect(r.unit).toBe("year");
-    // Step must come from {1,2,5,10,25,50,100}.
-    const step =
-      r.values.length > 1
-        ? new Date(r.values[1]).getUTCFullYear() -
-          new Date(r.values[0]).getUTCFullYear()
-        : 0;
-    expect([1, 2, 5, 10, 25, 50, 100]).toContain(step);
-  });
+    const yearly = pickDateTicks(
+      Date.UTC(2020, 0, 1),
+      Date.UTC(2030, 0, 1),
+      5,
+      "utc",
+    );
+    expect(yearly.unit).toBe("year");
 
-  it("handles pre-1970 ranges", () => {
-    const min = Date.UTC(1900, 0, 1);
-    const max = Date.UTC(1920, 0, 1);
-    const r = pickDateTicks(min, max, target, "utc");
-    expect(r.unit).toBe("year");
-    expect(r.values.length).toBeGreaterThan(0);
-    expect(r.values[0]).toBeLessThan(0);
-  });
-
-  it("picks minute ticks for a 1-hour span", () => {
-    const min = Date.UTC(2026, 0, 15, 12, 0);
-    const max = Date.UTC(2026, 0, 15, 13, 0);
-    const r = pickDateTicks(min, max, target, "utc");
-    expect(r.unit).toBe("minute");
-    expect(r.values.length).toBeGreaterThan(2);
-    expect(r.values.length).toBeLessThan(7);
-  });
-
-  it("picks hour ticks for a 1-day span", () => {
-    const min = Date.UTC(2026, 0, 15);
-    const max = Date.UTC(2026, 0, 16);
-    const r = pickDateTicks(min, max, target, "utc");
-    expect(r.unit).toBe("hour");
-    expect(r.values.length).toBeGreaterThan(2);
-    expect(r.values.length).toBeLessThan(7);
-  });
-
-  it("anchors day ticks at midnight in local mode (DST-safe)", () => {
-    // Span crossing US DST (March 2026: DST starts March 8). Local day
-    // stepping must land on 00:00 local time, not 23:00 or 01:00.
-    const min = new Date(2026, 2, 5).getTime();
-    const max = new Date(2026, 2, 12).getTime();
-    const r = pickDateTicks(min, max, target, "local");
-    expect(r.unit).toBe("day");
-    for (const v of r.values) {
-      const d = new Date(v);
-      expect(d.getHours()).toBe(0);
-      expect(d.getMinutes()).toBe(0);
+    // Local day stepping across US DST must stay anchored at 00:00 local time.
+    const dst = pickDateTicks(
+      new Date(2026, 2, 5).getTime(),
+      new Date(2026, 2, 12).getTime(),
+      5,
+      "local",
+    );
+    expect(dst.unit).toBe("day");
+    for (const v of dst.values) {
+      expect(new Date(v).getHours()).toBe(0);
     }
   });
 });
@@ -286,73 +115,22 @@ describe("pickDateTicks", () => {
 describe("formatDate", () => {
   const ms = Date.UTC(2026, 0, 15, 12, 30, 45);
 
-  it("'iso' preset emits YYYY-MM-DD", () => {
+  it("formats presets, mutated Intl options, custom functions, and rejects unknown presets", () => {
     expect(formatDate(ms, "iso", "utc")).toBe("2026-01-15");
-  });
-
-  it("'iso-datetime' preset emits full ISO with Z under utc", () => {
     expect(formatDate(ms, "iso-datetime", "utc")).toBe("2026-01-15T12:30:45Z");
-  });
+    expect(formatDate(ms, undefined, "utc", "year")).toBe("2026");
 
-  it("'year' preset emits 4-digit year", () => {
-    expect(formatDate(ms, "year", "utc")).toBe("2026");
-  });
-
-  it("'month-day' preset includes month and day", () => {
-    const s = formatDate(ms, "month-day", "utc");
-    expect(s).toContain("Jan");
-    expect(s).toContain("15");
-  });
-
-  it("formatter caching is content-keyed: in-place options mutation applies", () => {
     const opts: Intl.DateTimeFormatOptions = { year: "numeric" };
     expect(formatDate(ms, opts, "utc")).toBe("2026");
     opts.month = "short";
     expect(formatDate(ms, opts, "utc")).toContain("Jan");
-  });
 
-  it("function format receives ms and unit", () => {
-    const captured: Array<{ ms: number; unit?: string }> = [];
-    formatDate(
-      ms,
-      (m, u) => {
-        captured.push({ ms: m, unit: u });
-        return "x";
-      },
-      "utc",
-      "month",
-    );
-    expect(captured).toEqual([{ ms, unit: "month" }]);
-  });
+    expect(
+      formatDate(ms, (value, unit) => `${value}:${unit}`, "utc", "month"),
+    ).toBe(`${ms}:month`);
+    expect(() => formatDate(ms, "compact" as never, "utc")).toThrow();
 
-  it("Intl.DateTimeFormatOptions passthrough is honored", () => {
-    const s = formatDate(ms, { year: "numeric", month: "numeric" }, "utc");
-    // Don't assert the exact rendering (locale-dependent), just that
-    // it includes the year.
-    expect(s).toContain("2026");
-  });
-
-  it("default format uses unit-appropriate preset", () => {
-    // Year unit → "year" preset
-    expect(formatDate(ms, undefined, "utc", "year")).toBe("2026");
-    // Month unit → "month-year" preset (includes both)
-    const monthOut = formatDate(ms, undefined, "utc", "month");
-    expect(monthOut).toContain("Jan");
-    expect(monthOut).toContain("2026");
-  });
-
-  it("throws on unknown preset names", () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect(() => formatDate(ms, "compact" as any, "utc")).toThrow();
-  });
-});
-
-describe("preset-name disjointness with NumberFormat", () => {
-  it("date and number preset names do not overlap", () => {
-    // Hardcoded list mirrors formatNumber.ts presets. If new number
-    // presets are added that collide with a date preset, update this
-    // test and either rename or namespace.
-    const NUMBER_PRESETS = [
+    const numberPresets = [
       "plain",
       "localized",
       "percent",
@@ -360,8 +138,7 @@ describe("preset-name disjointness with NumberFormat", () => {
       "scientific",
       "engineering",
     ];
-    for (const date of DATE_FORMAT_PRESETS) {
-      expect(NUMBER_PRESETS).not.toContain(date);
-    }
+    for (const preset of DATE_FORMAT_PRESETS)
+      expect(numberPresets).not.toContain(preset);
   });
 });

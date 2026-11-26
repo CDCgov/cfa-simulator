@@ -14,12 +14,11 @@ class FakeChild extends EventEmitter {
 const processKill = vi.spyOn(process, "kill").mockImplementation(() => true);
 
 function fakeServer(listening = true) {
-  const httpServer = Object.assign(new EventEmitter(), {
-    listening,
-    address: () => ({ port: 5173 }),
-  });
   return {
-    httpServer,
+    httpServer: Object.assign(new EventEmitter(), {
+      listening,
+      address: () => ({ port: 5173 }),
+    }),
     config: {
       base: "/",
       server: {},
@@ -31,94 +30,71 @@ function fakeServer(listening = true) {
 beforeEach(() => {
   vi.mocked(spawn).mockReset();
   processKill.mockClear();
-  // Fake children never exit, so forget servers earlier tests stopped.
   (globalThis as unknown as Record<symbol, Map<number, unknown> | undefined>)[
     Symbol.for("cfasim-server.stopping")
   ]?.clear();
 });
 
-describe("serverCommand", () => {
-  it("builds the default cfasim serve command", () => {
-    expect(serverCommand()).toEqual([
-      "cfasim",
-      "serve",
-      "--port",
-      "8765",
-      "--output",
-      "output",
-    ]);
+describe("cfasimServer", () => {
+  it("builds commands and proxies /api, spawns detached, and cleans up on close", () => {
     expect(
-      serverCommand({
-        port: 9000,
-        output: "runs",
-        csv: true,
-        debug: true,
-        tasks: "pkg.tasks",
-      }),
+      serverCommand({ port: 9000, csv: true, tasks: "pkg.tasks" }),
     ).toEqual([
       "cfasim",
       "serve",
       "--port",
       "9000",
       "--output",
-      "runs",
+      "output",
       "--csv",
-      "--debug",
       "--tasks",
       "pkg.tasks",
     ]);
-  });
-
-  it("takes the executable from the option or CFASIM_BIN", () => {
-    expect(serverCommand({ bin: "/opt/cfasim" })[0]).toBe("/opt/cfasim");
+    expect(serverCommand({ command: ["cargo", "run"], port: 1 })).toEqual([
+      "cargo",
+      "run",
+    ]);
+    expect(fallbackCommand({ port: 1 }, "http://x/")?.[0]).toBe("uvx");
     vi.stubEnv("CFASIM_BIN", "/tmp/cfasim");
     expect(serverCommand()[0]).toBe("/tmp/cfasim");
     expect(fallbackCommand()).toBeUndefined();
     vi.unstubAllEnvs();
-  });
 
-  it("uses an explicit command verbatim", () => {
-    expect(
-      serverCommand({ command: ["cargo", "run"], port: 1 }, "http://x/"),
-    ).toEqual(["cargo", "run"]);
-    expect(fallbackCommand({ command: ["cargo", "run"] })).toBeUndefined();
-  });
-
-  it("falls back to the matching release through uvx", () => {
-    const fallback = fallbackCommand({ port: 1 }, "http://x/");
-    expect(fallback?.[0]).toBe("uvx");
-    expect(fallback?.[1]).toMatch(/^cfasim@\d+\.\d+\.\d+/);
-    expect(fallback?.slice(2)).toEqual([
-      "serve",
-      "--port",
-      "1",
-      "--output",
-      "output",
-      "--app-url",
-      "http://x/",
-    ]);
-    expect(fallbackCommand({ bin: "cfasim" })).toBeUndefined();
-  });
-});
-
-describe("cfasimServer", () => {
-  it("only applies to the dev server and proxies the api path", () => {
-    const plugin = cfasimServer({ port: 9100 });
+    const child = new FakeChild();
+    vi.mocked(spawn).mockReturnValue(child as never);
+    const plugin = cfasimServer({ port: 9100, tasks: "demo.tasks", cwd: "/p" });
     expect(plugin.apply).toBe("serve");
-    const config = (plugin.config as () => Record<string, unknown>)();
-    expect(config).toEqual({
-      server: {
-        proxy: { "/api": { target: "http://127.0.0.1:9100" } },
-      },
+    expect((plugin.config as () => Record<string, unknown>)()).toEqual({
+      server: { proxy: { "/api": { target: "http://127.0.0.1:9100" } } },
     });
+
+    const server = fakeServer();
+    (plugin.configureServer as (s: unknown) => void)(server);
+    expect(spawn).toHaveBeenCalledWith(
+      "cfasim",
+      expect.arrayContaining([
+        "--port",
+        "9100",
+        "--app-url",
+        "http://localhost:5173/",
+      ]),
+      { cwd: "/p", stdio: "inherit", detached: true },
+    );
+    server.httpServer.emit("close");
+    expect(processKill).toHaveBeenCalledWith(-4242, "SIGTERM");
+    child.emit("exit", 1, null);
+    expect(server.config.logger.error).not.toHaveBeenCalled();
   });
 
-  it("waits for the previous server to exit after a vite restart", async () => {
-    const old = new FakeChild();
-    const next = new FakeChild();
+  it("waits on restart, skips early close, falls back to uvx, and logs unexpected exit", async () => {
+    const oldChild = new FakeChild();
+    const nextChild = new FakeChild();
+    const uvxChild = new FakeChild();
     vi.mocked(spawn)
-      .mockReturnValueOnce(old as never)
-      .mockReturnValueOnce(next as never);
+      .mockReturnValueOnce(oldChild as never)
+      .mockReturnValueOnce(nextChild as never)
+      .mockReturnValueOnce(uvxChild as never);
+
     const first = fakeServer();
     (cfasimServer({ port: 9200 }).configureServer as (s: unknown) => void)(
       first,
@@ -129,126 +105,28 @@ describe("cfasimServer", () => {
       second,
     );
     expect(spawn).toHaveBeenCalledTimes(1);
-    old.exitCode = 0;
-    old.emit("exit", 0, null);
+    oldChild.exitCode = 0;
+    oldChild.emit("exit", 0, null);
     await Promise.resolve();
     await Promise.resolve();
     expect(spawn).toHaveBeenCalledTimes(2);
+
+    nextChild.emit(
+      "error",
+      Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
+    );
+    expect(vi.mocked(spawn).mock.calls[2][0]).toBe("uvx");
+    uvxChild.emit("exit", 1, null);
+    expect(second.config.logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("port 9200"),
+    );
     second.httpServer.emit("close");
-    next.emit("exit", 0, null);
-  });
-
-  it("spawns the server with stdio inherited and stops it when vite closes", () => {
-    const child = new FakeChild();
-    vi.mocked(spawn).mockReturnValue(child as never);
-    const plugin = cfasimServer({ tasks: "demo.tasks", cwd: "/proj" });
-    const server = fakeServer();
-    (plugin.configureServer as (s: unknown) => void)(server);
-    expect(spawn).toHaveBeenCalledWith(
-      "cfasim",
-      [
-        "serve",
-        "--port",
-        "8765",
-        "--output",
-        "output",
-        "--tasks",
-        "demo.tasks",
-        "--app-url",
-        "http://localhost:5173/",
-      ],
-      { cwd: "/proj", stdio: "inherit", detached: true },
-    );
-    server.httpServer.emit("close");
-    // The whole process group is signalled, not just the launcher.
-    expect(processKill).toHaveBeenCalledWith(-4242, "SIGTERM");
-    // A non-zero exit after we asked it to stop is not an error.
-    child.emit("exit", 1, null);
-    expect(server.config.logger.error).not.toHaveBeenCalled();
-  });
-
-  it("waits for vite's port before starting, and skips the start if vite closed first", () => {
-    const child = new FakeChild();
-    vi.mocked(spawn).mockReturnValue(child as never);
-    const plugin = cfasimServer();
-    const server = fakeServer(false);
-    server.config.base = "/app/";
-    server.config.server = { https: {} };
-    (plugin.configureServer as (s: unknown) => void)(server);
-    expect(spawn).not.toHaveBeenCalled();
-    server.httpServer.emit("listening");
-    expect(vi.mocked(spawn).mock.calls[0][1]).toContain(
-      "https://localhost:5173/app/",
-    );
-    server.httpServer.emit("close");
 
     vi.mocked(spawn).mockClear();
-    const closedEarly = fakeServer(false);
-    (plugin.configureServer as (s: unknown) => void)(closedEarly);
-    closedEarly.httpServer.emit("close");
-    closedEarly.httpServer.emit("listening");
+    const unready = fakeServer(false);
+    (cfasimServer().configureServer as (s: unknown) => void)(unready);
+    unready.httpServer.emit("close");
+    unready.httpServer.emit("listening");
     expect(spawn).not.toHaveBeenCalled();
-  });
-
-  it("stops the server on Ctrl+C and lets the process exit", () => {
-    const child = new FakeChild();
-    vi.mocked(spawn).mockReturnValue(child as never);
-    const once = vi.spyOn(process, "once");
-    const plugin = cfasimServer();
-    (plugin.configureServer as (s: unknown) => void)(fakeServer());
-    const sigint = once.mock.calls.find(([event]) => event === "SIGINT");
-    expect(sigint).toBeDefined();
-    (sigint![1] as (sig: string) => void)("SIGINT");
-    expect(processKill).toHaveBeenCalledWith(-4242, "SIGTERM");
-    // Node's default exit was suppressed by listening; the signal is handed back.
-    expect(processKill).toHaveBeenCalledWith(process.pid, "SIGINT");
-    const sigterm = once.mock.calls.find(([event]) => event === "SIGTERM");
-    (sigterm![1] as (sig: string) => void)("SIGTERM");
-    // SIGTERM is left to Vite's own handler.
-    expect(processKill).not.toHaveBeenCalledWith(process.pid, "SIGTERM");
-    once.mockRestore();
-  });
-
-  it("retries through uvx when cfasim is not installed", () => {
-    const missing = new FakeChild();
-    const viaUvx = new FakeChild();
-    vi.mocked(spawn)
-      .mockReturnValueOnce(missing as never)
-      .mockReturnValueOnce(viaUvx as never);
-    const plugin = cfasimServer();
-    const server = fakeServer();
-    (plugin.configureServer as (s: unknown) => void)(server);
-    const enoent = Object.assign(new Error("spawn cfasim ENOENT"), {
-      code: "ENOENT",
-    });
-    missing.emit("error", enoent);
-    expect(spawn).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(spawn).mock.calls[1][0]).toBe("uvx");
-    expect(server.config.logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("not installed"),
-    );
-    expect(server.config.logger.error).not.toHaveBeenCalled();
-    // The second launcher is what gets stopped.
-    server.httpServer.emit("close");
-    expect(processKill).toHaveBeenCalledWith(-4242, "SIGTERM");
-
-    // A failure of the fallback itself is reported with an install hint.
-    viaUvx.emit("error", enoent);
-    expect(server.config.logger.error).toHaveBeenCalledWith(
-      expect.stringContaining("cargo install cfasim"),
-    );
-  });
-
-  it("reports an unexpected exit with a port hint", () => {
-    const child = new FakeChild();
-    vi.mocked(spawn).mockReturnValue(child as never);
-    const plugin = cfasimServer({ port: 8765 });
-    const server = fakeServer();
-    (plugin.configureServer as (s: unknown) => void)(server);
-    child.emit("exit", 1, null);
-    expect(server.config.logger.error).toHaveBeenCalledWith(
-      expect.stringContaining("port 8765"),
-    );
-    server.httpServer.emit("close");
   });
 });

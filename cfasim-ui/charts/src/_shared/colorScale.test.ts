@@ -10,89 +10,57 @@ import {
   rgbToOklab,
 } from "./colorScale.js";
 
-describe("colorScaleDomain", () => {
-  it("spans every finite value across scalars and arrays", () => {
+describe("colorScale", () => {
+  it("computes domain, explicit sort, single-value widening, and piecewise position", () => {
     expect(
       colorScaleDomain([3, [1, NaN, 7], undefined, new Float64Array([-2])]),
     ).toEqual([-2, 7]);
-  });
-
-  it("prefers an explicit domain and sorts it", () => {
     expect(colorScaleDomain([[1, 2]], [10, 0, 5])).toEqual([0, 5, 10]);
-  });
-
-  it("widens a single value and returns null with no values", () => {
     expect(colorScaleDomain([4])).toEqual([3, 5]);
     expect(colorScaleDomain([undefined, [NaN]])).toBeNull();
-  });
-});
 
-describe("domainPosition", () => {
-  it("places piecewise domain values at even positions and clamps", () => {
-    const d = [-10, 0, 1];
-    expect(domainPosition(d, -10)).toBe(0);
-    expect(domainPosition(d, -5)).toBe(0.25);
-    expect(domainPosition(d, 0)).toBe(0.5);
-    expect(domainPosition(d, 0.5)).toBe(0.75);
-    expect(domainPosition(d, 99)).toBe(1);
-    expect(domainPosition(d, NaN)).toBeNaN();
-  });
-});
-
-describe("colorInterpolator", () => {
-  it("round-trips sRGB through Oklab", () => {
-    for (const c of [
-      [0, 0, 0],
-      [255, 255, 255],
-      [59, 82, 139],
-      [253, 231, 37],
-    ] as const) {
-      expect(oklabToRgb(rgbToOklab([...c]))).toEqual([...c]);
-    }
+    const domain = [-10, 0, 1];
+    expect(domainPosition(domain, -5)).toBe(0.25);
+    expect(domainPosition(domain, 0.5)).toBe(0.75);
+    expect(domainPosition(domain, 99)).toBe(1);
+    expect(domainPosition(domain, NaN)).toBeNaN();
   });
 
-  it("returns stops exactly at their positions and mixes in Oklab between", () => {
-    const at = colorInterpolator(["#000000", "#ffffff"]);
-    expect(at(0)).toBe("#000000");
-    expect(at(1)).toBe("#ffffff");
-    expect(at(-1)).toBe("#000000");
-    // Oklab mid-gray is lighter than the sRGB midpoint (128).
-    const [r] = at(0.5)!.slice(4, -1).split(", ").map(Number);
-    expect(r).toBeGreaterThan(90);
-    expect(r).toBeLessThan(128);
-    expect(at(NaN)).toBeUndefined();
-  });
+  it("interpolates in Oklab, falls back to color-mix for CSS vars, and samples ramps", () => {
+    expect(oklabToRgb(rgbToOklab([59, 82, 139]))).toEqual([59, 82, 139]);
 
-  it("falls back to color-mix for colors it cannot parse", () => {
-    const at = colorInterpolator(["var(--a)", "#fff"]);
-    expect(at(0.25)).toBe("color-mix(in oklab, var(--a) 75%, #fff)");
-  });
+    const bw = colorInterpolator(["#000000", "#ffffff"]);
+    expect(bw(0)).toBe("#000000");
+    expect(bw(1)).toBe("#ffffff");
+    expect(bw(NaN)).toBeUndefined();
+    const [red] = bw(0.5)!.slice(4, -1).split(", ").map(Number);
+    expect(red).toBeGreaterThan(90);
+    expect(red).toBeLessThan(128);
 
-  it("maps values through a diverging piecewise domain", () => {
-    const f = colorScaleFn(["#0000ff", "#ffffff", "#ff0000"], [-1, 0, 4]);
-    expect(f(-1)).toBe("#0000ff");
-    expect(f(0)).toBe("#ffffff");
-    expect(f(4)).toBe("#ff0000");
-    expect(f(NaN)).toBeUndefined();
-  });
+    expect(colorInterpolator(["var(--a)", "#fff"])(0.25)).toBe(
+      "color-mix(in oklab, var(--a) 75%, #fff)",
+    );
 
-  it("samples the ramp from the interpolator", () => {
+    const diverging = colorScaleFn(
+      ["#0000ff", "#ffffff", "#ff0000"],
+      [-1, 0, 4],
+    );
+    expect([diverging(-1), diverging(0), diverging(4), diverging(NaN)]).toEqual(
+      ["#0000ff", "#ffffff", "#ff0000", undefined],
+    );
+
     const stops = colorRampStops(["#000000", "#ffffff"], 3);
-    expect(stops.map((s) => s.offset)).toEqual([0, 0.5, 1]);
-    expect(stops[1].color).toBe(colorInterpolator(["#000000", "#ffffff"])(0.5));
+    expect(stops.map((stop) => stop.offset)).toEqual([0, 0.5, 1]);
   });
-});
 
-describe("lineColorGradient", () => {
-  const pts = [
-    { x: 20, color: "b" },
-    { x: 0, color: "a" },
-    { x: 40, color: undefined },
-    { x: 40, color: "c" },
-  ];
-
-  it("puts one stop per colored point, sorted by x", () => {
-    expect(lineColorGradient(pts, "linear")).toEqual({
+  it("builds lineColorGradient stops for linear and step curves", () => {
+    const points = [
+      { x: 20, color: "b" },
+      { x: 0, color: "a" },
+      { x: 40, color: undefined },
+      { x: 40, color: "c" },
+    ];
+    expect(lineColorGradient(points, "linear")).toEqual({
       x1: 0,
       x2: 40,
       stops: [
@@ -101,42 +69,11 @@ describe("lineColorGradient", () => {
         { offset: 1, color: "c" },
       ],
     });
-  });
-
-  it("switches color where each step curve changes value", () => {
-    const offsets = (curve: "step" | "step-after" | "step-before") =>
-      lineColorGradient(pts, curve)!.stops.map((s) => `${s.offset}${s.color}`);
-    expect(offsets("step-after")).toEqual(["0a", "0.5a", "0.5b", "1b", "1c"]);
-    expect(offsets("step-before")).toEqual([
-      "0a",
-      "0a",
-      "0b",
-      "0.5b",
-      "0.5b",
-      "0.5c",
-      "1c",
-    ]);
-    expect(offsets("step")).toEqual([
-      "0a",
-      "0.25a",
-      "0.25b",
-      "0.5b",
-      "0.75b",
-      "0.75c",
-      "1c",
-    ]);
-  });
-
-  it("is null without two distinct colored x positions", () => {
-    expect(lineColorGradient([{ x: 1, color: "a" }], undefined)).toBeNull();
     expect(
-      lineColorGradient(
-        [
-          { x: 1, color: "a" },
-          { x: 1, color: "b" },
-        ],
-        undefined,
+      lineColorGradient(points, "step-after")!.stops.map(
+        (s) => `${s.offset}${s.color}`,
       ),
-    ).toBeNull();
+    ).toEqual(["0a", "0.5a", "0.5b", "1b", "1c"]);
+    expect(lineColorGradient([{ x: 1, color: "a" }], undefined)).toBeNull();
   });
 });

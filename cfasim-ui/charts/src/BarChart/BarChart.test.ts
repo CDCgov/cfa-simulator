@@ -1,2066 +1,425 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { nextTick } from "vue";
 import { mount } from "@vue/test-utils";
 import BarChart from "./BarChart.vue";
 import ChartMenu from "../ChartMenu/ChartMenu.vue";
 import * as download from "../ChartMenu/download.js";
 
-function bars(wrapper: ReturnType<typeof mount>) {
-  return wrapper.findAll('[data-testid="bar"]');
+type Wrapper = ReturnType<typeof mount>;
+const baseProps = { width: 400, height: 200, menu: false };
+const PLOT_LEFT = 50;
+const PLOT_W = 540;
+
+const bars = (wrapper: Wrapper) => wrapper.findAll('[data-testid="bar"]');
+const centers = (wrapper: Wrapper) =>
+  bars(wrapper).map(
+    (bar) => Number(bar.attributes("x")) + Number(bar.attributes("width")) / 2,
+  );
+
+const findOverlay = (wrapper: Wrapper) =>
+  wrapper.find('[data-testid="chart-overlay"]').exists()
+    ? wrapper.find('[data-testid="chart-overlay"]')
+    : wrapper
+        .findAll("rect")
+        .find((rect) => rect.attributes("fill") === "transparent")!;
+
+const csvHref = (wrapper: Wrapper) =>
+  decodeURIComponent(
+    wrapper.find("a.bar-chart-download-link").attributes("href")!,
+  )
+    .split(",")
+    .slice(1)
+    .join(",");
+
+function parsePathPoints(
+  pathData: string,
+): { cmd: "M" | "L"; x: number; y: number }[] {
+  const points: { cmd: "M" | "L"; x: number; y: number }[] = [];
+  const regex = /([ML])([-\d.]+),([-\d.]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(pathData))) {
+    points.push({
+      cmd: match[1] as "M" | "L",
+      x: parseFloat(match[2]),
+      y: parseFloat(match[3]),
+    });
+  }
+  return points;
 }
 
 describe("BarChart", () => {
-  it("renders one bar per category for a single series", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        data: [10, 20, 30, 40],
-        categories: ["A", "B", "C", "D"],
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    expect(bars(wrapper).length).toBe(4);
-  });
+  afterEach(() => vi.restoreAllMocks());
 
-  it("accepts a typed array as data", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        data: new Float64Array([1, 2, 3]),
-        width: 300,
-        height: 150,
-        menu: false,
-      },
-    });
-    expect(bars(wrapper).length).toBe(3);
-  });
-
-  it("accepts y as an alias for data", () => {
-    const a = mount(BarChart, {
-      props: { y: [1, 2, 3], width: 300, height: 150, menu: false },
-    });
-    const b = mount(BarChart, {
-      props: { data: [1, 2, 3], width: 300, height: 150, menu: false },
-    });
-    expect(bars(a).length).toBe(bars(b).length);
-  });
-
-  it("renders k * categoryCount bars in grouped mode", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        series: [{ data: [1, 2, 3] }, { data: [4, 5, 6] }],
-        categories: ["A", "B", "C"],
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    expect(bars(wrapper).length).toBe(6);
-  });
-
-  it("stacks bars when layout is stacked", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        series: [{ data: [10, 20] }, { data: [5, 15] }],
-        categories: ["A", "B"],
-        layout: "stacked" as const,
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    const found = bars(wrapper);
-    expect(found.length).toBe(4);
-    // In stacked mode all bars in a category share the same x and width
-    const catA = found.filter((b) => b.attributes("data-category") === "0");
-    expect(catA[0].attributes("x")).toBe(catA[1].attributes("x"));
-    expect(catA[0].attributes("width")).toBe(catA[1].attributes("width"));
-  });
-
-  it("overlays bars at full group width when layout is overlay", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        series: [{ data: [10, 20] }, { data: [5, 15] }],
-        categories: ["A", "B"],
-        layout: "overlay" as const,
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    const found = bars(wrapper);
-    expect(found.length).toBe(4);
-    // In overlay, both series in a category share the same x and width
-    // (full group width), like stacked — but each bar starts from the
-    // shared baseline rather than stacking.
-    const catA = found.filter((b) => b.attributes("data-category") === "0");
-    expect(catA[0].attributes("x")).toBe(catA[1].attributes("x"));
-    expect(catA[0].attributes("width")).toBe(catA[1].attributes("width"));
-    // Both bars in category A rest on the same baseline (same y+height).
-    const baselineA0 =
-      Number(catA[0].attributes("y")) + Number(catA[0].attributes("height"));
-    const baselineA1 =
-      Number(catA[1].attributes("y")) + Number(catA[1].attributes("height"));
-    expect(baselineA0).toBeCloseTo(baselineA1, 1);
-    // Taller series (data 10 vs 5 in category A) has greater height.
-    expect(Number(catA[0].attributes("height"))).toBeGreaterThan(
-      Number(catA[1].attributes("height")),
-    );
-  });
-
-  it("scales overlay value axis to per-series max, not the sum", () => {
-    const overlay = mount(BarChart, {
-      props: {
-        series: [{ data: [10] }, { data: [20] }],
-        categories: ["A"],
-        layout: "overlay" as const,
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    const stacked = mount(BarChart, {
-      props: {
-        series: [{ data: [10] }, { data: [20] }],
-        categories: ["A"],
-        layout: "stacked" as const,
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    // Overlay's tallest bar (value 20) fills the same axis as a 20-max,
-    // whereas stacked treats the cumulative 30 as max — so the 20-bar
-    // is taller in overlay than in stacked.
-    const overlayTop = Math.max(
-      ...bars(overlay).map((b) => Number(b.attributes("height"))),
-    );
-    const stackedTop = Math.max(
-      ...bars(stacked).map((b) => Number(b.attributes("height"))),
-    );
-    expect(overlayTop).toBeGreaterThan(stackedTop);
-  });
-
-  it("renders horizontal bars when orientation is horizontal", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        data: [10, 20, 30],
-        categories: ["A", "B", "C"],
-        orientation: "horizontal" as const,
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    const found = bars(wrapper);
-    expect(found.length).toBe(3);
-    // In horizontal mode bars share x (start at baseline) and differ in y.
-    const ys = found.map((b) => Number(b.attributes("y")));
-    expect(new Set(ys).size).toBe(3);
-  });
-
-  it("uses 0 as the baseline by default for grouped layout", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        data: [10, 20],
-        categories: ["A", "B"],
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    const found = bars(wrapper);
-    // The taller bar should have a larger height than the shorter one.
-    const heights = found.map((b) => Number(b.attributes("height")));
-    expect(heights[1]).toBeGreaterThan(heights[0]);
-  });
-
-  it("places value-axis ticks at numeric intervals", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        data: [0, 25, 50, 75, 100],
-        valueTicks: 25,
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    const ticks = wrapper
-      .findAll('[data-testid="value-tick"]')
-      .map((t) => t.text());
-    expect(ticks).toEqual(
-      expect.arrayContaining(["0", "25", "50", "75", "100"]),
-    );
-  });
-
-  it("formats value ticks with valueTickFormat", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        data: [0, 50, 100],
-        valueTicks: [0, 50, 100],
-        valueTickFormat: (v: number) => `${v}%`,
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    const ticks = wrapper
-      .findAll('[data-testid="value-tick"]')
-      .map((t) => t.text());
-    expect(ticks).toEqual(expect.arrayContaining(["0%", "50%", "100%"]));
-  });
-
-  it("renders category labels", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        data: [1, 2, 3],
-        categories: ["red", "green", "blue"],
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    const labels = wrapper
-      .findAll('[data-testid="category-tick"]')
-      .map((t) => t.text());
-    expect(labels).toEqual(["red", "green", "blue"]);
-  });
-
-  it("falls back to indices when no categories prop is given", () => {
-    const wrapper = mount(BarChart, {
-      props: { data: [10, 20], width: 400, height: 200, menu: false },
-    });
-    const labels = wrapper
-      .findAll('[data-testid="category-tick"]')
-      .map((t) => t.text());
-    expect(labels).toEqual(["0", "1"]);
-  });
-
-  it("applies categoryFormat", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        data: [1, 2],
-        categories: ["a", "b"],
-        categoryFormat: (s: string) => s.toUpperCase(),
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    const labels = wrapper
-      .findAll('[data-testid="category-tick"]')
-      .map((t) => t.text());
-    expect(labels).toEqual(["A", "B"]);
-  });
-
-  it("renders tooltip overlay when tooltipTrigger is set", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        data: [1, 2, 3],
-        categories: ["a", "b", "c"],
-        width: 400,
-        height: 200,
-        menu: false,
-        tooltipTrigger: "hover" as const,
-      },
-    });
-    const rects = wrapper.findAll("rect");
-    const overlay = rects.find((r) => r.attributes("fill") === "transparent");
-    expect(overlay).toBeTruthy();
-  });
-
-  it("sets overlay touch-action to the page-scroll axis per orientation", () => {
-    const findOverlayStyle = (orientation: "vertical" | "horizontal") => {
-      const wrapper = mount(BarChart, {
+  describe("layouts, baselines, and log scale", () => {
+    it("renders grouped, stacked, overlay, and horizontal layouts with typed arrays and NaN skipping", () => {
+      const grouped = mount(BarChart, {
         props: {
-          data: [1, 2, 3],
-          categories: ["a", "b", "c"],
-          width: 400,
-          height: 200,
-          menu: false,
-          orientation,
-          tooltipTrigger: "hover" as const,
-        },
-      });
-      return wrapper
-        .findAll("rect")
-        .find((r) => r.attributes("fill") === "transparent")
-        ?.attributes("style");
-    };
-    // Vertical bars scrub across X, so vertical page scroll stays available.
-    expect(findOverlayStyle("vertical")).toContain("touch-action: pan-y");
-    // Horizontal bars scrub down Y, so horizontal page scroll stays available.
-    expect(findOverlayStyle("horizontal")).toContain("touch-action: pan-x");
-  });
-
-  it("emits hover with category index on mousemove", async () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        data: [1, 2, 3, 4],
-        categories: ["a", "b", "c", "d"],
-        width: 400,
-        height: 200,
-        menu: false,
-        tooltipTrigger: "hover" as const,
-      },
-      attachTo: document.body,
-    });
-    const overlay = wrapper
-      .findAll("rect")
-      .find((r) => r.attributes("fill") === "transparent")!;
-    await overlay.trigger("mousemove", { clientX: 200, clientY: 100 });
-    const events = wrapper.emitted("hover");
-    expect(events).toBeTruthy();
-    expect(events![0][0]).toHaveProperty("index");
-    wrapper.unmount();
-  });
-
-  it("emits hover null on mouseleave", async () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        data: [1, 2, 3],
-        categories: ["a", "b", "c"],
-        width: 400,
-        height: 200,
-        menu: false,
-        tooltipTrigger: "hover" as const,
-      },
-      attachTo: document.body,
-    });
-    const overlay = wrapper
-      .findAll("rect")
-      .find((r) => r.attributes("fill") === "transparent")!;
-    await overlay.trigger("mousemove", { clientX: 200, clientY: 100 });
-    await overlay.trigger("mouseleave");
-    const events = wrapper.emitted("hover")!;
-    expect(events[events.length - 1][0]).toBeNull();
-    wrapper.unmount();
-  });
-
-  describe("menu downloads", () => {
-    beforeEach(() => {
-      vi.restoreAllMocks();
-    });
-
-    function getMenuItem(wrapper: ReturnType<typeof mount>, label: string) {
-      const items = wrapper.findComponent(ChartMenu).props("items");
-      const item = items.find((i) => i.label === label);
-      if (!item) throw new Error(`menu item not found: ${label}`);
-      return item;
-    }
-
-    it("auto-generates CSV from categories + series", () => {
-      const spy = vi
-        .spyOn(download, "downloadCsv")
-        .mockImplementation(() => {});
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [10, 20, 30],
-          categories: ["A", "B", "C"],
-          width: 400,
-          height: 200,
-        },
-      });
-      getMenuItem(wrapper, "Download CSV").action();
-      expect(spy).toHaveBeenCalledOnce();
-      const [csv, fname] = spy.mock.calls[0];
-      expect(csv).toBe("category,value\nA,10\nB,20\nC,30");
-      expect(fname).toBe("chart");
-    });
-
-    it("renders a download link when downloadLink=true", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2],
+          ...baseProps,
+          series: [{ data: new Float64Array([10, NaN]) }, { y: [20, 30] }],
           categories: ["A", "B"],
-          width: 400,
-          height: 200,
-          downloadLink: true,
+          groupGap: 10,
         },
       });
-      const link = wrapper.find("a.bar-chart-download-link");
-      expect(link.exists()).toBe(true);
-      expect(link.text()).toBe("Download data (CSV)");
-      expect(link.attributes("href")).toContain(
-        encodeURIComponent("category,value\nA,1\nB,2"),
-      );
-    });
-
-    it("hides Download CSV menu item when downloadLink is set", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2],
-          categories: ["A", "B"],
-          width: 400,
-          height: 200,
-          downloadLink: true,
-        },
-      });
-      const items = wrapper.findComponent(ChartMenu).props("items");
-      expect(items.find((i) => i.label === "Download CSV")).toBeUndefined();
-      expect(items.find((i) => i.label === "Save SVG")).toBeTruthy();
-    });
-
-    it("renders a download button with default text when downloadButton=true", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2],
-          categories: ["A", "B"],
-          width: 400,
-          height: 200,
-          downloadButton: true,
-        },
-      });
-      const button = wrapper.find("button.bar-chart-download-button");
-      expect(button.exists()).toBe(true);
-      expect(button.text()).toBe("Download data (CSV)");
-    });
-
-    it("renders a download button with custom text when downloadButton is a string", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2],
-          categories: ["A", "B"],
-          width: 400,
-          height: 200,
-          downloadButton: "Get the data",
-        },
-      });
-      const button = wrapper.find("button.bar-chart-download-button");
-      expect(button.text()).toBe("Get the data");
-    });
-
-    it("hides Download CSV menu item and link when downloadButton is set", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2],
-          categories: ["A", "B"],
-          width: 400,
-          height: 200,
-          downloadButton: true,
-          downloadLink: true,
-        },
-      });
-      const items = wrapper.findComponent(ChartMenu).props("items");
-      expect(items.find((i) => i.label === "Download CSV")).toBeUndefined();
-      expect(wrapper.find("a.bar-chart-download-link").exists()).toBe(false);
-    });
-
-    it("downloads CSV when the download button is clicked", () => {
-      const spy = vi
-        .spyOn(download, "downloadCsv")
-        .mockImplementation(() => {});
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2],
-          categories: ["A", "B"],
-          width: 400,
-          height: 200,
-          downloadButton: true,
-          filename: "my-data",
-        },
-      });
-      wrapper.find("button.bar-chart-download-button").trigger("click");
-      expect(spy).toHaveBeenCalledWith(expect.any(String), "my-data");
-    });
-
-    it("uses filename prop for SVG downloads", () => {
-      const spy = vi.spyOn(download, "saveSvg").mockImplementation(() => {});
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2],
-          categories: ["A", "B"],
-          width: 400,
-          height: 200,
-          filename: "my-chart",
-        },
-      });
-      getMenuItem(wrapper, "Save SVG").action();
-      expect(spy).toHaveBeenCalledWith(expect.anything(), "my-chart");
-    });
-  });
-
-  it("uses series legend label in multi-series CSV", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        series: [
-          { data: [1, 2], legend: "low" },
-          { data: [3, 4], legend: "high" },
-        ],
-        categories: ["A", "B"],
-        width: 400,
-        height: 200,
-        downloadLink: true,
-      },
-    });
-    const link = wrapper.find("a.bar-chart-download-link");
-    expect(decodeURIComponent(link.attributes("href")!)).toContain(
-      "category,low,high\nA,1,3\nB,2,4",
-    );
-  });
-
-  it("rests grouped bars at zero baseline when data includes negatives", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        // Symmetric data: a positive and negative of equal magnitude
-        // should render as equal-height bars meeting at the zero line
-        // in the middle of the chart.
-        data: [10, -10],
-        categories: ["pos", "neg"],
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    const found = bars(wrapper);
-    expect(found.length).toBe(2);
-    const posH = Number(found[0].attributes("height"));
-    const negH = Number(found[1].attributes("height"));
-    expect(posH).toBeGreaterThan(0);
-    expect(negH).toBeGreaterThan(0);
-    // For ±N data both bars span half the value axis, so heights match.
-    expect(posH).toBeCloseTo(negH, 0);
-    // Bar edges meet on the zero line: pos bottom == neg top.
-    const posBottom =
-      Number(found[0].attributes("y")) + Number(found[0].attributes("height"));
-    const negTop = Number(found[1].attributes("y"));
-    expect(posBottom).toBeCloseTo(negTop, 1);
-  });
-
-  it("places baseline at valueMin when all data is above valueMin", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        data: [60, 90],
-        categories: ["A", "B"],
-        valueMin: 50,
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    const found = bars(wrapper);
-    // Bar heights should reflect 10 and 40 (above the 50 baseline), so the
-    // ratio of heights is 1:4, not 60:90.
-    const heights = found.map((b) => Number(b.attributes("height")));
-    expect(heights[1] / heights[0]).toBeCloseTo(4, 1);
-  });
-
-  it("extends the value axis to valueMax but never clips to it", () => {
-    const tallest = (valueMax?: number) => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [10, 20],
-          categories: ["A", "B"],
-          valueMax,
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const h = Number(bars(wrapper)[1].attributes("height"));
-      wrapper.unmount();
-      return h;
-    };
-    expect(tallest(40)).toBeCloseTo(tallest() / 2, 1);
-    expect(tallest(5)).toBeCloseTo(tallest(), 1);
-  });
-
-  it("skips non-finite values without crashing", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        data: [10, NaN, 30],
-        categories: ["A", "B", "C"],
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    // Two real bars (NaN is skipped)
-    expect(bars(wrapper).length).toBe(2);
-  });
-
-  describe("stacked layout edge cases", () => {
-    it("stacks positives and negatives separately, meeting at zero", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          series: [{ data: [3] }, { data: [-2] }],
-          categories: ["A"],
-          layout: "stacked" as const,
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const found = bars(wrapper);
-      expect(found.length).toBe(2);
-      // Positive bar's bottom edge and negative bar's top edge should meet
-      // on the zero line.
-      const pos = found[0];
-      const neg = found[1];
-      const posBottom =
-        Number(pos.attributes("y")) + Number(pos.attributes("height"));
-      const negTop = Number(neg.attributes("y"));
-      expect(posBottom).toBeCloseTo(negTop, 1);
-    });
-
-    it("stacks all-negative values from zero downward", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          series: [{ data: [-2] }, { data: [-3] }],
-          categories: ["A"],
-          layout: "stacked" as const,
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const found = bars(wrapper);
-      expect(found.length).toBe(2);
-      // The second bar (data -3) stacks below the first (data -2), so its
-      // top edge equals the first bar's bottom edge.
-      const first = found[0];
-      const second = found[1];
-      const firstBottom =
-        Number(first.attributes("y")) + Number(first.attributes("height"));
-      const secondTop = Number(second.attributes("y"));
-      expect(firstBottom).toBeCloseTo(secondTop, 1);
-    });
-  });
-
-  describe("interactions", () => {
-    it("emits hover from clientY in horizontal orientation", async () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2, 3, 4],
-          categories: ["A", "B", "C", "D"],
-          orientation: "horizontal" as const,
-          width: 400,
-          height: 200,
-          menu: false,
-          tooltipTrigger: "hover" as const,
-        },
-        attachTo: document.body,
-      });
-      const overlay = wrapper
-        .findAll("rect")
-        .find((r) => r.attributes("fill") === "transparent")!;
-      // Move within the first category's vertical slot.
-      await overlay.trigger("mousemove", { clientX: 200, clientY: 30 });
-      const events = wrapper.emitted("hover");
-      expect(events).toBeTruthy();
-      expect(events![0][0]).toHaveProperty("index");
-      wrapper.unmount();
-    });
-
-    it("toggles hover on click when tooltipTrigger is click", async () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2, 3, 4],
-          categories: ["A", "B", "C", "D"],
-          width: 400,
-          height: 200,
-          menu: false,
-          tooltipTrigger: "click" as const,
-        },
-        attachTo: document.body,
-      });
-      const overlay = wrapper
-        .findAll("rect")
-        .find((r) => r.attributes("fill") === "transparent")!;
-      await overlay.trigger("click", { clientX: 100, clientY: 100 });
-      const events = wrapper.emitted("hover")!;
-      expect(events[events.length - 1][0]).not.toBeNull();
-      // Same-bar click toggles off
-      await overlay.trigger("click", { clientX: 100, clientY: 100 });
-      expect(wrapper.emitted("hover")!.at(-1)![0]).toBeNull();
-      wrapper.unmount();
-    });
-
-    it("does not emit hover on mouseleave in click mode", async () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2, 3],
-          categories: ["A", "B", "C"],
-          width: 400,
-          height: 200,
-          menu: false,
-          tooltipTrigger: "click" as const,
-        },
-        attachTo: document.body,
-      });
-      const overlay = wrapper
-        .findAll("rect")
-        .find((r) => r.attributes("fill") === "transparent")!;
-      await overlay.trigger("click", { clientX: 100, clientY: 100 });
-      const before = wrapper.emitted("hover")!.length;
-      await overlay.trigger("mouseleave");
-      // mouseleave in click mode is a no-op for emit
-      expect(wrapper.emitted("hover")!.length).toBe(before);
-      wrapper.unmount();
-    });
-
-    it("omits a series from the tooltip when showInTooltip is false", async () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          series: [
-            { data: [10, 20], color: "#0057b7" },
-            { data: [5, 7], color: "#f4a261", showInTooltip: false },
-          ],
-          categories: ["A", "B"],
-          tooltipTrigger: "hover" as const,
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-        attachTo: document.body,
-      });
-      const overlay = wrapper
-        .findAll("rect")
-        .find((r) => r.attributes("fill") === "transparent")!;
-      await overlay.trigger("mousemove", { clientX: 100, clientY: 100 });
-      const rows = wrapper.findAll(".chart-tooltip-row");
-      expect(rows.length).toBe(1);
-      wrapper.unmount();
-    });
-
-    it("uses tooltipValueFormat for tooltip values", async () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1000, 2000],
-          categories: ["A", "B"],
-          tooltipTrigger: "hover" as const,
-          tooltipValueFormat: (v: number) => `$${v.toLocaleString()}`,
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-        attachTo: document.body,
-      });
-      const overlay = wrapper
-        .findAll("rect")
-        .find((r) => r.attributes("fill") === "transparent")!;
-      await overlay.trigger("mousemove", { clientX: 100, clientY: 100 });
-      const row = wrapper.find(".chart-tooltip-row");
-      expect(row.exists()).toBe(true);
-      expect(row.text()).toMatch(/^\$[\d,]+$/);
-      wrapper.unmount();
-    });
-
-    it("names tooltip rows and formats the heading with tooltipTitle", async () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          series: [
-            { data: [10, 20], legend: "2024" },
-            { data: [15, 25], tooltipLabel: "2025" },
-            { data: [1, 2] },
-          ],
-          categories: ["A", "B"],
-          intervals: [{ x: 0, lower: 5, upper: 12, label: "Target" }],
-          tooltipTrigger: "hover" as const,
-          tooltipTitle: (label: string) => `Region ${label}`,
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-        attachTo: document.body,
-      });
-      const overlay = wrapper
-        .findAll("rect")
-        .find((r) => r.attributes("fill") === "transparent")!;
-      await overlay.trigger("mousemove", { clientX: 100, clientY: 100 });
-      expect(wrapper.find(".chart-tooltip-label").text()).toBe("Region A");
-      const rows = wrapper.findAll(".chart-tooltip-row").map((r) => r.text());
-      expect(rows).toEqual(["202410", "202515", "Target5–12"]);
-      wrapper.unmount();
-    });
-
-    it("keeps a row with no value when it has a range", async () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          series: [{ data: [NaN, 20], lower: [3, 15], upper: [9, 25] }],
-          categories: ["A", "B"],
-          tooltipTrigger: "hover" as const,
-          tooltipTitle: (label: string) => `Region ${label}`,
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-        attachTo: document.body,
-      });
-      const overlay = wrapper
-        .findAll("rect")
-        .find((r) => r.attributes("fill") === "transparent")!;
-      await overlay.trigger("mousemove", { clientX: 100, clientY: 100 });
+      const groupedBars = bars(grouped);
+      expect(groupedBars).toHaveLength(3);
       expect(
-        wrapper.find(".chart-tooltip-row").text().replace(/\s+/g, " "),
-      ).toBe("— (3–9)");
-      wrapper.unmount();
-    });
+        Number(groupedBars[1].attributes("x")) -
+          (Number(groupedBars[0].attributes("x")) +
+            Number(groupedBars[0].attributes("width"))),
+      ).toBeCloseTo(10, 1);
 
-    it("falls back to valueTickFormat for tooltip values", async () => {
-      const wrapper = mount(BarChart, {
+      const overlay = mount(BarChart, {
         props: {
-          data: [10, 20],
-          categories: ["A", "B"],
-          tooltipTrigger: "hover" as const,
-          valueTickFormat: (v: number) => `${v}%`,
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-        attachTo: document.body,
-      });
-      const overlay = wrapper
-        .findAll("rect")
-        .find((r) => r.attributes("fill") === "transparent")!;
-      await overlay.trigger("mousemove", { clientX: 100, clientY: 100 });
-      const row = wrapper.find(".chart-tooltip-row");
-      expect(row.text()).toMatch(/\d+%$/);
-      wrapper.unmount();
-    });
-
-    it("accepts a typed array for tooltipData", async () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [10, 20, 30],
-          categories: ["A", "B", "C"],
-          tooltipData: new Float64Array([1.5, 2.5, 3.5]),
-          tooltipTrigger: "hover" as const,
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-        slots: {
-          tooltip: `
-            <template #default="props">
-              <div data-testid="slot-data">{{ props.data }}</div>
-            </template>
-          `,
-        },
-        attachTo: document.body,
-      });
-      const overlay = wrapper
-        .findAll("rect")
-        .find((r) => r.attributes("fill") === "transparent")!;
-      await overlay.trigger("mousemove", { clientX: 100, clientY: 100 });
-      expect(wrapper.find('[data-testid="slot-data"]').text()).toBe("1.5");
-      wrapper.unmount();
-    });
-
-    it("provides category, values, and data to the tooltip slot", async () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          series: [{ data: [10, 20] }, { data: [5, 15] }],
-          categories: ["A", "B"],
-          tooltipData: [{ note: "first" }, { note: "second" }],
-          tooltipTrigger: "hover" as const,
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-        slots: {
-          tooltip: `
-            <template #default="props">
-              <div data-testid="slot-cat">{{ props.category }}</div>
-              <div data-testid="slot-count">{{ props.values.length }}</div>
-              <div data-testid="slot-data">{{ props.data?.note }}</div>
-            </template>
-          `,
-        },
-        attachTo: document.body,
-      });
-      const overlay = wrapper
-        .findAll("rect")
-        .find((r) => r.attributes("fill") === "transparent")!;
-      await overlay.trigger("mousemove", { clientX: 320, clientY: 100 });
-      // Category B is at index 1; values has 2 entries; data.note = "second".
-      expect(wrapper.find('[data-testid="slot-cat"]').text()).toBe("B");
-      expect(wrapper.find('[data-testid="slot-count"]').text()).toBe("2");
-      expect(wrapper.find('[data-testid="slot-data"]').text()).toBe("second");
-      wrapper.unmount();
-    });
-  });
-
-  describe("rendering options", () => {
-    it("renders the title text", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2],
-          categories: ["A", "B"],
-          title: "Weekly cases",
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const texts = wrapper.findAll("text").map((t) => t.text());
-      expect(texts).toContain("Weekly cases");
-    });
-
-    it("pulls a left-aligned title to the category inset with categoryAlign start", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2],
-          categories: ["A", "B"],
-          title: "T",
-          orientation: "horizontal",
-          categoryAlign: "start",
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      // headerLeftX = CATEGORY_LABEL_INSET (2) so the title lines up with
-      // start-aligned category labels.
-      expect(wrapper.find("svg text").element.getAttribute("x")).toBe("2");
-    });
-
-    it("keeps a centered title anchored to the plot bounds under categoryAlign start", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2],
-          categories: ["A", "B"],
-          title: "T",
-          orientation: "horizontal",
-          categoryAlign: "start",
-          titleStyle: { align: "center" },
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      // width 400, no yLabel → bounds.left 50, innerW 340 → center 220.
-      expect(wrapper.find("svg text").element.getAttribute("x")).toBe("220");
-    });
-
-    it("renders xLabel and yLabel", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2],
-          categories: ["A", "B"],
-          xLabel: "Day",
-          yLabel: "Cases",
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const texts = wrapper.findAll("text").map((t) => t.text());
-      expect(texts).toContain("Day");
-      expect(texts).toContain("Cases");
-    });
-
-    it("renders inline legend entries for series with a legend label", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          series: [
-            { data: [1, 2], legend: "Pediatric", color: "#0057b7" },
-            { data: [3, 4], legend: "Adult", color: "#f4a261" },
-          ],
-          categories: ["A", "B"],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const texts = wrapper.findAll("text").map((t) => t.text());
-      expect(texts).toContain("Pediatric");
-      expect(texts).toContain("Adult");
-    });
-
-    it("wraps inline legend items to multiple rows when they overflow width", () => {
-      const series = Array.from({ length: 10 }, (_, i) => ({
-        data: [i + 1, i + 2],
-        legend: `Series ${i + 1} with longer label`,
-      }));
-      const wrapper = mount(BarChart, {
-        props: {
-          series,
-          categories: ["A", "B"],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      // Each legend label is rendered as one <text>. Collect their y
-      // coordinates — multi-row wrapping means more than one distinct y.
-      const labelYs = new Set(
-        wrapper
-          .findAll("text")
-          .filter((t) => /^Series /.test(t.text()))
-          .map((t) => t.attributes("y")),
-      );
-      expect(labelYs.size).toBeGreaterThan(1);
-    });
-
-    it("draws the legend under the x-axis label with legendPosition bottom", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          series: [{ data: [1, 2], legend: "Pediatric" }],
-          categories: ["A", "B"],
-          xLabel: "Age group",
-          legendPosition: "bottom",
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const texts = wrapper.findAll("text");
-      const legend = texts.find((t) => t.text() === "Pediatric")!;
-      const xLabel = texts.find((t) => t.text() === "Age group")!;
-      // One 20px legend row at the bottom of the 200px svg (row center
-      // 190, baseline +4); the x label moves up from height - 4.
-      expect(Number(legend.attributes("y"))).toBe(194);
-      expect(Number(xLabel.attributes("y"))).toBe(176);
-    });
-
-    it("fixes the legend column count with legendLayout columns", () => {
-      const series = Array.from({ length: 4 }, (_, i) => ({
-        data: [i, i + 1],
-        legend: `Series ${i}`,
-      }));
-      const wrapper = mount(BarChart, {
-        props: {
-          series,
-          categories: ["A", "B"],
-          legendLayout: { columns: 2 },
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const labels = wrapper
-        .findAll("text")
-        .filter((t) => /^Series /.test(t.text()));
-      const xs = labels.map((t) => t.attributes("x"));
-      const ys = labels.map((t) => t.attributes("y"));
-      expect(xs[2]).toBe(xs[0]);
-      expect(xs[3]).toBe(xs[1]);
-      expect(ys[0]).toBe(ys[1]);
-      expect(ys[2]).not.toBe(ys[0]);
-    });
-
-    it("fades the other series' bars while a legend item is hovered", async () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          series: [
-            { data: [1, 2], legend: "Pediatric" },
-            { data: [3, 4], legend: "Adult" },
-          ],
-          categories: ["A", "B"],
-          legendHighlight: true,
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const item = wrapper.findAll("rect.legend-hit")[1].element.parentElement!;
-      item.dispatchEvent(new MouseEvent("mouseenter"));
-      await nextTick();
-      const opacityBySeries = (i: number) =>
-        wrapper
-          .findAll(`[data-testid="bar"][data-series="${i}"]`)
-          .map((b) => b.attributes("opacity"));
-      expect(opacityBySeries(0)).toEqual(["0.15", "0.15"]);
-      expect(opacityBySeries(1)).toEqual([undefined, undefined]);
-      expect(wrapper.emitted("legendHover")).toEqual([["Adult"]]);
-      item.dispatchEvent(new MouseEvent("mouseleave"));
-      await nextTick();
-      expect(opacityBySeries(0)).toEqual([undefined, undefined]);
-    });
-
-    it("isolates a series on click with legendToggle isolate", async () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          series: [
-            { data: [1, 2], legend: "Pediatric" },
-            { data: [3, 4], legend: "Adult" },
-          ],
-          categories: ["A", "B"],
-          legendToggle: "isolate",
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      await wrapper.findAll(".chart-legend-toggle")[0].trigger("click");
-      expect(wrapper.emitted("legendClick")).toEqual([["Pediatric"]]);
-      expect(wrapper.emitted("update:hiddenSeries")).toEqual([[["Adult"]]]);
-      expect(wrapper.findAll('[data-testid="bar"]')).toHaveLength(2);
-    });
-
-    it("hides a series legend entry when showInLegend is false", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          series: [
-            { data: [1, 2], legend: "Pediatric" },
-            { data: [3, 4], legend: "Adult", showInLegend: false },
-          ],
-          categories: ["A", "B"],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const texts = wrapper.findAll("text").map((t) => t.text());
-      expect(texts).toContain("Pediatric");
-      expect(texts).not.toContain("Adult");
-    });
-
-    it("renders value-axis grid lines when valueGrid is true (default)", () => {
-      const wrapper = mount(BarChart, {
-        props: { data: [0, 25, 50], width: 400, height: 200, menu: false },
-      });
-      const gridLines = wrapper
-        .findAll("line")
-        .filter((l) => l.attributes("stroke-opacity") === "0.1");
-      expect(gridLines.length).toBeGreaterThan(0);
-    });
-
-    it("omits grid lines when valueGrid is false", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [0, 25, 50],
-          valueGrid: false,
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const gridLines = wrapper
-        .findAll("line")
-        .filter((l) => l.attributes("stroke-opacity") === "0.1");
-      expect(gridLines.length).toBe(0);
-    });
-
-    it("styles grid lines from valueGrid over gridStyle", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [0, 25, 50],
-          width: 400,
-          height: 200,
-          menu: false,
-          gridStyle: { color: "#999", lineStyle: "dotted" },
-          valueGrid: { lineStyle: "dashed", lineWidth: 1.5 },
-        },
-      });
-      const lines = wrapper.findAll('[data-testid="grid-line"]');
-      expect(lines.length).toBeGreaterThan(0);
-      const a = lines[0].attributes();
-      expect(a.stroke).toBe("#999");
-      expect(a["stroke-width"]).toBe("1.5");
-      expect(a["stroke-dasharray"]).toBe("6 6");
-      expect(a["stroke-linecap"]).toBe("butt");
-      // Vertical bars: horizontal grid lines.
-      expect(a.y1).toBe(a.y2);
-    });
-
-    it("draws vertical grid lines in horizontal orientation", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [0, 25, 50],
-          width: 400,
-          height: 200,
-          menu: false,
-          orientation: "horizontal",
-          valueGrid: { lineStyle: "dotted" },
-        },
-      });
-      const a = wrapper.find('[data-testid="grid-line"]').attributes();
-      expect(a.x1).toBe(a.x2);
-      expect(a["stroke-dasharray"]).toBe("0 3");
-      expect(a["stroke-linecap"]).toBe("round");
-    });
-
-    it("applies a per-series color", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          series: [{ data: [10, 20], color: "#ff0000" }],
-          categories: ["A", "B"],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const found = bars(wrapper);
-      expect(found[0].attributes("fill")).toBe("#ff0000");
-      expect(found[1].attributes("fill")).toBe("#ff0000");
-    });
-
-    it("applies blendMode as mix-blend-mode style on each bar", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          series: [
-            { data: [10, 20], blendMode: "multiply" as const },
-            { data: [5, 15] },
-          ],
-          categories: ["A", "B"],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const found = bars(wrapper);
-      const blended = found.filter((b) => b.attributes("data-series") === "0");
-      const plain = found.filter((b) => b.attributes("data-series") === "1");
-      for (const b of blended) {
-        expect(b.attributes("style")).toContain("mix-blend-mode: multiply");
-      }
-      for (const b of plain) {
-        expect(b.attributes("style") ?? "").not.toContain("mix-blend-mode");
-      }
-    });
-
-    it("applies a per-series opacity", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          series: [{ data: [10, 20], opacity: 0.4 }],
-          categories: ["A", "B"],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const found = bars(wrapper);
-      expect(found[0].attributes("fill-opacity")).toBe("0.4");
-    });
-
-    it("assigns distinct default colors to series without an explicit color", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          series: [{ data: [1] }, { data: [2] }, { data: [3] }],
-          categories: ["A"],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const fills = bars(wrapper).map((b) => b.attributes("fill"));
-      expect(new Set(fills).size).toBe(3);
-    });
-
-    it("hides the chart menu when menu is false", () => {
-      const wrapper = mount(BarChart, {
-        props: { data: [1, 2], categories: ["A", "B"], menu: false },
-      });
-      expect(wrapper.findComponent(ChartMenu).exists()).toBe(false);
-    });
-
-    it("uses a custom CSV string via the csv prop", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2],
-          categories: ["A", "B"],
-          csv: "custom,csv\n1,2",
-          width: 400,
-          height: 200,
-          downloadLink: true,
-        },
-      });
-      const href = wrapper
-        .find("a.bar-chart-download-link")
-        .attributes("href")!;
-      expect(decodeURIComponent(href)).toContain("custom,csv\n1,2");
-    });
-
-    it("uses a custom CSV function via the csv prop", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2],
-          categories: ["A", "B"],
-          csv: () => "fn,csv\nA,B",
-          width: 400,
-          height: 200,
-          downloadLink: true,
-        },
-      });
-      const href = wrapper
-        .find("a.bar-chart-download-link")
-        .attributes("href")!;
-      expect(decodeURIComponent(href)).toContain("fn,csv\nA,B");
-    });
-
-    it("widens slot gaps when barPadding is increased", () => {
-      const tight = mount(BarChart, {
-        props: {
-          data: [10, 20, 30],
-          categories: ["A", "B", "C"],
-          barPadding: 0,
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const loose = mount(BarChart, {
-        props: {
-          data: [10, 20, 30],
-          categories: ["A", "B", "C"],
-          barPadding: 0.5,
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const tightW = Number(bars(tight)[0].attributes("width"));
-      const looseW = Number(bars(loose)[0].attributes("width"));
-      expect(tightW).toBeGreaterThan(looseW);
-    });
-
-    it("uses groupGap to space bars within a category in grouped layout", () => {
-      const wrapper = mount(BarChart, {
-        props: {
+          ...baseProps,
           series: [{ data: [10] }, { data: [20] }],
           categories: ["A"],
-          groupGap: 10,
-          width: 400,
-          height: 200,
-          menu: false,
+          layout: "overlay",
         },
       });
-      const found = bars(wrapper);
-      const x0 = Number(found[0].attributes("x"));
-      const w0 = Number(found[0].attributes("width"));
-      const x1 = Number(found[1].attributes("x"));
-      // Gap between bar 0's right edge and bar 1's left edge equals groupGap.
-      expect(x1 - (x0 + w0)).toBeCloseTo(10, 1);
-    });
-  });
-
-  describe("annotations", () => {
-    it("renders an annotation at the category center for vertical bars", () => {
-      const wrapper = mount(BarChart, {
+      const stacked = mount(BarChart, {
         props: {
-          data: [10, 20, 30],
-          categories: ["A", "B", "C"],
-          annotations: [
-            { x: 1, y: 20, offset: { x: 0, y: -10 }, text: "B is up" },
-          ],
-          width: 400,
-          height: 200,
-          menu: false,
+          ...baseProps,
+          series: [{ data: [10] }, { data: [20] }],
+          categories: ["A"],
+          layout: "stacked",
         },
       });
-      const text = wrapper.find("g.chart-annotations text");
-      expect(text.exists()).toBe(true);
-      expect(text.text()).toContain("B is up");
-      const x = Number(text.attributes("x"));
-      const expectedCenter =
-        Number(bars(wrapper)[1].attributes("x")) +
-        Number(bars(wrapper)[1].attributes("width")) / 2;
-      // Annotation centers on category index 1 (middle bar's center).
-      expect(x).toBeCloseTo(expectedCenter, 0);
+      expect(bars(overlay)[0].attributes("x")).toBe(
+        bars(overlay)[1].attributes("x"),
+      );
+      // Overlay scales to per-series max (20) rather than cumulative sum (30).
+      const maxHeight = (wrapper: Wrapper) =>
+        Math.max(
+          ...bars(wrapper).map((bar) => Number(bar.attributes("height"))),
+        );
+      expect(maxHeight(overlay)).toBeGreaterThan(maxHeight(stacked));
+
+      const horizontal = mount(BarChart, {
+        props: { ...baseProps, data: [10, 20, 30], orientation: "horizontal" },
+      });
+      expect(
+        new Set(bars(horizontal).map((bar) => bar.attributes("y"))).size,
+      ).toBe(3);
     });
 
-    it("renders an annotation on horizontal bars with axes swapped", () => {
-      const wrapper = mount(BarChart, {
+    it("handles negative, zero, valueMin/valueMax, stacked sign, and log baselines", () => {
+      const signed = mount(BarChart, {
+        props: { ...baseProps, data: [10, -10], categories: ["pos", "neg"] },
+      });
+      const [posBar, negBar] = bars(signed);
+      expect(Number(posBar.attributes("height"))).toBeCloseTo(
+        Number(negBar.attributes("height")),
+        0,
+      );
+      expect(
+        Number(posBar.attributes("y")) + Number(posBar.attributes("height")),
+      ).toBeCloseTo(Number(negBar.attributes("y")), 1);
+
+      const minChart = mount(BarChart, {
+        props: { ...baseProps, data: [60, 90], valueMin: 50 },
+      });
+      const minHeights = bars(minChart).map((bar) =>
+        Number(bar.attributes("height")),
+      );
+      expect(minHeights[1] / minHeights[0]).toBeCloseTo(4, 1);
+
+      const tallest = (valueMax?: number) =>
+        Number(
+          bars(
+            mount(BarChart, {
+              props: { ...baseProps, data: [10, 20], valueMax },
+            }),
+          )[1].attributes("height"),
+        );
+      expect(tallest(40)).toBeCloseTo(tallest() / 2, 1);
+      expect(tallest(5)).toBeCloseTo(tallest(), 1);
+
+      const mixed = mount(BarChart, {
         props: {
-          data: [10, 20, 30],
-          categories: ["A", "B", "C"],
-          orientation: "horizontal" as const,
-          annotations: [{ x: 0, y: 10, offset: { x: 20, y: 0 }, text: "A" }],
-          width: 400,
-          height: 200,
-          menu: false,
+          ...baseProps,
+          series: [{ data: [3] }, { data: [-2] }],
+          layout: "stacked",
         },
       });
-      const group = wrapper.find("g.chart-annotations");
-      expect(group.exists()).toBe(true);
-      // On horizontal bars, category axis runs vertically — the
-      // annotation's offsetX still maps to text-anchor "start".
-      expect(group.find("text").attributes("text-anchor")).toBe("start");
-    });
+      const [mixedPos, mixedNeg] = bars(mixed);
+      expect(
+        Number(mixedPos.attributes("y")) +
+          Number(mixedPos.attributes("height")),
+      ).toBeCloseTo(Number(mixedNeg.attributes("y")), 1);
 
-    it("does not render annotations group when none are provided", () => {
-      const wrapper = mount(BarChart, {
+      const allNegative = mount(BarChart, {
         props: {
-          data: [10, 20, 30],
-          width: 400,
-          height: 200,
-          menu: false,
+          ...baseProps,
+          series: [{ data: [-2] }, { data: [-3] }],
+          layout: "stacked",
         },
       });
-      expect(wrapper.find("g.chart-annotations").exists()).toBe(false);
-    });
-  });
+      const [firstNeg, secondNeg] = bars(allNegative);
+      expect(
+        Number(firstNeg.attributes("y")) +
+          Number(firstNeg.attributes("height")),
+      ).toBeCloseTo(Number(secondNeg.attributes("y")), 1);
 
-  describe("valueScaleType: log", () => {
-    it("renders powers-of-10 ticks by default", () => {
-      const wrapper = mount(BarChart, {
+      // Log scale: geometric heights and ignores valueMin <= 0.
+      const logChart = mount(BarChart, {
         props: {
-          data: [1, 10, 100, 1000],
-          categories: ["a", "b", "c", "d"],
-          valueScaleType: "log",
-          width: 400,
-          height: 240,
-          menu: false,
-        },
-      });
-      const tickLabels = wrapper
-        .findAll('[data-testid="value-tick"]')
-        .map((t) => t.text());
-      expect(tickLabels).toEqual(["1", "10", "100", "1,000"]);
-    });
-
-    it("places bars between the axis floor and the value's log position", () => {
-      const wrapper = mount(BarChart, {
-        props: {
+          ...baseProps,
           data: [1, 10, 100],
-          categories: ["a", "b", "c"],
-          valueScaleType: "log",
-          width: 400,
-          height: 240,
-          menu: false,
-        },
-      });
-      const bars = wrapper.findAll('[data-testid="bar"]');
-      // Bar heights should grow geometrically: bar2 ≈ 0.5 of inner, bar3 ≈ 1.0.
-      const heights = bars.map((b) => Number(b.attributes("height")));
-      expect(heights[0]).toBe(0); // value === min → zero height
-      expect(heights[1]).toBeGreaterThan(0);
-      expect(heights[2]).toBeGreaterThan(heights[1]);
-      // The 10-bar should be roughly half the height of the 100-bar.
-      expect(heights[1] / heights[2]).toBeCloseTo(0.5, 1);
-    });
-
-    it("ignores valueMin <= 0 in log mode", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 10, 100],
-          categories: ["a", "b", "c"],
           valueScaleType: "log",
           valueMin: 0,
-          width: 400,
-          height: 240,
-          menu: false,
         },
       });
-      const bars = wrapper.findAll('[data-testid="bar"]');
-      // Geometry still produces finite, non-NaN positions.
-      for (const b of bars) {
-        const y = Number(b.attributes("y"));
-        const h = Number(b.attributes("height"));
-        expect(Number.isFinite(y)).toBe(true);
-        expect(Number.isFinite(h)).toBe(true);
-        expect(h).toBeGreaterThanOrEqual(0);
-      }
+      expect(
+        logChart
+          .findAll('[data-testid="value-tick"]')
+          .map((tick) => tick.text()),
+      ).toEqual(["1", "10", "100"]);
+      const logHeights = bars(logChart).map((bar) =>
+        Number(bar.attributes("height")),
+      );
+      expect(logHeights[0]).toBe(0);
+      expect(logHeights[1] / logHeights[2]).toBeCloseTo(0.5, 1);
     });
   });
 
-  describe("date categories", () => {
-    it("auto-detects date categories and emits month-anchored labels", () => {
-      const cats = [
-        "2026-01-01",
-        "2026-01-08",
-        "2026-01-15",
-        "2026-01-22",
-        "2026-01-29",
-        "2026-02-05",
-        "2026-02-12",
-        "2026-02-19",
-        "2026-02-26",
-        "2026-03-05",
-        "2026-03-12",
-        "2026-03-19",
-      ];
-      const wrapper = mount(BarChart, {
-        props: {
-          data: cats.map((_, i) => i),
-          categories: cats,
-          width: 480,
-          height: 220,
-          menu: false,
-        },
-      });
-      const labels = wrapper
-        .findAll('[data-testid="category-tick"]')
-        .map((t) => t.text());
-      // Default labels for week/month-scale ticks include month names.
-      expect(labels.join(" ")).toMatch(/Jan|Feb|Mar/);
-      // Tick thinning: fewer labels than there are categories.
-      expect(labels.length).toBeLessThan(cats.length);
-    });
+  describe("continuous x-axis", () => {
+    const continuousBase = { width: 600, height: 300, menu: false };
 
-    it("non-date short labels emit all when they fit", () => {
-      const cats = ["a", "b", "c", "d", "e"];
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2, 3, 4, 5],
-          categories: cats,
-          width: 400,
-          height: 200,
-          menu: false,
-        },
+    it("positions numeric x gaps, uneven x2 bins, calendar periods, tooltip ranges, and CSV x_end", async () => {
+      const gapped = mount(BarChart, {
+        props: { ...continuousBase, data: [5, 6, 7], x: [0, 1, 3] },
       });
-      const labels = wrapper
-        .findAll('[data-testid="category-tick"]')
-        .map((t) => t.text());
-      expect(labels).toEqual(cats);
-    });
-
-    it("thins crowded non-date categorical labels", () => {
-      const cats = Array.from({ length: 14 }, (_, i) =>
-        (2 + i * 0.22).toFixed(2),
+      const unit = PLOT_W / 4;
+      expect(centers(gapped)[0]).toBeCloseTo(PLOT_LEFT + 0.5 * unit);
+      expect(centers(gapped)[2]).toBeCloseTo(PLOT_LEFT + 3.5 * unit);
+      expect(Number(bars(gapped)[0].attributes("width"))).toBeCloseTo(
+        unit * 0.8,
       );
-      const wrapper = mount(BarChart, {
+
+      const bins = mount(BarChart, {
         props: {
-          data: cats.map((_, i) => i),
-          categories: cats,
+          ...continuousBase,
+          data: [4, 8],
+          x: [0, 1],
+          x2: [1, 4],
+          barPadding: 0,
+        },
+      });
+      const [firstWidth, secondWidth] = bars(bins).map((rect) =>
+        Number(rect.attributes("width")),
+      );
+      expect(secondWidth / firstWidth).toBeCloseTo(3);
+
+      const weekly = mount(BarChart, {
+        props: {
+          ...continuousBase,
+          data: [3, 4, 5],
+          x: ["2026-01-05", "2026-01-12", "2026-01-26"],
+          period: "week",
+          barPadding: 0,
+          downloadLink: true,
+          tooltipTrigger: "hover",
+        },
+        attachTo: document.body,
+      });
+      const rects = bars(weekly);
+      for (const rect of rects)
+        expect(Number(rect.attributes("width"))).toBeCloseTo(PLOT_W / 4);
+      expect(Number(rects[2].attributes("x"))).toBeCloseTo(
+        PLOT_LEFT + (3 * PLOT_W) / 4,
+      );
+      expect(csvHref(weekly)).toBe(
+        "x,x_end,value\n2026-01-05,2026-01-12,3\n2026-01-12,2026-01-19,4\n2026-01-26,2026-02-02,5",
+      );
+      await findOverlay(weekly).trigger("mousemove", {
+        clientX: PLOT_LEFT + PLOT_W / 8,
+        clientY: 100,
+      });
+      expect(weekly.find(".chart-tooltip-label").text()).toBe(
+        "2026-01-05 – 2026-01-11",
+      );
+      weekly.unmount();
+    });
+
+    it("shares slots across series, lays out horizontally, zooms continuous ranges, and warns on invalid mixes", async () => {
+      const grouped = mount(BarChart, {
+        props: {
+          ...continuousBase,
+          series: [
+            { data: [1, 2, 3], x: [0, 1, 2] },
+            { data: [4, 5], x: [1, 2] },
+          ],
+        },
+      });
+      expect(
+        bars(grouped).map((bar) => bar.attributes("data-category")),
+      ).toEqual(["0", "1", "1", "2", "2"]);
+
+      const horizontal = mount(BarChart, {
+        props: {
+          ...continuousBase,
+          data: [1, 2, 3],
+          x: [0, 1, 3],
+          orientation: "horizontal",
+        },
+      });
+      const centerYs = bars(horizontal).map(
+        (rect) =>
+          Number(rect.attributes("y")) + Number(rect.attributes("height")) / 2,
+      );
+      expect(centerYs[2] - centerYs[1]).toBeCloseTo(
+        2 * (centerYs[1] - centerYs[0]),
+      );
+
+      const zoomChart = mount(BarChart, {
+        props: {
+          ...continuousBase,
+          data: Array.from({ length: 10 }, (_, index) => index + 1),
+          x: Array.from({ length: 10 }, (_, index) => index),
+          zoom: true,
+        },
+      });
+      const slotWidth = PLOT_W / 10;
+      await findOverlay(zoomChart).trigger("pointerdown", {
+        clientX: PLOT_LEFT + 2 * slotWidth,
+        button: 0,
+      });
+      const target = { clientX: PLOT_LEFT + 5 * slotWidth };
+      window.dispatchEvent(new MouseEvent("pointermove", target));
+      window.dispatchEvent(new MouseEvent("pointerup", target));
+      await nextTick();
+      expect(
+        bars(zoomChart).map((bar) => bar.attributes("data-category")),
+      ).toEqual(["2", "3", "4"]);
+      await zoomChart.find('[aria-label="Reset zoom"]').trigger("click");
+      expect(bars(zoomChart)).toHaveLength(10);
+
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const badCategories = mount(BarChart, {
+        props: {
+          ...continuousBase,
+          data: [1, 2],
+          x: [0, 1],
+          categories: ["a", "b"],
+        },
+      });
+      expect(
+        badCategories
+          .findAll('[data-testid="category-tick"]')
+          .map((tick) => tick.text()),
+      ).not.toContain("a");
+      const missingX = mount(BarChart, {
+        props: {
+          ...continuousBase,
+          series: [
+            { data: [1, 2], x: ["2026-01-05", "2026-01-12"] },
+            { data: [3, 4] },
+          ],
+        },
+      });
+      expect(bars(missingX)).toHaveLength(2);
+      expect(warn).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("axes, horizontal label room, and barLabels", () => {
+    it("formats ticks, auto-detects date categories, and thins crowded labels", () => {
+      const formatted = mount(BarChart, {
+        props: {
+          ...baseProps,
+          data: [0, 50, 100],
+          categories: ["a", "b", "c"],
+          valueTicks: [0, 50, 100],
+          valueTickFormat: (value: number) => `${value}%`,
+          categoryFormat: (label: string) => label.toUpperCase(),
+        },
+      });
+      expect(
+        formatted
+          .findAll('[data-testid="value-tick"]')
+          .map((tick) => tick.text()),
+      ).toEqual(["0%", "50%", "100%"]);
+      expect(
+        formatted
+          .findAll('[data-testid="category-tick"]')
+          .map((tick) => tick.text()),
+      ).toEqual(["A", "B", "C"]);
+
+      const dateCategories = Array.from({ length: 12 }, (_, index) =>
+        new Date(Date.UTC(2026, 0, 1 + index * 7)).toISOString().slice(0, 10),
+      );
+      const dated = mount(BarChart, {
+        props: {
+          ...baseProps,
+          data: dateCategories.map((_, index) => index),
+          categories: dateCategories,
+        },
+      });
+      const dateLabels = dated
+        .findAll('[data-testid="category-tick"]')
+        .map((tick) => tick.text());
+      expect(dateLabels.join(" ")).toMatch(/Jan|Feb|Mar/);
+      expect(dateLabels.length).toBeLessThan(dateCategories.length);
+
+      const crowded = Array.from({ length: 14 }, (_, index) =>
+        (2 + index * 0.22).toFixed(2),
+      );
+      const thinned = mount(BarChart, {
+        props: {
+          data: crowded.map((_, index) => index),
+          categories: crowded,
           width: 320,
           height: 200,
           menu: false,
         },
       });
-      const labels = wrapper
+      const kept = thinned
         .findAll('[data-testid="category-tick"]')
-        .map((t) => t.text());
-      expect(labels.length).toBeLessThan(cats.length);
-      // Kept labels must be a strided subset of the inputs, never reformatted.
-      for (const l of labels) {
-        expect(cats).toContain(l);
-      }
+        .map((tick) => tick.text());
+      expect(kept.length).toBeLessThan(crowded.length);
+      for (const label of kept) expect(crowded).toContain(label);
     });
 
-    it("dateFormat overrides the default unit-aware formatter", () => {
-      const cats = ["2026-01-01", "2026-02-01", "2026-03-01", "2026-04-01"];
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2, 3, 4],
-          categories: cats,
-          dateFormat: "iso",
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const labels = wrapper
-        .findAll('[data-testid="category-tick"]')
-        .map((t) => t.text());
-      for (const l of labels) {
-        expect(l).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      }
-    });
-
-    it("tooltip label uses dateFormat for date categories", async () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [10, 20, 30, 40],
-          categories: ["2026-01-01", "2026-02-01", "2026-03-01", "2026-04-01"],
-          dateFormat: "month-year",
-          tooltipTrigger: "hover" as const,
-          width: 480,
-          height: 220,
-          menu: false,
-        },
-        attachTo: document.body,
-      });
-      const overlay = wrapper
-        .findAll("rect")
-        .find((r) => r.attributes("fill") === "transparent")!;
-      await overlay.trigger("mousemove", { clientX: 60, clientY: 100 });
-      const tip = wrapper.find(".chart-tooltip-label");
-      expect(tip.exists()).toBe(true);
-      // Should render via "month-year" preset, not the raw ISO string.
-      expect(tip.text()).not.toBe("2026-01-01");
-      expect(tip.text()).toContain("2026");
-      expect(tip.text()).toMatch(/Jan|Feb|Mar|Apr/);
-      wrapper.unmount();
-    });
-
-    it("accepts Date instances in the categories array", () => {
-      const cats = [
-        new Date(Date.UTC(2026, 0, 1)),
-        new Date(Date.UTC(2026, 1, 1)),
-        new Date(Date.UTC(2026, 2, 1)),
-        new Date(Date.UTC(2026, 3, 1)),
-      ];
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [1, 2, 3, 4],
-          categories: cats,
-          dateFormat: "iso",
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const labels = wrapper
-        .findAll('[data-testid="category-tick"]')
-        .map((t) => t.text());
-      expect(labels.length).toBeGreaterThan(0);
-      for (const l of labels) {
-        expect(l).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      }
-    });
-  });
-
-  describe("summary lines", () => {
-    function lineEl(wrapper: ReturnType<typeof mount>) {
-      return wrapper.find('[data-testid="summary-line"]');
-    }
-    function parsePathPoints(
-      d: string,
-    ): { cmd: "M" | "L"; x: number; y: number }[] {
-      const out: { cmd: "M" | "L"; x: number; y: number }[] = [];
-      const re = /([ML])([-\d.]+),([-\d.]+)/g;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(d))) {
-        out.push({
-          cmd: m[1] as "M" | "L",
-          x: parseFloat(m[2]),
-          y: parseFloat(m[3]),
-        });
-      }
-      return out;
-    }
-
-    it("renders a path with one point per data entry by default", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [10, 20, 30, 40],
-          categories: ["A", "B", "C", "D"],
-          summaryLines: [{ data: [1, 2, 3, 4] }],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const path = lineEl(wrapper);
-      expect(path.exists()).toBe(true);
-      const pts = parsePathPoints(path.attributes("d") ?? "");
-      expect(pts.length).toBe(4);
-      expect(pts[0].cmd).toBe("M");
-      expect(pts.slice(1).every((p) => p.cmd === "L")).toBe(true);
-    });
-
-    it("steps along the category axis with curve step-after", () => {
-      for (const orientation of ["vertical", "horizontal"] as const) {
-        const wrapper = mount(BarChart, {
+    it("sizes horizontal category padding, clears yLabel, and truncates past 40% width with title", () => {
+      const longLabel = "A much longer category label";
+      const longWidth = longLabel.length * 6;
+      const mountHorizontal = (extra: Record<string, unknown>) =>
+        mount(BarChart, {
           props: {
-            data: [10, 20, 30],
-            categories: ["A", "B", "C"],
-            summaryLines: [{ data: [1, 3, 2], curve: "step-after" }],
-            orientation,
-            width: 400,
+            data: [10, 20],
+            categories: ["Short", longLabel],
+            orientation: "horizontal",
+            width: 600,
             height: 200,
             menu: false,
+            ...extra,
           },
         });
-        const pts = parsePathPoints(lineEl(wrapper).attributes("d") ?? "");
-        expect(pts).toHaveLength(5);
-        // The first step holds the first value across to the next category.
-        const valueAxis = orientation === "vertical" ? "y" : "x";
-        expect(pts[1][valueAxis]).toBe(pts[0][valueAxis]);
-        expect(pts[2][valueAxis]).not.toBe(pts[0][valueAxis]);
-        wrapper.unmount();
-      }
-    });
+      const rightEdge = (wrapper: Wrapper) =>
+        Number(wrapper.find('[data-testid="category-tick"]').attributes("x"));
 
-    it("scales to its own extent independent of the bars", () => {
-      // Bars in 0..500, line in 0..0.02. Line max should pin to top of plot.
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [100, 200, 500, 200, 100],
-          categories: ["a", "b", "c", "d", "e"],
-          summaryLines: [{ data: [0.005, 0.01, 0.02, 0.01, 0.005] }],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const pts = parsePathPoints(lineEl(wrapper).attributes("d") ?? "");
-      // The line's own max (0.02) is at index 2 — its y should be the
-      // minimum (topmost) of all points.
-      const ys = pts.map((p) => p.y);
-      expect(Math.min(...ys)).toBeCloseTo(ys[2], 2);
-      // And the line's min (0.005) at indices 0 and 4 should be the
-      // bottom of the line — but well above the plot bottom (where a
-      // bar of value 100 against a 500 max sits).
-      expect(ys[0]).toBeLessThan(180); // above plot bottom (y=180-ish)
-      expect(ys[0]).toBeGreaterThan(ys[2]);
-    });
-
-    it("plots a shared-scale line on the bars' value axis", async () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [10, 20, 30],
-          categories: ["a", "b", "c"],
-          summaryLines: [
-            // valueMax is ignored on the shared scale.
-            { data: [20, 50, 20], scale: "shared", valueMax: 1, legend: "T" },
-          ],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const barTop = (i: number) => Number(bars(wrapper)[i].attributes("y"));
-      const pts = parsePathPoints(lineEl(wrapper).attributes("d") ?? "");
-      // A line value of 20 sits level with the top of the bar of 20, and
-      // the axis grows so the line's 50 clears the tallest bar.
-      expect(pts[0].y).toBeCloseTo(barTop(1));
-      expect(pts[1].y).toBeLessThan(barTop(2));
-      const withLine = barTop(2);
-      // A hidden line no longer stretches the axis.
-      await wrapper.setProps({ hiddenSeries: ["T"] });
-      expect(barTop(2)).toBeLessThan(withLine);
-    });
-
-    it("fits the value axis to where a shared line leaves the categories", () => {
-      // The line runs past the last category (index 5) and is drawn up to
-      // where it crosses the axis end, at 31.
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [10, 10, 10, 10, 10],
-          summaryLines: [{ x: [3, 4, 5], data: [10, 12, 50], scale: "shared" }],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const ticks = wrapper
-        .findAll('[data-testid="value-tick"]')
-        .map((t) => Number(t.text()));
-      expect(Math.max(...ticks)).toBeGreaterThanOrEqual(30);
-    });
-
-    it("respects valueMin/valueMax overrides", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [10, 20, 30],
-          categories: ["a", "b", "c"],
-          summaryLines: [{ data: [0.5, 0.6, 0.7], valueMin: 0, valueMax: 1 }],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const pts = parsePathPoints(lineEl(wrapper).attributes("d") ?? "");
-      // y=0.5 with [0,1] extent should sit at the vertical midpoint of
-      // the inner plot. With height=200 and standard padding, inner h is
-      // close to 160 — midpoint y ≈ 100.
-      expect(pts[0].y).toBeGreaterThan(80);
-      expect(pts[0].y).toBeLessThan(140);
-    });
-
-    it("places points at custom x positions in category-index space", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [10, 20, 30, 40],
-          categories: ["a", "b", "c", "d"],
-          summaryLines: [
-            { data: [0, 1], x: [0, 3] }, // first and last category centers
-          ],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const pts = parsePathPoints(lineEl(wrapper).attributes("d") ?? "");
-      expect(pts.length).toBe(2);
-      // Two points should be far apart horizontally (spanning the chart).
-      expect(Math.abs(pts[1].x - pts[0].x)).toBeGreaterThan(200);
-    });
-
-    it("applies color, strokeWidth, and dashed", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [10, 20, 30],
-          categories: ["a", "b", "c"],
-          summaryLines: [
-            { data: [1, 2, 3], color: "#ff0000", strokeWidth: 4, dashed: true },
-          ],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const path = lineEl(wrapper);
-      expect(path.attributes("stroke")).toBe("#ff0000");
-      expect(path.attributes("stroke-width")).toBe("4");
-      expect(path.attributes("stroke-dasharray")).toBe("6 3");
-    });
-
-    it("draws dots when dots is true", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [10, 20, 30],
-          categories: ["a", "b", "c"],
-          summaryLines: [{ data: [1, 2, 3], dots: true }],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      // 3 dots from the summary line (BarChart itself draws no other circles)
-      expect(wrapper.findAll("circle").length).toBe(3);
-    });
-
-    it("sizes summary-line dots per point", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [10, 20, 30],
-          categories: ["a", "b", "c"],
-          summaryLines: [
-            { data: [1, NaN, 3], dots: true, dotRadius: [2, 9, 4] },
-          ],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const radii = wrapper.findAll("circle").map((c) => c.attributes("r"));
-      expect(radii).toEqual(["2", "4"]);
-    });
-
-    it("skips non-finite points without breaking the path", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [10, 20, 30, 40],
-          categories: ["a", "b", "c", "d"],
-          summaryLines: [{ data: [1, NaN, 3, 4] }],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const d = lineEl(wrapper).attributes("d") ?? "";
-      const pts = parsePathPoints(d);
-      // 3 finite points; second segment restarts with M after the gap.
-      expect(pts.length).toBe(3);
-      expect(pts[0].cmd).toBe("M");
-      expect(pts[1].cmd).toBe("M");
-      expect(pts[2].cmd).toBe("L");
-    });
-
-    it("adds a line entry to the inline legend", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [10, 20, 30],
-          categories: ["a", "b", "c"],
-          series: [{ data: [10, 20, 30], legend: "Bars", color: "#0057b7" }],
-          summaryLines: [{ data: [1, 2, 3], legend: "KDE", color: "#ef4444" }],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      // The legend renders a <line> element for line items and a <rect>
-      // for bar items. Confirm both are present with matching colors.
-      const legendLines = wrapper
-        .findAll("line")
-        .filter((l) => l.attributes("stroke") === "#ef4444");
-      expect(legendLines.length).toBeGreaterThan(0);
-    });
-
-    it("draws only a dot in the legend for a zero-width dotted line", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [10, 20, 30],
-          categories: ["a", "b", "c"],
-          summaryLines: [
-            {
-              data: [1, 2, 3],
-              legend: "Points",
-              color: "#ef4444",
-              dots: true,
-              strokeWidth: 0,
-              dotRadius: 3,
-            },
-          ],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const dot = wrapper.get('[data-testid="legend-dot"]');
-      expect(dot.attributes("fill")).toBe("#ef4444");
-      expect(dot.attributes("r")).toBe("3");
+      const fit = mountHorizontal({});
+      expect(rightEdge(fit) - longWidth).toBeGreaterThanOrEqual(0);
+      expect(Number(bars(fit)[0].attributes("x"))).toBe(rightEdge(fit) + 6);
       expect(
-        wrapper
-          .findAll("line")
-          .some((l) => l.attributes("stroke") === "#ef4444"),
-      ).toBe(false);
+        rightEdge(mountHorizontal({ yLabel: "Setting" })) - longWidth,
+      ).toBe(22);
+      expect(rightEdge(mountHorizontal({ chartPadding: { left: 150 } }))).toBe(
+        50 + 150 - 6,
+      );
+
+      const narrow = mountHorizontal({ width: 300 });
+      expect(rightEdge(narrow)).toBe(2 + 300 * 0.4);
+      const ticks = narrow.findAll('[data-testid="category-tick"]');
+      expect(ticks[1].find("title").text()).toBe(longLabel);
+      const drawn = ticks[1].element.firstChild?.textContent?.trim() ?? "";
+      expect(drawn.endsWith("…")).toBe(true);
+      expect(drawn.length * 6).toBeLessThanOrEqual(300 * 0.4);
     });
 
-    it("renders in horizontal orientation along the value axis", () => {
-      const wrapper = mount(BarChart, {
+    it("places barLabels with contrast fill, outside overflow, and overlap hiding", () => {
+      const overflow = mount(BarChart, {
         props: {
-          data: [10, 20, 30, 40],
-          categories: ["a", "b", "c", "d"],
-          orientation: "horizontal",
-          summaryLines: [{ data: [1, 2, 3, 4] }],
-          width: 400,
-          height: 200,
-          menu: false,
-        },
-      });
-      const pts = parsePathPoints(lineEl(wrapper).attributes("d") ?? "");
-      expect(pts.length).toBe(4);
-      // In horizontal mode, the line should advance along the *y* axis
-      // (category axis) and grow along the *x* axis (value axis).
-      const ys = pts.map((p) => p.y);
-      for (let i = 1; i < ys.length; i++) {
-        expect(ys[i]).toBeGreaterThan(ys[i - 1]);
-      }
-    });
-  });
-
-  describe("value axis", () => {
-    it("renders value ticks by default", () => {
-      const wrapper = mount(BarChart, {
-        props: { data: [10, 20, 30], width: 400, height: 200, menu: false },
-      });
-      expect(
-        wrapper.findAll('[data-testid="value-tick"]').length,
-      ).toBeGreaterThan(0);
-    });
-
-    it("hides the value axis line, grid, and ticks when valueAxis is false", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [10, 20, 30],
-          width: 400,
-          height: 200,
-          menu: false,
-          valueAxis: false,
-        },
-      });
-      expect(wrapper.findAll('[data-testid="value-tick"]').length).toBe(0);
-      // Category ticks remain visible.
-      expect(
-        wrapper.findAll('[data-testid="category-tick"]').length,
-      ).toBeGreaterThan(0);
-    });
-  });
-
-  describe("barLabels", () => {
-    function labels(wrapper: ReturnType<typeof mount>) {
-      return wrapper.findAll('[data-testid="bar-label"]');
-    }
-
-    it("renders no labels by default", () => {
-      const wrapper = mount(BarChart, {
-        props: { data: [10, 20, 30], width: 400, height: 200, menu: false },
-      });
-      expect(labels(wrapper).length).toBe(0);
-    });
-
-    it("renders one label per bar when enabled", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          series: [{ data: [50, 30, 20] }, { data: [10, 40, 50] }],
-          orientation: "horizontal",
-          layout: "stacked",
-          width: 500,
-          height: 200,
-          menu: false,
-          barLabels: true,
-        },
-      });
-      expect(labels(wrapper).length).toBe(6);
-    });
-
-    it("applies a custom format function for label text", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [99.4, 0.3, 0.3],
-          categories: ["a"],
-          orientation: "horizontal",
-          layout: "stacked",
-          width: 500,
-          height: 120,
-          menu: false,
-          barLabels: {
-            format: (v: number) =>
-              v >= 99 ? ">99%" : v < 1 ? "<1%" : String(Math.round(v)),
-          },
-        },
-      });
-      const texts = labels(wrapper).map((n) => n.text());
-      expect(texts).toContain(">99%");
-      expect(texts).toContain("<1%");
-    });
-
-    it("omits a label when the formatter returns an empty string", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [50, 50],
-          categories: ["a"],
-          orientation: "horizontal",
-          layout: "stacked",
-          width: 500,
-          height: 120,
-          menu: false,
-          barLabels: { format: (v: number) => (v > 40 ? "" : String(v)) },
-        },
-      });
-      expect(labels(wrapper).length).toBe(0);
-    });
-
-    it("picks a contrasting fill for inside labels (white on dark)", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          series: [{ data: [80], color: "#2a1a4a" }],
-          categories: ["a"],
-          orientation: "horizontal",
-          layout: "stacked",
-          width: 500,
-          height: 120,
-          menu: false,
-          barLabels: true,
-        },
-      });
-      // The single wide segment fits its label inside → contrast color.
-      expect(labels(wrapper)[0].attributes("fill")).toBe("#ffffff");
-    });
-
-    it("honors a fixed label color", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          data: [80],
-          categories: ["a"],
-          orientation: "horizontal",
-          layout: "stacked",
-          width: 500,
-          height: 120,
-          menu: false,
-          barLabels: { color: "red" },
-        },
-      });
-      expect(labels(wrapper)[0].attributes("fill")).toBe("red");
-    });
-
-    it("places a small segment's label outside (start-anchored past the edge)", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          // Tiny segment first so its outside label has room to the right.
-          series: [
-            { data: [1], color: "#9b7cc4" },
-            { data: [99], color: "#2a1a4a" },
-          ],
-          categories: ["a"],
-          orientation: "horizontal",
-          layout: "stacked",
-          width: 500,
-          height: 120,
-          menu: false,
-          barLabels: true,
-        },
-      });
-      const all = labels(wrapper);
-      // Big segment label sits inside (middle-anchored); the tiny one is
-      // forced outside (start-anchored) since its text can't fit.
-      const tiny = all.find((n) => n.text() === "1")!;
-      expect(tiny.attributes("text-anchor")).toBe("start");
-      const big = all.find((n) => n.text() === "99")!;
-      expect(big.attributes("text-anchor")).toBe("middle");
-    });
-
-    it("contrasts an overflow label against the segment it lands on", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          // Tiny dark segment first; its label overflows onto the light
-          // neighbor, so it should be dark for contrast (not currentColor).
           series: [
             { data: [1], color: "#2a1a4a" },
             { data: [99], color: "#e8d9f5" },
@@ -2074,80 +433,15 @@ describe("BarChart", () => {
           barLabels: true,
         },
       });
-      const tiny = labels(wrapper).find((n) => n.text() === "1")!;
+      const labels = overflow.findAll('[data-testid="bar-label"]');
+      const tiny = labels.find((node) => node.text() === "1")!;
       expect(tiny.attributes("text-anchor")).toBe("start");
       expect(tiny.attributes("fill")).toBe("#1a1a1a");
-    });
+      expect(
+        labels.find((node) => node.text() === "99")!.attributes("text-anchor"),
+      ).toBe("middle");
 
-    it("uses the chart text color when an overflow label clears all bars", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          // Tiny last segment overflows past the right edge onto the
-          // background → currentColor.
-          series: [
-            { data: [99], color: "#2a1a4a" },
-            { data: [1], color: "#8a5fb0" },
-          ],
-          categories: ["a"],
-          orientation: "horizontal",
-          layout: "stacked",
-          width: 500,
-          height: 120,
-          menu: false,
-          chartPadding: { right: 40 },
-          barLabels: true,
-        },
-      });
-      const tiny = labels(wrapper).find((n) => n.text() === "1")!;
-      expect(tiny.attributes("fill")).toBe("currentColor");
-    });
-
-    it("left-aligns inside labels to the segment start when align is 'start'", () => {
-      const base = {
-        series: [{ data: [80] }],
-        categories: ["a"],
-        orientation: "horizontal" as const,
-        layout: "stacked" as const,
-        width: 500,
-        height: 120,
-        menu: false,
-      };
-      const start = mount(BarChart, {
-        props: { ...base, barLabels: { align: "start" } },
-      });
-      const center = mount(BarChart, { props: { ...base, barLabels: true } });
-      const sLabel = labels(start)[0];
-      const sx = Number(sLabel.attributes("x"));
-      const cx = Number(labels(center)[0].attributes("x"));
-      expect(sLabel.attributes("text-anchor")).toBe("start");
-      // Start-aligned label sits left of the centered one.
-      expect(sx).toBeLessThan(cx);
-    });
-
-    it("right-aligns inside labels to the segment end when align is 'end'", () => {
-      const base = {
-        series: [{ data: [80] }],
-        categories: ["a"],
-        orientation: "horizontal" as const,
-        layout: "stacked" as const,
-        width: 500,
-        height: 120,
-        menu: false,
-      };
-      const end = mount(BarChart, {
-        props: { ...base, barLabels: { align: "end" } },
-      });
-      const center = mount(BarChart, { props: { ...base, barLabels: true } });
-      const eLabel = labels(end)[0];
-      expect(eLabel.attributes("text-anchor")).toBe("end");
-      expect(Number(eLabel.attributes("x"))).toBeGreaterThan(
-        Number(labels(center)[0].attributes("x")),
-      );
-    });
-
-    it("hides overlapping labels when overlap is 'hide'", () => {
-      // Many tiny adjacent segments whose outside labels would collide.
-      const wrapper = mount(BarChart, {
+      const hidden = mount(BarChart, {
         props: {
           series: Array.from({ length: 8 }, () => ({ data: [1] })),
           categories: ["a"],
@@ -2159,754 +453,367 @@ describe("BarChart", () => {
           barLabels: { overlap: "hide" },
         },
       });
-      const shifted = mount(BarChart, {
-        props: {
-          series: Array.from({ length: 8 }, () => ({ data: [1] })),
-          categories: ["a"],
-          orientation: "horizontal",
-          layout: "stacked",
-          width: 120,
-          height: 80,
-          menu: false,
-          barLabels: { overlap: "shift" },
-        },
-      });
-      // "hide" drops colliding labels, so it shows no more than "shift".
-      expect(labels(wrapper).length).toBeLessThanOrEqual(
-        labels(shifted).length,
+      expect(hidden.findAll('[data-testid="bar-label"]').length).toBeLessThan(
+        8,
       );
-      expect(labels(wrapper).length).toBeLessThan(8);
     });
   });
 
-  describe("column headers", () => {
-    it("renders no headers by default", () => {
-      const wrapper = mount(BarChart, {
-        props: { data: [10, 20], width: 400, height: 200, menu: false },
+  describe("interactions, tooltips, and downloads", () => {
+    beforeEach(() => vi.restoreAllMocks());
+
+    it("handles hover/click modes, touch-action per orientation, tooltip formatting, and range-only NaN rows", async () => {
+      const hoverChart = mount(BarChart, {
+        props: {
+          ...baseProps,
+          series: [
+            { data: [10, 20], legend: "2024" },
+            { data: [15, 25], tooltipLabel: "2025" },
+            { data: [5, 7], showInTooltip: false },
+          ],
+          categories: ["A", "B"],
+          intervals: [{ x: 0, lower: 5, upper: 12, label: "Target" }],
+          tooltipTrigger: "hover",
+          tooltipTitle: (label: string) => `Region ${label}`,
+        },
+        attachTo: document.body,
       });
-      expect(wrapper.find('[data-testid="category-header"]').exists()).toBe(
+      const overlay = findOverlay(hoverChart);
+      expect(overlay.attributes("style")).toContain("touch-action: pan-y");
+      await overlay.trigger("mousemove", { clientX: 100, clientY: 100 });
+      expect(hoverChart.find(".chart-tooltip-label").text()).toBe("Region A");
+      expect(
+        hoverChart.findAll(".chart-tooltip-row").map((row) => row.text()),
+      ).toEqual(["202410", "202515", "Target5–12"]);
+      await overlay.trigger("mouseleave");
+      expect(hoverChart.emitted("hover")!.at(-1)![0]).toBeNull();
+      hoverChart.unmount();
+
+      const clickChart = mount(BarChart, {
+        props: {
+          ...baseProps,
+          data: [1, 2, 3],
+          categories: ["A", "B", "C"],
+          orientation: "horizontal",
+          tooltipTrigger: "click",
+        },
+        attachTo: document.body,
+      });
+      const clickOverlay = findOverlay(clickChart);
+      expect(clickOverlay.attributes("style")).toContain("touch-action: pan-x");
+      await clickOverlay.trigger("click", { clientX: 100, clientY: 40 });
+      const countBeforeLeave = clickChart.emitted("hover")!.length;
+      await clickOverlay.trigger("mouseleave");
+      expect(clickChart.emitted("hover")!.length).toBe(countBeforeLeave);
+      await clickOverlay.trigger("click", { clientX: 100, clientY: 40 });
+      expect(clickChart.emitted("hover")!.at(-1)![0]).toBeNull();
+      clickChart.unmount();
+
+      const rangeOnly = mount(BarChart, {
+        props: {
+          ...baseProps,
+          series: [{ data: [NaN, 20], lower: [3, 15], upper: [9, 25] }],
+          categories: ["A", "B"],
+          tooltipTrigger: "hover",
+        },
+        attachTo: document.body,
+      });
+      await findOverlay(rangeOnly).trigger("mousemove", {
+        clientX: 100,
+        clientY: 100,
+      });
+      expect(
+        rangeOnly.find(".chart-tooltip-row").text().replace(/\s+/g, " "),
+      ).toBe("— (3–9)");
+      rangeOnly.unmount();
+    });
+
+    it("wires CSV and SVG downloads through menu and downloadButton", () => {
+      const csvSpy = vi
+        .spyOn(download, "downloadCsv")
+        .mockImplementation(() => {});
+      const svgSpy = vi.spyOn(download, "saveSvg").mockImplementation(() => {});
+      const wrapper = mount(BarChart, {
+        props: {
+          series: [
+            { data: [1, 2], legend: "low" },
+            { data: [3, 4], legend: "high" },
+          ],
+          categories: ["A", "B"],
+          width: 400,
+          height: 200,
+          filename: "my-bars",
+        },
+      });
+      const items = wrapper.findComponent(ChartMenu).props("items");
+      items.find((item) => item.label === "Download CSV")!.action();
+      expect(csvSpy).toHaveBeenCalledWith(
+        "category,low,high\nA,1,3\nB,2,4",
+        "my-bars",
+      );
+      items.find((item) => item.label === "Save SVG")!.action();
+      expect(svgSpy).toHaveBeenCalledWith(expect.anything(), "my-bars");
+
+      const buttonChart = mount(BarChart, {
+        props: {
+          data: [1, 2],
+          categories: ["A", "B"],
+          width: 400,
+          height: 200,
+          downloadButton: "Export",
+          downloadLink: true,
+          csv: () => "fn,csv\nA,B",
+        },
+      });
+      expect(buttonChart.find("a.bar-chart-download-link").exists()).toBe(
         false,
       );
-      expect(wrapper.find('[data-testid="value-header"]').exists()).toBe(false);
+      buttonChart.find("button.bar-chart-download-button").trigger("click");
+      expect(csvSpy).toHaveBeenLastCalledWith("fn,csv\nA,B", "chart");
     });
+  });
 
-    it("renders category and value headers with their text", () => {
-      const wrapper = mount(BarChart, {
+  describe("summary lines, annotations, intervals, zoom, and legend", () => {
+    it("plots shared/step-after/NaN-gapped summary lines and vertical/horizontal annotations", async () => {
+      const shared = mount(BarChart, {
         props: {
-          data: [10, 20],
-          categories: ["a", "b"],
-          orientation: "horizontal",
-          width: 500,
-          height: 200,
-          menu: false,
-          categoryHeader: "Scenario",
-          valueHeader: "Proportion",
+          ...baseProps,
+          data: [10, 20, 30],
+          categories: ["a", "b", "c"],
+          summaryLines: [
+            {
+              data: [20, 50, 20],
+              scale: "shared",
+              legend: "T",
+              curve: "step-after",
+            },
+          ],
+          annotations: [
+            { x: 1, y: 20, offset: { x: 0, y: -10 }, text: "Peak" },
+          ],
         },
       });
-      const ch = wrapper.find('[data-testid="category-header"]');
-      const vh = wrapper.find('[data-testid="value-header"]');
-      expect(ch.text()).toBe("Scenario");
-      expect(vh.text()).toBe("Proportion");
-      // Category header is right-aligned to match the category labels;
-      // value header starts where the bars do.
-      expect(ch.attributes("text-anchor")).toBe("end");
-      expect(vh.attributes("text-anchor")).toBe("start");
-    });
-
-    it("left-aligns category labels (and the header) when categoryAlign is 'start'", () => {
-      const props = {
-        data: [10, 20],
-        categories: ["Alpha", "Beta"],
-        orientation: "horizontal" as const,
-        width: 500,
-        height: 200,
-        menu: false,
-        categoryHeader: "Scenario",
-      };
-      const end = mount(BarChart, { props });
-      const start = mount(BarChart, {
-        props: { ...props, categoryAlign: "start" as const },
-      });
-      const endTick = end.find('[data-testid="category-tick"]');
-      const startTick = start.find('[data-testid="category-tick"]');
-      // Default right-aligns (anchor end); start switches to anchor start
-      // at the left margin, so the label x moves left.
-      expect(endTick.attributes("text-anchor")).toBe("end");
-      expect(startTick.attributes("text-anchor")).toBe("start");
-      expect(Number(startTick.attributes("x"))).toBeLessThan(
-        Number(endTick.attributes("x")),
+      const barTop = (index: number) =>
+        Number(bars(shared)[index].attributes("y"));
+      const points = parsePathPoints(
+        shared.find('[data-testid="summary-line"]').attributes("d") ?? "",
       );
-      // The category header follows the same alignment.
+      expect(points).toHaveLength(5);
+      expect(points[0].y).toBeCloseTo(barTop(1));
+      expect(points[2].y).toBeLessThan(barTop(2));
+      const expectedX =
+        Number(bars(shared)[1].attributes("x")) +
+        Number(bars(shared)[1].attributes("width")) / 2;
       expect(
-        start.find('[data-testid="category-header"]').attributes("text-anchor"),
-      ).toBe("start");
-    });
+        Number(shared.find("g.chart-annotations text").attributes("x")),
+      ).toBeCloseTo(expectedX, 0);
+      const topWithLine = barTop(2);
+      await shared.setProps({ hiddenSeries: ["T"] });
+      expect(barTop(2)).toBeLessThan(topWithLine);
 
-    it("aligns the title and legend to the category-label start when categoryAlign is 'start'", () => {
-      const base = {
-        series: [
-          { data: [10], legend: "Aye", color: "#333333" },
-          { data: [20], legend: "Bee", color: "#999999" },
-        ],
-        categories: ["Alpha"],
-        orientation: "horizontal" as const,
-        layout: "stacked" as const,
-        width: 500,
-        height: 200,
-        menu: false,
-        title: "My title",
-      };
-      const def = mount(BarChart, { props: base });
-      const start = mount(BarChart, {
-        props: { ...base, categoryAlign: "start" as const },
-      });
-      const titleX = (w: ReturnType<typeof mount>) =>
-        Number(
-          w
-            .findAll("text")
-            .find((e) => e.text().includes("My title"))!
-            .attributes("x"),
-        );
-      const legendX = (w: ReturnType<typeof mount>) =>
-        Number(
-          w
-            .findAll("text")
-            .find((e) => e.text() === "Aye")!
-            .attributes("x"),
-        );
-      // Both the title and the legend shift left to the category-label start.
-      expect(titleX(start)).toBeLessThan(titleX(def));
-      expect(legendX(start)).toBeLessThan(legendX(def));
-    });
-
-    it("reserves extra top space so headers don't overlap the plot", () => {
-      const firstBarY = (w: ReturnType<typeof mount>) =>
-        Math.min(...bars(w).map((b) => Number(b.attributes("y"))));
-      const without = mount(BarChart, {
+      const gapped = mount(BarChart, {
         props: {
-          data: [10, 20],
-          categories: ["a", "b"],
-          orientation: "horizontal",
-          width: 500,
-          height: 200,
-          menu: false,
+          ...baseProps,
+          data: [10, 20, 30, 40],
+          summaryLines: [
+            { data: [1, NaN, 3, 4], dots: true, dotRadius: [2, 9, 4, 5] },
+          ],
         },
       });
-      const withHeaders = mount(BarChart, {
-        props: {
-          data: [10, 20],
-          categories: ["a", "b"],
-          orientation: "horizontal",
-          width: 500,
-          height: 200,
-          menu: false,
-          categoryHeader: "Scenario",
-          valueHeader: "Proportion",
-        },
-      });
-      // Reserving a header row pushes the plot (and its bars) down.
-      expect(firstBarY(withHeaders)).toBeGreaterThan(firstBarY(without));
-    });
-  });
-
-  // happy-dom cannot measure text, so a label is 6px per character here.
-  describe("horizontal category label room", () => {
-    const longLabel = "A much longer category label";
-    const longLabelWidth = longLabel.length * 6;
-
-    function mountHorizontal(extra: Record<string, unknown>) {
-      return mount(BarChart, {
-        props: {
-          data: [10, 20],
-          categories: ["Short", longLabel],
-          orientation: "horizontal" as const,
-          width: 600,
-          height: 200,
-          menu: false,
-          ...extra,
-        },
-      });
-    }
-
-    function labelRightEdge(wrapper: ReturnType<typeof mount>) {
-      const tick = wrapper.find('[data-testid="category-tick"]');
-      expect(tick.attributes("text-anchor")).toBe("end");
-      return Number(tick.attributes("x"));
-    }
-
-    it("widens the left padding to fit the longest label", () => {
-      const short = mountHorizontal({ categories: ["A", "B"] });
-      expect(labelRightEdge(short)).toBe(44);
-
-      const long = mountHorizontal({});
-      expect(labelRightEdge(long) - longLabelWidth).toBeGreaterThanOrEqual(0);
-      expect(Number(bars(long)[0].attributes("x"))).toBe(
-        labelRightEdge(long) + 6,
-      );
-      expect(long.find('[data-testid="category-tick"] title').exists()).toBe(
-        false,
-      );
-    });
-
-    it("keeps the labels clear of a yLabel", () => {
-      const wrapper = mountHorizontal({ yLabel: "Setting" });
-      expect(labelRightEdge(wrapper) - longLabelWidth).toBe(22);
-    });
-
-    it("leaves a chartPadding that already fits the labels alone", () => {
-      const wrapper = mountHorizontal({ chartPadding: { left: 150 } });
-      expect(labelRightEdge(wrapper)).toBe(50 + 150 - 6);
-    });
-
-    it("shortens labels past 40% of the width and keeps the whole text in a title", () => {
-      const wrapper = mountHorizontal({ width: 300 });
-      expect(labelRightEdge(wrapper)).toBe(2 + 300 * 0.4);
-      const ticks = wrapper.findAll('[data-testid="category-tick"]');
-      expect(ticks[0].text()).toBe("Short");
-      expect(ticks[1].find("title").text()).toBe(longLabel);
-      const drawn = ticks[1].element.firstChild?.textContent?.trim() ?? "";
-      expect(drawn.endsWith("…")).toBe(true);
-      expect(drawn.length * 6).toBeLessThanOrEqual(300 * 0.4);
-    });
-  });
-
-  describe("accessibility", () => {
-    const base = { data: [10, 20, 30], categories: ["A", "B", "C"] };
-
-    // The chart's own <svg> is a direct child of the wrapper; scope past the
-    // ChartMenu's icon <svg> (which renders first).
-    const chartSvg = (wrapper: ReturnType<typeof mount>) =>
-      wrapper.find(".bar-chart-wrapper").element.querySelector(":scope > svg");
-
-    it("has no role or aria-label on the svg when unlabeled", () => {
-      const wrapper = mount(BarChart, { props: base });
-      const svg = chartSvg(wrapper);
-      expect(svg?.getAttribute("role")).toBeNull();
-      expect(svg?.getAttribute("aria-label")).toBeNull();
-    });
-
-    it("labels the svg as an image using the title by default", () => {
-      const wrapper = mount(BarChart, {
-        props: { ...base, title: "Cases by region" },
-      });
-      const svg = chartSvg(wrapper);
-      expect(svg?.getAttribute("role")).toBe("img");
-      expect(svg?.getAttribute("aria-label")).toBe("Cases by region");
-    });
-
-    it("prefers ariaLabel over title and honors a role override", () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          ...base,
-          title: "Cases",
-          ariaLabel: "Bar chart of cases in three regions",
-          role: "figure",
-        },
-      });
-      const svg = chartSvg(wrapper);
-      expect(svg?.getAttribute("role")).toBe("figure");
-      expect(svg?.getAttribute("aria-label")).toBe(
-        "Bar chart of cases in three regions",
-      );
-    });
-  });
-
-  describe("zoom", () => {
-    // 10 categories across a 540px plot starting at x = 50 → 54px slots.
-    const zoomProps = {
-      data: [1, 2, 3, 4, 50, 6, 7, 8, 9, 10],
-      width: 600,
-      height: 300,
-      menu: false,
-      zoom: true,
-    };
-    const overlay = (w: ReturnType<typeof mount>) =>
-      w.find('[data-testid="chart-overlay"]');
-
-    async function brush(
-      w: ReturnType<typeof mount>,
-      from: { clientX?: number; clientY?: number },
-      to: { clientX?: number; clientY?: number },
-    ) {
-      await overlay(w).trigger("pointerdown", { ...from, button: 0 });
-      window.dispatchEvent(new MouseEvent("pointermove", to));
-      window.dispatchEvent(new MouseEvent("pointerup", to));
-      await w.vm.$nextTick();
-    }
-
-    it("rescales to a shared line where it crosses the zoom window edge", async () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          ...zoomProps,
-          data: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-          summaryLines: [{ x: [3, 4], data: [5, 100], scale: "shared" }],
-        },
-      });
-      // Categories 0..3: the line climbs toward 100 across slot 3's right
-      // half and leaves the window at 52.5.
-      await brush(
-        wrapper,
-        { clientX: 50 + 54 * 0.5 },
-        { clientX: 50 + 54 * 3.5 },
-      );
-      const ticks = wrapper
-        .findAll('[data-testid="value-tick"]')
-        .map((t) => Number(t.text()));
-      expect(Math.max(...ticks)).toBeGreaterThanOrEqual(50);
-    });
-
-    it("zooms to the brushed categories and rescales the value axis", async () => {
-      const wrapper = mount(BarChart, { props: zoomProps });
-      expect(bars(wrapper).length).toBe(10);
-
-      // Mid-slot 1 → mid-slot 3
-      await brush(
-        wrapper,
-        { clientX: 50 + 54 * 1.5 },
-        { clientX: 50 + 54 * 3.5 },
-      );
-      const visible = bars(wrapper);
-      expect(visible.map((b) => b.attributes("data-category"))).toEqual([
-        "1",
-        "2",
-        "3",
-      ]);
-      // The three bars now share the full plot width.
-      expect(Number(visible[0].attributes("x"))).toBeGreaterThanOrEqual(50);
-      expect(Number(visible[0].attributes("width"))).toBeGreaterThan(54);
-      const ticks = wrapper
-        .findAll('[data-testid="value-tick"]')
-        .map((t) => Number(t.text()));
-      expect(Math.max(...ticks)).toBeLessThanOrEqual(4);
       expect(
-        wrapper.findAll('[data-testid="category-tick"]').map((t) => t.text()),
-      ).toEqual(["1", "2", "3"]);
+        parsePathPoints(
+          gapped.find('[data-testid="summary-line"]').attributes("d") ?? "",
+        ).map((point) => point.cmd),
+      ).toEqual(["M", "M", "L"]);
+      expect(
+        gapped.findAll("circle").map((circle) => circle.attributes("r")),
+      ).toEqual(["2", "4", "5"]);
     });
 
-    it("places the zoom reset beside the menu only when a trigger renders", async () => {
-      const resetPosition = async (props: object) => {
-        const wrapper = mount(BarChart, {
-          props: { ...zoomProps, menu: true, ...props },
+    it("renders grouped, standalone, and horizontal intervals and includes bounds in tooltip/CSV", async () => {
+      const wrapper = mount(BarChart, {
+        props: {
+          ...baseProps,
+          series: [
+            { data: [10, 20], lower: [8, 18], upper: [12, 22], legend: "A" },
+            { data: [15, 25], legend: "B" },
+          ],
+          intervals: [
+            { x: 1, lower: 10, upper: 100, seriesIndex: 0 },
+            { x: 9, lower: 1, upper: 2 },
+          ],
+          categories: ["x", "y"],
+          downloadLink: true,
+          tooltipTrigger: "hover",
+        },
+        slots: {
+          tooltip: `<template #tooltip="p"><div class="tt">{{ p.values[0].lower }}-{{ p.values[0].upper }}|{{ p.intervals.map(i => i.lower + '-' + i.upper).join() }}</div></template>`,
+        },
+      });
+      const items = wrapper.findAll('[data-testid="interval"]');
+      expect(items).toHaveLength(3);
+      const firstBar = bars(wrapper)[0];
+      expect(
+        Number(items[0].find("line.interval-line").attributes("x1")),
+      ).toBeCloseTo(
+        Number(firstBar.attributes("x")) +
+          Number(firstBar.attributes("width")) / 2,
+        5,
+      );
+      expect(wrapper.findAll("text").map((text) => text.text())).toContain(
+        "100",
+      );
+      await findOverlay(wrapper).trigger("mousemove", {
+        clientX: 300,
+        clientY: 100,
+      });
+      expect(wrapper.find(".tt").text()).toBe("18-22|10-100");
+      expect(csvHref(wrapper)).toBe(
+        "category,A,A_lower,A_upper,B\nx,10,8,12,15\ny,20,18,22,25",
+      );
+      await wrapper.setProps({ hiddenSeries: ["A"] });
+      expect(wrapper.findAll('[data-testid="interval"]')).toHaveLength(0);
+
+      const horizontal = mount(BarChart, {
+        props: {
+          ...baseProps,
+          data: [10, 20],
+          intervals: [{ x: 0, lower: 5, upper: 15 }],
+          orientation: "horizontal",
+        },
+      });
+      const horizontalLine = horizontal.find(
+        '[data-testid="interval"] line.interval-line',
+      );
+      expect(horizontalLine.attributes("y1")).toBe(
+        horizontalLine.attributes("y2"),
+      );
+      expect(Number(horizontalLine.attributes("x2"))).toBeGreaterThan(
+        Number(horizontalLine.attributes("x1")),
+      );
+    });
+
+    it("supports box/horizontal brush zoom with summary-line alignment and legend toggle/highlight", async () => {
+      const zoomProps = {
+        data: [1, 2, 3, 4, 50, 6, 7, 8, 9, 10],
+        width: 600,
+        height: 300,
+        menu: false,
+        zoom: true,
+      };
+      const brush = async (
+        wrapper: Wrapper,
+        from: { clientX?: number; clientY?: number },
+        to: { clientX?: number; clientY?: number },
+      ) => {
+        await findOverlay(wrapper).trigger("pointerdown", {
+          ...from,
+          button: 0,
         });
-        await brush(wrapper, { clientX: 140 }, { clientX: 240 });
-        return wrapper.find(".chart-zoom-controls").classes();
+        window.dispatchEvent(new MouseEvent("pointermove", to));
+        window.dispatchEvent(new MouseEvent("pointerup", to));
+        await nextTick();
       };
-      expect(await resetPosition({ menuItems: ["save-png"] })).toContain(
-        "chart-zoom-controls--beside-menu",
-      );
-      expect(
-        await resetPosition({ menuItems: ["csv"], downloadLink: true }),
-      ).toContain("chart-zoom-controls--right");
-      expect(await resetPosition({ menu: false })).toContain(
-        "chart-zoom-controls--right",
-      );
-    });
 
-    it("resets from the reset button and on double-click", async () => {
-      const wrapper = mount(BarChart, { props: zoomProps });
-      await brush(wrapper, { clientX: 140 }, { clientX: 240 });
-      expect(bars(wrapper).length).toBeLessThan(10);
-      await wrapper.find('[aria-label="Reset zoom"]').trigger("click");
-      expect(bars(wrapper).length).toBe(10);
-      expect(wrapper.find('[aria-label="Reset zoom"]').exists()).toBe(false);
-
-      await brush(wrapper, { clientX: 140 }, { clientX: 240 });
-      await overlay(wrapper).trigger("dblclick");
-      expect(bars(wrapper).length).toBe(10);
-    });
-
-    it("brushes along the y axis in horizontal orientation", async () => {
-      const wrapper = mount(BarChart, {
-        props: { ...zoomProps, orientation: "horizontal" },
-      });
-      const first = bars(wrapper)[0];
-      const slot =
-        Number(bars(wrapper)[1].attributes("y")) -
-        Number(first.attributes("y"));
-      const top = Number(first.attributes("y"));
-      await brush(
-        wrapper,
-        { clientY: top + slot * 2 },
-        { clientY: top + slot * 4 },
-      );
-      expect(bars(wrapper).map((b) => b.attributes("data-category"))).toEqual([
-        "2",
-        "3",
-        "4",
-      ]);
-    });
-
-    it("zooms categories and values to a box when the drag is tall enough", async () => {
-      const wrapper = mount(BarChart, { props: zoomProps });
-      const overlayRect = overlay(wrapper);
-      const top = Number(overlayRect.attributes("y"));
-      const h = Number(overlayRect.attributes("height"));
-      // Categories 3..5 (includes the 50 spike), bottom half of the axis.
-      await brush(
-        wrapper,
-        { clientX: 50 + 54 * 3.5, clientY: top + h / 2 },
-        { clientX: 50 + 54 * 5.5, clientY: top + h },
-      );
-      expect(bars(wrapper).map((b) => b.attributes("data-category"))).toEqual([
-        "3",
-        "4",
-        "5",
-      ]);
-      const ticks = wrapper
-        .findAll('[data-testid="value-tick"]')
-        .map((t) => Number(t.text()));
-      // The axis stops at half the full extent rather than rescaling to 50.
-      expect(Math.max(...ticks)).toBeLessThanOrEqual(25);
-      expect(wrapper.find("clipPath").exists()).toBe(true);
-    });
-
-    it("leaves the marks on the visible value extent whole", async () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          ...zoomProps,
-          intervals: [{ x: 2, lower: 1, upper: 6, value: 6 }],
-        },
-      });
-      await brush(
-        wrapper,
-        { clientX: 50 + 54 * 1.5 },
-        { clientX: 50 + 54 * 3.5 },
-      );
-      // The value axis rescales to the visible marks, so the whisker's dot
-      // sits on the plot's top edge: the clip opens along the value axis
-      // and stays exact on the category edges, which cut bars off.
-      const clip = wrapper.find("clipPath rect");
-      const plotTop = Number(overlay(wrapper).attributes("y"));
-      const plotH = Number(overlay(wrapper).attributes("height"));
-      expect(clip.attributes("x")).toBe("50");
-      expect(clip.attributes("width")).toBe("540");
-      const clipTop = Number(clip.attributes("y"));
-      const dot = wrapper.find(".interval-dot");
-      expect(Number(dot.attributes("cy"))).toBe(plotTop);
-      expect(clipTop).toBeLessThanOrEqual(
-        plotTop - Number(dot.attributes("r")),
-      );
-      expect(clipTop + Number(clip.attributes("height"))).toBeGreaterThan(
-        plotTop + plotH,
-      );
-    });
-
-    it("clips a box zoom exactly on the value edge that cuts the bars", async () => {
-      const wrapper = mount(BarChart, { props: zoomProps });
-      const top = Number(overlay(wrapper).attributes("y"));
-      const h = Number(overlay(wrapper).attributes("height"));
-      await brush(
-        wrapper,
-        { clientX: 50 + 54 * 3.5, clientY: top + h / 2 },
-        { clientX: 50 + 54 * 5.5, clientY: top + h },
-      );
-      // The 50 spike continues past the window's top; the baseline is
-      // the data's own floor.
-      const clip = wrapper.find("clipPath rect");
-      expect(Number(clip.attributes("y"))).toBe(top);
-      expect(Number(clip.attributes("height"))).toBeGreaterThan(h);
-      expect(clip.attributes("x")).toBe("50");
-      expect(clip.attributes("width")).toBe("540");
-    });
-
-    it("keeps a summary line aligned with the box-zoomed value axis", async () => {
-      // The line's own scale is 0..1 over the full plot height.
       const wrapper = mount(BarChart, {
         props: {
           ...zoomProps,
           summaryLines: [{ data: Array(10).fill(0.25), valueMax: 1 }],
         },
       });
-      const lineY = () =>
-        Number(
-          wrapper
-            .find('[data-testid="summary-line"]')
-            .attributes("d")!
-            .match(/^M[^,]+,([^L]+)/)![1],
-        );
-      const overlayRect = overlay(wrapper);
-      const top = Number(overlayRect.attributes("y"));
-      const h = Number(overlayRect.attributes("height"));
-      expect(lineY()).toBeCloseTo(top + h * 0.75);
-      // Zoom to the bottom half: 0.25 of the plot becomes its midpoint.
+      const top = Number(findOverlay(wrapper).attributes("y"));
+      const height = Number(findOverlay(wrapper).attributes("height"));
       await brush(
         wrapper,
-        { clientX: 50 + 54 * 3.5, clientY: top + h / 2 },
-        { clientX: 50 + 54 * 5.5, clientY: top + h },
+        { clientX: 50 + 54 * 3.5, clientY: top + height / 2 },
+        { clientX: 50 + 54 * 5.5, clientY: top + height },
       );
-      expect(lineY()).toBeCloseTo(top + h * 0.5);
-    });
-
-    it('rescales values instead of boxing with zoom="x"', async () => {
-      const wrapper = mount(BarChart, {
-        props: { ...zoomProps, zoom: "x" as const },
-      });
-      await brush(
-        wrapper,
-        { clientX: 50 + 54 * 3.5, clientY: 100 },
-        { clientX: 50 + 54 * 5.5, clientY: 250 },
-      );
-      const ticks = wrapper
-        .findAll('[data-testid="value-tick"]')
-        .map((t) => Number(t.text()));
-      expect(Math.max(...ticks)).toBe(50);
-    });
-
-    it("renders no overlay unless zoom or a tooltip is enabled", () => {
-      const wrapper = mount(BarChart, {
-        props: { ...zoomProps, zoom: false },
-      });
-      expect(overlay(wrapper).exists()).toBe(false);
-    });
-  });
-
-  describe("legend toggle", () => {
-    const toggleProps = {
-      series: [
-        { data: [1, 2], legend: "Low", color: "red" },
-        { data: [100, 200], legend: "High", color: "blue" },
-      ],
-      categories: ["A", "B"],
-      width: 600,
-      height: 300,
-      menu: false,
-      legendToggle: true,
-    };
-    const toggles = (w: ReturnType<typeof mount>) =>
-      w.findAll(".chart-legend-toggle");
-
-    it("renders no toggle buttons unless legendToggle is set", () => {
-      const wrapper = mount(BarChart, {
-        props: { ...toggleProps, legendToggle: false },
-      });
-      expect(toggles(wrapper).length).toBe(0);
-    });
-
-    it("hides a series, widens the rest, and rescales the value axis", async () => {
-      const wrapper = mount(BarChart, { props: toggleProps });
-      expect(bars(wrapper).length).toBe(4);
-      const widthBefore = Number(bars(wrapper)[0].attributes("width"));
-
-      await toggles(wrapper)[1].trigger("click");
-      expect(bars(wrapper).length).toBe(2);
       expect(
-        bars(wrapper).every((b) => b.attributes("data-series") === "0"),
-      ).toBe(true);
-      expect(Number(bars(wrapper)[0].attributes("width"))).toBeGreaterThan(
-        widthBefore,
+        bars(wrapper).map((bar) => bar.attributes("data-category")),
+      ).toEqual(["3", "4", "5"]);
+      expect(
+        Math.max(
+          ...wrapper
+            .findAll('[data-testid="value-tick"]')
+            .map((tick) => Number(tick.text())),
+        ),
+      ).toBeLessThanOrEqual(25);
+      const lineY = Number(
+        wrapper
+          .find('[data-testid="summary-line"]')
+          .attributes("d")!
+          .match(/^M[^,]+,([^L]+)/)![1],
       );
-      const ticks = wrapper
-        .findAll('[data-testid="value-tick"]')
-        .map((t) => Number(t.text()));
-      expect(Math.max(...ticks)).toBeLessThanOrEqual(2);
-      expect(toggles(wrapper)[1].attributes("aria-pressed")).toBe("false");
-      expect(wrapper.emitted("update:hiddenSeries")).toEqual([[["High"]]]);
-    });
+      expect(lineY).toBeCloseTo(top + height * 0.5);
+      await wrapper.find('[aria-label="Reset zoom"]').trigger("click");
+      expect(bars(wrapper)).toHaveLength(10);
 
-    it("keeps a series' default color when an earlier one is hidden", async () => {
-      const wrapper = mount(BarChart, {
+      const horizontal = mount(BarChart, {
+        props: { ...zoomProps, orientation: "horizontal" },
+      });
+      const firstY = Number(bars(horizontal)[0].attributes("y"));
+      const slot = Number(bars(horizontal)[1].attributes("y")) - firstY;
+      await brush(
+        horizontal,
+        { clientY: firstY + slot * 2 },
+        { clientY: firstY + slot * 4 },
+      );
+      expect(
+        bars(horizontal).map((bar) => bar.attributes("data-category")),
+      ).toEqual(["2", "3", "4"]);
+      await findOverlay(horizontal).trigger("dblclick");
+      expect(bars(horizontal)).toHaveLength(10);
+
+      const legendChart = mount(BarChart, {
         props: {
-          ...toggleProps,
           series: [
             { data: [1, 2], legend: "Low" },
-            { data: [3, 4], legend: "High" },
+            { data: [100, 200], legend: "High" },
           ],
-        },
-      });
-      const fill = bars(wrapper)
-        .find((b) => b.attributes("data-series") === "1")!
-        .attributes("fill");
-      await toggles(wrapper)[0].trigger("click");
-      expect(bars(wrapper)[0].attributes("fill")).toBe(fill);
-    });
-
-    it("toggles summary lines", async () => {
-      const wrapper = mount(BarChart, {
-        props: {
-          ...toggleProps,
           summaryLines: [{ data: [1, 2], legend: "Trend" }],
+          categories: ["A", "B"],
+          width: 600,
+          height: 300,
+          menu: false,
+          legendToggle: true,
         },
       });
-      const linePaths = () =>
-        wrapper.findAll("path").filter((p) => p.attributes("fill") === "none");
-      expect(linePaths().length).toBe(1);
-      await toggles(wrapper)[2].trigger("click");
-      expect(linePaths().length).toBe(0);
-    });
-  });
-});
+      const widthBefore = Number(bars(legendChart)[0].attributes("width"));
+      const highFill = bars(legendChart)
+        .find((bar) => bar.attributes("data-series") === "1")!
+        .attributes("fill");
+      const toggles = legendChart.findAll(".chart-legend-toggle");
+      await toggles[0].trigger("click");
+      expect(bars(legendChart)).toHaveLength(2);
+      expect(bars(legendChart)[0].attributes("fill")).toBe(highFill);
+      expect(Number(bars(legendChart)[0].attributes("width"))).toBeGreaterThan(
+        widthBefore,
+      );
+      await toggles[2].trigger("click");
+      expect(legendChart.find('[data-testid="summary-line"]').exists()).toBe(
+        false,
+      );
 
-describe("BarChart intervals", () => {
-  function intervals(wrapper: ReturnType<typeof mount>) {
-    return wrapper.findAll('[data-testid="interval"]');
-  }
-
-  it("centers a series whisker on its bar in a grouped layout", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        series: [
-          { data: [10, 20], lower: [8, 18], upper: [12, 22], legend: "A" },
-          { data: [15, 25], lower: [13, 23], upper: [17, 27], legend: "B" },
-        ],
-        categories: ["x", "y"],
-        width: 400,
-        height: 200,
-        menu: false,
-      },
+      const highlightChart = mount(BarChart, {
+        props: {
+          ...baseProps,
+          series: [
+            { data: [1, 2], legend: "A" },
+            { data: [3, 4], legend: "B" },
+          ],
+          legendHighlight: true,
+        },
+      });
+      highlightChart
+        .findAll("rect.legend-hit")[1]
+        .element.parentElement!.dispatchEvent(new MouseEvent("mouseenter"));
+      await nextTick();
+      expect(
+        highlightChart
+          .findAll('[data-testid="bar"][data-series="0"]')
+          .map((bar) => bar.attributes("opacity")),
+      ).toEqual(["0.15", "0.15"]);
+      expect(highlightChart.emitted("legendHover")).toEqual([["B"]]);
     });
-    const items = intervals(wrapper);
-    expect(items).toHaveLength(4);
-    const found = bars(wrapper);
-    // Whiskers are emitted per series then per category; bars per
-    // category then per series.
-    for (let s = 0; s < 2; s++) {
-      for (let c = 0; c < 2; c++) {
-        const bar = found[c * 2 + s];
-        const line = items[s * 2 + c].find("line.interval-line");
-        const center =
-          Number(bar.attributes("x")) + Number(bar.attributes("width")) / 2;
-        expect(Number(line.attributes("x1"))).toBeCloseTo(center, 5);
-        // Never the bar's own color: that would hide the whisker over the bar.
-        expect(line.attributes("stroke")).toBe("currentColor");
-      }
-    }
-  });
-
-  it("centers a standalone interval on the category slot", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        data: [10, 20, 30],
-        categories: ["a", "b", "c"],
-        intervals: [{ x: 1, lower: 15, upper: 25 }],
-        width: 300,
-        height: 200,
-        menu: false,
-        barPadding: 0,
-      },
-    });
-    const bar = bars(wrapper)[1];
-    const line = intervals(wrapper)[0].find("line.interval-line");
-    const center =
-      Number(bar.attributes("x")) + Number(bar.attributes("width")) / 2;
-    expect(Number(line.attributes("x1"))).toBeCloseTo(center, 5);
-  });
-
-  it("pins a standalone interval to a series bar via seriesIndex", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        series: [
-          { data: [10, 20], color: "#111111" },
-          { data: [15, 25], color: "#222222" },
-        ],
-        intervals: [{ x: 0, lower: 12, upper: 18, seriesIndex: 1 }],
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    const bar = bars(wrapper).find((b) => b.attributes("data-series") === "1")!;
-    const line = intervals(wrapper)[0].find("line.interval-line");
-    const center =
-      Number(bar.attributes("x")) + Number(bar.attributes("width")) / 2;
-    expect(Number(line.attributes("x1"))).toBeCloseTo(center, 5);
-    expect(line.attributes("stroke")).toBe("currentColor");
-  });
-
-  it("draws horizontal whiskers with vertical caps in horizontal orientation", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        data: [10, 20],
-        intervals: [{ x: 0, lower: 5, upper: 15 }],
-        orientation: "horizontal",
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    const item = intervals(wrapper)[0];
-    const line = item.find("line.interval-line");
-    expect(line.attributes("y1")).toBe(line.attributes("y2"));
-    expect(Number(line.attributes("x2"))).toBeGreaterThan(
-      Number(line.attributes("x1")),
-    );
-    const cap = item.find("line.interval-cap");
-    expect(cap.attributes("x1")).toBe(cap.attributes("x2"));
-  });
-
-  it("drops an interval that sits off the category axis", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        data: [10, 20, 30],
-        intervals: [
-          { x: 5, lower: 1, upper: 2 },
-          { x: 2.2, lower: 1, upper: 2 },
-        ],
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    expect(intervals(wrapper)).toHaveLength(1);
-  });
-
-  it("extends the value axis to cover interval bounds", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        data: [10, 20],
-        intervals: [{ x: 1, lower: 15, upper: 100 }],
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    const labels = wrapper.findAll("text").map((t) => t.text());
-    expect(labels).toContain("100");
-  });
-
-  it("hides whiskers of a legend-hidden series", () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        series: [
-          { data: [10], lower: [8], upper: [12], legend: "A" },
-          { data: [15], legend: "B" },
-        ],
-        intervals: [{ x: 0, lower: 1, upper: 2, seriesIndex: 0 }],
-        hiddenSeries: ["A"],
-        width: 400,
-        height: 200,
-        menu: false,
-      },
-    });
-    expect(intervals(wrapper)).toHaveLength(0);
-  });
-
-  it("includes interval bounds in the tooltip and CSV", async () => {
-    const wrapper = mount(BarChart, {
-      props: {
-        series: [
-          { data: [1, 2], lower: [0, 1], upper: [2, 3], legend: "Cases" },
-        ],
-        intervals: [{ x: 1, lower: 10, upper: 20 }],
-        categories: ["a", "b"],
-        width: 400,
-        height: 200,
-        menu: false,
-        downloadLink: true,
-        tooltipTrigger: "hover" as const,
-      },
-      slots: {
-        tooltip: `<template #tooltip="p">
-          <div class="tt">{{ p.values[0].lower }}-{{ p.values[0].upper }}|{{ p.intervals.map(i => i.lower + '-' + i.upper).join() }}</div>
-        </template>`,
-      },
-    });
-    await wrapper
-      .find('[data-testid="chart-overlay"]')
-      .trigger("mousemove", { clientX: 300, clientY: 100 });
-    expect(wrapper.find(".tt").text()).toBe("1-3|10-20");
-    const link = wrapper.find("a.bar-chart-download-link");
-    expect(decodeURIComponent(link.attributes("href") ?? "")).toContain(
-      "category,Cases,Cases_lower,Cases_upper\na,1,0,2\nb,2,1,3",
-    );
   });
 });

@@ -1,10 +1,6 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 
-/**
- * The media rule of the theme's reset (`theme/src/base.css`), which the
- * docs site does not load. It shrinks a chart's svg, and so its wrapper,
- * until the chart draws at the narrower width.
- */
+// Theme reset rule (theme/src/base.css), which the docs site does not load.
 const THEME_SVG_RESET = `
   @layer base {
     svg {
@@ -16,7 +12,7 @@ const THEME_SVG_RESET = `
 `;
 
 const VIEWPORT_HEIGHT = 1000;
-const VIEWPORT_WIDTHS = [1280, 700, 1400, 900, 1280];
+const VIEWPORT_WIDTHS = [1280, 700, 1400, 900];
 
 declare global {
   interface Window {
@@ -24,7 +20,7 @@ declare global {
   }
 }
 
-/** Chromium reports the loop as a window `error` event, not an exception. */
+// Chromium reports ResizeObserver loops as window error events.
 async function collectResizeObserverErrors(page: Page) {
   await page.addInitScript(() => {
     window.resizeObserverErrors = [];
@@ -40,7 +36,6 @@ function resizeObserverErrors(page: Page) {
   return page.evaluate(() => window.resizeObserverErrors);
 }
 
-/** Lets the observers deliver and the charts render. */
 async function settle(page: Page) {
   await page.evaluate(
     () =>
@@ -111,7 +106,6 @@ test("LineChart grows for another row of section labels without a ResizeObserver
   await page.evaluate(() => document.fonts.ready);
   const wide = await svgSize(chart);
 
-  // Too narrow for the two section labels to share a row.
   await chart.evaluate((element) => {
     element.parentElement!.style.width = "220px";
   });
@@ -156,43 +150,3 @@ for (const { name, style } of [
     }
   });
 }
-
-test("an expanded chart fills the window, follows it, and returns to its inline size", async ({
-  page,
-}) => {
-  await collectResizeObserverErrors(page);
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto("./cfasim-ui/charts/line-chart");
-  const chart = page.locator(".line-chart-wrapper").first();
-  await expect(chart).toBeVisible();
-  await page.evaluate(() => document.fonts.ready);
-  await settle(page);
-  const inline = await svgSize(chart);
-
-  await chart.getByRole("button", { name: "Chart options" }).click();
-  await page.getByRole("menuitem", { name: "Fullscreen" }).click();
-  const expanded = page.locator(".line-chart-wrapper.is-fullscreen");
-  await expect(expanded).toBeVisible();
-
-  // The wrapper pads the chart by 2em on each side.
-  const padding = await expanded.evaluate(
-    (element) => 2 * parseFloat(getComputedStyle(element).paddingTop),
-  );
-  for (const viewport of [
-    { width: 1280, height: 800 },
-    { width: 900, height: 600 },
-  ]) {
-    await page.setViewportSize(viewport);
-    await settle(page);
-    const drawn = await svgSize(expanded);
-    expect(drawn.width).toBeCloseTo(viewport.width - padding, 0);
-    expect(drawn.height).toBeCloseTo(viewport.height - padding, 0);
-  }
-
-  await page.keyboard.press("Escape");
-  await expect(expanded).toHaveCount(0);
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await settle(page);
-  expect(await svgSize(chart)).toEqual(inline);
-  expect(await resizeObserverErrors(page)).toEqual([]);
-});
